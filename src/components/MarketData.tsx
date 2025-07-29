@@ -99,7 +99,7 @@ const MarketData = () => {
   return (
     <div className="min-h-screen bg-background text-foreground font-mono text-sm p-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-terminal-amber mb-2">BLOOMBERG TERMINAL</h1>
+        <h1 className="text-2xl font-bold text-terminal-amber mb-2">ableTERMINAL</h1>
         <div className="text-terminal-cyan">
           Market Data Feed - {new Date().toLocaleString('th-TH')}
         </div>
