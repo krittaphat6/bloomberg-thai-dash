@@ -52,6 +52,13 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+				terminal: {
+					green: 'hsl(var(--terminal-green))',
+					red: 'hsl(var(--terminal-red))',
+					amber: 'hsl(var(--terminal-amber))',
+					cyan: 'hsl(var(--terminal-cyan))',
+					gray: 'hsl(var(--terminal-gray))'
+				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
@@ -62,6 +69,9 @@ export default {
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
 				}
+			},
+			fontFamily: {
+				mono: ['Monaco', 'Menlo', 'Ubuntu Mono', 'monospace'],
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
