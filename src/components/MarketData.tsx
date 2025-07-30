@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import ScatterAnalysis from './ScatterChart';
 
 interface StockData {
   symbol: string;
@@ -118,36 +120,65 @@ const MarketData = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {marketData.map((section, sectionIndex) => (
-          <div key={sectionIndex} className="border border-border bg-card p-4">
-            <h2 className="text-lg font-bold text-terminal-amber mb-4 border-b border-border pb-2">
-              {section.title}
-            </h2>
-            <div className="space-y-2">
-              {section.stocks.map((stock, stockIndex) => (
-                <div 
-                  key={stockIndex}
-                  className="grid grid-cols-4 gap-2 hover:bg-muted py-1 px-2 transition-colors"
-                >
-                  <div className="text-foreground font-medium truncate">
-                    {stock.symbol}
-                  </div>
-                  <div className="text-right text-foreground">
-                    {formatPrice(stock.price)}
-                  </div>
-                  <div className={`text-right ${getColorClass(stock.change)}`}>
-                    {formatChange(stock.change)}
-                  </div>
-                  <div className={`text-right ${getColorClass(stock.changePercent)}`}>
-                    {formatPercent(stock.changePercent)}
-                  </div>
+      <Tabs defaultValue="quotes" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsTrigger value="quotes">Quotes</TabsTrigger>
+          <TabsTrigger value="scatter">Scatter</TabsTrigger>
+          <TabsTrigger value="correlations">Correlations</TabsTrigger>
+          <TabsTrigger value="forecasts">Forecasts</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="quotes" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {marketData.map((section, sectionIndex) => (
+              <div key={sectionIndex} className="border border-border bg-card p-4">
+                <h2 className="text-lg font-bold text-terminal-amber mb-4 border-b border-border pb-2">
+                  {section.title}
+                </h2>
+                <div className="space-y-2">
+                  {section.stocks.map((stock, stockIndex) => (
+                    <div 
+                      key={stockIndex}
+                      className="grid grid-cols-4 gap-2 hover:bg-muted py-1 px-2 transition-colors"
+                    >
+                      <div className="text-foreground font-medium truncate">
+                        {stock.symbol}
+                      </div>
+                      <div className="text-right text-foreground">
+                        {formatPrice(stock.price)}
+                      </div>
+                      <div className={`text-right ${getColorClass(stock.change)}`}>
+                        {formatChange(stock.change)}
+                      </div>
+                      <div className={`text-right ${getColorClass(stock.changePercent)}`}>
+                        {formatPercent(stock.changePercent)}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </TabsContent>
+
+        <TabsContent value="scatter">
+          <ScatterAnalysis />
+        </TabsContent>
+
+        <TabsContent value="correlations" className="space-y-6">
+          <div className="text-center text-terminal-cyan py-16">
+            <h3 className="text-lg font-bold text-terminal-amber mb-2">Correlation Matrix</h3>
+            <p>Coming Soon - Advanced correlation analysis between commodities</p>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="forecasts" className="space-y-6">
+          <div className="text-center text-terminal-cyan py-16">
+            <h3 className="text-lg font-bold text-terminal-amber mb-2">Price Forecasts</h3>
+            <p>Coming Soon - AI-powered price predictions and market forecasts</p>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <div className="mt-6 border-t border-border pt-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
