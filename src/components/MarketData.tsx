@@ -15,7 +15,7 @@ interface MarketSection {
 const MarketData = () => {
   const [marketData, setMarketData] = useState<MarketSection[]>([
     {
-      title: "ตลาดหุ้นไทย",
+      title: "ดัชนีต่างประเทศ",
       stocks: [
         { symbol: "US30", price: 44123.50, change: -189.25, changePercent: -0.43 },
         { symbol: "US500", price: 5831.25, change: -11.75, changePercent: -0.20 },
@@ -29,6 +29,19 @@ const MarketData = () => {
         { symbol: "ฝรั่งเศส", price: 7456.89, change: 52.34, changePercent: 0.70 },
         { symbol: "สเปน", price: 11567.23, change: 143.45, changePercent: 1.24 },
         { symbol: "เกาหลี", price: 2567.89, change: 0.26, changePercent: 0.01 }
+      ]
+    },
+    {
+      title: "ตลาดหุ้นไทย",
+      stocks: [
+        { symbol: "PTT", price: 35.50, change: 0.75, changePercent: 2.16 },
+        { symbol: "CPALL", price: 58.25, change: -0.50, changePercent: -0.85 },
+        { symbol: "KBANK", price: 142.50, change: 1.25, changePercent: 0.88 },
+        { symbol: "AOT", price: 68.75, change: -1.25, changePercent: -1.79 },
+        { symbol: "SCB", price: 118.00, change: 2.00, changePercent: 1.72 },
+        { symbol: "ADVANC", price: 201.50, change: -2.50, changePercent: -1.23 },
+        { symbol: "BBL", price: 156.00, change: 3.50, changePercent: 2.30 },
+        { symbol: "TRUE", price: 5.85, change: -0.15, changePercent: -2.50 }
       ]
     },
     {
