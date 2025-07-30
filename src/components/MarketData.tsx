@@ -112,52 +112,196 @@ const MarketData = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-mono text-sm p-4">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-terminal-amber mb-2">ableTERMINAL</h1>
-        <div className="text-terminal-cyan">
-          Market Data Feed - {new Date().toLocaleString('th-TH')}
+    <div className="min-h-screen bg-background text-foreground font-mono">
+      {/* Main Header */}
+      <div className="panel-header flex justify-between items-center border-b border-border px-4 py-2">
+        <h1 className="text-lg font-bold text-terminal-amber">ableTERMINAL</h1>
+        <div className="text-terminal-cyan text-xs">
+          {new Date().toLocaleString('th-TH')} | LIVE MARKET DATA
         </div>
       </div>
 
-      <Tabs defaultValue="quotes" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-6">
-          <TabsTrigger value="quotes">Quotes</TabsTrigger>
-          <TabsTrigger value="scatter">Scatter</TabsTrigger>
-          <TabsTrigger value="correlations">Correlations</TabsTrigger>
-          <TabsTrigger value="forecasts">Forecasts</TabsTrigger>
+      <Tabs defaultValue="terminal" className="w-full">
+        <TabsList className="tabs-list grid w-full grid-cols-4">
+          <TabsTrigger value="terminal" className="tabs-trigger">TERMINAL</TabsTrigger>
+          <TabsTrigger value="scatter" className="tabs-trigger">SCATTER</TabsTrigger>
+          <TabsTrigger value="correlations" className="tabs-trigger">CORRELATIONS</TabsTrigger>
+          <TabsTrigger value="forecasts" className="tabs-trigger">FORECASTS</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="quotes" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {marketData.map((section, sectionIndex) => (
-              <div key={sectionIndex} className="border border-border bg-card p-4">
-                <h2 className="text-lg font-bold text-terminal-amber mb-4 border-b border-border pb-2">
-                  {section.title}
-                </h2>
-                <div className="space-y-2">
-                  {section.stocks.map((stock, stockIndex) => (
-                    <div 
-                      key={stockIndex}
-                      className="grid grid-cols-4 gap-2 hover:bg-muted py-1 px-2 transition-colors"
-                    >
-                      <div className="text-foreground font-medium truncate">
-                        {stock.symbol}
-                      </div>
-                      <div className="text-right text-foreground">
-                        {formatPrice(stock.price)}
-                      </div>
-                      <div className={`text-right ${getColorClass(stock.change)}`}>
-                        {formatChange(stock.change)}
-                      </div>
-                      <div className={`text-right ${getColorClass(stock.changePercent)}`}>
-                        {formatPercent(stock.changePercent)}
-                      </div>
+        <TabsContent value="terminal" className="p-0">
+          <div className="terminal-grid">
+            {/* Panel 1: International Indices */}
+            <div className="terminal-panel">
+              <div className="panel-header">GLOBAL INDICES</div>
+              <div className="panel-content">
+                {marketData[0].stocks.slice(0, 8).map((stock, index) => (
+                  <div key={index} className="data-row">
+                    <div className="symbol">{stock.symbol}</div>
+                    <div className="price">{formatPrice(stock.price)}</div>
+                    <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
+                      {formatChange(stock.change)}
                     </div>
-                  ))}
+                    <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
+                      {formatPercent(stock.changePercent)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Panel 2: Asian Markets */}
+            <div className="terminal-panel">
+              <div className="panel-header">ASIAN MARKETS</div>
+              <div className="panel-content">
+                {marketData[0].stocks.slice(8).concat(marketData[1].stocks.slice(0, 4)).map((stock, index) => (
+                  <div key={index} className="data-row">
+                    <div className="symbol">{stock.symbol}</div>
+                    <div className="price">{formatPrice(stock.price)}</div>
+                    <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
+                      {formatChange(stock.change)}
+                    </div>
+                    <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
+                      {formatPercent(stock.changePercent)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Panel 3: Commodities */}
+            <div className="terminal-panel">
+              <div className="panel-header">COMMODITIES</div>
+              <div className="panel-content">
+                {marketData[2].stocks.map((stock, index) => (
+                  <div key={index} className="data-row">
+                    <div className="symbol">{stock.symbol}</div>
+                    <div className="price">{formatPrice(stock.price)}</div>
+                    <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
+                      {formatChange(stock.change)}
+                    </div>
+                    <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
+                      {formatPercent(stock.changePercent)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Panel 4: FX Rates */}
+            <div className="terminal-panel">
+              <div className="panel-header">FOREIGN EXCHANGE</div>
+              <div className="panel-content">
+                {marketData[3].stocks.map((stock, index) => (
+                  <div key={index} className="data-row">
+                    <div className="symbol">{stock.symbol}</div>
+                    <div className="price">{formatPrice(stock.price)}</div>
+                    <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
+                      {formatChange(stock.change)}
+                    </div>
+                    <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
+                      {formatPercent(stock.changePercent)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Panel 5: Thai Stocks */}
+            <div className="terminal-panel">
+              <div className="panel-header">THAI EQUITIES</div>
+              <div className="panel-content">
+                {marketData[1].stocks.slice(4).map((stock, index) => (
+                  <div key={index} className="data-row">
+                    <div className="symbol">{stock.symbol}</div>
+                    <div className="price">{formatPrice(stock.price)}</div>
+                    <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
+                      {formatChange(stock.change)}
+                    </div>
+                    <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
+                      {formatPercent(stock.changePercent)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Panel 6: Crypto */}
+            <div className="terminal-panel">
+              <div className="panel-header">CRYPTOCURRENCY</div>
+              <div className="panel-content">
+                <div className="data-row">
+                  <div className="symbol">BTC/USD</div>
+                  <div className="price">67,234.50</div>
+                  <div className="change-positive">+1,234.50</div>
+                  <div className="change-positive">+1.87%</div>
+                </div>
+                <div className="data-row">
+                  <div className="symbol">ETH/USD</div>
+                  <div className="price">3,456.78</div>
+                  <div className="change-negative">-234.22</div>
+                  <div className="change-negative">-6.34%</div>
+                </div>
+                <div className="data-row">
+                  <div className="symbol">BNB/USD</div>
+                  <div className="price">612.34</div>
+                  <div className="change-positive">+23.45</div>
+                  <div className="change-positive">+3.98%</div>
+                </div>
+                <div className="data-row">
+                  <div className="symbol">ADA/USD</div>
+                  <div className="price">0.456</div>
+                  <div className="change-negative">-0.023</div>
+                  <div className="change-negative">-4.81%</div>
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* Panel 7: Bonds */}
+            <div className="terminal-panel">
+              <div className="panel-header">GOVERNMENT BONDS</div>
+              <div className="panel-content">
+                <div className="data-row">
+                  <div className="symbol">US 10Y</div>
+                  <div className="price">4.567</div>
+                  <div className="change-positive">+0.023</div>
+                  <div className="change-positive">+0.51%</div>
+                </div>
+                <div className="data-row">
+                  <div className="symbol">TH 10Y</div>
+                  <div className="price">2.678</div>
+                  <div className="change-negative">-0.012</div>
+                  <div className="change-negative">-0.45%</div>
+                </div>
+                <div className="data-row">
+                  <div className="symbol">DE 10Y</div>
+                  <div className="price">2.234</div>
+                  <div className="change-positive">+0.034</div>
+                  <div className="change-positive">+1.54%</div>
+                </div>
+                <div className="data-row">
+                  <div className="symbol">JP 10Y</div>
+                  <div className="price">0.789</div>
+                  <div className="change-neutral">+0.000</div>
+                  <div className="change-neutral">+0.00%</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel 8: News Feed */}
+            <div className="terminal-panel">
+              <div className="panel-header">MARKET NEWS</div>
+              <div className="panel-content">
+                <div className="text-xs space-y-2">
+                  <div className="text-terminal-amber">15:30 | FED RAISES RATES BY 0.25%</div>
+                  <div className="text-terminal-cyan">15:25 | OIL PRICES SURGE ON SUPPLY CUTS</div>
+                  <div className="text-terminal-yellow">15:20 | TECH STOCKS RALLY CONTINUES</div>
+                  <div className="text-terminal-green">15:15 | GDP GROWTH BEATS ESTIMATES</div>
+                  <div className="text-terminal-red">15:10 | INFLATION DATA CONCERNS</div>
+                  <div className="text-terminal-cyan">15:05 | CRYPTO REGULATION UPDATE</div>
+                </div>
+              </div>
+            </div>
           </div>
         </TabsContent>
 
@@ -165,38 +309,63 @@ const MarketData = () => {
           <ScatterAnalysis />
         </TabsContent>
 
-        <TabsContent value="correlations" className="space-y-6">
-          <div className="text-center text-terminal-cyan py-16">
-            <h3 className="text-lg font-bold text-terminal-amber mb-2">Correlation Matrix</h3>
-            <p>Coming Soon - Advanced correlation analysis between commodities</p>
+        <TabsContent value="correlations" className="p-8">
+          <div className="terminal-panel">
+            <div className="panel-header">CORRELATION MATRIX</div>
+            <div className="panel-content text-center py-16">
+              <div className="text-terminal-cyan">
+                Advanced correlation analysis between asset classes
+              </div>
+              <div className="text-terminal-amber mt-2">COMING SOON</div>
+            </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="forecasts" className="space-y-6">
-          <div className="text-center text-terminal-cyan py-16">
-            <h3 className="text-lg font-bold text-terminal-amber mb-2">Price Forecasts</h3>
-            <p>Coming Soon - AI-powered price predictions and market forecasts</p>
+        <TabsContent value="forecasts" className="p-8">
+          <div className="terminal-panel">
+            <div className="panel-header">AI FORECASTS</div>
+            <div className="panel-content text-center py-16">
+              <div className="text-terminal-cyan">
+                Machine learning powered price predictions
+              </div>
+              <div className="text-terminal-amber mt-2">COMING SOON</div>
+            </div>
           </div>
         </TabsContent>
       </Tabs>
 
-      <div className="mt-6 border-t border-border pt-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-          <div className="text-terminal-cyan">
-            <div>เวลาอัพเดทล่าสุด:</div>
-            <div>{new Date().toLocaleTimeString('th-TH')}</div>
+      {/* Ticker Tape */}
+      <div className="ticker-tape">
+        <div className="ticker-content">
+          <div className="ticker-item">
+            <span className="text-terminal-white">AAPL</span>
+            <span className="text-terminal-cyan">189.45</span>
+            <span className="text-terminal-green">+2.34</span>
           </div>
-          <div className="text-terminal-cyan">
-            <div>สถานะการเชื่อมต่อ:</div>
-            <div className="text-terminal-green">● ONLINE</div>
+          <div className="ticker-item">
+            <span className="text-terminal-white">GOOGL</span>
+            <span className="text-terminal-cyan">2,678.90</span>
+            <span className="text-terminal-red">-15.67</span>
           </div>
-          <div className="text-terminal-cyan">
-            <div>ข้อมูลล่าช้า:</div>
-            <div>15 นาที</div>
+          <div className="ticker-item">
+            <span className="text-terminal-white">MSFT</span>
+            <span className="text-terminal-cyan">378.23</span>
+            <span className="text-terminal-green">+5.89</span>
           </div>
-          <div className="text-terminal-cyan">
-            <div>แหล่งข้อมูล:</div>
-            <div>BLOOMBERG API</div>
+          <div className="ticker-item">
+            <span className="text-terminal-white">TSLA</span>
+            <span className="text-terminal-cyan">234.56</span>
+            <span className="text-terminal-red">-8.91</span>
+          </div>
+          <div className="ticker-item">
+            <span className="text-terminal-white">AMZN</span>
+            <span className="text-terminal-cyan">3,156.78</span>
+            <span className="text-terminal-green">+23.45</span>
+          </div>
+          <div className="ticker-item">
+            <span className="text-terminal-white">META</span>
+            <span className="text-terminal-cyan">456.89</span>
+            <span className="text-terminal-red">-12.34</span>
           </div>
         </div>
       </div>

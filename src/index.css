@@ -1,104 +1,48 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    /* Bloomberg Terminal Theme */
-    --background: 0 0% 0%;
-    --foreground: 0 0% 95%;
-
-    --card: 0 0% 5%;
-    --card-foreground: 0 0% 95%;
-
-    --popover: 0 0% 5%;
-    --popover-foreground: 0 0% 95%;
-
-    --primary: 0 0% 10%;
-    --primary-foreground: 0 0% 95%;
-
-    --secondary: 0 0% 8%;
-    --secondary-foreground: 0 0% 90%;
-
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 60%;
-
-    --accent: 50 100% 50%;
+    /* Bloomberg Terminal Black Theme */
+    --background: 0 0% 2%;
+    --foreground: 0 0% 90%;
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 90%;
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 90%;
+    --primary: 0 0% 8%;
+    --primary-foreground: 0 0% 90%;
+    --secondary: 0 0% 6%;
+    --secondary-foreground: 0 0% 85%;
+    --muted: 0 0% 8%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 45 100% 50%;
     --accent-foreground: 0 0% 0%;
-
     --destructive: 0 100% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 0 0% 20%;
-    --input: 0 0% 15%;
-    --ring: 50 100% 50%;
-
-    /* Terminal specific colors */
-    --terminal-green: 120 100% 50%;
-    --terminal-red: 0 100% 60%;
-    --terminal-amber: 45 100% 50%;
-    --terminal-cyan: 180 100% 50%;
-    --terminal-gray: 0 0% 60%;
-
+    --border: 0 0% 12%;
+    --input: 0 0% 8%;
+    --ring: 45 100% 50%;
     --radius: 0rem;
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    
+    /* Bloomberg Terminal Colors */
+    --terminal-green: 120 100% 45%;
+    --terminal-red: 0 100% 55%;
+    --terminal-amber: 45 100% 60%;
+    --terminal-cyan: 180 100% 65%;
+    --terminal-gray: 0 0% 55%;
+    --terminal-yellow: 60 100% 60%;
+    --terminal-blue: 220 100% 55%;
+    --terminal-orange: 25 100% 55%;
+    --terminal-white: 0 0% 90%;
+    
+    /* Bloomberg Specific */
+    --bloomberg-black: 0 0% 2%;
+    --bloomberg-blue: 220 100% 25%;
+    --bloomberg-orange: 25 100% 50%;
+    --bloomberg-header: 0 0% 8%;
   }
 }
 
@@ -106,8 +50,179 @@ All colors MUST be HSL.
   * {
     @apply border-border;
   }
-
+  
   body {
     @apply bg-background text-foreground;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    line-height: 1.1;
+    overflow-x: hidden;
   }
+}
+
+/* Bloomberg Terminal Grid Layout */
+.terminal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 1px;
+  height: calc(100vh - 60px);
+  background: hsl(var(--background));
+  padding: 1px;
+}
+
+.terminal-panel {
+  background: hsl(var(--bloomberg-black));
+  border: 1px solid hsl(var(--terminal-amber) / 0.3);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, 
+    hsl(var(--terminal-amber)) 0%, 
+    hsl(var(--terminal-orange)) 50%, 
+    hsl(var(--terminal-amber)) 100%
+  );
+  z-index: 1;
+}
+
+.panel-header {
+  background: hsl(var(--bloomberg-header));
+  color: hsl(var(--terminal-amber));
+  font-weight: 600;
+  font-size: 10px;
+  padding: 4px 8px;
+  border-bottom: 1px solid hsl(var(--terminal-amber) / 0.3);
+  margin-top: 2px;
+  position: relative;
+  z-index: 2;
+}
+
+.panel-content {
+  flex: 1;
+  padding: 6px;
+  overflow-y: auto;
+  font-size: 10px;
+}
+
+.data-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 8px;
+  padding: 2px 4px;
+  border-bottom: 1px solid hsl(var(--border) / 0.3);
+  transition: background-color 0.1s;
+}
+
+.data-row:hover {
+  background: hsl(var(--terminal-amber) / 0.05);
+}
+
+.symbol {
+  color: hsl(var(--terminal-white));
+  font-weight: 500;
+}
+
+.price {
+  color: hsl(var(--terminal-cyan));
+  text-align: right;
+}
+
+.change-positive {
+  color: hsl(var(--terminal-green));
+  text-align: right;
+}
+
+.change-negative {
+  color: hsl(var(--terminal-red));
+  text-align: right;
+}
+
+.change-neutral {
+  color: hsl(var(--terminal-yellow));
+  text-align: right;
+}
+
+/* Ticker Tape */
+.ticker-tape {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  background: hsl(var(--bloomberg-black));
+  border-top: 1px solid hsl(var(--terminal-amber) / 0.5);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.ticker-content {
+  display: flex;
+  animation: scroll-ticker 120s linear infinite;
+  white-space: nowrap;
+  align-items: center;
+  height: 100%;
+  font-size: 10px;
+}
+
+@keyframes scroll-ticker {
+  0% { transform: translate3d(100%, 0, 0); }
+  100% { transform: translate3d(-100%, 0, 0); }
+}
+
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 40px;
+  gap: 8px;
+}
+
+/* Tabs Styling */
+.tabs-list {
+  background: hsl(var(--bloomberg-header));
+  border: 1px solid hsl(var(--terminal-amber) / 0.3);
+  border-radius: 0;
+}
+
+.tabs-trigger {
+  background: transparent;
+  color: hsl(var(--terminal-cyan));
+  border-radius: 0;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 8px 16px;
+}
+
+.tabs-trigger[data-state="active"] {
+  background: hsl(var(--terminal-amber) / 0.2);
+  color: hsl(var(--terminal-amber));
+  border-bottom: 2px solid hsl(var(--terminal-amber));
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--bloomberg-black));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--terminal-amber) / 0.3);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--terminal-amber) / 0.5);
 }
