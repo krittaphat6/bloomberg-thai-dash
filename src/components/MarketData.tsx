@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ScatterAnalysis from './ScatterChart';
+import MarketPieChart from './MarketPieChart';
 
 interface StockData {
   symbol: string;
@@ -288,19 +289,9 @@ const MarketData = () => {
               </div>
             </div>
 
-            {/* Panel 8: News Feed */}
-            <div className="terminal-panel">
-              <div className="panel-header">MARKET NEWS</div>
-              <div className="panel-content">
-                <div className="text-xs space-y-2">
-                  <div className="text-terminal-amber">15:30 | FED RAISES RATES BY 0.25%</div>
-                  <div className="text-terminal-cyan">15:25 | OIL PRICES SURGE ON SUPPLY CUTS</div>
-                  <div className="text-terminal-yellow">15:20 | TECH STOCKS RALLY CONTINUES</div>
-                  <div className="text-terminal-green">15:15 | GDP GROWTH BEATS ESTIMATES</div>
-                  <div className="text-terminal-red">15:10 | INFLATION DATA CONCERNS</div>
-                  <div className="text-terminal-cyan">15:05 | CRYPTO REGULATION UPDATE</div>
-                </div>
-              </div>
+            {/* Panel 8: Market Pie Chart */}
+            <div className="relative">
+              <MarketPieChart />
             </div>
           </div>
         </TabsContent>
