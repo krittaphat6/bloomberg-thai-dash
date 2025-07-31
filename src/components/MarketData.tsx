@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ScatterAnalysis from './ScatterChart';
 import MarketPieChart from './MarketPieChart';
+import BloombergNews from './BloombergNews';
 
 interface StockData {
   symbol: string;
@@ -324,6 +325,11 @@ const MarketData = () => {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Bloomberg News Section */}
+      <div className="px-4 py-2">
+        <BloombergNews />
+      </div>
 
       {/* Ticker Tape */}
       <div className="ticker-tape">
