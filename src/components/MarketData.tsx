@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ScatterAnalysis from './ScatterChart';
 import MarketPieChart from './MarketPieChart';
 import BloombergNews from './BloombergNews';
+import LiveMap from './LiveMap';
 
 interface StockData {
   symbol: string;
@@ -293,6 +294,11 @@ const MarketData = () => {
             {/* Panel 8: Market Pie Chart */}
             <div className="relative">
               <MarketPieChart />
+            </div>
+
+            {/* Panel 9: Live Geopolitical Map */}
+            <div className="relative">
+              <LiveMap />
             </div>
           </div>
         </TabsContent>
