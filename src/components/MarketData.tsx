@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import ScatterAnalysis from './ScatterChart';
 import MarketPieChart from './MarketPieChart';
 import BloombergNews from './BloombergNews';
@@ -137,552 +138,604 @@ const MarketData = () => {
         </TabsList>
 
         <TabsContent value="terminal" className="p-0">
-          <div className="terminal-grid">
-            {/* Panel 1: International Indices */}
-            <div className="terminal-panel">
-              <div className="panel-header">GLOBAL INDICES</div>
-              <div className="panel-content">
-                {marketData[0].stocks.slice(0, 8).map((stock, index) => (
-                  <div key={index} className="data-row">
-                    <div className="symbol">{stock.symbol}</div>
-                    <div className="price">{formatPrice(stock.price)}</div>
-                    <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
-                      {formatChange(stock.change)}
+          <div className="h-[calc(100vh-140px)]">
+            <ResizablePanelGroup direction="vertical">
+              {/* Row 1 */}
+              <ResizablePanel defaultSize={25} minSize={15}>
+                <ResizablePanelGroup direction="horizontal">
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">GLOBAL INDICES</div>
+                      <div className="panel-content">
+                        {marketData[0].stocks.slice(0, 8).map((stock, index) => (
+                          <div key={index} className="data-row">
+                            <div className="symbol">{stock.symbol}</div>
+                            <div className="price">{formatPrice(stock.price)}</div>
+                            <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
+                              {formatChange(stock.change)}
+                            </div>
+                            <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
+                              {formatPercent(stock.changePercent)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
-                      {formatPercent(stock.changePercent)}
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">ASIAN MARKETS</div>
+                      <div className="panel-content">
+                        {marketData[0].stocks.slice(8).concat(marketData[1].stocks.slice(0, 4)).map((stock, index) => (
+                          <div key={index} className="data-row">
+                            <div className="symbol">{stock.symbol}</div>
+                            <div className="price">{formatPrice(stock.price)}</div>
+                            <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
+                              {formatChange(stock.change)}
+                            </div>
+                            <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
+                              {formatPercent(stock.changePercent)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Panel 2: Asian Markets */}
-            <div className="terminal-panel">
-              <div className="panel-header">ASIAN MARKETS</div>
-              <div className="panel-content">
-                {marketData[0].stocks.slice(8).concat(marketData[1].stocks.slice(0, 4)).map((stock, index) => (
-                  <div key={index} className="data-row">
-                    <div className="symbol">{stock.symbol}</div>
-                    <div className="price">{formatPrice(stock.price)}</div>
-                    <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
-                      {formatChange(stock.change)}
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">COMMODITIES</div>
+                      <div className="panel-content">
+                        {marketData[2].stocks.map((stock, index) => (
+                          <div key={index} className="data-row">
+                            <div className="symbol">{stock.symbol}</div>
+                            <div className="price">{formatPrice(stock.price)}</div>
+                            <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
+                              {formatChange(stock.change)}
+                            </div>
+                            <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
+                              {formatPercent(stock.changePercent)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
-                      {formatPercent(stock.changePercent)}
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">FOREIGN EXCHANGE</div>
+                      <div className="panel-content">
+                        {marketData[3].stocks.map((stock, index) => (
+                          <div key={index} className="data-row">
+                            <div className="symbol">{stock.symbol}</div>
+                            <div className="price">{formatPrice(stock.price)}</div>
+                            <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
+                              {formatChange(stock.change)}
+                            </div>
+                            <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
+                              {formatPercent(stock.changePercent)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Panel 3: Commodities */}
-            <div className="terminal-panel">
-              <div className="panel-header">COMMODITIES</div>
-              <div className="panel-content">
-                {marketData[2].stocks.map((stock, index) => (
-                  <div key={index} className="data-row">
-                    <div className="symbol">{stock.symbol}</div>
-                    <div className="price">{formatPrice(stock.price)}</div>
-                    <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
-                      {formatChange(stock.change)}
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">THAI EQUITIES</div>
+                      <div className="panel-content">
+                        {marketData[1].stocks.slice(4).map((stock, index) => (
+                          <div key={index} className="data-row">
+                            <div className="symbol">{stock.symbol}</div>
+                            <div className="price">{formatPrice(stock.price)}</div>
+                            <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
+                              {formatChange(stock.change)}
+                            </div>
+                            <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
+                              {formatPercent(stock.changePercent)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
-                      {formatPercent(stock.changePercent)}
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">CRYPTOCURRENCY</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">BTC/USD</div>
+                          <div className="price">67,234.50</div>
+                          <div className="change-positive">+1,234.50</div>
+                          <div className="change-positive">+1.87%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">ETH/USD</div>
+                          <div className="price">3,456.78</div>
+                          <div className="change-negative">-234.22</div>
+                          <div className="change-negative">-6.34%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">BNB/USD</div>
+                          <div className="price">612.34</div>
+                          <div className="change-positive">+23.45</div>
+                          <div className="change-positive">+3.98%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">ADA/USD</div>
+                          <div className="price">0.456</div>
+                          <div className="change-negative">-0.023</div>
+                          <div className="change-negative">-4.81%</div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Panel 4: FX Rates */}
-            <div className="terminal-panel">
-              <div className="panel-header">FOREIGN EXCHANGE</div>
-              <div className="panel-content">
-                {marketData[3].stocks.map((stock, index) => (
-                  <div key={index} className="data-row">
-                    <div className="symbol">{stock.symbol}</div>
-                    <div className="price">{formatPrice(stock.price)}</div>
-                    <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
-                      {formatChange(stock.change)}
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </ResizablePanel>
+              
+              <ResizableHandle withHandle />
+              
+              {/* Row 2 */}
+              <ResizablePanel defaultSize={25} minSize={15}>
+                <ResizablePanelGroup direction="horizontal">
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">GOVERNMENT BONDS</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">US 10Y</div>
+                          <div className="price">4.567</div>
+                          <div className="change-positive">+0.023</div>
+                          <div className="change-positive">+0.51%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">TH 10Y</div>
+                          <div className="price">2.678</div>
+                          <div className="change-negative">-0.012</div>
+                          <div className="change-negative">-0.45%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">DE 10Y</div>
+                          <div className="price">2.234</div>
+                          <div className="change-positive">+0.034</div>
+                          <div className="change-positive">+1.54%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">JP 10Y</div>
+                          <div className="price">0.789</div>
+                          <div className="change-neutral">+0.000</div>
+                          <div className="change-neutral">+0.00%</div>
+                        </div>
+                      </div>
                     </div>
-                    <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
-                      {formatPercent(stock.changePercent)}
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="relative h-full">
+                      <MarketPieChart />
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Panel 5: Thai Stocks */}
-            <div className="terminal-panel">
-              <div className="panel-header">THAI EQUITIES</div>
-              <div className="panel-content">
-                {marketData[1].stocks.slice(4).map((stock, index) => (
-                  <div key={index} className="data-row">
-                    <div className="symbol">{stock.symbol}</div>
-                    <div className="price">{formatPrice(stock.price)}</div>
-                    <div className={stock.change >= 0 ? 'change-positive' : 'change-negative'}>
-                      {formatChange(stock.change)}
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">OPTIONS FLOW</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">SPY C420</div>
+                          <div className="price">2.45</div>
+                          <div className="change-positive">+0.34</div>
+                          <div className="change-positive">+16.1%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">QQQ P380</div>
+                          <div className="price">1.23</div>
+                          <div className="change-negative">-0.45</div>
+                          <div className="change-negative">-26.8%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">AAPL C190</div>
+                          <div className="price">3.67</div>
+                          <div className="change-positive">+0.89</div>
+                          <div className="change-positive">+32.0%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">TSLA P250</div>
+                          <div className="price">5.12</div>
+                          <div className="change-negative">-1.34</div>
+                          <div className="change-negative">-20.7%</div>
+                        </div>
+                      </div>
                     </div>
-                    <div className={stock.changePercent >= 0 ? 'change-positive' : 'change-negative'}>
-                      {formatPercent(stock.changePercent)}
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">SECTOR PERFORMANCE</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">TECH</div>
+                          <div className="price">+1.24%</div>
+                          <div className="change-positive">+0.34</div>
+                          <div className="change-positive">+38.5%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">ENERGY</div>
+                          <div className="price">-0.67%</div>
+                          <div className="change-negative">-0.12</div>
+                          <div className="change-negative">-12.3%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">FINANCE</div>
+                          <div className="price">+0.89%</div>
+                          <div className="change-positive">+0.23</div>
+                          <div className="change-positive">+22.1%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">HEALTH</div>
+                          <div className="price">+0.45%</div>
+                          <div className="change-positive">+0.15</div>
+                          <div className="change-positive">+15.7%</div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Panel 6: Crypto */}
-            <div className="terminal-panel">
-              <div className="panel-header">CRYPTOCURRENCY</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">BTC/USD</div>
-                  <div className="price">67,234.50</div>
-                  <div className="change-positive">+1,234.50</div>
-                  <div className="change-positive">+1.87%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">ETH/USD</div>
-                  <div className="price">3,456.78</div>
-                  <div className="change-negative">-234.22</div>
-                  <div className="change-negative">-6.34%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">BNB/USD</div>
-                  <div className="price">612.34</div>
-                  <div className="change-positive">+23.45</div>
-                  <div className="change-positive">+3.98%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">ADA/USD</div>
-                  <div className="price">0.456</div>
-                  <div className="change-negative">-0.023</div>
-                  <div className="change-negative">-4.81%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 7: Bonds */}
-            <div className="terminal-panel">
-              <div className="panel-header">GOVERNMENT BONDS</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">US 10Y</div>
-                  <div className="price">4.567</div>
-                  <div className="change-positive">+0.023</div>
-                  <div className="change-positive">+0.51%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">TH 10Y</div>
-                  <div className="price">2.678</div>
-                  <div className="change-negative">-0.012</div>
-                  <div className="change-negative">-0.45%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">DE 10Y</div>
-                  <div className="price">2.234</div>
-                  <div className="change-positive">+0.034</div>
-                  <div className="change-positive">+1.54%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">JP 10Y</div>
-                  <div className="price">0.789</div>
-                  <div className="change-neutral">+0.000</div>
-                  <div className="change-neutral">+0.00%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 8: Market Pie Chart */}
-            <div className="relative">
-              <MarketPieChart />
-            </div>
-
-            {/* Panel 9: Options Flow */}
-            <div className="terminal-panel">
-              <div className="panel-header">OPTIONS FLOW</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">SPY C420</div>
-                  <div className="price">2.45</div>
-                  <div className="change-positive">+0.34</div>
-                  <div className="change-positive">+16.1%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">QQQ P380</div>
-                  <div className="price">1.23</div>
-                  <div className="change-negative">-0.45</div>
-                  <div className="change-negative">-26.8%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">AAPL C190</div>
-                  <div className="price">3.67</div>
-                  <div className="change-positive">+0.89</div>
-                  <div className="change-positive">+32.0%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">TSLA P250</div>
-                  <div className="price">5.12</div>
-                  <div className="change-negative">-1.34</div>
-                  <div className="change-negative">-20.7%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 10: Sector Performance */}
-            <div className="terminal-panel">
-              <div className="panel-header">SECTOR PERFORMANCE</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">TECH</div>
-                  <div className="price">+1.24%</div>
-                  <div className="change-positive">+0.34</div>
-                  <div className="change-positive">+38.5%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">ENERGY</div>
-                  <div className="price">-0.67%</div>
-                  <div className="change-negative">-0.12</div>
-                  <div className="change-negative">-12.3%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">FINANCE</div>
-                  <div className="price">+0.89%</div>
-                  <div className="change-positive">+0.23</div>
-                  <div className="change-positive">+22.1%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">HEALTH</div>
-                  <div className="price">+0.45%</div>
-                  <div className="change-positive">+0.15</div>
-                  <div className="change-positive">+15.7%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 11: Market Movers */}
-            <div className="terminal-panel">
-              <div className="panel-header">TOP MOVERS</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">NVDA</div>
-                  <div className="price">876.45</div>
-                  <div className="change-positive">+45.67</div>
-                  <div className="change-positive">+5.50%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">AMD</div>
-                  <div className="price">145.23</div>
-                  <div className="change-positive">+12.34</div>
-                  <div className="change-positive">+9.28%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">INTC</div>
-                  <div className="price">23.45</div>
-                  <div className="change-negative">-2.34</div>
-                  <div className="change-negative">-9.07%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">BABA</div>
-                  <div className="price">89.12</div>
-                  <div className="change-negative">-4.56</div>
-                  <div className="change-negative">-4.87%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 12: Volatility Index */}
-            <div className="terminal-panel">
-              <div className="panel-header">VOLATILITY</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">VIX</div>
-                  <div className="price">18.45</div>
-                  <div className="change-negative">-1.23</div>
-                  <div className="change-negative">-6.25%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">VVIX</div>
-                  <div className="price">89.67</div>
-                  <div className="change-positive">+2.34</div>
-                  <div className="change-positive">+2.68%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">SKEW</div>
-                  <div className="price">145.23</div>
-                  <div className="change-neutral">+0.12</div>
-                  <div className="change-neutral">+0.08%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">TERM</div>
-                  <div className="price">0.234</div>
-                  <div className="change-positive">+0.012</div>
-                  <div className="change-positive">+5.41%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 13: Economic Calendar */}
-            <EconomicCalendar />
-
-            {/* Panel 14: Market Depth */}
-            <MarketDepth />
-
-            {/* Panel 15: Trading Volume */}
-            <TradingVolume />
-
-            {/* Panel 16: Market Heatmap */}
-            <HeatMap />
-
-            {/* Panel 17: Interest Rates */}
-            <div className="terminal-panel">
-              <div className="panel-header">INTEREST RATES</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">FED FUNDS</div>
-                  <div className="price">5.25</div>
-                  <div className="change-neutral">+0.00</div>
-                  <div className="change-neutral">+0.00%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">ECB RATE</div>
-                  <div className="price">4.50</div>
-                  <div className="change-neutral">+0.00</div>
-                  <div className="change-neutral">+0.00%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">BOJ RATE</div>
-                  <div className="price">0.10</div>
-                  <div className="change-neutral">+0.00</div>
-                  <div className="change-neutral">+0.00%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">BOE RATE</div>
-                  <div className="price">5.25</div>
-                  <div className="change-neutral">+0.00</div>
-                  <div className="change-neutral">+0.00%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 18: Futures */}
-            <div className="terminal-panel">
-              <div className="panel-header">FUTURES</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">ES DEC24</div>
-                  <div className="price">5829.25</div>
-                  <div className="change-negative">-12.50</div>
-                  <div className="change-negative">-0.21%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">NQ DEC24</div>
-                  <div className="price">20485.75</div>
-                  <div className="change-negative">-15.25</div>
-                  <div className="change-negative">-0.07%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">RTY DEC24</div>
-                  <div className="price">2387.40</div>
-                  <div className="change-negative">-18.75</div>
-                  <div className="change-negative">-0.78%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">CL JAN25</div>
-                  <div className="price">78.92</div>
-                  <div className="change-positive">+0.95</div>
-                  <div className="change-positive">+1.22%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 19: Market Sentiment */}
-            <div className="terminal-panel">
-              <div className="panel-header">SENTIMENT</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">FEAR/GREED</div>
-                  <div className="price">67</div>
-                  <div className="change-positive">+5</div>
-                  <div className="change-positive">GREED</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">PUT/CALL</div>
-                  <div className="price">0.89</div>
-                  <div className="change-negative">-0.05</div>
-                  <div className="change-negative">-5.33%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">AAII BULL</div>
-                  <div className="price">45.6%</div>
-                  <div className="change-positive">+2.3%</div>
-                  <div className="change-positive">+5.31%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">MARGIN DEBT</div>
-                  <div className="price">891.2B</div>
-                  <div className="change-positive">+12.4B</div>
-                  <div className="change-positive">+1.41%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 20: Technical Indicators */}
-            <div className="terminal-panel">
-              <div className="panel-header">TECHNICALS</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">SPX RSI</div>
-                  <div className="price">67.8</div>
-                  <div className="change-positive">+2.1</div>
-                  <div className="change-positive">BULLISH</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">SPX MACD</div>
-                  <div className="price">23.45</div>
-                  <div className="change-positive">+1.23</div>
-                  <div className="change-positive">BUY</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">SPX MA50</div>
-                  <div className="price">5745.23</div>
-                  <div className="change-positive">+12.45</div>
-                  <div className="change-positive">+0.22%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">SPX MA200</div>
-                  <div className="price">5234.67</div>
-                  <div className="change-positive">+5.67</div>
-                  <div className="change-positive">+0.11%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 21: Energy */}
-            <div className="terminal-panel">
-              <div className="panel-header">ENERGY MARKETS</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">WTI CRUDE</div>
-                  <div className="price">78.92</div>
-                  <div className="change-positive">+0.95</div>
-                  <div className="change-positive">+1.22%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">BRENT</div>
-                  <div className="price">83.45</div>
-                  <div className="change-positive">+1.12</div>
-                  <div className="change-positive">+1.36%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">NAT GAS</div>
-                  <div className="price">3.456</div>
-                  <div className="change-positive">+0.071</div>
-                  <div className="change-positive">+2.09%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">GASOLINE</div>
-                  <div className="price">2.234</div>
-                  <div className="change-negative">-0.034</div>
-                  <div className="change-negative">-1.50%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 22: Metals */}
-            <div className="terminal-panel">
-              <div className="panel-header">PRECIOUS METALS</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">GOLD</div>
-                  <div className="price">2634.50</div>
-                  <div className="change-negative">-4.75</div>
-                  <div className="change-negative">-0.18%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">SILVER</div>
-                  <div className="price">31.45</div>
-                  <div className="change-negative">-0.67</div>
-                  <div className="change-negative">-2.09%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">PLATINUM</div>
-                  <div className="price">967.80</div>
-                  <div className="change-positive">+12.45</div>
-                  <div className="change-positive">+1.30%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">PALLADIUM</div>
-                  <div className="price">1034.50</div>
-                  <div className="change-negative">-23.40</div>
-                  <div className="change-negative">-2.21%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 23: Agriculture */}
-            <div className="terminal-panel">
-              <div className="panel-header">AGRICULTURE</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">CORN</div>
-                  <div className="price">434.25</div>
-                  <div className="change-positive">+2.75</div>
-                  <div className="change-positive">+0.64%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">WHEAT</div>
-                  <div className="price">567.50</div>
-                  <div className="change-negative">-5.25</div>
-                  <div className="change-negative">-0.92%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">SOYBEANS</div>
-                  <div className="price">1023.75</div>
-                  <div className="change-positive">+8.50</div>
-                  <div className="change-positive">+0.84%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">SUGAR</div>
-                  <div className="price">21.89</div>
-                  <div className="change-negative">-0.34</div>
-                  <div className="change-negative">-1.53%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Panel 24: World Indices */}
-            <div className="terminal-panel">
-              <div className="panel-header">WORLD INDICES</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">NIKKEI</div>
-                  <div className="price">38234.56</div>
-                  <div className="change-positive">+234.78</div>
-                  <div className="change-positive">+0.62%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">HANG SENG</div>
-                  <div className="price">17456.23</div>
-                  <div className="change-negative">-123.45</div>
-                  <div className="change-negative">-0.70%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">FTSE 100</div>
-                  <div className="price">8234.67</div>
-                  <div className="change-positive">+45.23</div>
-                  <div className="change-positive">+0.55%</div>
-                </div>
-                <div className="data-row">
-                  <div className="symbol">CAC 40</div>
-                  <div className="price">7456.89</div>
-                  <div className="change-positive">+67.34</div>
-                  <div className="change-positive">+0.91%</div>
-                </div>
-              </div>
-            </div>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">TOP MOVERS</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">NVDA</div>
+                          <div className="price">876.45</div>
+                          <div className="change-positive">+45.67</div>
+                          <div className="change-positive">+5.50%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">AMD</div>
+                          <div className="price">145.23</div>
+                          <div className="change-positive">+12.34</div>
+                          <div className="change-positive">+9.28%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">INTC</div>
+                          <div className="price">23.45</div>
+                          <div className="change-negative">-2.34</div>
+                          <div className="change-negative">-9.07%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">BABA</div>
+                          <div className="price">89.12</div>
+                          <div className="change-negative">-4.56</div>
+                          <div className="change-negative">-4.87%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">VOLATILITY</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">VIX</div>
+                          <div className="price">18.45</div>
+                          <div className="change-negative">-1.23</div>
+                          <div className="change-negative">-6.25%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">VVIX</div>
+                          <div className="price">89.67</div>
+                          <div className="change-positive">+2.34</div>
+                          <div className="change-positive">+2.68%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">SKEW</div>
+                          <div className="price">145.23</div>
+                          <div className="change-neutral">+0.12</div>
+                          <div className="change-neutral">+0.08%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">TERM</div>
+                          <div className="price">0.234</div>
+                          <div className="change-positive">+0.012</div>
+                          <div className="change-positive">+5.41%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </ResizablePanel>
+              
+              <ResizableHandle withHandle />
+              
+              {/* Row 3 */}
+              <ResizablePanel defaultSize={25} minSize={15}>
+                <ResizablePanelGroup direction="horizontal">
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <EconomicCalendar />
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <MarketDepth />
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <TradingVolume />
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <HeatMap />
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">INTEREST RATES</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">FED FUNDS</div>
+                          <div className="price">5.25</div>
+                          <div className="change-neutral">+0.00</div>
+                          <div className="change-neutral">+0.00%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">ECB RATE</div>
+                          <div className="price">4.50</div>
+                          <div className="change-neutral">+0.00</div>
+                          <div className="change-neutral">+0.00%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">BOJ RATE</div>
+                          <div className="price">0.10</div>
+                          <div className="change-neutral">+0.00</div>
+                          <div className="change-neutral">+0.00%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">BOE RATE</div>
+                          <div className="price">5.25</div>
+                          <div className="change-neutral">+0.00</div>
+                          <div className="change-neutral">+0.00%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">FUTURES</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">ES DEC24</div>
+                          <div className="price">5829.25</div>
+                          <div className="change-negative">-12.50</div>
+                          <div className="change-negative">-0.21%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">NQ DEC24</div>
+                          <div className="price">20485.75</div>
+                          <div className="change-negative">-15.25</div>
+                          <div className="change-negative">-0.07%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">RTY DEC24</div>
+                          <div className="price">2387.40</div>
+                          <div className="change-negative">-18.75</div>
+                          <div className="change-negative">-0.78%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">CL JAN25</div>
+                          <div className="price">78.92</div>
+                          <div className="change-positive">+0.95</div>
+                          <div className="change-positive">+1.22%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </ResizablePanel>
+              
+              <ResizableHandle withHandle />
+              
+              {/* Row 4 */}
+              <ResizablePanel defaultSize={25} minSize={15}>
+                <ResizablePanelGroup direction="horizontal">
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">SENTIMENT</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">FEAR/GREED</div>
+                          <div className="price">67</div>
+                          <div className="change-positive">+5</div>
+                          <div className="change-positive">GREED</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">PUT/CALL</div>
+                          <div className="price">0.89</div>
+                          <div className="change-negative">-0.05</div>
+                          <div className="change-negative">-5.33%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">AAII BULL</div>
+                          <div className="price">45.6%</div>
+                          <div className="change-positive">+2.3%</div>
+                          <div className="change-positive">+5.31%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">MARGIN DEBT</div>
+                          <div className="price">891.2B</div>
+                          <div className="change-positive">+12.4B</div>
+                          <div className="change-positive">+1.41%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">TECHNICALS</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">SPX RSI</div>
+                          <div className="price">67.8</div>
+                          <div className="change-positive">+2.1</div>
+                          <div className="change-positive">BULLISH</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">SPX MACD</div>
+                          <div className="price">23.45</div>
+                          <div className="change-positive">+1.23</div>
+                          <div className="change-positive">BUY</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">SPX MA50</div>
+                          <div className="price">5745.23</div>
+                          <div className="change-positive">+12.45</div>
+                          <div className="change-positive">+0.22%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">SPX MA200</div>
+                          <div className="price">5234.67</div>
+                          <div className="change-positive">+5.67</div>
+                          <div className="change-positive">+0.11%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">ENERGY MARKETS</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">WTI CRUDE</div>
+                          <div className="price">78.92</div>
+                          <div className="change-positive">+0.95</div>
+                          <div className="change-positive">+1.22%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">BRENT</div>
+                          <div className="price">83.45</div>
+                          <div className="change-positive">+1.12</div>
+                          <div className="change-positive">+1.36%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">NAT GAS</div>
+                          <div className="price">3.456</div>
+                          <div className="change-positive">+0.071</div>
+                          <div className="change-positive">+2.09%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">GASOLINE</div>
+                          <div className="price">2.234</div>
+                          <div className="change-negative">-0.034</div>
+                          <div className="change-negative">-1.50%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">PRECIOUS METALS</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">GOLD</div>
+                          <div className="price">2634.50</div>
+                          <div className="change-negative">-4.75</div>
+                          <div className="change-negative">-0.18%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">SILVER</div>
+                          <div className="price">31.45</div>
+                          <div className="change-negative">-0.67</div>
+                          <div className="change-negative">-2.09%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">PLATINUM</div>
+                          <div className="price">967.80</div>
+                          <div className="change-positive">+12.45</div>
+                          <div className="change-positive">+1.30%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">PALLADIUM</div>
+                          <div className="price">1034.50</div>
+                          <div className="change-negative">-23.40</div>
+                          <div className="change-negative">-2.21%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">AGRICULTURE</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">CORN</div>
+                          <div className="price">434.25</div>
+                          <div className="change-positive">+2.75</div>
+                          <div className="change-positive">+0.64%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">WHEAT</div>
+                          <div className="price">567.50</div>
+                          <div className="change-negative">-5.25</div>
+                          <div className="change-negative">-0.92%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">SOYBEANS</div>
+                          <div className="price">1023.75</div>
+                          <div className="change-positive">+8.50</div>
+                          <div className="change-positive">+0.84%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">SUGAR</div>
+                          <div className="price">21.89</div>
+                          <div className="change-negative">-0.34</div>
+                          <div className="change-negative">-1.53%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={16.66} minSize={10}>
+                    <div className="terminal-panel h-full">
+                      <div className="panel-header">WORLD INDICES</div>
+                      <div className="panel-content">
+                        <div className="data-row">
+                          <div className="symbol">NIKKEI</div>
+                          <div className="price">38234.56</div>
+                          <div className="change-positive">+234.78</div>
+                          <div className="change-positive">+0.62%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">HANG SENG</div>
+                          <div className="price">17456.23</div>
+                          <div className="change-negative">-123.45</div>
+                          <div className="change-negative">-0.70%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">FTSE 100</div>
+                          <div className="price">8234.67</div>
+                          <div className="change-positive">+45.23</div>
+                          <div className="change-positive">+0.55%</div>
+                        </div>
+                        <div className="data-row">
+                          <div className="symbol">CAC 40</div>
+                          <div className="price">7456.89</div>
+                          <div className="change-positive">+67.34</div>
+                          <div className="change-positive">+0.91%</div>
+                        </div>
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </ResizablePanel>
+            </ResizablePanelGroup>
           </div>
         </TabsContent>
 
