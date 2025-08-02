@@ -9,6 +9,9 @@ import MarketDepth from './MarketDepth';
 import TradingVolume from './TradingVolume';
 import HeatMap from './HeatMap';
 import CurrencyTable from './CurrencyTable';
+import CandlestickChart from './CandlestickChart';
+import PriceChart from './PriceChart';
+import VolumeChart from './VolumeChart';
 
 
 interface StockData {
@@ -317,7 +320,7 @@ const MarketData = () => {
                   <ResizableHandle withHandle />
                   <ResizablePanel defaultSize={16.66} minSize={10}>
                     <div className="relative h-full">
-                      <MarketPieChart />
+                      <CandlestickChart symbol="SPY" />
                     </div>
                   </ResizablePanel>
                   <ResizableHandle withHandle />
@@ -353,37 +356,11 @@ const MarketData = () => {
                     </div>
                   </ResizablePanel>
                   <ResizableHandle withHandle />
-                  <ResizablePanel defaultSize={16.66} minSize={10}>
-                    <div className="terminal-panel h-full">
-                      <div className="panel-header">SECTOR PERFORMANCE</div>
-                      <div className="panel-content">
-                        <div className="data-row">
-                          <div className="symbol">TECH</div>
-                          <div className="price">+1.24%</div>
-                          <div className="change-positive">+0.34</div>
-                          <div className="change-positive">+38.5%</div>
-                        </div>
-                        <div className="data-row">
-                          <div className="symbol">ENERGY</div>
-                          <div className="price">-0.67%</div>
-                          <div className="change-negative">-0.12</div>
-                          <div className="change-negative">-12.3%</div>
-                        </div>
-                        <div className="data-row">
-                          <div className="symbol">FINANCE</div>
-                          <div className="price">+0.89%</div>
-                          <div className="change-positive">+0.23</div>
-                          <div className="change-positive">+22.1%</div>
-                        </div>
-                        <div className="data-row">
-                          <div className="symbol">HEALTH</div>
-                          <div className="price">+0.45%</div>
-                          <div className="change-positive">+0.15</div>
-                          <div className="change-positive">+15.7%</div>
-                        </div>
-                      </div>
-                    </div>
-                  </ResizablePanel>
+                   <ResizablePanel defaultSize={16.66} minSize={10}>
+                     <div className="relative h-full">
+                       <PriceChart symbol="EURUSD" type="area" />
+                     </div>
+                   </ResizablePanel>
                   <ResizableHandle withHandle />
                   <ResizablePanel defaultSize={16.66} minSize={10}>
                     <div className="terminal-panel h-full">
@@ -456,21 +433,29 @@ const MarketData = () => {
               {/* Row 3 */}
               <ResizablePanel defaultSize={25} minSize={15}>
                 <ResizablePanelGroup direction="horizontal">
-                  <ResizablePanel defaultSize={16.66} minSize={10}>
-                    <EconomicCalendar />
-                  </ResizablePanel>
+                   <ResizablePanel defaultSize={16.66} minSize={10}>
+                     <div className="relative h-full">
+                       <VolumeChart title="MARKET VOLUME" />
+                     </div>
+                   </ResizablePanel>
                   <ResizableHandle withHandle />
-                  <ResizablePanel defaultSize={16.66} minSize={10}>
-                    <MarketDepth />
-                  </ResizablePanel>
+                   <ResizablePanel defaultSize={16.66} minSize={10}>
+                     <div className="relative h-full">
+                       <PriceChart symbol="GOLD" type="line" />
+                     </div>
+                   </ResizablePanel>
                   <ResizableHandle withHandle />
-                  <ResizablePanel defaultSize={16.66} minSize={10}>
-                    <TradingVolume />
-                  </ResizablePanel>
+                   <ResizablePanel defaultSize={16.66} minSize={10}>
+                     <div className="relative h-full">
+                       <CandlestickChart symbol="BTC" />
+                     </div>
+                   </ResizablePanel>
                   <ResizableHandle withHandle />
-                  <ResizablePanel defaultSize={16.66} minSize={10}>
-                    <HeatMap />
-                  </ResizablePanel>
+                   <ResizablePanel defaultSize={16.66} minSize={10}>
+                     <div className="relative h-full">
+                       <PriceChart symbol="NASDAQ" type="area" />
+                     </div>
+                   </ResizablePanel>
                   <ResizableHandle withHandle />
                   <ResizablePanel defaultSize={16.66} minSize={10}>
                     <div className="terminal-panel h-full">
