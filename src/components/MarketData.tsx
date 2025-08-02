@@ -8,6 +8,7 @@ import EconomicCalendar from './EconomicCalendar';
 import MarketDepth from './MarketDepth';
 import TradingVolume from './TradingVolume';
 import HeatMap from './HeatMap';
+import CurrencyTable from './CurrencyTable';
 
 
 interface StockData {
@@ -703,35 +704,7 @@ const MarketData = () => {
                   </ResizablePanel>
                   <ResizableHandle withHandle />
                   <ResizablePanel defaultSize={16.66} minSize={10}>
-                    <div className="terminal-panel h-full">
-                      <div className="panel-header">WORLD INDICES</div>
-                      <div className="panel-content">
-                        <div className="data-row">
-                          <div className="symbol">NIKKEI</div>
-                          <div className="price">38234.56</div>
-                          <div className="change-positive">+234.78</div>
-                          <div className="change-positive">+0.62%</div>
-                        </div>
-                        <div className="data-row">
-                          <div className="symbol">HANG SENG</div>
-                          <div className="price">17456.23</div>
-                          <div className="change-negative">-123.45</div>
-                          <div className="change-negative">-0.70%</div>
-                        </div>
-                        <div className="data-row">
-                          <div className="symbol">FTSE 100</div>
-                          <div className="price">8234.67</div>
-                          <div className="change-positive">+45.23</div>
-                          <div className="change-positive">+0.55%</div>
-                        </div>
-                        <div className="data-row">
-                          <div className="symbol">CAC 40</div>
-                          <div className="price">7456.89</div>
-                          <div className="change-positive">+67.34</div>
-                          <div className="change-positive">+0.91%</div>
-                        </div>
-                      </div>
-                    </div>
+                    <CurrencyTable />
                   </ResizablePanel>
                 </ResizablePanelGroup>
               </ResizablePanel>
