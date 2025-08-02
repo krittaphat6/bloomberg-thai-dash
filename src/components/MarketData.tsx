@@ -12,6 +12,7 @@ import CurrencyTable from './CurrencyTable';
 import CandlestickChart from './CandlestickChart';
 import PriceChart from './PriceChart';
 import VolumeChart from './VolumeChart';
+import TradingViewChart from './TradingViewChart';
 
 
 interface StockData {
@@ -320,7 +321,7 @@ const MarketData = () => {
                   <ResizableHandle withHandle />
                   <ResizablePanel defaultSize={16.66} minSize={10}>
                     <div className="relative h-full">
-                      <CandlestickChart symbol="SPY" />
+                      <TradingViewChart symbol="NASDAQ:AAPL" title="SPY CHART" />
                     </div>
                   </ResizablePanel>
                   <ResizableHandle withHandle />
@@ -688,9 +689,11 @@ const MarketData = () => {
                     </div>
                   </ResizablePanel>
                   <ResizableHandle withHandle />
-                  <ResizablePanel defaultSize={16.66} minSize={10}>
-                    <CurrencyTable />
-                  </ResizablePanel>
+                   <ResizablePanel defaultSize={16.66} minSize={10}>
+                     <div className="relative h-full">
+                       <TradingViewChart symbol="FX:EURUSD" title="TRADINGVIEW FOREX" />
+                     </div>
+                   </ResizablePanel>
                 </ResizablePanelGroup>
               </ResizablePanel>
             </ResizablePanelGroup>
@@ -726,9 +729,25 @@ const MarketData = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Bloomberg News Section */}
-      <div className="px-4 py-2">
-        <BloombergNews />
+      {/* Additional components outside resizable area */}
+      <div className="flex space-x-2 px-4 py-2">
+        <div className="w-1/3">
+          <EconomicCalendar />
+        </div>
+        <div className="w-1/3">
+          <MarketDepth />
+        </div>
+        <div className="w-1/3">
+          <TradingVolume />
+        </div>
+      </div>
+      <div className="flex space-x-2 px-4 py-2">
+        <div className="w-1/2">
+          <HeatMap />
+        </div>
+        <div className="w-1/2">
+          <MarketPieChart />
+        </div>
       </div>
 
       {/* Ticker Tape */}
