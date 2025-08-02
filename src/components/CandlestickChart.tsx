@@ -117,6 +117,14 @@ const CandlestickChart = ({ symbol = "SPY" }: { symbol?: string }) => {
               tick={{ fontSize: 8, fill: '#00ff00' }}
               domain={['dataMin - 1', 'dataMax + 1']}
             />
+            <YAxis 
+              yAxisId="volume"
+              orientation="right"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 8, fill: '#666666' }}
+              domain={[0, 'dataMax']}
+            />
             <Tooltip content={<CandlestickTooltip />} />
             <Bar 
               dataKey="volume" 
