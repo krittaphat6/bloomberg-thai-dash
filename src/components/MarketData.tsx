@@ -9,9 +9,6 @@ import MarketDepth from './MarketDepth';
 import TradingVolume from './TradingVolume';
 import HeatMap from './HeatMap';
 import CurrencyTable from './CurrencyTable';
-import CandlestickChart from './CandlestickChart';
-import PriceChart from './PriceChart';
-import VolumeChart from './VolumeChart';
 import TradingViewChart from './TradingViewChart';
 
 
@@ -359,7 +356,7 @@ const MarketData = () => {
                   <ResizableHandle withHandle />
                    <ResizablePanel defaultSize={16.66} minSize={10}>
                      <div className="relative h-full">
-                       <PriceChart symbol="EURUSD" type="area" />
+                       <TradingViewChart symbol="FX:EURUSD" title="EUR/USD" />
                      </div>
                    </ResizablePanel>
                   <ResizableHandle withHandle />
@@ -436,25 +433,25 @@ const MarketData = () => {
                 <ResizablePanelGroup direction="horizontal">
                    <ResizablePanel defaultSize={16.66} minSize={10}>
                      <div className="relative h-full">
-                       <VolumeChart title="MARKET VOLUME" />
+                       <TradingViewChart symbol="NASDAQ:TSLA" title="TESLA" />
                      </div>
                    </ResizablePanel>
                   <ResizableHandle withHandle />
                    <ResizablePanel defaultSize={16.66} minSize={10}>
                      <div className="relative h-full">
-                       <PriceChart symbol="GOLD" type="line" />
+                       <TradingViewChart symbol="TVC:GOLD" title="GOLD" />
                      </div>
                    </ResizablePanel>
                   <ResizableHandle withHandle />
                    <ResizablePanel defaultSize={16.66} minSize={10}>
                      <div className="relative h-full">
-                       <CandlestickChart symbol="BTC" />
+                       <TradingViewChart symbol="BINANCE:BTCUSDT" title="BITCOIN" />
                      </div>
                    </ResizablePanel>
                   <ResizableHandle withHandle />
                    <ResizablePanel defaultSize={16.66} minSize={10}>
                      <div className="relative h-full">
-                       <PriceChart symbol="NASDAQ" type="area" />
+                       <TradingViewChart symbol="NASDAQ:QQQ" title="NASDAQ QQQ" />
                      </div>
                    </ResizablePanel>
                   <ResizableHandle withHandle />
