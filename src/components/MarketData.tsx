@@ -39,6 +39,29 @@ const MarketData = () => {
     setPanels(newPanels);
   };
 
+  const handlePanelMaximize = (id: string) => {
+    const newPanels = panels.map(p => ({
+      ...p,
+      isMaximized: p.id === id,
+      isMinimized: false
+    }));
+    setPanels(newPanels);
+  };
+
+  const handlePanelMinimize = (id: string) => {
+    const newPanels = panels.map(p => 
+      p.id === id ? { ...p, isMinimized: true, isMaximized: false } : p
+    );
+    setPanels(newPanels);
+  };
+
+  const handlePanelRestore = (id: string) => {
+    const newPanels = panels.map(p => 
+      p.id === id ? { ...p, isMinimized: false, isMaximized: false } : p
+    );
+    setPanels(newPanels);
+  };
+
   const availableComponents = [
     { id: 'real-market', title: 'REAL MARKET DATA', component: <RealMarketData /> },
     { id: 'economic', title: 'ECONOMIC INDICATORS', component: <EconomicIndicators /> },
@@ -87,6 +110,9 @@ const MarketData = () => {
         panels={panels}
         onTabAdd={handleTabAdd}
         onPanelClose={handlePanelClose}
+        onPanelMaximize={handlePanelMaximize}
+        onPanelMinimize={handlePanelMinimize}
+        onPanelRestore={handlePanelRestore}
       />
 
       {showTabSelector && (
