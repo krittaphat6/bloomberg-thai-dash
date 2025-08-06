@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import DraggableTab from './DraggableTab';
+import TabManager from './TabManager';
+import TabSelector from './TabSelector';
 import ScatterAnalysis from './ScatterChart';
 import MarketPieChart from './MarketPieChart';
 import BloombergNews from './BloombergNews';
@@ -11,6 +12,7 @@ import CurrencyTable from './CurrencyTable';
 import EconomicIndicators from './EconomicIndicators';
 import COTData from './COTData';
 import SPDRGoldData from './SPDRGoldData';
+import RealMarketData from './RealMarketData';
 
 interface TabData {
   id: string;
@@ -24,57 +26,16 @@ const MarketData = () => {
   const [tabs, setTabs] = useState<TabData[]>([]);
   const [activeTab, setActiveTab] = useState<string>('markets');
   const [draggedTab, setDraggedTab] = useState<string | null>(null);
+  const [showTabSelector, setShowTabSelector] = useState(false);
+  const [nextTabId, setNextTabId] = useState(1);
 
   useEffect(() => {
     const MarketsComponent = () => (
       <div className="flex-1 p-2">
         <div className="h-full grid grid-rows-3 gap-2">
           <div className="grid grid-cols-6 gap-2">
-            <div className="terminal-panel">
-              <div className="panel-header">MAJOR INDICES</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">SPX</div>
-                  <div className="price">5829.76</div>
-                  <div className="change-negative">-12.64</div>
-                  <div className="change-negative">-0.22%</div>
-                </div>
-              </div>
-            </div>
-            <div className="terminal-panel">
-              <div className="panel-header">FUTURES</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">ES=F</div>
-                  <div className="price">5832.25</div>
-                  <div className="change-positive">+2.49</div>
-                  <div className="change-positive">+0.04%</div>
-                </div>
-              </div>
-            </div>
-            <div className="terminal-panel">
-              <div className="panel-header">COMMODITIES</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">GOLD</div>
-                  <div className="price">2650.45</div>
-                  <div className="change-negative">-8.12</div>
-                  <div className="change-negative">-0.31%</div>
-                </div>
-              </div>
-            </div>
+            <RealMarketData />
             <CurrencyTable />
-            <div className="terminal-panel">
-              <div className="panel-header">VOLATILITY</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">VIX</div>
-                  <div className="price">18.45</div>
-                  <div className="change-negative">-1.23</div>
-                  <div className="change-negative">-6.25%</div>
-                </div>
-              </div>
-            </div>
             <div className="terminal-panel">
               <div className="panel-header">CRYPTO</div>
               <div className="panel-content">
@@ -156,6 +117,38 @@ const MarketData = () => {
     }
   };
 
+  const availableComponents = [
+    { id: 'real-market', title: 'REAL MARKET DATA', component: <RealMarketData /> },
+    { id: 'economic', title: 'ECONOMIC INDICATORS', component: <EconomicIndicators /> },
+    { id: 'cot', title: 'COT REPORT', component: <COTData /> },
+    { id: 'gold', title: 'GOLD/SPDR', component: <SPDRGoldData /> },
+    { id: 'news', title: 'BLOOMBERG NEWS', component: <BloombergNews /> },
+    { id: 'analysis', title: 'SCATTER ANALYSIS', component: <ScatterAnalysis /> },
+    { id: 'pie-chart', title: 'MARKET PIE CHART', component: <MarketPieChart /> },
+    { id: 'calendar', title: 'ECONOMIC CALENDAR', component: <EconomicCalendar /> },
+    { id: 'depth', title: 'MARKET DEPTH', component: <MarketDepth /> },
+    { id: 'volume', title: 'TRADING VOLUME', component: <TradingVolume /> },
+    { id: 'heatmap', title: 'HEAT MAP', component: <HeatMap /> },
+    { id: 'currency', title: 'CURRENCY TABLE', component: <CurrencyTable /> }
+  ];
+
+  const handleTabAdd = () => {
+    setShowTabSelector(true);
+  };
+
+  const handleTabSelect = (selectedComponent: any) => {
+    const newTab: TabData = {
+      id: `${selectedComponent.id}-${nextTabId}`,
+      title: selectedComponent.title,
+      component: selectedComponent.component,
+      closable: true
+    };
+    setTabs([...tabs, newTab]);
+    setActiveTab(newTab.id);
+    setNextTabId(nextTabId + 1);
+    setShowTabSelector(false);
+  };
+
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
       <div className="bg-background border-b border-border p-3">
@@ -170,28 +163,25 @@ const MarketData = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
-        <div className="flex bg-background/50 border-b border-border overflow-x-auto">
-          {tabs.map((tab) => (
-            <DraggableTab
-              key={tab.id}
-              id={tab.id}
-              title={tab.title}
-              isActive={activeTab === tab.id}
-              onActivate={() => setActiveTab(tab.id)}
-              onClose={() => handleTabClose(tab.id)}
-              onDragStart={handleTabDragStart}
-              onDragOver={handleTabDragOver}
-              onDrop={handleTabDrop}
-              isDragging={draggedTab === tab.id}
-            />
-          ))}
-        </div>
+      <TabManager
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onTabClose={handleTabClose}
+        onTabAdd={handleTabAdd}
+        onTabDragStart={handleTabDragStart}
+        onTabDragOver={handleTabDragOver}
+        onTabDrop={handleTabDrop}
+        draggedTab={draggedTab}
+      />
 
-        <div className="flex-1 bg-background">
-          {tabs.find(tab => tab.id === activeTab)?.component}
-        </div>
-      </div>
+      {showTabSelector && (
+        <TabSelector
+          onSelect={handleTabSelect}
+          onClose={() => setShowTabSelector(false)}
+          availableComponents={availableComponents}
+        />
+      )}
     </div>
   );
 };
