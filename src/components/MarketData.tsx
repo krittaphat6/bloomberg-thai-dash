@@ -14,65 +14,19 @@ import COTData from './COTData';
 import SPDRGoldData from './SPDRGoldData';
 import RealMarketData from './RealMarketData';
 
-interface TabData {
+interface PanelData {
   id: string;
   title: string;
   component: React.ReactNode;
-  closable: boolean;
 }
 
 const MarketData = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [tabs, setTabs] = useState<TabData[]>([]);
-  const [activeTab, setActiveTab] = useState<string>('markets');
-  const [draggedTab, setDraggedTab] = useState<string | null>(null);
+  const [panels, setPanels] = useState<PanelData[]>([]);
   const [showTabSelector, setShowTabSelector] = useState(false);
-  const [nextTabId, setNextTabId] = useState(1);
+  const [nextPanelId, setNextPanelId] = useState(1);
 
   useEffect(() => {
-    const MarketsComponent = () => (
-      <div className="flex-1 p-2">
-        <div className="h-full grid grid-rows-3 gap-2">
-          <div className="grid grid-cols-6 gap-2">
-            <RealMarketData />
-            <CurrencyTable />
-            <div className="terminal-panel">
-              <div className="panel-header">CRYPTO</div>
-              <div className="panel-content">
-                <div className="data-row">
-                  <div className="symbol">BTC</div>
-                  <div className="price">96,847</div>
-                  <div className="change-positive">+1,234</div>
-                  <div className="change-positive">+1.29%</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-2">
-            <EconomicIndicators />
-            <HeatMap />
-            <MarketDepth />
-            <TradingVolume />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <MarketPieChart />
-            <ScatterAnalysis />
-            <EconomicCalendar />
-          </div>
-        </div>
-      </div>
-    );
-
-    const initialTabs: TabData[] = [
-      { id: 'markets', title: 'MARKETS', component: <MarketsComponent />, closable: false },
-      { id: 'economic', title: 'ECONOMIC', component: <EconomicIndicators />, closable: true },
-      { id: 'cot', title: 'COT REPORT', component: <COTData />, closable: true },
-      { id: 'gold', title: 'GOLD/SPDR', component: <SPDRGoldData />, closable: true },
-      { id: 'news', title: 'NEWS', component: <BloombergNews />, closable: true },
-      { id: 'analysis', title: 'ANALYSIS', component: <ScatterAnalysis />, closable: true }
-    ];
-    setTabs(initialTabs);
-
     const timeInterval = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
@@ -80,41 +34,9 @@ const MarketData = () => {
     return () => clearInterval(timeInterval);
   }, []);
 
-  const handleTabDragStart = (id: string, e: React.DragEvent) => {
-    setDraggedTab(id);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleTabDragOver = (id: string, e: React.DragEvent) => {
-    e.preventDefault();
-    if (draggedTab && draggedTab !== id) {
-      e.dataTransfer.dropEffect = 'move';
-    }
-  };
-
-  const handleTabDrop = (targetId: string, e: React.DragEvent) => {
-    e.preventDefault();
-    if (draggedTab && draggedTab !== targetId) {
-      const draggedIndex = tabs.findIndex(t => t.id === draggedTab);
-      const targetIndex = tabs.findIndex(t => t.id === targetId);
-      
-      if (draggedIndex !== -1 && targetIndex !== -1) {
-        const newTabs = [...tabs];
-        const draggedTabData = newTabs[draggedIndex];
-        newTabs.splice(draggedIndex, 1);
-        newTabs.splice(targetIndex, 0, draggedTabData);
-        setTabs(newTabs);
-      }
-    }
-    setDraggedTab(null);
-  };
-
-  const handleTabClose = (id: string) => {
-    const newTabs = tabs.filter(t => t.id !== id);
-    setTabs(newTabs);
-    if (activeTab === id && newTabs.length > 0) {
-      setActiveTab(newTabs[0].id);
-    }
+  const handlePanelClose = (id: string) => {
+    const newPanels = panels.filter(p => p.id !== id);
+    setPanels(newPanels);
   };
 
   const availableComponents = [
@@ -137,15 +59,13 @@ const MarketData = () => {
   };
 
   const handleTabSelect = (selectedComponent: any) => {
-    const newTab: TabData = {
-      id: `${selectedComponent.id}-${nextTabId}`,
+    const newPanel: PanelData = {
+      id: `${selectedComponent.id}-${nextPanelId}`,
       title: selectedComponent.title,
-      component: selectedComponent.component,
-      closable: true
+      component: selectedComponent.component
     };
-    setTabs([...tabs, newTab]);
-    setActiveTab(newTab.id);
-    setNextTabId(nextTabId + 1);
+    setPanels([...panels, newPanel]);
+    setNextPanelId(nextPanelId + 1);
     setShowTabSelector(false);
   };
 
@@ -164,15 +84,9 @@ const MarketData = () => {
       </div>
 
       <TabManager
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onTabClose={handleTabClose}
+        panels={panels}
         onTabAdd={handleTabAdd}
-        onTabDragStart={handleTabDragStart}
-        onTabDragOver={handleTabDragOver}
-        onTabDrop={handleTabDrop}
-        draggedTab={draggedTab}
+        onPanelClose={handlePanelClose}
       />
 
       {showTabSelector && (
