@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, Maximize2, Minimize2, X } from 'lucide-react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import DraggableTab from './DraggableTab';
 
 interface PanelData {
   id: string;
@@ -17,6 +18,7 @@ interface TabManagerProps {
   onPanelMaximize: (panelId: string) => void;
   onPanelMinimize: (panelId: string) => void;
   onPanelRestore: (panelId: string) => void;
+  onPanelReorder: (panels: PanelData[]) => void;
 }
 
 const TabManager = ({
@@ -25,14 +27,43 @@ const TabManager = ({
   onPanelClose,
   onPanelMaximize,
   onPanelMinimize,
-  onPanelRestore
+  onPanelRestore,
+  onPanelReorder
 }: TabManagerProps) => {
+  const [draggedPanel, setDraggedPanel] = useState<string | null>(null);
   const maximizedPanel = panels.find(p => p.isMaximized);
   const visiblePanels = panels.filter(p => !p.isMinimized);
   
   const getDefaultSize = () => {
     if (visiblePanels.length === 0) return 100;
     return Math.max(100 / visiblePanels.length, 20);
+  };
+
+  const handleDragStart = (id: string, e: React.DragEvent) => {
+    setDraggedPanel(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (id: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (id: string, e: React.DragEvent) => {
+    e.preventDefault();
+    if (draggedPanel && draggedPanel !== id) {
+      const draggedIndex = panels.findIndex(p => p.id === draggedPanel);
+      const targetIndex = panels.findIndex(p => p.id === id);
+      
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        const newPanels = [...panels];
+        const draggedPanelData = newPanels[draggedIndex];
+        newPanels.splice(draggedIndex, 1);
+        newPanels.splice(targetIndex, 0, draggedPanelData);
+        onPanelReorder(newPanels);
+      }
+    }
+    setDraggedPanel(null);
   };
 
   return (
@@ -77,6 +108,24 @@ const TabManager = ({
         </div>
       ) : (
         <div className="flex-1 flex flex-col">
+          {/* Tab headers with drag functionality */}
+          <div className="flex bg-background/50 border-b border-border overflow-x-auto">
+            {visiblePanels.map(panel => (
+              <DraggableTab
+                key={panel.id}
+                id={panel.id}
+                title={panel.title}
+                isActive={false}
+                onActivate={() => {}}
+                onClose={() => onPanelClose(panel.id)}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                isDragging={draggedPanel === panel.id}
+              />
+            ))}
+          </div>
+
           {/* Minimized panels bar */}
           {panels.some(p => p.isMinimized) && (
             <div className="flex bg-terminal-panel border-b border-border p-2 gap-2">

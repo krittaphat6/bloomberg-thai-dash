@@ -62,6 +62,10 @@ const MarketData = () => {
     setPanels(newPanels);
   };
 
+  const handlePanelReorder = (newPanels: PanelData[]) => {
+    setPanels(newPanels);
+  };
+
   const availableComponents = [
     { id: 'real-market', title: 'REAL MARKET DATA', component: <RealMarketData /> },
     { id: 'economic', title: 'ECONOMIC INDICATORS', component: <EconomicIndicators /> },
@@ -113,6 +117,7 @@ const MarketData = () => {
         onPanelMaximize={handlePanelMaximize}
         onPanelMinimize={handlePanelMinimize}
         onPanelRestore={handlePanelRestore}
+        onPanelReorder={handlePanelReorder}
       />
 
       {showTabSelector && (
