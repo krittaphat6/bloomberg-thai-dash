@@ -102,14 +102,14 @@ const SPDRGoldData = () => {
   const latestGoldData = goldData[goldData.length - 1];
 
   return (
-    <div className="terminal-panel h-full">
-      <div className="panel-header flex items-center justify-between">
+    <div className="terminal-panel h-full text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
+      <div className="panel-header flex items-center justify-between text-[0.7rem] sm:text-sm md:text-base lg:text-lg">
         <span>GOLD MARKET DATA</span>
         <div className="flex items-center gap-2">
           <select 
             value={selectedView}
             onChange={(e) => setSelectedView(e.target.value)}
-            className="bg-background border border-border text-terminal-green text-xs px-2 py-1"
+            className="bg-background border border-border text-terminal-green text-[0.6rem] sm:text-xs px-1 sm:px-2 py-1"
           >
             <option value="spdr">SPDR Gold Trust (GLD)</option>
             <option value="centralbanks">Central Bank Holdings</option>
@@ -123,32 +123,32 @@ const SPDRGoldData = () => {
           <div className="space-y-4">
             {/* Current SPDR Stats */}
             <div className="grid grid-cols-4 gap-4 mb-4">
-              <div className="bg-background/30 p-3 rounded">
-                <div className="text-xs text-terminal-amber mb-1">Gold Holdings</div>
-                <div className="text-lg text-terminal-white font-bold">{latestGoldData.goldHoldings}</div>
-                <div className="text-xs text-terminal-gray">tonnes</div>
+              <div className="bg-background/30 p-2 sm:p-3 rounded">
+                <div className="text-[0.6rem] sm:text-xs text-terminal-amber mb-1">Gold Holdings</div>
+                <div className="text-sm sm:text-lg text-terminal-white font-bold">{latestGoldData.goldHoldings}</div>
+                <div className="text-[0.6rem] sm:text-xs text-terminal-gray">tonnes</div>
               </div>
-              <div className="bg-background/30 p-3 rounded">
-                <div className="text-xs text-terminal-amber mb-1">Price (USD)</div>
-                <div className="text-lg text-terminal-white font-bold">${latestGoldData.priceUSD}</div>
-                <div className={`text-xs ${getChangeColor(latestGoldData.changePercent)}`}>
+              <div className="bg-background/30 p-2 sm:p-3 rounded">
+                <div className="text-[0.6rem] sm:text-xs text-terminal-amber mb-1">Price (USD)</div>
+                <div className="text-sm sm:text-lg text-terminal-white font-bold">${latestGoldData.priceUSD}</div>
+                <div className={`text-[0.6rem] sm:text-xs ${getChangeColor(latestGoldData.changePercent)}`}>
                   {latestGoldData.changePercent >= 0 ? '+' : ''}{latestGoldData.changePercent.toFixed(2)}%
                 </div>
               </div>
-              <div className="bg-background/30 p-3 rounded">
-                <div className="text-xs text-terminal-amber mb-1">Volume</div>
-                <div className="text-lg text-terminal-white font-bold">{formatNumber(latestGoldData.volume)}</div>
-                <div className="text-xs text-terminal-gray">shares</div>
+              <div className="bg-background/30 p-2 sm:p-3 rounded">
+                <div className="text-[0.6rem] sm:text-xs text-terminal-amber mb-1">Volume</div>
+                <div className="text-sm sm:text-lg text-terminal-white font-bold">{formatNumber(latestGoldData.volume)}</div>
+                <div className="text-[0.6rem] sm:text-xs text-terminal-gray">shares</div>
               </div>
-              <div className="bg-background/30 p-3 rounded">
-                <div className="text-xs text-terminal-amber mb-1">Market Cap</div>
-                <div className="text-lg text-terminal-white font-bold">${(latestGoldData.marketCap / 1e9).toFixed(1)}B</div>
-                <div className="text-xs text-terminal-gray">USD</div>
+              <div className="bg-background/30 p-2 sm:p-3 rounded">
+                <div className="text-[0.6rem] sm:text-xs text-terminal-amber mb-1">Market Cap</div>
+                <div className="text-sm sm:text-lg text-terminal-white font-bold">${(latestGoldData.marketCap / 1e9).toFixed(1)}B</div>
+                <div className="text-[0.6rem] sm:text-xs text-terminal-gray">USD</div>
               </div>
             </div>
 
             {/* Recent Holdings Data */}
-            <div className="grid grid-cols-7 gap-2 text-xs mb-2 text-terminal-amber border-b border-border pb-2">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs mb-2 text-terminal-amber border-b border-border pb-2">
               <div>Date</div>
               <div className="text-right">Holdings (oz)</div>
               <div className="text-right">Price USD</div>
@@ -160,7 +160,7 @@ const SPDRGoldData = () => {
             
             <div className="space-y-1 max-h-48 overflow-y-auto">
               {goldData.slice(-10).reverse().map((item, index) => (
-                <div key={index} className="grid grid-cols-7 gap-2 text-xs py-1 border-b border-border/20 hover:bg-background/30">
+                <div key={index} className="grid grid-cols-7 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs py-1 border-b border-border/20 hover:bg-background/30">
                   <div className="text-terminal-white">{item.date}</div>
                   <div className="text-right text-terminal-cyan">{item.goldHoldings}</div>
                   <div className="text-right text-terminal-white">${item.priceUSD}</div>
@@ -178,7 +178,7 @@ const SPDRGoldData = () => {
 
         {selectedView === 'centralbanks' && (
           <div>
-            <div className="grid grid-cols-6 gap-2 text-xs mb-2 text-terminal-amber border-b border-border pb-2">
+            <div className="grid grid-cols-6 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs mb-2 text-terminal-amber border-b border-border pb-2">
               <div>Country</div>
               <div className="text-right">Gold Reserves (tonnes)</div>
               <div className="text-right">Monthly Change</div>
@@ -189,7 +189,7 @@ const SPDRGoldData = () => {
             
             <div className="space-y-1">
               {centralBankData.map((country, index) => (
-                <div key={index} className="grid grid-cols-6 gap-2 text-xs py-2 border-b border-border/20 hover:bg-background/30">
+                <div key={index} className="grid grid-cols-6 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs py-1 sm:py-2 border-b border-border/20 hover:bg-background/30">
                   <div className="text-terminal-white flex items-center gap-2">
                     <span>{country.flag}</span>
                     <span>{country.country}</span>

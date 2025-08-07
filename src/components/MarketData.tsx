@@ -100,11 +100,11 @@ const MarketData = () => {
     <div className="h-screen flex flex-col bg-background text-foreground">
       <div className="bg-background border-b border-border p-3">
         <div className="flex justify-between items-center">
-          <div className="flex items-center space-x-6">
-            <span className="text-2xl font-bold text-terminal-green">ABLE TERMINAL</span>
-            <span className="text-terminal-amber">PROFESSIONAL TRADING PLATFORM</span>
+          <div className="flex items-center space-x-3 sm:space-x-6">
+            <span className="text-lg sm:text-2xl font-bold text-terminal-green">ABLE TERMINAL</span>
+            <span className="text-sm sm:text-base text-terminal-amber">PROFESSIONAL TRADING PLATFORM</span>
           </div>
-          <div className="text-terminal-green font-mono">
+          <div className="text-sm sm:text-base text-terminal-green font-mono">
             {currentTime.toLocaleTimeString()} EST | LIVE
           </div>
         </div>

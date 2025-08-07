@@ -75,10 +75,10 @@ const CurrencyTable = () => {
   };
 
   return (
-    <div className="terminal-panel h-full">
-      <div className="panel-header">CURRENCY EXCHANGE</div>
+    <div className="terminal-panel h-full text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
+      <div className="panel-header text-[0.7rem] sm:text-sm md:text-base lg:text-lg">CURRENCY EXCHANGE</div>
       <div className="panel-content overflow-auto">
-        <div className="grid grid-cols-7 gap-1 text-xs font-semibold text-terminal-amber border-b border-border pb-1 mb-2">
+        <div className="grid grid-cols-7 gap-1 text-[0.6rem] sm:text-xs font-semibold text-terminal-amber border-b border-border pb-1 mb-2">
           <div>PAIR</div>
           <div>BID</div>
           <div>ASK</div>
@@ -89,7 +89,7 @@ const CurrencyTable = () => {
         </div>
         <div className="space-y-1">
           {currencyData.map((currency, index) => (
-            <div key={index} className="grid grid-cols-7 gap-1 text-xs py-1 hover:bg-muted/50 rounded">
+            <div key={index} className="grid grid-cols-7 gap-1 text-[0.6rem] sm:text-xs py-1 hover:bg-muted/50 rounded">
               <div className="text-terminal-cyan font-semibold">{currency.symbol}</div>
               <div className="text-terminal-white">{formatCurrency(currency.bid)}</div>
               <div className="text-terminal-white">{formatCurrency(currency.ask)}</div>

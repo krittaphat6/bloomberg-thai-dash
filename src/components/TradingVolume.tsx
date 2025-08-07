@@ -19,13 +19,13 @@ const TradingVolume = () => {
   };
 
   return (
-    <div className="terminal-panel">
-      <div className="panel-header flex items-center gap-2">
-        <Activity className="h-3 w-3" />
+    <div className="terminal-panel text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
+      <div className="panel-header flex items-center gap-2 text-[0.7rem] sm:text-sm md:text-base lg:text-lg">
+        <Activity className="h-2 w-2 sm:h-3 sm:w-3" />
         VOLUME ANALYSIS
       </div>
       <div className="panel-content">
-        <div className="grid grid-cols-4 gap-1 text-xs mb-2 text-terminal-amber">
+        <div className="grid grid-cols-4 gap-1 text-[0.6rem] sm:text-xs mb-2 text-terminal-amber">
           <div>SYMBOL</div>
           <div className="text-right">VOLUME</div>
           <div className="text-right">AVG</div>
@@ -33,7 +33,7 @@ const TradingVolume = () => {
         </div>
         
         {volumeData.map((item, index) => (
-          <div key={index} className="grid grid-cols-4 gap-1 text-xs py-1 border-b border-border/20">
+          <div key={index} className="grid grid-cols-4 gap-1 text-[0.6rem] sm:text-xs py-1 border-b border-border/20">
             <div className="text-terminal-white">{item.symbol}</div>
             <div className="text-terminal-cyan text-right">{item.volume}</div>
             <div className="text-terminal-gray text-right">{item.avgVol}</div>

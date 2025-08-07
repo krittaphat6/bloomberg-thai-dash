@@ -179,13 +179,13 @@ const EconomicIndicators = () => {
   };
 
   return (
-    <div className="terminal-panel h-full">
-      <div className="panel-header flex items-center justify-between">
+    <div className="terminal-panel h-full text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
+      <div className="panel-header flex items-center justify-between text-[0.7rem] sm:text-sm md:text-base lg:text-lg">
         <span>ECONOMIC INDICATORS</span>
         <select 
           value={selectedCountry}
           onChange={(e) => setSelectedCountry(e.target.value)}
-          className="bg-background border border-border text-terminal-green text-xs px-2 py-1"
+          className="bg-background border border-border text-terminal-green text-[0.6rem] sm:text-xs px-1 sm:px-2 py-1"
         >
           {data.map(country => (
             <option key={country.country} value={country.country}>
@@ -198,7 +198,7 @@ const EconomicIndicators = () => {
       <div className="panel-content">
         {selectedCountryData && (
           <div className="space-y-1">
-            <div className="grid grid-cols-6 gap-2 text-xs mb-2 text-terminal-amber border-b border-border pb-1">
+            <div className="grid grid-cols-6 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs mb-2 text-terminal-amber border-b border-border pb-1">
               <div>Indicator</div>
               <div className="text-right">Last</div>
               <div className="text-right">Previous</div>
@@ -208,7 +208,7 @@ const EconomicIndicators = () => {
             </div>
             
             {selectedCountryData.indicators.map((indicator, index) => (
-              <div key={index} className="grid grid-cols-6 gap-2 text-xs py-1 border-b border-border/20 hover:bg-background/50">
+              <div key={index} className="grid grid-cols-6 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs py-1 border-b border-border/20 hover:bg-background/50">
                 <div className="text-terminal-white">{indicator.name}</div>
                 <div className={`text-right ${getChangeColor(indicator.change)}`}>
                   {formatValue(indicator.last)}
@@ -222,7 +222,7 @@ const EconomicIndicators = () => {
                 <div className="text-terminal-cyan text-right">
                   {formatValue(indicator.lowest)}
                 </div>
-                <div className="text-terminal-gray text-right text-xs">
+                <div className="text-terminal-gray text-right text-[0.6rem] sm:text-xs">
                   {indicator.date}
                 </div>
               </div>

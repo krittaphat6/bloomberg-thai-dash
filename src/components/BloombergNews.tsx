@@ -167,23 +167,23 @@ const BloombergNews = () => {
   }
 
   return (
-    <div className="bg-background/90 border border-terminal-cyan backdrop-blur-sm">
+    <div className="bg-background/90 border border-terminal-cyan backdrop-blur-sm text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
       {/* Header */}
-      <div className="panel-header flex justify-between items-center border-b border-terminal-cyan">
+      <div className="panel-header flex justify-between items-center border-b border-terminal-cyan text-[0.7rem] sm:text-sm md:text-base lg:text-lg">
         <span className="text-terminal-amber font-bold">BLOOMBERG FINANCIAL NEWS</span>
         <div className="flex gap-1">
           <Button
             onClick={fetchNews}
             disabled={isLoading}
-            className="bg-transparent border border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-black text-xs px-2 py-1"
+            className="bg-transparent border border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-black text-[0.6rem] sm:text-xs px-1 sm:px-2 py-1"
           >
-            {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'REFRESH'}
+            {isLoading ? <Loader2 className="h-2 w-2 sm:h-3 sm:w-3 animate-spin" /> : 'REFRESH'}
           </Button>
           <Button
             onClick={() => setShowApiKeyInput(true)}
-            className="bg-transparent border border-terminal-cyan text-terminal-cyan hover:bg-terminal-cyan hover:text-black text-xs px-2 py-1"
+            className="bg-transparent border border-terminal-cyan text-terminal-cyan hover:bg-terminal-cyan hover:text-black text-[0.6rem] sm:text-xs px-1 sm:px-2 py-1"
           >
-            <Settings className="h-3 w-3" />
+            <Settings className="h-2 w-2 sm:h-3 sm:w-3" />
           </Button>
         </div>
       </div>
@@ -194,21 +194,21 @@ const BloombergNews = () => {
           {news.map((item, index) => (
             <div key={index} className="border-l-2 border-terminal-cyan/30 pl-2">
               <div className="flex items-start gap-2">
-                <span className="text-terminal-gray text-xs font-mono min-w-[4rem]">
+                <span className="text-terminal-gray text-[0.6rem] sm:text-xs font-mono min-w-[3rem] sm:min-w-[4rem]">
                   {item.time}
                 </span>
                 <div className="flex-1">
-                  <div className={`${getNewsColor(index)} text-xs font-medium leading-tight`}>
+                  <div className={`${getNewsColor(index)} text-[0.6rem] sm:text-xs font-medium leading-tight`}>
                     {item.headline}
                   </div>
                   {item.summary && (
-                    <div className="text-terminal-gray text-xs mt-1 leading-tight">
+                    <div className="text-terminal-gray text-[0.6rem] sm:text-xs mt-1 leading-tight">
                       {item.summary}
                     </div>
                   )}
                 </div>
                 {item.url && (
-                  <ExternalLink className="h-3 w-3 text-terminal-cyan/50 hover:text-terminal-cyan cursor-pointer" />
+                  <ExternalLink className="h-2 w-2 sm:h-3 sm:w-3 text-terminal-cyan/50 hover:text-terminal-cyan cursor-pointer" />
                 )}
               </div>
             </div>
@@ -217,7 +217,7 @@ const BloombergNews = () => {
         
         {!hasApiKey && (
           <div className="mt-3 pt-2 border-t border-terminal-cyan/30">
-            <p className="text-terminal-yellow text-xs">
+            <p className="text-terminal-yellow text-[0.6rem] sm:text-xs">
               📈 Sample data shown. Configure API key for live Bloomberg news.
             </p>
           </div>
