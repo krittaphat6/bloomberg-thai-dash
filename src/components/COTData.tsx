@@ -78,26 +78,26 @@ const COTData = () => {
   };
 
   return (
-    <div className="terminal-panel h-full">
+    <div className="terminal-panel h-full text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
       <div className="panel-header flex items-center justify-between">
-        <span>COT REPORT - COMMITMENT OF TRADERS</span>
-        <div className="flex items-center gap-2">
+        <span className="text-[0.7rem] sm:text-sm md:text-base lg:text-lg">COT REPORT - COMMITMENT OF TRADERS</span>
+        <div className="flex items-center gap-1 sm:gap-2">
           <select 
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="bg-background border border-border text-terminal-green text-xs px-2 py-1"
+            className="bg-background border border-border text-terminal-green text-[0.6rem] sm:text-xs px-1 sm:px-2 py-1"
           >
             <option value="futures">Futures Only</option>
             <option value="combined">Futures & Options</option>
             <option value="disaggregated">Disaggregated</option>
           </select>
-          <span className="text-xs text-terminal-gray">Updated: Dec 03, 2024</span>
+          <span className="text-[0.6rem] sm:text-xs text-terminal-gray">Updated: Dec 03, 2024</span>
         </div>
       </div>
       
       <div className="panel-content">
         <div className="overflow-x-auto">
-          <div className="grid grid-cols-10 gap-2 text-xs mb-2 text-terminal-amber border-b border-border pb-2 min-w-[1200px]">
+          <div className="grid grid-cols-10 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs mb-2 text-terminal-amber border-b border-border pb-2 min-w-[800px] sm:min-w-[1000px] lg:min-w-[1200px]">
             <div className="font-medium">Asset</div>
             <div className="text-right font-medium">Comm Long</div>
             <div className="text-right font-medium">Comm Short</div>
@@ -110,14 +110,14 @@ const COTData = () => {
             <div className="text-right font-medium">Change %</div>
           </div>
           
-          <div className="space-y-1 min-w-[1200px]">
+          <div className="space-y-1 min-w-[800px] sm:min-w-[1000px] lg:min-w-[1200px]">
             {cotData.map((item, index) => {
               const commNet = getNetPosition(item.commercialLong, item.commercialShort);
               const largeNet = getNetPosition(item.nonCommercialLong, item.nonCommercialShort);
               const smallNet = getNetPosition(item.nonReportableLong, item.nonReportableShort);
               
               return (
-                <div key={index} className="grid grid-cols-10 gap-2 text-xs py-2 border-b border-border/20 hover:bg-background/30">
+                <div key={index} className="grid grid-cols-10 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs py-1 sm:py-2 border-b border-border/20 hover:bg-background/30">
                   <div className="text-terminal-white font-medium">{item.asset}</div>
                   <div className="text-right text-terminal-cyan">{formatNumber(item.commercialLong)}</div>
                   <div className="text-right text-terminal-cyan">{formatNumber(item.commercialShort)}</div>
