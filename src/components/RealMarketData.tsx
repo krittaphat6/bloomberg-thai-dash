@@ -96,10 +96,10 @@ const RealMarketData = () => {
   }
 
   return (
-    <div className="terminal-panel h-full text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
-      <div className="panel-header text-[0.7rem] sm:text-sm md:text-base lg:text-lg">REAL-TIME MARKET DATA (15min delay)</div>
+    <div className="terminal-panel h-full text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm xl:text-base">
+      <div className="panel-header text-[0.5rem] xs:text-[0.6rem] sm:text-[0.7rem] md:text-sm lg:text-base xl:text-lg">REAL-TIME MARKET DATA (15min delay)</div>
       <div className="panel-content">
-        <div className="grid grid-cols-4 gap-1 text-[0.6rem] sm:text-xs font-semibold text-terminal-amber mb-2 pb-1 border-b border-terminal-amber/30">
+        <div className="grid grid-cols-4 gap-1 text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm font-semibold text-terminal-amber mb-2 pb-1 border-b border-terminal-amber/30">
           <div>SYMBOL</div>
           <div className="text-right">PRICE</div>
           <div className="text-right">CHANGE</div>

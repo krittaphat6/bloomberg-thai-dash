@@ -18,8 +18,8 @@ const EconomicCalendar = () => {
   };
 
   return (
-    <div className="terminal-panel text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
-      <div className="panel-header flex items-center gap-2 text-[0.7rem] sm:text-sm md:text-base lg:text-lg">
+    <div className="terminal-panel text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm xl:text-base">
+      <div className="panel-header flex items-center gap-2 text-[0.5rem] xs:text-[0.6rem] sm:text-[0.7rem] md:text-sm lg:text-base xl:text-lg">
         <Calendar className="h-2 w-2 sm:h-3 sm:w-3" />
         ECONOMIC CALENDAR
       </div>
@@ -27,13 +27,13 @@ const EconomicCalendar = () => {
         {events.map((event, index) => (
           <div key={index} className="mb-2 p-2 border-b border-border/30">
             <div className="flex justify-between items-start mb-1">
-              <span className="text-terminal-cyan text-[0.6rem] sm:text-xs">{event.time}</span>
-              <span className={`text-[0.6rem] sm:text-xs ${getImportanceColor(event.importance)}`}>
+              <span className="text-terminal-cyan text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs">{event.time}</span>
+              <span className={`text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs ${getImportanceColor(event.importance)}`}>
                 {event.importance.toUpperCase()}
               </span>
             </div>
-            <div className="text-terminal-white text-[0.6rem] sm:text-xs mb-1">{event.event}</div>
-            <div className="flex justify-between text-[0.6rem] sm:text-xs">
+            <div className="text-terminal-white text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs mb-1">{event.event}</div>
+            <div className="flex justify-between text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs">
               <span className="text-terminal-gray">F: {event.forecast || 'N/A'}</span>
               <span className="text-terminal-gray">P: {event.previous}</span>
             </div>

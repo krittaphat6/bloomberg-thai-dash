@@ -179,8 +179,8 @@ const EconomicIndicators = () => {
   };
 
   return (
-    <div className="terminal-panel h-full text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
-      <div className="panel-header flex items-center justify-between text-[0.7rem] sm:text-sm md:text-base lg:text-lg">
+    <div className="terminal-panel h-full text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm xl:text-base">
+      <div className="panel-header flex items-center justify-between text-[0.5rem] xs:text-[0.6rem] sm:text-[0.7rem] md:text-sm lg:text-base xl:text-lg">
         <span>ECONOMIC INDICATORS</span>
         <select 
           value={selectedCountry}

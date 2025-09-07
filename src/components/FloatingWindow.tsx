@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Maximize2, Minimize2, X, Move } from 'lucide-react';
+import { Square, Minimize2, X, Move } from 'lucide-react';
 
 interface FloatingWindowProps {
   id: string;
@@ -106,7 +106,7 @@ const FloatingWindow = ({
               className="w-6 h-6 flex items-center justify-center hover:bg-terminal-green/20 hover:text-terminal-green transition-colors rounded"
               title="Restore"
             >
-              <Maximize2 className="w-4 h-4" />
+              <Square className="w-4 h-4" />
             </button>
             <button
               onClick={onClose}
@@ -156,7 +156,7 @@ const FloatingWindow = ({
             className="w-6 h-6 flex items-center justify-center hover:bg-terminal-green/20 hover:text-terminal-green transition-colors rounded"
             title="Maximize"
           >
-            <Maximize2 className="w-4 h-4" />
+            <Square className="w-4 h-4" />
           </button>
           <button
             onClick={onClose}

@@ -75,10 +75,10 @@ const CurrencyTable = () => {
   };
 
   return (
-    <div className="terminal-panel h-full text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
-      <div className="panel-header text-[0.7rem] sm:text-sm md:text-base lg:text-lg">CURRENCY EXCHANGE</div>
+    <div className="terminal-panel h-full text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm xl:text-base">
+      <div className="panel-header text-[0.5rem] xs:text-[0.6rem] sm:text-[0.7rem] md:text-sm lg:text-base xl:text-lg">CURRENCY EXCHANGE</div>
       <div className="panel-content overflow-auto">
-        <div className="grid grid-cols-7 gap-1 text-[0.6rem] sm:text-xs font-semibold text-terminal-amber border-b border-border pb-1 mb-2">
+        <div className="grid grid-cols-7 gap-1 text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm font-semibold text-terminal-amber border-b border-border pb-1 mb-2">
           <div>PAIR</div>
           <div>BID</div>
           <div>ASK</div>
