@@ -13,6 +13,7 @@ import EconomicIndicators from './EconomicIndicators';
 import COTData from './COTData';
 import SPDRGoldData from './SPDRGoldData';
 import RealMarketData from './RealMarketData';
+import ABLE3AI from './ABLE3AI';
 
 interface PanelData {
   id: string;
@@ -67,6 +68,7 @@ const MarketData = () => {
   };
 
   const availableComponents = [
+    { id: 'able3-ai', title: 'ABLE 3.0 AI', component: <ABLE3AI /> },
     { id: 'real-market', title: 'REAL MARKET DATA', component: <RealMarketData /> },
     { id: 'economic', title: 'ECONOMIC INDICATORS', component: <EconomicIndicators /> },
     { id: 'cot', title: 'COT REPORT', component: <COTData /> },
