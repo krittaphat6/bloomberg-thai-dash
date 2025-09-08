@@ -5,29 +5,29 @@
 
 @layer base {
   :root {
-    /* Bloomberg Terminal Black Theme */
-    --background: 0 0% 2%;
-    --foreground: 0 0% 90%;
-    --card: 0 0% 4%;
-    --card-foreground: 0 0% 90%;
-    --popover: 0 0% 4%;
-    --popover-foreground: 0 0% 90%;
-    --primary: 0 0% 8%;
+    /* Claude-style Gray Theme */
+    --background: 0 0% 7%;
+    --foreground: 0 0% 85%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 85%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 85%;
+    --primary: 0 0% 15%;
     --primary-foreground: 0 0% 90%;
-    --secondary: 0 0% 6%;
+    --secondary: 0 0% 12%;
     --secondary-foreground: 0 0% 85%;
-    --muted: 0 0% 8%;
-    --muted-foreground: 0 0% 55%;
-    --accent: 45 100% 50%;
-    --accent-foreground: 0 0% 0%;
-    --destructive: 0 100% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 12%;
-    --input: 0 0% 8%;
-    --ring: 45 100% 50%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 90%;
+    --destructive: 0 65% 45%;
+    --destructive-foreground: 0 0% 90%;
+    --border: 0 0% 20%;
+    --input: 0 0% 15%;
+    --ring: 0 0% 25%;
     --radius: 0rem;
     
-    /* Bloomberg Terminal Colors */
+    /* Terminal Colors - Claude Gray Theme */
     --terminal-green: 120 100% 45%;
     --terminal-red: 0 100% 55%;
     --terminal-amber: 45 100% 60%;
@@ -38,11 +38,12 @@
     --terminal-orange: 25 100% 55%;
     --terminal-white: 0 0% 90%;
     
-    /* Bloomberg Specific */
-    --bloomberg-black: 0 0% 2%;
+    /* Claude Gray Theme Specific */
+    --bloomberg-black: 0 0% 7%;
     --bloomberg-blue: 220 100% 25%;
     --bloomberg-orange: 25 100% 50%;
-    --bloomberg-header: 0 0% 8%;
+    --bloomberg-header: 0 0% 10%;
+    --terminal-panel: 0 0% 10%;
   }
 }
 
@@ -72,8 +73,8 @@
 }
 
 .terminal-panel {
-  background: hsl(var(--bloomberg-black));
-  border: 1px solid hsl(var(--terminal-amber) / 0.3);
+  background: hsl(var(--terminal-panel));
+  border: 1px solid hsl(var(--border));
   position: relative;
   overflow: hidden;
   display: flex;

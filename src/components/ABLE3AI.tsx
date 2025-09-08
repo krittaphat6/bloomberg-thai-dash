@@ -26,6 +26,7 @@ const ABLE3AI = () => {
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<'openai' | 'claude'>('openai');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -38,21 +39,23 @@ const ABLE3AI = () => {
 
   useEffect(() => {
     // Check if API key exists in localStorage
-    const savedApiKey = localStorage.getItem('openai_api_key');
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
+    const savedOpenAIKey = localStorage.getItem('openai_api_key');
+    const savedClaudeKey = localStorage.getItem('claude_api_key');
+    if (savedOpenAIKey || savedClaudeKey) {
+      setApiKey(savedOpenAIKey || savedClaudeKey || '');
       setHasApiKey(true);
     }
   }, []);
 
   const saveApiKey = () => {
     if (apiKey.trim()) {
-      localStorage.setItem('openai_api_key', apiKey.trim());
+      const keyName = selectedModel === 'openai' ? 'openai_api_key' : 'claude_api_key';
+      localStorage.setItem(keyName, apiKey.trim());
       setHasApiKey(true);
       setShowApiKeyInput(false);
       toast({
         title: "API Key Saved",
-        description: "OpenAI API key has been saved successfully.",
+        description: `${selectedModel === 'openai' ? 'OpenAI' : 'Claude'} API key has been saved successfully.`,
       });
     }
   };
@@ -82,39 +85,61 @@ const ABLE3AI = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are ABLE 3.0 AI, a professional financial market analysis assistant. You specialize in trading, market analysis, economic indicators, and financial advice. Respond in Thai language when the user speaks Thai, and English when they speak English. Be concise, professional, and helpful.'
-            },
-            ...messages.slice(-10).map(msg => ({
-              role: msg.isUser ? 'user' : 'assistant',
-              content: msg.text
-            })),
-            {
-              role: 'user',
-              content: inputMessage
-            }
-          ],
-          max_tokens: 1000,
-          temperature: 0.7,
-        }),
-      });
+      let response;
+      const systemMessage = 'You are ABLE 3.0 AI, a professional financial market analysis assistant. You specialize in trading, market analysis, economic indicators, and financial advice. Respond in Thai language when the user speaks Thai, and English when they speak English. Be concise, professional, and helpful.';
+      
+      if (selectedModel === 'openai') {
+        response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('openai_api_key')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4',
+            messages: [
+              { role: 'system', content: systemMessage },
+              ...messages.slice(-10).map(msg => ({
+                role: msg.isUser ? 'user' : 'assistant',
+                content: msg.text
+              })),
+              { role: 'user', content: inputMessage }
+            ],
+            max_tokens: 1000,
+            temperature: 0.7,
+          }),
+        });
+      } else {
+        response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': localStorage.getItem('claude_api_key') || '',
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 1000,
+            system: systemMessage,
+            messages: [
+              ...messages.slice(-10).map(msg => ({
+                role: msg.isUser ? 'user' : 'assistant',
+                content: msg.text
+              })),
+              { role: 'user', content: inputMessage }
+            ]
+          }),
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`API Error: ${response.status}`);
       }
 
       const data = await response.json();
-      const aiResponse = data.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
+      const aiResponse = selectedModel === 'openai' 
+        ? data.choices[0]?.message?.content || 'Sorry, I could not generate a response.'
+        : data.content[0]?.text || 'Sorry, I could not generate a response.';
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -159,7 +184,7 @@ const ABLE3AI = () => {
               ABLE 3.0 AI
             </span>
             <span className="text-[0.4rem] xs:text-[0.5rem] sm:text-xs text-terminal-gray">
-              Powered by ChatGPT
+              Powered by {selectedModel === 'openai' ? 'ChatGPT' : 'Claude'}
             </span>
           </div>
         </div>
@@ -175,15 +200,40 @@ const ABLE3AI = () => {
       {/* API Key Input */}
       {showApiKeyInput && (
         <div className="bg-terminal-panel/50 p-2 rounded border border-border mb-2">
+          <div className="text-[0.5rem] xs:text-[0.6rem] sm:text-xs text-terminal-amber mb-2">
+            Select AI Model:
+          </div>
+          <div className="flex gap-2 mb-2">
+            <button
+              onClick={() => setSelectedModel('openai')}
+              className={`px-2 py-1 rounded text-[0.4rem] xs:text-[0.5rem] sm:text-xs ${
+                selectedModel === 'openai' 
+                  ? 'bg-terminal-green text-background' 
+                  : 'bg-terminal-panel text-terminal-gray'
+              }`}
+            >
+              OpenAI
+            </button>
+            <button
+              onClick={() => setSelectedModel('claude')}
+              className={`px-2 py-1 rounded text-[0.4rem] xs:text-[0.5rem] sm:text-xs ${
+                selectedModel === 'claude' 
+                  ? 'bg-terminal-green text-background' 
+                  : 'bg-terminal-panel text-terminal-gray'
+              }`}
+            >
+              Claude
+            </button>
+          </div>
           <div className="text-[0.5rem] xs:text-[0.6rem] sm:text-xs text-terminal-amber mb-1">
-            Enter OpenAI API Key:
+            Enter {selectedModel === 'openai' ? 'OpenAI' : 'Claude'} API Key:
           </div>
           <div className="flex gap-2">
             <Input
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-..."
+              placeholder={selectedModel === 'openai' ? 'sk-...' : 'sk-ant-...'}
               className="text-[0.4rem] xs:text-[0.5rem] sm:text-xs bg-background border-border"
             />
             <Button
