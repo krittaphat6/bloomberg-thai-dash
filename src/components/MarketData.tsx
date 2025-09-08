@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import TabManager from './TabManager';
 import TabSelector from './TabSelector';
+import ThemeSwitcher from './ThemeSwitcher';
 import ScatterAnalysis from './ScatterChart';
 import MarketPieChart from './MarketPieChart';
 import BloombergNews from './BloombergNews';
@@ -108,8 +109,11 @@ const MarketData = () => {
             <span className="text-lg sm:text-2xl font-bold text-terminal-green">ABLE TERMINAL</span>
             <span className="text-sm sm:text-base text-terminal-amber">PROFESSIONAL TRADING PLATFORM</span>
           </div>
-          <div className="text-sm sm:text-base text-terminal-green font-mono">
-            {currentTime.toLocaleTimeString()} EST | LIVE
+          <div className="flex items-center gap-4">
+            <ThemeSwitcher />
+            <div className="text-sm sm:text-base text-terminal-green font-mono">
+              {currentTime.toLocaleTimeString()} EST | LIVE
+            </div>
           </div>
         </div>
       </div>

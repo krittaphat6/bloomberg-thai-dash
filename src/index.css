@@ -5,7 +5,7 @@
 
 @layer base {
   :root {
-    /* Claude-style Gray Theme */
+    /* Default Claude Gray Theme */
     --background: 0 0% 7%;
     --foreground: 0 0% 85%;
     --card: 0 0% 8%;
@@ -27,7 +27,7 @@
     --ring: 0 0% 25%;
     --radius: 0rem;
     
-    /* Terminal Colors - Claude Gray Theme */
+    /* Terminal Colors */
     --terminal-green: 120 100% 45%;
     --terminal-red: 0 100% 55%;
     --terminal-amber: 45 100% 60%;
@@ -38,12 +38,97 @@
     --terminal-orange: 25 100% 55%;
     --terminal-white: 0 0% 90%;
     
-    /* Claude Gray Theme Specific */
+    /* Theme Specific */
     --bloomberg-black: 0 0% 7%;
     --bloomberg-blue: 220 100% 25%;
     --bloomberg-orange: 25 100% 50%;
     --bloomberg-header: 0 0% 10%;
     --terminal-panel: 0 0% 10%;
+  }
+
+  /* Dark Terminal Theme */
+  .theme-dark {
+    --background: 0 0% 3%;
+    --foreground: 120 100% 50%;
+    --card: 0 0% 5%;
+    --card-foreground: 120 100% 50%;
+    --primary: 120 100% 25%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 8%;
+    --secondary-foreground: 120 100% 50%;
+    --accent: 120 100% 15%;
+    --accent-foreground: 0 0% 100%;
+    --border: 120 100% 15%;
+    --input: 0 0% 8%;
+    --terminal-panel: 0 0% 5%;
+    --bloomberg-header: 0 0% 8%;
+    --bloomberg-black: 0 0% 3%;
+  }
+
+  /* Claude Gray Theme */
+  .theme-gray {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 85%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 85%;
+    --primary: 0 0% 15%;
+    --primary-foreground: 0 0% 90%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 85%;
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 90%;
+    --border: 0 0% 20%;
+    --input: 0 0% 15%;
+    --terminal-panel: 0 0% 10%;
+    --bloomberg-header: 0 0% 10%;
+    --bloomberg-black: 0 0% 7%;
+  }
+
+  /* Light Gray Theme */
+  .theme-light-gray {
+    --background: 0 0% 25%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 30%;
+    --card-foreground: 0 0% 95%;
+    --primary: 0 0% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 35%;
+    --secondary-foreground: 0 0% 95%;
+    --accent: 0 0% 40%;
+    --accent-foreground: 0 0% 100%;
+    --border: 0 0% 45%;
+    --input: 0 0% 35%;
+    --terminal-panel: 0 0% 30%;
+    --bloomberg-header: 0 0% 35%;
+    --bloomberg-black: 0 0% 25%;
+  }
+
+  /* Bright Mode Theme */
+  .theme-bright {
+    --background: 210 40% 95%;
+    --foreground: 210 40% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 40% 15%;
+    --primary: 210 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 90%;
+    --secondary-foreground: 210 40% 15%;
+    --accent: 210 100% 95%;
+    --accent-foreground: 210 100% 25%;
+    --border: 210 40% 80%;
+    --input: 0 0% 100%;
+    --terminal-panel: 0 0% 98%;
+    --bloomberg-header: 210 40% 92%;
+    --bloomberg-black: 210 40% 95%;
+    --terminal-green: 120 100% 35%;
+    --terminal-red: 0 100% 45%;
+    --terminal-amber: 45 100% 45%;
+    --terminal-cyan: 180 100% 35%;
+    --terminal-gray: 0 0% 45%;
+    --terminal-yellow: 60 100% 40%;
+    --terminal-blue: 220 100% 45%;
+    --terminal-orange: 25 100% 45%;
+    --terminal-white: 210 40% 15%;
   }
 }
 
