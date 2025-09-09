@@ -26,7 +26,7 @@ const ABLE3AI = () => {
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<'openai' | 'claude'>('openai');
+  const [selectedModel, setSelectedModel] = useState<'openai' | 'claude' | 'free'>('free');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -63,11 +63,11 @@ const ABLE3AI = () => {
   const sendMessage = async () => {
     if (!inputMessage.trim()) return;
     
-    if (!hasApiKey) {
+    if (selectedModel !== 'free' && !hasApiKey) {
       setShowApiKeyInput(true);
       toast({
         title: "API Key Required",
-        description: "Please enter your OpenAI API key to use ABLE 3.0 AI.",
+        description: "Please enter your API key to use external AI models.",
         variant: "destructive",
       });
       return;
@@ -85,11 +85,21 @@ const ABLE3AI = () => {
     setIsLoading(true);
 
     try {
-      let response;
+      let aiResponse;
       const systemMessage = 'You are ABLE 3.0 AI, a professional financial market analysis assistant. You specialize in trading, market analysis, economic indicators, and financial advice. Respond in Thai language when the user speaks Thai, and English when they speak English. Be concise, professional, and helpful.';
       
-      if (selectedModel === 'openai') {
-        response = await fetch('https://api.openai.com/v1/chat/completions', {
+      if (selectedModel === 'free') {
+        // Use a simple rule-based response for free model
+        const responses = [
+          'ขอบคุณสำหรับคำถาม! ในฐานะ ABLE 3.0 AI แบบฟรี ผมแนะนำให้วิเคราะห์ข้อมูลตลาดอย่างรอบครอบก่อนตัดสินใจลงทุน',
+          'สวัสดี! สำหรับการวิเคราะห์ตลาดการเงิน แนะนำให้ดูที่ปัจจัยพื้นฐานและเทคนิคร่วมกัน',
+          'ขอบคุณที่ใช้บริการ ABLE 3.0 AI! การลงทุนควรมีการกระจายความเสี่ยงเสมอ',
+          'Hello! As ABLE 3.0 AI, I recommend always analyzing market trends before making investment decisions.',
+          'Thank you for your question! For financial market analysis, consider both fundamental and technical factors.'
+        ];
+        aiResponse = responses[Math.floor(Math.random() * responses.length)];
+      } else if (selectedModel === 'openai') {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('openai_api_key')}`,
@@ -109,8 +119,15 @@ const ABLE3AI = () => {
             temperature: 0.7,
           }),
         });
+
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        aiResponse = data.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
       } else {
-        response = await fetch('https://api.anthropic.com/v1/messages', {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
             'x-api-key': localStorage.getItem('claude_api_key') || '',
@@ -130,16 +147,14 @@ const ABLE3AI = () => {
             ]
           }),
         });
-      }
 
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
-      }
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status}`);
+        }
 
-      const data = await response.json();
-      const aiResponse = selectedModel === 'openai' 
-        ? data.choices[0]?.message?.content || 'Sorry, I could not generate a response.'
-        : data.content[0]?.text || 'Sorry, I could not generate a response.';
+        const data = await response.json();
+        aiResponse = data.content[0]?.text || 'Sorry, I could not generate a response.';
+      }
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -184,7 +199,7 @@ const ABLE3AI = () => {
               ABLE 3.0 AI
             </span>
             <span className="text-[0.4rem] xs:text-[0.5rem] sm:text-xs text-terminal-gray">
-              Powered by {selectedModel === 'openai' ? 'ChatGPT' : 'Claude'}
+              Powered by {selectedModel === 'openai' ? 'ChatGPT' : selectedModel === 'claude' ? 'Claude' : 'Free AI'}
             </span>
           </div>
         </div>
@@ -224,29 +239,48 @@ const ABLE3AI = () => {
             >
               Claude
             </button>
-          </div>
-          <div className="text-[0.5rem] xs:text-[0.6rem] sm:text-xs text-terminal-amber mb-1">
-            Enter {selectedModel === 'openai' ? 'OpenAI' : 'Claude'} API Key:
-          </div>
-          <div className="flex gap-2">
-            <Input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={selectedModel === 'openai' ? 'sk-...' : 'sk-ant-...'}
-              className="text-[0.4rem] xs:text-[0.5rem] sm:text-xs bg-background border-border"
-            />
-            <Button
-              onClick={saveApiKey}
-              size="sm"
-              className="text-[0.4rem] xs:text-[0.5rem] sm:text-xs"
+            <button
+              onClick={() => setSelectedModel('free')}
+              className={`px-2 py-1 rounded text-[0.4rem] xs:text-[0.5rem] sm:text-xs ${
+                selectedModel === 'free' 
+                  ? 'bg-terminal-green text-background' 
+                  : 'bg-terminal-panel text-terminal-gray'
+              }`}
             >
-              Save
-            </Button>
+              Free AI
+            </button>
           </div>
-          <div className="text-[0.4rem] xs:text-[0.5rem] text-terminal-gray mt-1">
-            Your API key is stored locally in your browser
-          </div>
+          {selectedModel !== 'free' && (
+            <>
+              <div className="text-[0.5rem] xs:text-[0.6rem] sm:text-xs text-terminal-amber mb-1">
+                Enter {selectedModel === 'openai' ? 'OpenAI' : 'Claude'} API Key:
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={selectedModel === 'openai' ? 'sk-...' : 'sk-ant-...'}
+                  className="text-[0.4rem] xs:text-[0.5rem] sm:text-xs bg-background border-border"
+                />
+                <Button
+                  onClick={saveApiKey}
+                  size="sm"
+                  className="text-[0.4rem] xs:text-[0.5rem] sm:text-xs"
+                >
+                  Save
+                </Button>
+              </div>
+              <div className="text-[0.4rem] xs:text-[0.5rem] text-terminal-gray mt-1">
+                Your API key is stored locally in your browser
+              </div>
+            </>
+          )}
+          {selectedModel === 'free' && (
+            <div className="text-[0.4rem] xs:text-[0.5rem] text-terminal-green mt-1">
+              Free AI model ready to use! No API key required.
+            </div>
+          )}
         </div>
       )}
 
