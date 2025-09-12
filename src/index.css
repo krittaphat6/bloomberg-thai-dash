@@ -180,149 +180,34 @@
 }
 
 .design-ios {
-  /* iOS Color Palette */
-  --background: 242 242 247;
-  --foreground: 28 28 30;
-  --card: 255 255 255;
-  --card-foreground: 28 28 30;
-  --popover: 255 255 255;
-  --popover-foreground: 28 28 30;
-  --primary: 0 122 255;
-  --primary-foreground: 255 255 255;
-  --secondary: 209 209 214;
-  --secondary-foreground: 60 60 67;
-  --muted: 229 229 234;
-  --muted-foreground: 142 142 147;
-  --accent: 0 122 255;
-  --accent-foreground: 255 255 255;
-  --destructive: 255 59 48;
-  --destructive-foreground: 255 255 255;
-  --border: 198 198 200;
-  --input: 255 255 255;
-  --ring: 0 122 255;
-  
-  /* iOS Terminal Colors Override */
-  --terminal-green: 52 199 89;
-  --terminal-amber: 255 149 0;
-  --terminal-cyan: 50 173 230;
-  --terminal-red: 255 59 48;
-  --terminal-white: 28 28 30;
-  --terminal-gray: 142 142 147;
-  --terminal-panel: 255 255 255;
-  
-  /* iOS specific effects */
-  --ios-shadow-light: 0 2px 20px rgba(0, 0, 0, 0.04);
-  --ios-shadow-medium: 0 4px 25px rgba(0, 0, 0, 0.08);
-  --ios-shadow-strong: 0 8px 40px rgba(0, 0, 0, 0.12);
-  --ios-blur: blur(20px);
-  --ios-border: rgba(255, 255, 255, 0.4);
-  --ios-gradient: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7));
+  --button-radius: 1.25rem;
+  --button-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --button-style: pill;
 }
 
-/* iOS Global Typography */
-.design-ios * {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif !important;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  letter-spacing: -0.01em;
-}
-
-/* iOS Background */
-.design-ios body {
-  background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(220 13% 91%) 100%);
-}
-
-/* iOS Panel Styling */
-.design-ios .terminal-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: var(--ios-blur);
-  -webkit-backdrop-filter: var(--ios-blur);
-  border: 1px solid var(--ios-border);
-  border-radius: 20px;
-  box-shadow: var(--ios-shadow-light);
-  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-.design-ios .terminal-panel:hover {
-  box-shadow: var(--ios-shadow-medium);
-  transform: translateY(-2px) scale(1.01);
-}
-
-/* iOS Button Styling */
 .design-ios button,
 .design-ios .Button {
-  border-radius: 14px;
+  border-radius: 1.25rem;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
   font-weight: 600;
   letter-spacing: -0.02em;
-  padding: 10px 20px;
-  background: var(--ios-gradient);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  color: hsl(var(--primary));
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.8));
+  border: none;
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.3);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .design-ios button:hover,
 .design-ios .Button:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.85));
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  transform: translateY(-1px) scale(1.02);
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px hsl(var(--primary) / 0.4);
 }
 
-.design-ios button:active,
-.design-ios .Button:active {
-  transform: translateY(0) scale(0.98);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.6));
-}
-
-/* iOS Primary Button */
-.design-ios button[data-variant="default"] {
-  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.8));
-  color: hsl(var(--primary-foreground));
-  border: none;
-  box-shadow: 0 2px 8px hsl(var(--primary) / 0.25);
-}
-
-.design-ios button[data-variant="default"]:hover {
-  background: linear-gradient(135deg, hsl(var(--primary) / 0.9), hsl(var(--primary) / 0.7));
-  box-shadow: 0 4px 16px hsl(var(--primary) / 0.35);
-}
-
-/* iOS Typography */
-.design-ios h1, .design-ios h2, .design-ios h3, .design-ios h4, .design-ios h5, .design-ios h6 {
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  color: hsl(var(--foreground));
-}
-
-/* iOS Terminal Colors */
-.design-ios .text-terminal-green { color: hsl(var(--terminal-green)); }
-.design-ios .text-terminal-amber { color: hsl(var(--terminal-amber)); }
-.design-ios .text-terminal-cyan { color: hsl(var(--terminal-cyan)); }
-.design-ios .text-terminal-red { color: hsl(var(--terminal-red)); }
-.design-ios .text-terminal-white { color: hsl(var(--terminal-white)); }
-.design-ios .text-terminal-gray { color: hsl(var(--terminal-gray)); }
-
-/* iOS Card Effects */
-.design-ios .panel-header {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  backdrop-filter: blur(10px);
-}
-
-/* iOS Tab Styling */
-.design-ios .tabs-trigger {
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.design-ios .tabs-trigger[data-state="active"] {
-  background: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-  box-shadow: 0 2px 8px hsl(var(--primary) / 0.3);
+.design-ios .terminal-panel {
+  border-radius: 1rem;
+  backdrop-filter: blur(20px);
+  background: hsl(var(--terminal-panel) / 0.8);
 }
 
 /* Bloomberg Terminal Grid Layout */
