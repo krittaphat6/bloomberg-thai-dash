@@ -143,7 +143,71 @@
     font-size: 11px;
     line-height: 1.1;
     overflow-x: hidden;
+    transition: all 0.3s ease;
   }
+}
+
+/* Design System Styles */
+.design-terminal {
+  --button-radius: 0rem;
+  --button-font: "JetBrains Mono", monospace;
+  --button-style: angular;
+}
+
+.design-macos {
+  --button-radius: 0.75rem;
+  --button-font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --button-style: rounded;
+}
+
+.design-macos button,
+.design-macos .Button {
+  border-radius: 0.75rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  backdrop-filter: blur(20px);
+  background: hsl(var(--primary) / 0.8);
+  border: 1px solid hsl(var(--border) / 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.design-macos button:hover,
+.design-macos .Button:hover {
+  background: hsl(var(--primary) / 0.9);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px hsl(var(--primary) / 0.2);
+}
+
+.design-ios {
+  --button-radius: 1.25rem;
+  --button-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --button-style: pill;
+}
+
+.design-ios button,
+.design-ios .Button {
+  border-radius: 1.25rem;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.8));
+  border: none;
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.3);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.design-ios button:hover,
+.design-ios .Button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px hsl(var(--primary) / 0.4);
+}
+
+.design-ios .terminal-panel {
+  border-radius: 1rem;
+  backdrop-filter: blur(20px);
+  background: hsl(var(--terminal-panel) / 0.8);
 }
 
 /* Bloomberg Terminal Grid Layout */

@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { Button } from './ui/button';
+import { ExternalLink } from 'lucide-react';
 
 interface TradingViewChartProps {
   symbol?: string;
@@ -53,9 +55,24 @@ const TradingViewChart = ({
     };
   }, [symbol, interval]);
 
+  const openTradingView = () => {
+    window.open(`https://www.tradingview.com/chart/?symbol=${symbol}`, '_blank');
+  };
+
   return (
     <div className="terminal-panel h-full">
-      <div className="panel-header">{title} - {symbol}</div>
+      <div className="panel-header flex justify-between items-center">
+        <span>{title} - {symbol}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={openTradingView}
+          className="h-6 px-2 text-xs hover:bg-accent"
+        >
+          <ExternalLink className="h-3 w-3 mr-1" />
+          Login
+        </Button>
+      </div>
       <div className="panel-content p-0">
         <div 
           ref={containerRef}

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import TabManager from './TabManager';
 import TabSelector from './TabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
+import DesignSwitcher from './DesignSwitcher';
+import TradingViewChart from './TradingViewChart';
 import ScatterAnalysis from './ScatterChart';
 import MarketPieChart from './MarketPieChart';
 import BloombergNews from './BloombergNews';
@@ -72,6 +74,7 @@ const MarketData = () => {
   };
 
   const availableComponents = [
+    { id: 'tradingview', title: 'TRADINGVIEW CHART', component: <TradingViewChart /> },
     { id: 'able3-ai', title: 'ABLE 3.0 AI', component: <ABLE3AI /> },
     { id: 'bitcoin-mempool', title: 'BITCOIN MEMPOOL', component: <BitcoinMempool /> },
     { id: 'live-ua-map', title: 'LIVE UA MAP', component: <LiveUAMap /> },
@@ -107,6 +110,7 @@ const MarketData = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
+      <DesignSwitcher />
       <div className="bg-background border-b border-border p-3">
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-3 sm:space-x-6">
