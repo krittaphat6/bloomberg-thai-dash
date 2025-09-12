@@ -1,3 +1,4 @@
+// Design Switcher Component
 import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Palette } from 'lucide-react';
