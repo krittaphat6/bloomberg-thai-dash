@@ -3,6 +3,8 @@ import TabManager from './TabManager';
 import TabSelector from './TabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
+import { Button } from '@/components/ui/button';
+import { Expand, Minimize } from 'lucide-react';
 import TradingViewChart from './TradingViewChart';
 import ScatterAnalysis from './ScatterChart';
 import MarketPieChart from './MarketPieChart';
@@ -32,14 +34,37 @@ const MarketData = () => {
   const [panels, setPanels] = useState<PanelData[]>([]);
   const [showTabSelector, setShowTabSelector] = useState(false);
   const [nextPanelId, setNextPanelId] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     const timeInterval = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
 
-    return () => clearInterval(timeInterval);
+    // ตรวจสอบ fullscreen status
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      clearInterval(timeInterval);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
   }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (error) {
+      console.error('Fullscreen error:', error);
+    }
+  };
 
   const handlePanelClose = (id: string) => {
     const newPanels = panels.filter(p => p.id !== id);
@@ -118,6 +143,14 @@ const MarketData = () => {
             <span className="text-sm sm:text-base text-terminal-amber">PROFESSIONAL TRADING PLATFORM</span>
           </div>
           <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleFullscreen}
+              className="text-terminal-green hover:bg-terminal-green/10"
+            >
+              {isFullscreen ? <Minimize className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
+            </Button>
             <ThemeSwitcher />
             <div className="text-sm sm:text-base text-terminal-green font-mono">
               {currentTime.toLocaleTimeString()} EST | LIVE
