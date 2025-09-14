@@ -81,4 +81,42 @@ export class FirecrawlService {
       };
     }
   }
+
+  static async scrapeUSDebtClock(): Promise<{ success: boolean; error?: string; data?: any }> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      return { success: false, error: 'API key not found' };
+    }
+
+    try {
+      console.log('Scraping US Debt Clock');
+      if (!this.firecrawlApp) {
+        this.firecrawlApp = new FirecrawlApp({ apiKey });
+      }
+
+      const scrapeResponse = await this.firecrawlApp.scrapeUrl('https://www.usdebtclock.org/', {
+        formats: ['markdown', 'html']
+      });
+
+      if (!scrapeResponse.success) {
+        console.error('Scrape failed:', scrapeResponse.error);
+        return { 
+          success: false, 
+          error: scrapeResponse.error || 'Failed to scrape US Debt Clock' 
+        };
+      }
+
+      console.log('US Debt Clock scraped successfully:', scrapeResponse);
+      return { 
+        success: true,
+        data: scrapeResponse 
+      };
+    } catch (error) {
+      console.error('Error during US Debt Clock scrape:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to connect to Firecrawl API' 
+      };
+    }
+  }
 }
