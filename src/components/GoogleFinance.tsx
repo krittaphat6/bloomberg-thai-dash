@@ -2,9 +2,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, TrendingUp } from 'lucide-react';
 
-export default function ThaiStockStreaming() {
+export default function GoogleFinance() {
   const refreshPage = () => {
-    const iframe = document.querySelector('#thai-stock-iframe') as HTMLIFrameElement;
+    const iframe = document.querySelector('#google-finance-iframe') as HTMLIFrameElement;
     if (iframe) {
       iframe.src = iframe.src;
     }
@@ -16,7 +16,7 @@ export default function ThaiStockStreaming() {
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-terminal-green">
             <TrendingUp className="h-5 w-5" />
-            THAI STOCK STREAMING - SET INDEX
+            GOOGLE FINANCE - MARKETS
           </CardTitle>
           <Button
             onClick={refreshPage}
@@ -28,21 +28,21 @@ export default function ThaiStockStreaming() {
           </Button>
         </div>
         <div className="text-xs text-muted-foreground">
-          Live streaming of Thai Stock Exchange (SET) market data
+          Real-time market data and financial information from Google Finance
         </div>
       </CardHeader>
       <CardContent className="h-full p-0">
         <div className="h-full flex flex-col">
           <iframe
-            id="thai-stock-iframe"
-            src="https://www.settrade.com/streaming"
+            id="google-finance-iframe"
+            src="https://www.google.com/finance"
             className="flex-1 w-full border border-border rounded bg-background"
-            title="Thai Stock Streaming - SET Index"
+            title="Google Finance - Markets"
             allow="geolocation"
             style={{ minHeight: '600px' }}
           />
           <div className="p-4 text-xs text-terminal-amber bg-card border-t border-border">
-            📈 Live SET streaming • 💰 Real-time quotes • 🇹🇭 Thai market data
+            📈 Global markets • 💹 Real-time quotes • 🌐 Google Finance data
           </div>
         </div>
       </CardContent>
