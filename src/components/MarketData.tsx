@@ -23,6 +23,8 @@ import BitcoinMempool from './BitcoinMempool';
 import LiveUAMap from './LiveUAMap';
 import MarineTraffic from './MarineTraffic';
 import USDebtClock from './USDebtClock';
+import ThaiStockStreaming from './ThaiStockStreaming';
+import USDebtData from './USDebtData';
 
 interface PanelData {
   id: string;
@@ -102,9 +104,11 @@ const MarketData = () => {
   const availableComponents = [
     { id: 'tradingview', title: 'TRADINGVIEW CHART', component: <TradingViewChart /> },
     { id: 'us-debt-clock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
+    { id: 'us-debt-data', title: 'US DEBT DATA', component: <USDebtData /> },
+    { id: 'thai-stock', title: 'THAI STOCK STREAMING', component: <ThaiStockStreaming /> },
     { id: 'able3-ai', title: 'ABLE 3.0 AI', component: <ABLE3AI /> },
     { id: 'bitcoin-mempool', title: 'BITCOIN MEMPOOL', component: <BitcoinMempool /> },
-    { id: 'live-ua-map', title: 'LIVE UA MAP', component: <LiveUAMap /> },
+    { id: 'live-ua-map', title:'LIVE UA MAP', component: <LiveUAMap /> },
     { id: 'marine-traffic', title: 'MARINE TRAFFIC', component: <MarineTraffic /> },
     { id: 'real-market', title: 'REAL MARKET DATA', component: <RealMarketData /> },
     { id: 'economic', title: 'ECONOMIC INDICATORS', component: <EconomicIndicators /> },
