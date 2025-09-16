@@ -23,7 +23,8 @@ import BitcoinMempool from './BitcoinMempool';
 import LiveUAMap from './LiveUAMap';
 import MarineTraffic from './MarineTraffic';
 import USDebtClock from './USDebtClock';
-import GoogleFinance from './GoogleFinance';
+import KoyfinMarkets from './KoyfinMarkets';
+import NoteTaking from './NoteTaking';
 
 interface PanelData {
   id: string;
@@ -103,7 +104,8 @@ const MarketData = () => {
   const availableComponents = [
     { id: 'tradingview', title: 'TRADINGVIEW CHART', component: <TradingViewChart /> },
     { id: 'us-debt-clock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
-    { id: 'google-finance', title: 'GOOGLE FINANCE', component: <GoogleFinance /> },
+    { id: 'koyfin-markets', title: 'KOYFIN MARKETS', component: <KoyfinMarkets /> },
+    { id: 'note-taking', title: 'ABLE NOTES', component: <NoteTaking /> },
     { id: 'able3-ai', title: 'ABLE 3.0 AI', component: <ABLE3AI /> },
     { id: 'bitcoin-mempool', title: 'BITCOIN MEMPOOL', component: <BitcoinMempool /> },
     { id: 'live-ua-map', title:'LIVE UA MAP', component: <LiveUAMap /> },
