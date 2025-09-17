@@ -32,6 +32,7 @@ interface GraphNode extends d3.SimulationNodeDatum {
 interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
   source: string | GraphNode;
   target: string | GraphNode;
+  type?: 'direct' | 'shared-tag';
 }
 
 export default function GraphView({ 
@@ -81,20 +82,22 @@ export default function GraphView({
     });
 
     // Create links
-    const links: GraphLink[] = [];
+    const links: (GraphLink & { type: 'direct' | 'shared-tag' })[] = [];
+    
     filteredNotes.forEach(note => {
-      // Link to explicitly linked notes
+      // Link to explicitly linked notes (direct links - white)
       note.linkedNotes.forEach(linkedId => {
         const targetNote = filteredNotes.find(n => n.id === linkedId);
         if (targetNote) {
           links.push({
             source: note.id,
-            target: linkedId
+            target: linkedId,
+            type: 'direct'
           });
         }
       });
 
-      // Link to notes mentioned in content via [[note name]]
+      // Link to notes mentioned in content via [[note name]] (direct links - white)
       const contentLinks = note.content.match(/\[\[([^\]]+)\]\]/g);
       if (contentLinks) {
         contentLinks.forEach(link => {
@@ -109,12 +112,37 @@ export default function GraphView({
             if (!linkExists) {
               links.push({
                 source: note.id,
-                target: targetNote.id
+                target: targetNote.id,
+                type: 'direct'
               });
             }
           }
         });
       }
+    });
+
+    // Add shared tag links (green connections)
+    filteredNotes.forEach(note => {
+      filteredNotes.forEach(otherNote => {
+        if (note.id !== otherNote.id) {
+          // Check if notes share any tags
+          const sharedTags = note.tags.filter(tag => otherNote.tags.includes(tag));
+          if (sharedTags.length > 0) {
+            // Check if any connection already exists between these nodes
+            const connectionExists = links.some(l => 
+              (l.source === note.id && l.target === otherNote.id) ||
+              (l.source === otherNote.id && l.target === note.id)
+            );
+            if (!connectionExists) {
+              links.push({
+                source: note.id,
+                target: otherNote.id,
+                type: 'shared-tag'
+              });
+            }
+          }
+        }
+      });
     });
 
     // Create simulation
@@ -140,9 +168,12 @@ export default function GraphView({
       .selectAll("line")
       .data(links)
       .enter().append("line")
-      .attr("stroke", "hsl(var(--muted-foreground))")
-      .attr("stroke-opacity", 0.6)
-      .attr("stroke-width", 1);
+      .attr("stroke", (d: any) => {
+        return d.type === 'shared-tag' ? "hsl(var(--terminal-green))" : "hsl(var(--foreground))";
+      })
+      .attr("stroke-opacity", (d: any) => d.type === 'shared-tag' ? 0.8 : 0.6)
+      .attr("stroke-width", (d: any) => d.type === 'shared-tag' ? 2 : 1)
+      .attr("stroke-dasharray", (d: any) => d.type === 'shared-tag' ? "5,5" : "none");
 
     // Create nodes
     const node = g.append("g")

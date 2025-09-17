@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,6 +55,7 @@ export default function NoteTaking() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingNote, setEditingNote] = useState<Partial<Note>>({});
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Load notes from localStorage
   useEffect(() => {
@@ -112,17 +113,33 @@ export default function NoteTaking() {
     setSelectedNote(newNote);
   };
 
-  const updateNote = (noteId: string, updates: Partial<Note>) => {
-    setNotes(notes.map(note => 
+  const updateNote = useCallback((noteId: string, updates: Partial<Note>) => {
+    setNotes(prevNotes => prevNotes.map(note => 
       note.id === noteId 
         ? { ...note, ...updates, updatedAt: new Date() }
         : note
     ));
     
-    if (selectedNote?.id === noteId) {
-      setSelectedNote({ ...selectedNote, ...updates, updatedAt: new Date() });
+    setSelectedNote(prevSelected => {
+      if (prevSelected?.id === noteId) {
+        return { ...prevSelected, ...updates, updatedAt: new Date() };
+      }
+      return prevSelected;
+    });
+  }, []);
+
+  // Auto-save function with debounce
+  const autoSaveNote = useCallback((noteId: string, updates: Partial<Note>) => {
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
     }
-  };
+    
+    const timeout = setTimeout(() => {
+      updateNote(noteId, updates);
+    }, 1000); // Auto-save after 1 second of inactivity
+    
+    setAutoSaveTimeout(timeout);
+  }, [autoSaveTimeout, updateNote]);
 
   const deleteNote = (noteId: string) => {
     setNotes(notes.filter(note => note.id !== noteId));
@@ -444,10 +461,18 @@ export default function NoteTaking() {
                 <div className="flex-1 overflow-auto">
                   <Textarea
                     value={selectedNote.content}
-                    onChange={(e) => updateNote(selectedNote.id, { content: e.target.value })}
+                    onChange={(e) => {
+                      // Update the selected note immediately for UI responsiveness
+                      setSelectedNote({ ...selectedNote, content: e.target.value });
+                      // Auto-save with debounce
+                      autoSaveNote(selectedNote.id, { content: e.target.value });
+                    }}
                     className="w-full h-full min-h-96 resize-none border-0 focus:ring-0"
                     placeholder="Start writing your note... Use [[note name]] for links and #tag for tags"
                   />
+                  <div className="text-xs text-muted-foreground mt-2 text-center">
+                    💾 Auto-saves as you type
+                  </div>
                 </div>
               </>
             ) : (
