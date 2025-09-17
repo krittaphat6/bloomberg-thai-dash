@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import GraphView from './GraphView';
 import { 
   Plus, 
   Search, 
@@ -18,7 +19,8 @@ import {
   Hash,
   Folder,
   Star,
-  BookOpen
+  BookOpen,
+  Network
 } from 'lucide-react';
 
 interface Note {
@@ -52,6 +54,7 @@ export default function NoteTaking() {
   const [selectedTag, setSelectedTag] = useState<string>('');
   const [isCreating, setIsCreating] = useState(false);
   const [editingNote, setEditingNote] = useState<Partial<Note>>({});
+  const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
 
   // Load notes from localStorage
   useEffect(() => {
@@ -170,6 +173,28 @@ export default function NoteTaking() {
         <div className="flex h-full gap-4">
           {/* Sidebar */}
           <div className="w-80 flex flex-col gap-4 border-r border-border pr-4">
+            {/* View Mode Toggle */}
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('list')}
+                className="flex-1"
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                List
+              </Button>
+              <Button
+                variant={viewMode === 'graph' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('graph')}
+                className="flex-1"
+              >
+                <Network className="h-4 w-4 mr-1" />
+                Graph
+              </Button>
+            </div>
+
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -323,7 +348,16 @@ export default function NoteTaking() {
 
           {/* Main Content */}
           <div className="flex-1 flex flex-col">
-            {selectedNote ? (
+            {viewMode === 'graph' ? (
+              <GraphView
+                notes={notes}
+                onNodeClick={setSelectedNote}
+                selectedNote={selectedNote}
+                searchTerm={searchTerm}
+                selectedFolder={selectedFolder}
+                selectedTag={selectedTag}
+              />
+            ) : selectedNote ? (
               <>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
