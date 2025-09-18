@@ -173,6 +173,7 @@ export default function TradingJournal() {
     return last30Days;
   };
 
+  const stats = calculateStats();
   const zellaScore = getZellaScore();
   const overallScore = zellaScore.length > 0 ? Math.round(zellaScore.reduce((sum, item) => sum + item.value, 0) / zellaScore.length) : 0;
 
@@ -243,8 +244,6 @@ export default function TradingJournal() {
       description: "Trade has been removed from journal"
     });
   };
-
-  const stats = calculateStats();
 
   return (
     <div className="w-full h-full flex flex-col bg-background p-4 space-y-4 overflow-auto">
