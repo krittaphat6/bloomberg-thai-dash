@@ -42,57 +42,64 @@ interface Folder {
 }
 
 export default function NoteTaking() {
-  const [notes, setNotes] = useState<Note[]>([
-    {
-      id: '1',
-      title: 'Trading Strategy',
-      content: 'This note discusses various trading strategies. It links to [[Risk Management]] and mentions #strategy.',
-      tags: ['strategy', 'trading'],
-      createdAt: new Date('2024-01-15'),
-      updatedAt: new Date('2024-01-15'),
-      linkedNotes: ['2'],
-      isFavorite: true,
-      folder: 'Research'
-    },
-    {
-      id: '2', 
-      title: 'Risk Management',
-      content: 'Key principles for managing risk in trading. Related to [[Trading Strategy]] and uses #risk #management tags.',
-      tags: ['risk', 'management'],
-      createdAt: new Date('2024-01-14'),
-      updatedAt: new Date('2024-01-14'),
-      linkedNotes: ['3'],
-      isFavorite: false,
-      folder: 'General'
-    },
-    {
-      id: '3',
-      title: 'Market Analysis',
-      content: 'Technical analysis methods and tools. Connected to risk management through shared tags #analysis.',
-      tags: ['analysis', 'technical'],
-      createdAt: new Date('2024-01-13'),
-      updatedAt: new Date('2024-01-13'),
-      linkedNotes: ['1'],
-      isFavorite: false,
-      folder: 'Research'
-    },
-    {
-      id: '4',
-      title: 'Portfolio Ideas',
-      content: 'Investment portfolio diversification ideas. Uses #strategy tag like Trading Strategy.',
-      tags: ['strategy', 'portfolio'],
-      createdAt: new Date('2024-01-12'),
-      updatedAt: new Date('2024-01-12'),
-      linkedNotes: [],
-      isFavorite: true,
-      folder: 'Ideas'
-    }
-  ]);
+  const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([
     { id: '1', name: 'General', color: 'bg-blue-500' },
     { id: '2', name: 'Research', color: 'bg-green-500' },
     { id: '3', name: 'Ideas', color: 'bg-purple-500' }
   ]);
+  
+  // Initialize with sample data on mount to avoid hydration issues
+  useEffect(() => {
+    if (notes.length === 0) {
+      setNotes([
+        {
+          id: '1',
+          title: 'Trading Strategy',
+          content: 'This note discusses various trading strategies. It links to [[Risk Management]] and mentions #strategy.',
+          tags: ['strategy', 'trading'],
+          createdAt: new Date('2024-01-15'),
+          updatedAt: new Date('2024-01-15'),
+          linkedNotes: ['2'],
+          isFavorite: true,
+          folder: 'Research'
+        },
+        {
+          id: '2', 
+          title: 'Risk Management',
+          content: 'Key principles for managing risk in trading. Related to [[Trading Strategy]] and uses #risk #management tags.',
+          tags: ['risk', 'management'],
+          createdAt: new Date('2024-01-14'),
+          updatedAt: new Date('2024-01-14'),
+          linkedNotes: ['3'],
+          isFavorite: false,
+          folder: 'General'
+        },
+        {
+          id: '3',
+          title: 'Market Analysis',
+          content: 'Technical analysis methods and tools. Connected to risk management through shared tags #analysis.',
+          tags: ['analysis', 'technical'],
+          createdAt: new Date('2024-01-13'),
+          updatedAt: new Date('2024-01-13'),
+          linkedNotes: ['1'],
+          isFavorite: false,
+          folder: 'Research'
+        },
+        {
+          id: '4',
+          title: 'Portfolio Ideas',
+          content: 'Investment portfolio diversification ideas. Uses #strategy tag like Trading Strategy.',
+          tags: ['strategy', 'portfolio'],
+          createdAt: new Date('2024-01-12'),
+          updatedAt: new Date('2024-01-12'),
+          linkedNotes: [],
+          isFavorite: true,
+          folder: 'Ideas'
+        }
+      ]);
+    }
+  }, [notes.length]);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<string>('');
