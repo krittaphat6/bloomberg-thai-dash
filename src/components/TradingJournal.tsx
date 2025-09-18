@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar } from 'recharts';
+import TradeAnalysisPanel from './TradeAnalysisPanel';
 
 interface Trade {
   id: string;
@@ -577,18 +578,18 @@ export default function TradingJournal() {
                 >
                   <div className="text-lg font-bold text-foreground mb-1">{day.date}</div>
                   {day.trades > 0 ? (
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium text-muted-foreground">
-                        {day.trades} trade{day.trades !== 1 ? 's' : ''}
-                      </div>
-                      <div className={`text-lg font-bold px-3 py-1 rounded-full ${
-                        day.pnl >= 0 
-                          ? 'text-emerald-300 bg-emerald-400/30 border border-emerald-400/50' 
-                          : 'text-red-300 bg-red-400/30 border border-red-400/50'
-                      }`}>
-                        ${day.pnl > 0 ? '+' : ''}${day.pnl.toFixed(0)}
-                      </div>
-                    </div>
+                     <div className="space-y-1">
+                       <div className="text-xs font-medium text-muted-foreground">
+                         {day.trades} trade{day.trades !== 1 ? 's' : ''}
+                       </div>
+                       <div className={`text-xs font-bold px-2 py-1 rounded-md whitespace-nowrap overflow-hidden text-ellipsis max-w-full ${
+                         day.pnl >= 0 
+                           ? 'text-emerald-300 bg-emerald-400/20 border border-emerald-400/40' 
+                           : 'text-red-300 bg-red-400/20 border border-red-400/40'
+                       }`}>
+                         ${day.pnl > 0 ? '+' : ''}${Math.abs(day.pnl) >= 1000 ? (day.pnl/1000).toFixed(1) + 'k' : day.pnl.toFixed(0)}
+                       </div>
+                     </div>
                   ) : (
                     <div className="text-xs text-muted-foreground/50">No trades</div>
                   )}
@@ -613,6 +614,15 @@ export default function TradingJournal() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Advanced Trading Analysis */}
+      <div className="mb-6">
+        <h3 className="text-xl font-bold text-primary mb-4 flex items-center gap-2">
+          <TrendingUp className="h-5 w-5" />
+          Advanced Trading Analysis
+        </h3>
+        <TradeAnalysisPanel trades={trades} />
       </div>
 
       {/* Net Daily P&L Chart */}
