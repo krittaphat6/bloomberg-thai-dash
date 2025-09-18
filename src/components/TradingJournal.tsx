@@ -446,6 +446,100 @@ export default function TradingJournal() {
         </Card>
       </div>
 
+      {/* Trading Calendar - Tradezella Style */}
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-lg text-primary">Trading Calendar - {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}</CardTitle>
+            <div className="text-sm text-muted-foreground">Daily P&L Overview</div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Calendar Header */}
+          <div className="grid grid-cols-7 gap-2 mb-4">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              <div key={day} className="text-center font-semibold text-muted-foreground p-3 bg-muted/20 rounded">
+                {day}
+              </div>
+            ))}
+          </div>
+          
+          {/* Calendar Grid */}
+          <div className="grid grid-cols-7 gap-2">
+            {Array.from({ length: 35 }, (_, i) => {
+              const now = new Date();
+              const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+              const startDay = startOfMonth.getDay();
+              const dayNum = i - startDay + 1;
+              const isCurrentMonth = dayNum > 0 && dayNum <= new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+              
+              if (!isCurrentMonth) {
+                return <div key={i} className="h-24 border border-muted/30 rounded bg-muted/5"></div>;
+              }
+              
+              const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+              const dayTrades = trades.filter(t => t.date === dateStr && t.status === 'CLOSED');
+              const dayPnL = dayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+              const winTrades = dayTrades.filter(t => (t.pnl || 0) > 0).length;
+              const lossTrades = dayTrades.filter(t => (t.pnl || 0) < 0).length;
+              const isToday = dayNum === now.getDate();
+              
+              return (
+                <div key={i} className={`h-24 border rounded p-2 flex flex-col justify-between text-xs transition-all hover:scale-105 ${
+                  isToday ? 'border-primary bg-primary/10 ring-2 ring-primary/20' :
+                  dayPnL > 0 ? 'bg-emerald-500/20 border-emerald-500/50 hover:bg-emerald-500/30' :
+                  dayPnL < 0 ? 'bg-red-500/20 border-red-500/50 hover:bg-red-500/30' :
+                  dayTrades.length > 0 ? 'bg-muted/20 border-muted hover:bg-muted/40' :
+                  'border-muted/30 hover:bg-muted/10'
+                }`}>
+                  <div className={`text-center font-bold ${isToday ? 'text-primary' : ''}`}>
+                    {dayNum}
+                  </div>
+                  {dayTrades.length > 0 && (
+                    <div className="space-y-1">
+                      <div className={`text-center font-bold text-xs ${
+                        dayPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        ${dayPnL >= 0 ? '+' : ''}{dayPnL.toFixed(0)}
+                      </div>
+                      <div className="flex justify-between items-center text-[10px]">
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                          <span className="text-emerald-400">{winTrades}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                          <span className="text-red-400">{lossTrades}</span>
+                        </div>
+                      </div>
+                      <div className="text-center text-[10px] text-muted-foreground">
+                        {dayTrades.length} trades
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Calendar Legend */}
+          <div className="mt-4 flex justify-center gap-6 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-emerald-500/20 border border-emerald-500/50 rounded"></div>
+              <span>Profitable Day</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-500/20 border border-red-500/50 rounded"></div>
+              <span>Loss Day</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 border border-primary bg-primary/10 rounded"></div>
+              <span>Today</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Net Daily P&L Chart */}
       <Card className="mb-6">
         <CardHeader>

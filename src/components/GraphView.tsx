@@ -84,6 +84,8 @@ export default function GraphView({
     // Create links
     const links: (GraphLink & { type: 'direct' | 'shared-tag' })[] = [];
     
+    console.log('Filtered notes:', filteredNotes);
+    
     filteredNotes.forEach(note => {
       // Link to explicitly linked notes (direct links - white)
       note.linkedNotes.forEach(linkedId => {
@@ -144,6 +146,8 @@ export default function GraphView({
         }
       });
     });
+    
+    console.log('Generated links:', links);
 
     // Create simulation
     const simulation = d3.forceSimulation<GraphNode>(nodes)
