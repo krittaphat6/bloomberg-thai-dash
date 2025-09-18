@@ -28,6 +28,7 @@ import TradingJournal from './TradingJournal';
 import FedWatch from './FedWatch';
 import PenguinSticker from './PenguinSticker';
 import TicTacToeGame from './TicTacToeGame';
+import ChessGame from './ChessGame';
 
 interface PanelData {
   id: string;
@@ -125,7 +126,8 @@ const MarketData = () => {
     { id: 'debtclock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
     { id: 'notes', title: 'NOTE TAKING', component: <NoteTaking /> },
     { id: 'journal', title: 'TRADING JOURNAL', component: <TradingJournal /> },
-    { id: 'tictactoe', title: 'หมากฮอส GAME', component: <TicTacToeGame /> }
+    { id: 'tictactoe', title: 'หมากฮอส GAME', component: <TicTacToeGame /> },
+    { id: 'chess', title: 'CHESS PUZZLE', component: <ChessGame /> }
   ];
 
   const handleTabAdd = () => {
