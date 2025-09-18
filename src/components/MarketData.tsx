@@ -26,6 +26,7 @@ import USDebtClock from './USDebtClock';
 import NoteTaking from './NoteTaking';
 import ForexFactory from './ForexFactory';
 import TradingJournal from './TradingJournal';
+import FedWatch from './FedWatch';
 
 interface PanelData {
   id: string;
@@ -103,6 +104,7 @@ const MarketData = () => {
   };
 
   const availableComponents = [
+    { id: 'fedwatch', title: 'FEDWATCH TOOL', component: <FedWatch /> },
     { id: 'tradingview', title: 'TRADINGVIEW CHART', component: <TradingViewChart /> },
     { id: 'us-debt-clock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
     { id: 'forex-factory', title: 'FOREX FACTORY', component: <ForexFactory /> },
