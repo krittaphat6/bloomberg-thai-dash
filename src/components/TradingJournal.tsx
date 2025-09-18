@@ -715,77 +715,212 @@ export default function TradingJournal() {
         </CardContent>
       </Card>
 
-      {/* Profit Factor by Symbols */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-lg">Profit Factor by Symbols</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {getProfitFactorBySymbols().map((item, index) => (
-              <div key={item.symbol} className="flex items-center justify-between p-2 rounded hover:bg-muted/50">
-                <div className="flex items-center gap-3">
-                  <Badge variant={item.type === 'CFD' ? 'default' : 'secondary'} className="text-xs">
-                    {item.type}
-                  </Badge>
-                  <span className="font-medium">{item.symbol}</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className={`w-32 h-2 rounded-full overflow-hidden ${
-                    item.profitFactor >= 2 ? 'bg-emerald-500' :
-                    item.profitFactor >= 1 ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}>
-                    <div 
-                      className="h-full bg-current opacity-80"
-                      style={{ width: `${Math.min(100, (item.profitFactor / 3) * 100)}%` }}
-                    />
-                  </div>
-                  <span className={`font-bold text-sm min-w-[60px] text-right ${
-                    item.profitFactor >= 1 ? 'text-emerald-400' : 'text-red-400'
-                  }`}>
-                    {item.profitFactor.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Long vs Short Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      {/* Analytics Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Profit Factor by Symbols Chart */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Long vs Short</CardTitle>
+            <CardTitle className="text-lg">Profit Factor by Symbols</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={getProfitFactorBySymbols().slice(0, 6)} 
+                  layout="horizontal"
+                  margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    type="number" 
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    axisLine={{ stroke: '#4B5563' }}
+                  />
+                  <YAxis 
+                    type="category" 
+                    dataKey="symbol" 
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    axisLine={{ stroke: '#4B5563' }}
+                    width={40}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1F2937', 
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#F3F4F6'
+                    }}
+                    formatter={(value: any, name) => [value.toFixed(2), 'Profit Factor']}
+                  />
+                  <Bar 
+                    dataKey="profitFactor" 
+                    radius={[0, 4, 4, 0]}
+                    fill="#10B981"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Monthly P&L Trend */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Monthly P&L</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={getTradesByMonth()}>
+                  <defs>
+                    <linearGradient id="monthlyPnlGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="month" 
+                    tick={{ fontSize: 9, fill: '#9CA3AF' }}
+                    axisLine={{ stroke: '#4B5563' }}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    axisLine={{ stroke: '#4B5563' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1F2937', 
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#F3F4F6'
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="pnl"
+                    stroke="#3B82F6"
+                    strokeWidth={2}
+                    fill="url(#monthlyPnlGradient)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Win Rate Distribution */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Win Rate by Asset</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={getProfitFactorBySymbols().slice(0, 6)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="symbol" 
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    axisLine={{ stroke: '#4B5563' }}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    axisLine={{ stroke: '#4B5563' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1F2937', 
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#F3F4F6'
+                    }}
+                    formatter={(value: any) => [`${value.toFixed(1)}%`, 'Win Rate']}
+                  />
+                  <Bar 
+                    dataKey="winRate" 
+                    radius={[4, 4, 0, 0]}
+                    fill="#F59E0B"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Performance Summary Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        {/* Long vs Short Pie Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Long vs Short Distribution</CardTitle>
           </CardHeader>
           <CardContent>
             {(() => {
               const breakdown = getLongShortBreakdown();
+              const total = breakdown.long.count + breakdown.short.count;
+              
               return (
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                      <span className="text-blue-400">Long</span>
+                  {/* Simple Pie Visualization */}
+                  <div className="flex justify-center">
+                    <div className="relative w-32 h-32">
+                      <svg className="w-32 h-32 transform -rotate-90">
+                        <circle
+                          cx="64"
+                          cy="64"
+                          r="56"
+                          fill="none"
+                          stroke="#374151"
+                          strokeWidth="12"
+                        />
+                        <circle
+                          cx="64"
+                          cy="64"
+                          r="56"
+                          fill="none"
+                          stroke="#3B82F6"
+                          strokeWidth="12"
+                          strokeDasharray={`${(breakdown.long.percentage * 352) / 100} 352`}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-primary">{total}</div>
+                          <div className="text-xs text-muted-foreground">Trades</div>
+                        </div>
+                      </div>
                     </div>
-                    <span className="font-bold">
-                      {breakdown.long.count} ({breakdown.long.percentage.toFixed(1)}%)
-                    </span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                      <span className="text-orange-400">Short</span>
+                  
+                  {/* Legend */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                        <span className="text-sm">Long</span>
+                      </div>
+                      <div className="text-sm font-medium">
+                        {breakdown.long.count} ({breakdown.long.percentage.toFixed(1)}%)
+                      </div>
                     </div>
-                    <span className="font-bold">
-                      {breakdown.short.count} ({breakdown.short.percentage.toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-blue-500 transition-all"
-                      style={{ width: `${breakdown.long.percentage}%` }}
-                    />
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-gray-500 rounded"></div>
+                        <span className="text-sm">Short</span>
+                      </div>
+                      <div className="text-sm font-medium">
+                        {breakdown.short.count} ({breakdown.short.percentage.toFixed(1)}%)
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
@@ -793,45 +928,119 @@ export default function TradingJournal() {
           </CardContent>
         </Card>
 
+        {/* CFD vs Stock Distribution */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Asset Grouping</CardTitle>
+            <CardTitle className="text-lg">CFD vs Stock</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3 max-h-64 overflow-y-auto">
-              {getAssetGrouping().slice(0, 5).map((group, index) => (
-                <div key={group.symbol} className="space-y-2">
-                  <div className="font-medium text-sm">{group.symbol}</div>
-                  <div className="ml-4 space-y-1">
-                    {group.cfd.count > 0 && (
-                      <div className="flex justify-between items-center text-xs">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="default" className="text-xs">CFD</Badge>
-                          <span>{group.cfd.count} trades</span>
+            {(() => {
+              const cfdTrades = trades.filter(t => t.type === 'CFD');
+              const stockTrades = trades.filter(t => t.type === 'STOCK');
+              const total = trades.length;
+              const cfdPercentage = total > 0 ? (cfdTrades.length / total) * 100 : 0;
+              
+              return (
+                <div className="space-y-4">
+                  {/* Simple Donut Chart */}
+                  <div className="flex justify-center">
+                    <div className="relative w-32 h-32">
+                      <svg className="w-32 h-32 transform -rotate-90">
+                        <circle
+                          cx="64"
+                          cy="64"
+                          r="56"
+                          fill="none"
+                          stroke="#374151"
+                          strokeWidth="12"
+                        />
+                        <circle
+                          cx="64"
+                          cy="64"
+                          r="56"
+                          fill="none"
+                          stroke="#10B981"
+                          strokeWidth="12"
+                          strokeDasharray={`${(cfdPercentage * 352) / 100} 352`}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-primary">{total}</div>
+                          <div className="text-xs text-muted-foreground">Total</div>
                         </div>
-                        <span className={`font-bold ${
-                          group.cfd.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
-                        }`}>
-                          ${group.cfd.pnl >= 0 ? '+' : ''}{group.cfd.pnl.toFixed(2)}
-                        </span>
                       </div>
-                    )}
-                    {group.stock.count > 0 && (
-                      <div className="flex justify-between items-center text-xs">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">STOCK</Badge>
-                          <span>{group.stock.count} trades</span>
-                        </div>
-                        <span className={`font-bold ${
-                          group.stock.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
-                        }`}>
-                          ${group.stock.pnl >= 0 ? '+' : ''}{group.stock.pnl.toFixed(2)}
-                        </span>
+                    </div>
+                  </div>
+                  
+                  {/* Legend */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-emerald-500 rounded"></div>
+                        <span className="text-sm">CFD</span>
                       </div>
-                    )}
+                      <div className="text-sm font-medium">
+                        {cfdTrades.length} ({cfdPercentage.toFixed(1)}%)
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-gray-500 rounded"></div>
+                        <span className="text-sm">Stock</span>
+                      </div>
+                      <div className="text-sm font-medium">
+                        {stockTrades.length} ({(100 - cfdPercentage).toFixed(1)}%)
+                      </div>
+                    </div>
                   </div>
                 </div>
-              ))}
+              );
+            })()}
+          </CardContent>
+        </Card>
+
+        {/* Top 5 Assets */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Top Assets</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {getAssetGrouping()
+                .map(group => ({
+                  ...group,
+                  totalPnL: group.cfd.pnl + group.stock.pnl,
+                  totalTrades: group.cfd.count + group.stock.count
+                }))
+                .sort((a, b) => b.totalPnL - a.totalPnL)
+                .slice(0, 5)
+                .map((group, index) => (
+                  <div key={group.symbol} className="flex items-center justify-between p-2 rounded bg-muted/20">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${
+                        index === 0 ? 'bg-yellow-500 text-black' :
+                        index === 1 ? 'bg-gray-400 text-black' :
+                        index === 2 ? 'bg-amber-600 text-white' :
+                        'bg-muted text-muted-foreground'
+                      }`}>
+                        {index + 1}
+                      </div>
+                      <span className="font-medium">{group.symbol}</span>
+                    </div>
+                    <div className="text-right">
+                      <div className={`font-bold text-sm ${
+                        group.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        ${group.totalPnL >= 0 ? '+' : ''}{group.totalPnL.toFixed(2)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {group.totalTrades} trades
+                      </div>
+                    </div>
+                  </div>
+                ))}
             </div>
           </CardContent>
         </Card>
