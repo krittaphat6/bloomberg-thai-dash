@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import ableTerminalLogo from '@/assets/able-terminal-logo.png';
 
 interface LoadingScreenProps {
   onLoadingComplete: () => void;
@@ -81,28 +80,6 @@ export const LoadingScreen = ({ onLoadingComplete }: LoadingScreenProps) => {
       </div>
 
       <div className="relative z-10 flex flex-col items-center space-y-6 max-w-md mx-auto px-4">
-        {/* Logo Container */}
-        <div className="relative">
-          {/* Multiple Glow Effects */}
-          <div className="absolute -inset-8 bg-terminal-amber/10 blur-3xl rounded-full animate-pulse"></div>
-          <div className="absolute -inset-6 bg-terminal-green/10 blur-2xl rounded-full animate-pulse" style={{ animationDelay: '0.5s' }}></div>
-          <div className="absolute -inset-4 bg-terminal-cyan/10 blur-xl rounded-full animate-pulse" style={{ animationDelay: '1s' }}></div>
-          
-          {/* Logo Frame */}
-          <div className="relative w-40 h-40 bg-black border-2 border-terminal-amber/50 overflow-hidden">
-            {/* Corner accents */}
-            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-terminal-amber"></div>
-            <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-terminal-amber"></div>
-            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-terminal-amber"></div>
-            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-terminal-amber"></div>
-            
-            <img 
-              src={ableTerminalLogo} 
-              alt="ABLE TERMINAL" 
-              className="w-full h-full object-contain p-4"
-            />
-          </div>
-        </div>
 
         {/* Terminal Header */}
         <div className="text-center space-y-2 bg-black border border-terminal-amber/30 px-6 py-4 w-full">
