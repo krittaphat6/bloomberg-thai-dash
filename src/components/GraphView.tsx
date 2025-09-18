@@ -169,11 +169,11 @@ export default function GraphView({
       .data(links)
       .enter().append("line")
       .attr("stroke", (d: any) => {
-        return d.type === 'shared-tag' ? "#22C55E" : "#9CA3AF";
+        return d.type === 'shared-tag' ? "#22C55E" : "#FFFFFF";
       })
-      .attr("stroke-opacity", (d: any) => d.type === 'shared-tag' ? 0.8 : 0.5)
-      .attr("stroke-width", (d: any) => d.type === 'shared-tag' ? 1.5 : 1)
-      .attr("stroke-dasharray", (d: any) => d.type === 'shared-tag' ? "none" : "none");
+      .attr("stroke-opacity", (d: any) => d.type === 'shared-tag' ? 0.9 : 0.8)
+      .attr("stroke-width", (d: any) => d.type === 'shared-tag' ? 2 : 1.5)
+      .style("pointer-events", "none");
 
     // Create nodes
     const node = g.append("g")
