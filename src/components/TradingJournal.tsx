@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Edit3, TrendingUp, TrendingDown } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar } from 'recharts';
 
 interface Trade {
   id: string;
@@ -129,6 +130,51 @@ export default function TradingJournal() {
     }
     return calendarData;
   };
+
+  const getZellaScore = () => {
+    const closedTrades = trades.filter(t => t.status === 'CLOSED');
+    if (closedTrades.length === 0) return [];
+    
+    const profitFactor = Math.min(stats.profitFactor * 20, 100);
+    const winRate = stats.winRate;
+    const avgRisk = 85; // Simulated - would calculate from position sizing
+    const discipline = Math.min((stats.totalTrades / 30) * 100, 100); // More trades = more discipline
+    const resilience = Math.max(100 - (Math.abs(stats.largestLoss) / 1000 * 100), 0);
+    
+    return [
+      { metric: 'Profit Factor', value: profitFactor },
+      { metric: 'Risk', value: avgRisk },
+      { metric: 'Discipline', value: discipline },
+      { metric: 'Resilience', value: resilience },
+      { metric: 'Win %', value: winRate }
+    ];
+  };
+
+  const getDailyCumulativePnL = () => {
+    const last30Days = [];
+    const now = new Date();
+    let cumulativePnL = 0;
+    
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const dayTrades = trades.filter(t => t.date === dateStr && t.status === 'CLOSED');
+      const dayPnL = dayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+      cumulativePnL += dayPnL;
+      
+      last30Days.push({
+        date: date.getDate(),
+        pnl: cumulativePnL,
+        dailyPnL: dayPnL
+      });
+    }
+    return last30Days;
+  };
+
+  const zellaScore = getZellaScore();
+  const overallScore = zellaScore.length > 0 ? Math.round(zellaScore.reduce((sum, item) => sum + item.value, 0) / zellaScore.length) : 0;
 
   const handleAddTrade = () => {
     if (!newTrade.symbol || !newTrade.entryPrice || !newTrade.strategy) {
@@ -274,25 +320,89 @@ export default function TradingJournal() {
       </div>
 
       {/* Dashboard Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Performance Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
+        {/* Zella Score */}
+        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Zella Score</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={zellaScore}>
+                  <PolarGrid stroke="#374151" />
+                  <PolarAngleAxis 
+                    dataKey="metric" 
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    className="text-xs"
+                  />
+                  <Radar
+                    dataKey="value"
+                    stroke="#A855F7"
+                    fill="#A855F7"
+                    fillOpacity={0.3}
+                    strokeWidth={2}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-4">
+              <div className="text-xs text-muted-foreground mb-2">YOUR ZELLA SCORE</div>
+              <div className="flex items-center gap-3">
+                <div className="text-2xl font-bold text-purple-400">{overallScore}</div>
+                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-red-500 via-amber-500 to-emerald-500 transition-all duration-500"
+                    style={{ width: `${overallScore}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Daily Net Cumulative P&L */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-lg">Performance Overview</CardTitle>
+            <CardTitle className="text-lg">Daily Net Cumulative P&L</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {getTradesByMonth().map((month, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                  <div>
-                    <div className="font-medium">{month.month}</div>
-                    <div className="text-sm text-muted-foreground">{month.trades} trades</div>
-                  </div>
-                  <div className={`text-lg font-bold ${month.pnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    ${month.pnl.toFixed(2)}
-                  </div>
-                </div>
-              ))}
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={getDailyCumulativePnL()}>
+                  <defs>
+                    <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#EF4444" stopOpacity={0.1}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="date" 
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    axisLine={{ stroke: '#4B5563' }}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    axisLine={{ stroke: '#4B5563' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1F2937', 
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#F3F4F6'
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="pnl"
+                    stroke="#10B981"
+                    strokeWidth={2}
+                    fill="url(#pnlGradient)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
@@ -336,6 +446,44 @@ export default function TradingJournal() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Net Daily P&L Chart */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg">Net Daily P&L</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={getDailyCumulativePnL()}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis 
+                  dataKey="date" 
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                  axisLine={{ stroke: '#4B5563' }}
+                />
+                <YAxis 
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                  axisLine={{ stroke: '#4B5563' }}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#1F2937', 
+                    border: '1px solid #374151',
+                    borderRadius: '8px',
+                    color: '#F3F4F6'
+                  }}
+                />
+                <Bar 
+                  dataKey="dailyPnL" 
+                  radius={[2, 2, 0, 0]}
+                  fill="#10B981"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Add Trade Form */}
       {isAddingTrade && (

@@ -147,10 +147,10 @@ export default function GraphView({
 
     // Create simulation
     const simulation = d3.forceSimulation<GraphNode>(nodes)
-      .force("link", d3.forceLink<GraphNode, GraphLink>(links).id(d => d.id).distance(100))
-      .force("charge", d3.forceManyBody().strength(-300))
+      .force("link", d3.forceLink<GraphNode, GraphLink>(links).id(d => d.id).distance(80))
+      .force("charge", d3.forceManyBody().strength(-400))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide().radius(30));
+      .force("collision", d3.forceCollide().radius(25));
 
     const g = svg.append("g");
 
@@ -169,11 +169,11 @@ export default function GraphView({
       .data(links)
       .enter().append("line")
       .attr("stroke", (d: any) => {
-        return d.type === 'shared-tag' ? "#A7C957" : "#6C727F";
+        return d.type === 'shared-tag' ? "#22C55E" : "#9CA3AF";
       })
-      .attr("stroke-opacity", (d: any) => d.type === 'shared-tag' ? 0.8 : 0.6)
-      .attr("stroke-width", (d: any) => d.type === 'shared-tag' ? 2 : 1.5)
-      .attr("stroke-dasharray", (d: any) => d.type === 'shared-tag' ? "6,3" : "none");
+      .attr("stroke-opacity", (d: any) => d.type === 'shared-tag' ? 0.8 : 0.5)
+      .attr("stroke-width", (d: any) => d.type === 'shared-tag' ? 1.5 : 1)
+      .attr("stroke-dasharray", (d: any) => d.type === 'shared-tag' ? "none" : "none");
 
     // Create nodes
     const node = g.append("g")
@@ -199,30 +199,37 @@ export default function GraphView({
 
     // Add circles for nodes
     node.append("circle")
-      .attr("r", d => Math.max(8, Math.min(20, 8 + d.connections * 1.5)))
-      .attr("fill", d => {
-        if (d.note.isFavorite) return "#FFB347";
-        if (selectedNote?.id === d.id) return "#7C3AED";
-        if (d.note.folder === "1") return "#A855F7";
-        if (d.note.folder === "2") return "#10B981";  
-        if (d.note.folder === "3") return "#F59E0B";
-        return "#6366F1";
+      .attr("r", d => {
+        const baseSize = 6;
+        const connectionBonus = Math.min(d.connections * 1.2, 8);
+        return selectedNote?.id === d.id ? baseSize + connectionBonus + 4 : baseSize + connectionBonus;
       })
-      .attr("stroke", d => selectedNote?.id === d.id ? "#A855F7" : "#4B5563")
-      .attr("stroke-width", d => selectedNote?.id === d.id ? 2.5 : 1.5)
-      .style("filter", "drop-shadow(0px 1px 3px rgba(0,0,0,0.5))");
+      .attr("fill", d => {
+        if (selectedNote?.id === d.id) return "#FFFFFF";
+        if (d.note.isFavorite) return "#22C55E";
+        if (d.note.tags.length > 0) return "#22C55E";
+        return "#9CA3AF";
+      })
+      .attr("stroke", d => selectedNote?.id === d.id ? "#60A5FA" : "#374151")
+      .attr("stroke-width", d => selectedNote?.id === d.id ? 2 : 1)
+      .style("filter", "drop-shadow(0px 1px 3px rgba(0,0,0,0.6))");
 
     // Add labels
     node.append("text")
-      .text(d => d.title.length > 10 ? d.title.substring(0, 10) + "..." : d.title)
+      .text(d => d.title.length > 8 ? d.title.substring(0, 8) + "..." : d.title)
       .attr("x", 0)
-      .attr("y", 25)
+      .attr("y", (d) => {
+        const baseSize = 6;
+        const connectionBonus = Math.min(d.connections * 1.2, 8);
+        const radius = selectedNote?.id === d.id ? baseSize + connectionBonus + 4 : baseSize + connectionBonus;
+        return radius + 16;
+      })
       .attr("text-anchor", "middle")
-      .attr("font-size", "10px")
-      .attr("font-weight", "500")
-      .attr("fill", "#E5E7EB")
+      .attr("font-size", "11px")
+      .attr("font-weight", "400")
+      .attr("fill", (d) => selectedNote?.id === d.id ? "#FFFFFF" : "#D1D5DB")
       .style("pointer-events", "none")
-      .style("text-shadow", "0px 1px 2px rgba(0,0,0,0.8)");
+      .style("text-shadow", "0px 1px 3px rgba(0,0,0,0.9)");
 
     // Add click handler
     node.on("click", (event, d) => {
@@ -248,17 +255,17 @@ export default function GraphView({
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="flex-1 bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+      <div className="flex-1 border border-gray-800 rounded-lg overflow-hidden" style={{ background: '#1e1e1e' }}>
         <svg
           ref={svgRef}
           width="100%"
           height="600"
           className="w-full h-full"
-          style={{ background: '#0F172A' }}
+          style={{ background: '#1e1e1e' }}
         />
       </div>
-      <div className="mt-2 text-xs text-slate-400 text-center">
-        🔗 Graph View - Click and drag nodes • Scroll to zoom • White lines: direct links • Green lines: shared tags
+      <div className="mt-2 text-xs text-gray-400 text-center">
+        🔗 Graph View - Click and drag nodes • Scroll to zoom • Gray lines: direct links • Green lines: shared tags
       </div>
     </div>
   );
