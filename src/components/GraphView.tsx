@@ -32,7 +32,7 @@ interface GraphNode extends d3.SimulationNodeDatum {
 interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
   source: string | GraphNode;
   target: string | GraphNode;
-  type?: 'direct' | 'shared-tag';
+  type?: 'direct' | 'shared-tag' | 'folder' | 'proximity';
 }
 
 export default function GraphView({ 
@@ -82,7 +82,7 @@ export default function GraphView({
     });
 
     // Create links
-    const links: (GraphLink & { type: 'direct' | 'shared-tag' })[] = [];
+    const links: (GraphLink & { type: 'direct' | 'shared-tag' | 'folder' | 'proximity' })[] = [];
     
     console.log('Filtered notes:', filteredNotes);
     
@@ -146,6 +146,37 @@ export default function GraphView({
         }
       });
     });
+
+    // Add folder-based connections (blue connections) if notes are in same folder
+    filteredNotes.forEach(note => {
+      filteredNotes.forEach(otherNote => {
+        if (note.id !== otherNote.id && note.folder && otherNote.folder && note.folder === otherNote.folder) {
+          // Check if any connection already exists between these nodes
+          const connectionExists = links.some(l => 
+            (l.source === note.id && l.target === otherNote.id) ||
+            (l.source === otherNote.id && l.target === note.id)
+          );
+          if (!connectionExists) {
+            links.push({
+              source: note.id,
+              target: otherNote.id,
+              type: 'folder'
+            });
+          }
+        }
+      });
+    });
+
+    // If no connections exist, create proximity connections for visualization
+    if (links.length === 0 && filteredNotes.length > 1) {
+      for (let i = 0; i < filteredNotes.length - 1; i++) {
+        links.push({
+          source: filteredNotes[i].id,
+          target: filteredNotes[i + 1].id,
+          type: 'proximity'
+        });
+      }
+    }
     
     console.log('Generated links:', links);
 
@@ -173,10 +204,29 @@ export default function GraphView({
       .data(links)
       .enter().append("line")
       .attr("stroke", (d: any) => {
-        return d.type === 'shared-tag' ? "#22C55E" : "#FFFFFF";
+        switch(d.type) {
+          case 'shared-tag': return "#22C55E"; // Green
+          case 'folder': return "#3B82F6"; // Blue  
+          case 'proximity': return "#8B5CF6"; // Purple
+          default: return "#FFFFFF"; // White for direct
+        }
       })
-      .attr("stroke-opacity", (d: any) => d.type === 'shared-tag' ? 0.9 : 0.8)
-      .attr("stroke-width", (d: any) => d.type === 'shared-tag' ? 2 : 1.5)
+      .attr("stroke-opacity", (d: any) => {
+        switch(d.type) {
+          case 'shared-tag': return 0.9;
+          case 'folder': return 0.8;
+          case 'proximity': return 0.6;
+          default: return 0.8; // direct links
+        }
+      })
+      .attr("stroke-width", (d: any) => {
+        switch(d.type) {
+          case 'shared-tag': return 2;
+          case 'folder': return 2;
+          case 'proximity': return 1;
+          default: return 1.5; // direct links
+        }
+      })
       .style("pointer-events", "none");
 
     // Create nodes
@@ -269,7 +319,7 @@ export default function GraphView({
         />
       </div>
       <div className="mt-2 text-xs text-gray-400 text-center">
-        🔗 Graph View - Click and drag nodes • Scroll to zoom • Gray lines: direct links • Green lines: shared tags
+        🔗 Graph View - Click and drag nodes • Scroll to zoom • White: direct links • Green: shared tags • Blue: same folder • Purple: proximity
       </div>
     </div>
   );
