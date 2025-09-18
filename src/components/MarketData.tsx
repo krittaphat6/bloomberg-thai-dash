@@ -24,7 +24,6 @@ import LiveUAMap from './LiveUAMap';
 
 import USDebtClock from './USDebtClock';
 import NoteTaking from './NoteTaking';
-import ForexFactory from './ForexFactory';
 import TradingJournal from './TradingJournal';
 import FedWatch from './FedWatch';
 
@@ -105,21 +104,6 @@ const MarketData = () => {
 
   const availableComponents = [
     { id: 'fedwatch', title: 'FEDWATCH TOOL', component: <FedWatch /> },
-    { id: 'tradingview', title: 'TRADINGVIEW CHART', component: <TradingViewChart /> },
-    { id: 'us-debt-clock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
-    { id: 'forex-factory', title: 'FOREX FACTORY', component: <ForexFactory /> },
-    { id: 'trading-journal', title: 'TRADING JOURNAL', component: <TradingJournal /> },
-    { id: 'note-taking', title: 'ABLE NOTES', component: <NoteTaking /> },
-    { id: 'able3-ai', title: 'ABLE 3.0 AI', component: <ABLE3AI /> },
-    { id: 'bitcoin-mempool', title: 'BITCOIN MEMPOOL', component: <BitcoinMempool /> },
-    { id: 'live-ua-map', title:'LIVE UA MAP', component: <LiveUAMap /> },
-    { id: 'real-market', title: 'REAL MARKET DATA', component: <RealMarketData /> },
-    { id: 'economic', title: 'ECONOMIC INDICATORS', component: <EconomicIndicators /> },
-    { id: 'cot', title: 'COT REPORT', component: <COTData /> },
-    { id: 'gold', title: 'GOLD/SPDR', component: <SPDRGoldData /> },
-    { id: 'news', title: 'BLOOMBERG NEWS', component: <BloombergNews /> },
-    { id: 'analysis', title: 'SCATTER ANALYSIS', component: <ScatterAnalysis /> },
-    { id: 'pie-chart', title: 'MARKET PIE CHART', component: <MarketPieChart /> },
     { id: 'calendar', title: 'ECONOMIC CALENDAR', component: <EconomicCalendar /> },
     { id: 'depth', title: 'MARKET DEPTH', component: <MarketDepth /> },
     { id: 'volume', title: 'TRADING VOLUME', component: <TradingVolume /> },

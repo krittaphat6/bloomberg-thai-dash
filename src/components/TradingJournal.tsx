@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Edit3, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar } from 'recharts';
 
@@ -543,41 +543,73 @@ export default function TradingJournal() {
           </CardContent>
         </Card>
 
-        {/* Calendar View */}
+        {/* Enhanced Trading Calendar */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Trading Calendar</CardTitle>
-            <div className="text-sm text-muted-foreground">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Daily Trading Performance - {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </CardTitle>
+            <div className="text-sm text-muted-foreground">Track your daily profits and losses at a glance</div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <div key={day} className="font-medium text-muted-foreground p-1">{day}</div>
+            <div className="grid grid-cols-7 gap-3 text-center text-sm mb-6">
+              {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, idx) => (
+                <div key={day} className="font-bold text-primary p-3 bg-gradient-to-r from-muted/30 to-muted/10 rounded-lg border border-border/30">
+                  {day.substring(0, 3)}
+                </div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-7 gap-3">
               {generateCalendarData().map((day, idx) => (
                 <div 
                   key={idx} 
                   className={`
-                    p-2 text-xs rounded transition-all cursor-pointer
+                    p-4 text-center rounded-xl border-2 transition-all duration-300 cursor-pointer hover:scale-105 hover:shadow-lg min-h-[80px] flex flex-col justify-between
                     ${day.trades > 0 
                       ? day.pnl >= 0 
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                        : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                      : 'bg-muted/20 text-muted-foreground hover:bg-muted/40'
+                        ? 'bg-gradient-to-br from-emerald-500/25 to-emerald-400/10 border-emerald-400/70 shadow-emerald-400/20' 
+                        : 'bg-gradient-to-br from-red-500/25 to-red-400/10 border-red-400/70 shadow-red-400/20'
+                      : 'bg-gradient-to-br from-muted/40 to-muted/10 border-border/60 hover:bg-muted/60'
                     }
                   `}
+                  title={`${day.trades} trades, $${day.pnl.toFixed(2)} P&L`}
                 >
-                  <div className="font-medium">{day.date}</div>
-                  {day.trades > 0 && (
-                    <div className="mt-1">
-                      <div className="text-[10px]">${day.pnl.toFixed(0)}</div>
-                      <div className="text-[9px] opacity-70">{day.trades} trades</div>
+                  <div className="text-lg font-bold text-foreground mb-1">{day.date}</div>
+                  {day.trades > 0 ? (
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-muted-foreground">
+                        {day.trades} trade{day.trades !== 1 ? 's' : ''}
+                      </div>
+                      <div className={`text-lg font-bold px-3 py-1 rounded-full ${
+                        day.pnl >= 0 
+                          ? 'text-emerald-300 bg-emerald-400/30 border border-emerald-400/50' 
+                          : 'text-red-300 bg-red-400/30 border border-red-400/50'
+                      }`}>
+                        ${day.pnl > 0 ? '+' : ''}${day.pnl.toFixed(0)}
+                      </div>
                     </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground/50">No trades</div>
                   )}
                 </div>
               ))}
+            </div>
+            
+            {/* Enhanced Legend */}
+            <div className="flex justify-center gap-8 mt-8 pt-6 border-t border-border/40">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-lg bg-emerald-400/50 border-2 border-emerald-400/70"></div>
+                <span className="text-sm font-medium text-muted-foreground">Profitable Days</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-lg bg-red-400/50 border-2 border-red-400/70"></div>
+                <span className="text-sm font-medium text-muted-foreground">Loss Days</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-lg bg-muted/50 border-2 border-border/60"></div>
+                <span className="text-sm font-medium text-muted-foreground">No Activity</span>
+              </div>
             </div>
           </CardContent>
         </Card>

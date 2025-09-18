@@ -324,12 +324,14 @@ const FedWatch = () => {
         </Card>
       </div>
 
-      {/* Charts Section */}
+      {/* Enhanced Tabs with comprehensive Fed analysis */}
       <Tabs defaultValue="probability" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="probability">Probability Chart</TabsTrigger>
-          <TabsTrigger value="historical">Historical Trend</TabsTrigger>
-          <TabsTrigger value="table">Probability Table</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="probability">Rate Probabilities</TabsTrigger>
+          <TabsTrigger value="historical">Historical Trends</TabsTrigger>
+          <TabsTrigger value="heatmap">Probability Heatmap</TabsTrigger>
+          <TabsTrigger value="analysis">Market Analysis</TabsTrigger>
+          <TabsTrigger value="futures">Fed Futures</TabsTrigger>
           <TabsTrigger value="comparison">Meeting Comparison</TabsTrigger>
         </TabsList>
 
