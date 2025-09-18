@@ -49,9 +49,9 @@ const PenguinSticker = () => {
 
   return (
     <>
-      {/* Click trigger - moved further right */}
+      {/* Click trigger - centered */}
       <div 
-        className="fixed top-4 right-2 z-50 cursor-pointer"
+        className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 cursor-pointer"
         onClick={() => setIsVisible(!isVisible)}
       >
         <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center hover:bg-primary/30 transition-colors">
