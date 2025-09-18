@@ -16,9 +16,13 @@ interface Trade {
   date: string;
   symbol: string;
   side: 'LONG' | 'SHORT';
+  type: 'CFD' | 'STOCK'; // New field for trade type
   entryPrice: number;
   exitPrice?: number;
   quantity: number;
+  lotSize?: number; // For CFD trades
+  contractSize?: number; // For CFD trades
+  leverage?: number; // For CFD trades
   pnl?: number;
   pnlPercentage?: number;
   status: 'OPEN' | 'CLOSED';
@@ -27,6 +31,8 @@ interface Trade {
   tags?: string[];
   riskReward?: number;
   commission?: number;
+  swap?: number; // For CFD overnight fees
+  dividends?: number; // For stock dividends
 }
 
 interface TradingStats {
@@ -48,10 +54,13 @@ export default function TradingJournal() {
   const [newTrade, setNewTrade] = useState<Partial<Trade>>({
     date: new Date().toISOString().split('T')[0],
     side: 'LONG',
+    type: 'STOCK',
     status: 'OPEN',
     strategy: '',
     quantity: 1,
-    commission: 0
+    commission: 0,
+    leverage: 1,
+    lotSize: 1
   });
 
   // Load trades from localStorage
@@ -192,22 +201,31 @@ export default function TradingJournal() {
       date: newTrade.date || new Date().toISOString().split('T')[0],
       symbol: newTrade.symbol!,
       side: newTrade.side || 'LONG',
+      type: newTrade.type || 'STOCK',
       entryPrice: newTrade.entryPrice!,
       quantity: newTrade.quantity || 1,
+      lotSize: newTrade.lotSize,
+      contractSize: newTrade.contractSize,
+      leverage: newTrade.leverage || 1,
       status: newTrade.status || 'OPEN',
       strategy: newTrade.strategy!,
       notes: newTrade.notes,
-      commission: newTrade.commission || 0
+      commission: newTrade.commission || 0,
+      swap: newTrade.swap,
+      dividends: newTrade.dividends
     };
 
     setTrades([...trades, trade]);
     setNewTrade({
       date: new Date().toISOString().split('T')[0],
       side: 'LONG',
+      type: 'STOCK',
       status: 'OPEN',
       strategy: '',
       quantity: 1,
-      commission: 0
+      commission: 0,
+      leverage: 1,
+      lotSize: 1
     });
     setIsAddingTrade(false);
     
@@ -220,10 +238,43 @@ export default function TradingJournal() {
   const handleCloseTrade = (tradeId: string, exitPrice: number) => {
     setTrades(trades.map(trade => {
       if (trade.id === tradeId) {
-        const pnl = trade.side === 'LONG' 
-          ? (exitPrice - trade.entryPrice) * trade.quantity - (trade.commission || 0)
-          : (trade.entryPrice - exitPrice) * trade.quantity - (trade.commission || 0);
-        const pnlPercentage = (pnl / (trade.entryPrice * trade.quantity)) * 100;
+        let pnl = 0;
+        let pnlPercentage = 0;
+        
+        if (trade.type === 'CFD') {
+          // CFD P&L calculation with lot size and contract size
+          const lotSize = trade.lotSize || 1;
+          const contractSize = trade.contractSize || 100000; // Default for forex
+          const pointValue = contractSize * lotSize;
+          
+          if (trade.side === 'LONG') {
+            pnl = (exitPrice - trade.entryPrice) * pointValue;
+          } else {
+            pnl = (trade.entryPrice - exitPrice) * pointValue;
+          }
+          
+          // Add swap and commission for CFD
+          pnl -= (trade.commission || 0);
+          pnl += (trade.swap || 0);
+          
+          // Calculate percentage based on margin used (with leverage)
+          const marginUsed = (trade.entryPrice * pointValue) / (trade.leverage || 1);
+          pnlPercentage = marginUsed > 0 ? (pnl / marginUsed) * 100 : 0;
+        } else {
+          // Stock P&L calculation
+          if (trade.side === 'LONG') {
+            pnl = (exitPrice - trade.entryPrice) * trade.quantity;
+          } else {
+            pnl = (trade.entryPrice - exitPrice) * trade.quantity;
+          }
+          
+          pnl -= (trade.commission || 0);
+          pnl += (trade.dividends || 0);
+          
+          // Calculate percentage based on total investment
+          const totalInvestment = trade.entryPrice * trade.quantity;
+          pnlPercentage = totalInvestment > 0 ? (pnl / totalInvestment) * 100 : 0;
+        }
         
         return {
           ...trade,
@@ -235,6 +286,92 @@ export default function TradingJournal() {
       }
       return trade;
     }));
+  };
+
+  // Calculate profit factor by symbols
+  const getProfitFactorBySymbols = () => {
+    const symbolStats = new Map();
+    
+    trades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined).forEach(trade => {
+      const symbol = trade.symbol;
+      if (!symbolStats.has(symbol)) {
+        symbolStats.set(symbol, {
+          symbol,
+          type: trade.type,
+          totalWins: 0,
+          totalLosses: 0,
+          winCount: 0,
+          lossCount: 0,
+          totalTrades: 0
+        });
+      }
+      
+      const stats = symbolStats.get(symbol);
+      stats.totalTrades++;
+      
+      if (trade.pnl! > 0) {
+        stats.totalWins += trade.pnl!;
+        stats.winCount++;
+      } else {
+        stats.totalLosses += Math.abs(trade.pnl!);
+        stats.lossCount++;
+      }
+    });
+    
+    return Array.from(symbolStats.values()).map(stats => ({
+      ...stats,
+      profitFactor: stats.totalLosses > 0 ? stats.totalWins / stats.totalLosses : stats.totalWins > 0 ? 999 : 0,
+      winRate: stats.totalTrades > 0 ? (stats.winCount / stats.totalTrades) * 100 : 0
+    })).sort((a, b) => b.profitFactor - a.profitFactor);
+  };
+
+  // Get Long vs Short breakdown
+  const getLongShortBreakdown = () => {
+    const closedTrades = trades.filter(t => t.status === 'CLOSED');
+    const longTrades = closedTrades.filter(t => t.side === 'LONG');
+    const shortTrades = closedTrades.filter(t => t.side === 'SHORT');
+    
+    return {
+      long: {
+        count: longTrades.length,
+        percentage: closedTrades.length > 0 ? (longTrades.length / closedTrades.length) * 100 : 0,
+        pnl: longTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
+      },
+      short: {
+        count: shortTrades.length,
+        percentage: closedTrades.length > 0 ? (shortTrades.length / closedTrades.length) * 100 : 0,
+        pnl: shortTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
+      }
+    };
+  };
+
+  // Get asset grouping with CFD/Stock breakdown
+  const getAssetGrouping = () => {
+    const groups = new Map();
+    
+    trades.forEach(trade => {
+      const baseSymbol = trade.symbol.replace(/[0-9]/g, ''); // Remove numbers for grouping
+      if (!groups.has(baseSymbol)) {
+        groups.set(baseSymbol, {
+          symbol: baseSymbol,
+          cfd: { count: 0, pnl: 0, trades: [] },
+          stock: { count: 0, pnl: 0, trades: [] }
+        });
+      }
+      
+      const group = groups.get(baseSymbol);
+      if (trade.type === 'CFD') {
+        group.cfd.count++;
+        group.cfd.pnl += trade.pnl || 0;
+        group.cfd.trades.push(trade);
+      } else {
+        group.stock.count++;
+        group.stock.pnl += trade.pnl || 0;
+        group.stock.trades.push(trade);
+      }
+    });
+    
+    return Array.from(groups.values());
   };
 
   const handleDeleteTrade = (tradeId: string) => {
@@ -578,6 +715,128 @@ export default function TradingJournal() {
         </CardContent>
       </Card>
 
+      {/* Profit Factor by Symbols */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg">Profit Factor by Symbols</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {getProfitFactorBySymbols().map((item, index) => (
+              <div key={item.symbol} className="flex items-center justify-between p-2 rounded hover:bg-muted/50">
+                <div className="flex items-center gap-3">
+                  <Badge variant={item.type === 'CFD' ? 'default' : 'secondary'} className="text-xs">
+                    {item.type}
+                  </Badge>
+                  <span className="font-medium">{item.symbol}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className={`w-32 h-2 rounded-full overflow-hidden ${
+                    item.profitFactor >= 2 ? 'bg-emerald-500' :
+                    item.profitFactor >= 1 ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}>
+                    <div 
+                      className="h-full bg-current opacity-80"
+                      style={{ width: `${Math.min(100, (item.profitFactor / 3) * 100)}%` }}
+                    />
+                  </div>
+                  <span className={`font-bold text-sm min-w-[60px] text-right ${
+                    item.profitFactor >= 1 ? 'text-emerald-400' : 'text-red-400'
+                  }`}>
+                    {item.profitFactor.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Long vs Short Breakdown */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Long vs Short</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const breakdown = getLongShortBreakdown();
+              return (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                      <span className="text-blue-400">Long</span>
+                    </div>
+                    <span className="font-bold">
+                      {breakdown.long.count} ({breakdown.long.percentage.toFixed(1)}%)
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                      <span className="text-orange-400">Short</span>
+                    </div>
+                    <span className="font-bold">
+                      {breakdown.short.count} ({breakdown.short.percentage.toFixed(1)}%)
+                    </span>
+                  </div>
+                  <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-500 transition-all"
+                      style={{ width: `${breakdown.long.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Asset Grouping</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {getAssetGrouping().slice(0, 5).map((group, index) => (
+                <div key={group.symbol} className="space-y-2">
+                  <div className="font-medium text-sm">{group.symbol}</div>
+                  <div className="ml-4 space-y-1">
+                    {group.cfd.count > 0 && (
+                      <div className="flex justify-between items-center text-xs">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="default" className="text-xs">CFD</Badge>
+                          <span>{group.cfd.count} trades</span>
+                        </div>
+                        <span className={`font-bold ${
+                          group.cfd.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          ${group.cfd.pnl >= 0 ? '+' : ''}{group.cfd.pnl.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    {group.stock.count > 0 && (
+                      <div className="flex justify-between items-center text-xs">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">STOCK</Badge>
+                          <span>{group.stock.count} trades</span>
+                        </div>
+                        <span className={`font-bold ${
+                          group.stock.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          ${group.stock.pnl >= 0 ? '+' : ''}{group.stock.pnl.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Add Trade Form */}
       {isAddingTrade && (
         <Card>
@@ -605,6 +864,21 @@ export default function TradingJournal() {
                 />
               </div>
               <div>
+                <Label htmlFor="type">Trade Type</Label>
+                <Select value={newTrade.type} onValueChange={(value: 'CFD' | 'STOCK') => setNewTrade({...newTrade, type: value})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="STOCK">Stock</SelectItem>
+                    <SelectItem value="CFD">CFD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
                 <Label htmlFor="side">Side</Label>
                 <Select value={newTrade.side} onValueChange={(value: 'LONG' | 'SHORT') => setNewTrade({...newTrade, side: value})}>
                   <SelectTrigger>
@@ -616,9 +890,6 @@ export default function TradingJournal() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="entryPrice">Entry Price</Label>
                 <Input
@@ -638,6 +909,46 @@ export default function TradingJournal() {
                   onChange={(e) => setNewTrade({...newTrade, quantity: parseInt(e.target.value)})}
                 />
               </div>
+            </div>
+
+            {/* CFD-specific fields */}
+            {newTrade.type === 'CFD' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                <div>
+                  <Label htmlFor="lotSize">Lot Size</Label>
+                  <Input
+                    id="lotSize"
+                    type="number"
+                    step="0.01"
+                    placeholder="1.0"
+                    value={newTrade.lotSize || ''}
+                    onChange={(e) => setNewTrade({...newTrade, lotSize: parseFloat(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="leverage">Leverage</Label>
+                  <Input
+                    id="leverage"
+                    type="number"
+                    placeholder="1:100"
+                    value={newTrade.leverage || ''}
+                    onChange={(e) => setNewTrade({...newTrade, leverage: parseInt(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="contractSize">Contract Size</Label>
+                  <Input
+                    id="contractSize"
+                    type="number"
+                    placeholder="100000"
+                    value={newTrade.contractSize || ''}
+                    onChange={(e) => setNewTrade({...newTrade, contractSize: parseInt(e.target.value)})}
+                  />
+                </div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="strategy">Strategy</Label>
                 <Input
@@ -645,6 +956,17 @@ export default function TradingJournal() {
                   placeholder="Breakout, Support/Resistance, etc."
                   value={newTrade.strategy || ''}
                   onChange={(e) => setNewTrade({...newTrade, strategy: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="commission">Commission</Label>
+                <Input
+                  id="commission"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={newTrade.commission || ''}
+                  onChange={(e) => setNewTrade({...newTrade, commission: parseFloat(e.target.value)})}
                 />
               </div>
             </div>
@@ -678,10 +1000,11 @@ export default function TradingJournal() {
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Symbol</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Side</TableHead>
                 <TableHead>Entry</TableHead>
                 <TableHead>Exit</TableHead>
-                <TableHead>Quantity</TableHead>
+                <TableHead>Size</TableHead>
                 <TableHead>P&L</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Strategy</TableHead>
@@ -693,6 +1016,11 @@ export default function TradingJournal() {
                 <TableRow key={trade.id}>
                   <TableCell>{trade.date}</TableCell>
                   <TableCell className="font-medium">{trade.symbol}</TableCell>
+                  <TableCell>
+                    <Badge variant={trade.type === 'CFD' ? 'default' : 'secondary'} className="text-xs">
+                      {trade.type || 'STOCK'}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <Badge variant={trade.side === 'LONG' ? 'default' : 'secondary'}>
                       {trade.side === 'LONG' ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
@@ -718,7 +1046,16 @@ export default function TradingJournal() {
                       />
                     )}
                   </TableCell>
-                  <TableCell>{trade.quantity}</TableCell>
+                  <TableCell>
+                    {trade.type === 'CFD' ? (
+                      <div className="text-xs">
+                        <div>Lot: {trade.lotSize || 1}</div>
+                        {trade.leverage && <div>Lev: 1:{trade.leverage}</div>}
+                      </div>
+                    ) : (
+                      trade.quantity
+                    )}
+                  </TableCell>
                   <TableCell>
                     {trade.pnl !== undefined ? (
                       <span className={trade.pnl >= 0 ? 'text-green-600' : 'text-red-600'}>
