@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar } from 'recharts';
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, ScatterChart, Scatter, ComposedChart, Line } from 'recharts';
 import TradeAnalysisPanel from './TradeAnalysisPanel';
 
 interface Trade {
@@ -34,6 +34,7 @@ interface Trade {
   commission?: number;
   swap?: number; // For CFD overnight fees
   dividends?: number; // For stock dividends
+  entryTime?: string; // Added for time-based analysis
 }
 
 interface TradingStats {
@@ -663,6 +664,125 @@ export default function TradingJournal() {
         </CardContent>
       </Card>
 
+      {/* New Comparison Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Win Rate vs Profit Factor Scatter Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Win Rate vs Profit Factor Analysis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart
+                  data={getProfitFactorBySymbols().map(item => ({
+                    symbol: item.symbol,
+                    winRate: item.winRate,
+                    profitFactor: item.profitFactor,
+                    totalTrades: item.totalTrades
+                  }))}
+                  margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="winRate" 
+                    type="number" 
+                    domain={[0, 100]}
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    label={{ value: 'Win Rate (%)', position: 'insideBottom', offset: -10, style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
+                  />
+                  <YAxis 
+                    dataKey="profitFactor" 
+                    type="number"
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    label={{ value: 'Profit Factor', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1F2937', 
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#F3F4F6'
+                    }}
+                    formatter={(value: any, name: string) => [
+                      name === 'profitFactor' ? value.toFixed(2) : `${value.toFixed(1)}%`,
+                      name === 'profitFactor' ? 'Profit Factor' : 'Win Rate'
+                    ]}
+                    labelFormatter={(label, payload) => 
+                      payload?.[0]?.payload ? `${payload[0].payload.symbol} (${payload[0].payload.totalTrades} trades)` : ''
+                    }
+                  />
+                  <Scatter dataKey="profitFactor" fill="#10B981" />
+                </ScatterChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Time-based Performance Heatmap */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Trading Performance by Time</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              {(() => {
+                const timePerformance = Array.from({ length: 24 }, (_, hour) => {
+                  const hourTrades = trades.filter(t => {
+                    const tradeHour = new Date(t.date + 'T' + (t.entryTime || '09:00')).getHours();
+                    return tradeHour === hour;
+                  });
+                  
+                  const totalPnL = hourTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+                  const tradeCount = hourTrades.length;
+                  
+                  return {
+                    hour: hour.toString().padStart(2, '0') + ':00',
+                    pnl: totalPnL,
+                    trades: tradeCount,
+                    avgPnL: tradeCount > 0 ? totalPnL / tradeCount : 0
+                  };
+                }).filter(item => item.trades > 0);
+
+                return (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={timePerformance}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis 
+                        dataKey="hour" 
+                        tick={{ fontSize: 9, fill: '#9CA3AF' }}
+                        interval={1}
+                      />
+                      <YAxis 
+                        tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                        label={{ value: 'P&L ($)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1F2937', 
+                          border: '1px solid #374151',
+                          borderRadius: '8px',
+                          color: '#F3F4F6'
+                        }}
+                        formatter={(value: any, name) => [
+                          name === 'pnl' ? `$${value.toFixed(2)}` : value,
+                          name === 'pnl' ? 'Total P&L' : 'Trades'
+                        ]}
+                      />
+                      <Bar 
+                        dataKey="pnl" 
+                        fill="#10B981"
+                        radius={[2, 2, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                );
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Analytics Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Profit Factor by Symbols Chart */}
@@ -989,6 +1109,119 @@ export default function TradingJournal() {
                     </div>
                   </div>
                 ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Additional Comparison Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Monthly Performance Comparison */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Monthly Performance Comparison</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={getTradesByMonth()}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="month" 
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                  />
+                  <YAxis 
+                    yAxisId="left"
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    label={{ value: 'P&L ($)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
+                  />
+                  <YAxis 
+                    yAxisId="right" 
+                    orientation="right"
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                    label={{ value: 'Trade Count', angle: 90, position: 'insideRight', style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1F2937', 
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#F3F4F6'
+                    }}
+                  />
+                  <Bar 
+                    yAxisId="left"
+                    dataKey="pnl" 
+                    fill="#10B981" 
+                    name="Monthly P&L"
+                    opacity={0.7}
+                  />
+                  <Line 
+                    yAxisId="right"
+                    type="monotone" 
+                    dataKey="trades" 
+                    stroke="#F59E0B" 
+                    strokeWidth={3}
+                    name="Trade Count"
+                    dot={{ fill: '#F59E0B', strokeWidth: 2, r: 4 }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Risk-Reward Analysis */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Risk vs Reward Analysis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              {(() => {
+                const riskRewardData = getProfitFactorBySymbols().map(item => ({
+                  symbol: item.symbol,
+                  avgRisk: item.totalLosses / (item.lossCount || 1),
+                  avgReward: item.totalWins / (item.winCount || 1),
+                  riskRewardRatio: (item.totalWins / (item.winCount || 1)) / (item.totalLosses / (item.lossCount || 1) || 1)
+                })).filter(item => item.avgRisk > 0 && item.avgReward > 0);
+
+                return (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ScatterChart data={riskRewardData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis 
+                        dataKey="avgRisk" 
+                        type="number"
+                        tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                        label={{ value: 'Avg Risk ($)', position: 'insideBottom', offset: -10, style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
+                      />
+                      <YAxis 
+                        dataKey="avgReward" 
+                        type="number"
+                        tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                        label={{ value: 'Avg Reward ($)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1F2937', 
+                          border: '1px solid #374151',
+                          borderRadius: '8px',
+                          color: '#F3F4F6'
+                        }}
+                        formatter={(value: any, name: string) => [
+                          `$${value.toFixed(2)}`,
+                          name === 'avgReward' ? 'Avg Reward' : 'Avg Risk'
+                        ]}
+                        labelFormatter={(label, payload) => 
+                          payload?.[0]?.payload ? `${payload[0].payload.symbol} (R:R ${payload[0].payload.riskRewardRatio.toFixed(2)})` : ''
+                        }
+                      />
+                      <Scatter dataKey="avgReward" fill="#3B82F6" />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                );
+              })()}
             </div>
           </CardContent>
         </Card>
