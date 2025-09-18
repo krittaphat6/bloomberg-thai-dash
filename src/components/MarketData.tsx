@@ -105,10 +105,24 @@ const MarketData = () => {
   const availableComponents = [
     { id: 'fedwatch', title: 'FEDWATCH TOOL', component: <FedWatch /> },
     { id: 'calendar', title: 'ECONOMIC CALENDAR', component: <EconomicCalendar /> },
+    { id: 'tradingview', title: 'TRADING VIEW CHART', component: <TradingViewChart /> },
+    { id: 'scatter', title: 'SCATTER ANALYSIS', component: <ScatterAnalysis /> },
+    { id: 'piechart', title: 'MARKET PIE CHART', component: <MarketPieChart /> },
+    { id: 'news', title: 'BLOOMBERG NEWS', component: <BloombergNews /> },
     { id: 'depth', title: 'MARKET DEPTH', component: <MarketDepth /> },
     { id: 'volume', title: 'TRADING VOLUME', component: <TradingVolume /> },
     { id: 'heatmap', title: 'HEAT MAP', component: <HeatMap /> },
-    { id: 'currency', title: 'CURRENCY TABLE', component: <CurrencyTable /> }
+    { id: 'currency', title: 'CURRENCY TABLE', component: <CurrencyTable /> },
+    { id: 'indicators', title: 'ECONOMIC INDICATORS', component: <EconomicIndicators /> },
+    { id: 'cot', title: 'COT DATA', component: <COTData /> },
+    { id: 'gold', title: 'SPDR GOLD DATA', component: <SPDRGoldData /> },
+    { id: 'realmarket', title: 'REAL MARKET DATA', component: <RealMarketData /> },
+    { id: 'able3ai', title: 'ABLE3 AI', component: <ABLE3AI /> },
+    { id: 'bitcoin', title: 'BITCOIN MEMPOOL', component: <BitcoinMempool /> },
+    { id: 'uamap', title: 'LIVE UA MAP', component: <LiveUAMap /> },
+    { id: 'debtclock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
+    { id: 'notes', title: 'NOTE TAKING', component: <NoteTaking /> },
+    { id: 'journal', title: 'TRADING JOURNAL', component: <TradingJournal /> }
   ];
 
   const handleTabAdd = () => {
