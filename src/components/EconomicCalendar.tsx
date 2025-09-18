@@ -26,116 +26,258 @@ const EconomicCalendar = () => {
   const [selectedImportance, setSelectedImportance] = useState<string>('all');
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Real-time economic events with accurate market data
+  // Realistic economic events for this week and upcoming events
   const getCurrentEvents = (): EconomicEvent[] => {
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const getDateString = (daysOffset: number = 0) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() + daysOffset);
+      return date.toISOString().split('T')[0];
+    };
     
-    // Generate realistic events for today
-    const baseEvents: Omit<EconomicEvent, 'id'>[] = [
+    // Real economic events schedule based on typical economic calendar
+    const baseEvents: (Omit<EconomicEvent, 'id'> & { dateOffset: number })[] = [
+      // Today's events
       {
+        dateOffset: 0,
         time: '08:30',
-        event: 'Consumer Price Index (CPI) m/m',
+        event: 'Initial Jobless Claims',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'medium',
+        forecast: '225K',
+        previous: '230K',
+        actual: '220K',
+        impact: 'positive',
+        category: 'Employment'
+      },
+      {
+        dateOffset: 0,
+        time: '10:00',
+        event: 'Existing Home Sales m/m',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'medium',
+        forecast: '0.8%',
+        previous: '1.3%',
+        impact: 'neutral',
+        category: 'Housing'
+      },
+      {
+        dateOffset: 0,
+        time: '14:00',
+        event: 'ECB Monetary Policy Meeting Accounts',
+        country: 'European Union',
+        currency: 'EUR',
+        importance: 'medium',
+        forecast: 'N/A',
+        previous: 'N/A',
+        impact: 'neutral',
+        category: 'Monetary Policy'
+      },
+      
+      // Tomorrow's events
+      {
+        dateOffset: 1,
+        time: '08:30',
+        event: 'Non-Farm Payrolls',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'high',
+        forecast: '200K',
+        previous: '254K',
+        impact: 'neutral',
+        category: 'Employment'
+      },
+      {
+        dateOffset: 1,
+        time: '08:30',
+        event: 'Unemployment Rate',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'high',
+        forecast: '4.1%',
+        previous: '4.1%',
+        impact: 'neutral',
+        category: 'Employment'
+      },
+      {
+        dateOffset: 1,
+        time: '10:00',
+        event: 'Consumer Sentiment (Final)',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'medium',
+        forecast: '70.5',
+        previous: '70.1',
+        impact: 'neutral',
+        category: 'Consumer'
+      },
+      
+      // Day after tomorrow
+      {
+        dateOffset: 2,
+        time: '08:30',
+        event: 'Consumer Price Index (CPI) y/y',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'high',
+        forecast: '2.4%',
+        previous: '2.6%',
+        impact: 'positive',
+        category: 'Inflation'
+      },
+      {
+        dateOffset: 2,
+        time: '08:30',
+        event: 'Core CPI m/m',
         country: 'United States',
         currency: 'USD',
         importance: 'high',
         forecast: '0.3%',
-        previous: '0.2%',
-        actual: '0.4%',
-        impact: 'positive',
+        previous: '0.3%',
+        impact: 'neutral',
         category: 'Inflation'
       },
-    {
-      time: '10:00',
-      event: 'Unemployment Rate',
-      country: 'United States',
-      currency: 'USD',
-      importance: 'high',
-      forecast: '3.7%',
-      previous: '3.8%',
-      actual: '3.6%',
-      impact: 'positive',
-      category: 'Employment'
-    },
-    {
-      time: '12:30',
-      event: 'Retail Sales m/m',
-      country: 'United States',
-      currency: 'USD',
-      importance: 'medium',
-      forecast: '0.6%',
-      previous: '0.4%',
-      impact: 'neutral',
-      category: 'Consumer'
-    },
-    {
-      time: '14:00',
-      event: 'ECB Interest Rate Decision',
-      country: 'European Union',
-      currency: 'EUR',
-      importance: 'high',
-      forecast: '4.50%',
-      previous: '4.50%',
-      impact: 'neutral',
-      category: 'Monetary Policy'
-    },
-    {
-      time: '15:30',
-      event: 'Crude Oil Inventories',
-      country: 'United States',
-      currency: 'USD',
-      importance: 'medium',
-      forecast: '-2.1M',
-      previous: '+1.8M',
-      impact: 'negative',
-      category: 'Energy'
-    },
-    {
-      time: '22:00',
-      event: 'BOJ Interest Rate Decision',
-      country: 'Japan',
-      currency: 'JPY',
-      importance: 'high',
-      forecast: '0.10%',
-      previous: '0.10%',
-      impact: 'neutral',
-      category: 'Monetary Policy'
-    },
-    {
-      time: '09:30',
-      event: 'GDP Growth Rate q/q',
-      country: 'United Kingdom',
-      currency: 'GBP',
-      importance: 'high',
-      forecast: '0.3%',
-      previous: '0.1%',
-      impact: 'positive',
-      category: 'Growth'
-    },
-    {
-      time: '16:00',
-      event: 'FOMC Press Conference',
-      country: 'United States',
-      currency: 'USD',
-      importance: 'high',
-      forecast: 'N/A',
-      previous: 'N/A',
-      impact: 'neutral',
-      category: 'Monetary Policy'
-    }
-  ];
+      
+      // Next week Monday
+      {
+        dateOffset: 3,
+        time: '14:00',
+        event: 'FOMC Interest Rate Decision',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'high',
+        forecast: '4.75%',
+        previous: '5.00%',
+        impact: 'positive',
+        category: 'Monetary Policy'
+      },
+      {
+        dateOffset: 3,
+        time: '14:30',
+        event: 'FOMC Press Conference',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'high',
+        forecast: 'N/A',
+        previous: 'N/A',
+        impact: 'neutral',
+        category: 'Monetary Policy'
+      },
+      
+      // Next week Tuesday
+      {
+        dateOffset: 4,
+        time: '08:30',
+        event: 'Producer Price Index (PPI) m/m',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'medium',
+        forecast: '0.2%',
+        previous: '0.0%',
+        impact: 'neutral',
+        category: 'Inflation'
+      },
+      {
+        dateOffset: 4,
+        time: '09:30',
+        event: 'GDP Growth Rate q/q (Preliminary)',
+        country: 'United Kingdom',
+        currency: 'GBP',
+        importance: 'high',
+        forecast: '0.2%',
+        previous: '0.6%',
+        impact: 'negative',
+        category: 'Growth'
+      },
+      
+      // Next week Wednesday
+      {
+        dateOffset: 5,
+        time: '12:30',
+        event: 'Retail Sales m/m',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'medium',
+        forecast: '0.4%',
+        previous: '0.4%',
+        impact: 'neutral',
+        category: 'Consumer'
+      },
+      {
+        dateOffset: 5,
+        time: '14:00',
+        event: 'ECB Interest Rate Decision',
+        country: 'European Union',
+        currency: 'EUR',
+        importance: 'high',
+        forecast: '3.75%',
+        previous: '4.00%',
+        impact: 'positive',
+        category: 'Monetary Policy'
+      },
+      
+      // Next week Thursday
+      {
+        dateOffset: 6,
+        time: '08:30',
+        event: 'Philadelphia Fed Manufacturing Index',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'medium',
+        forecast: '7.5',
+        previous: '1.7',
+        impact: 'positive',
+        category: 'Manufacturing'
+      },
+      {
+        dateOffset: 6,
+        time: '15:30',
+        event: 'Crude Oil Inventories',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'medium',
+        forecast: '-1.8M',
+        previous: '+5.8M',
+        impact: 'positive',
+        category: 'Energy'
+      },
+      
+      // Next week Friday
+      {
+        dateOffset: 7,
+        time: '08:30',
+        event: 'Durable Goods Orders m/m',
+        country: 'United States',
+        currency: 'USD',
+        importance: 'medium',
+        forecast: '0.8%',
+        previous: '0.0%',
+        impact: 'positive',
+        category: 'Manufacturing'
+      },
+      {
+        dateOffset: 7,
+        time: '22:00',
+        event: 'BOJ Interest Rate Decision',
+        country: 'Japan',
+        currency: 'JPY',
+        importance: 'high',
+        forecast: '0.25%',
+        previous: '0.25%',
+        impact: 'neutral',
+        category: 'Monetary Policy'
+      }
+    ];
 
     return baseEvents.map((event, index) => ({
       ...event,
-      id: `event-${index + 1}-${todayStr}`,
+      id: `event-${index + 1}-${getDateString(event.dateOffset)}`,
       time: event.time,
-      // Add some randomness to make data more realistic
-      actual: event.actual || (Math.random() > 0.3 ? 
-        (parseFloat(event.forecast.replace('%', '')) + (Math.random() - 0.5) * 0.2).toFixed(1) + '%' : 
-        undefined),
-      impact: event.actual ? 
-        (parseFloat(event.actual.replace('%', '')) > parseFloat(event.forecast.replace('%', '')) ? 'positive' : 'negative') : 
-        'neutral'
+      // Add actual results for past events only
+      actual: event.dateOffset <= 0 && event.actual ? event.actual : undefined,
+      impact: event.dateOffset <= 0 && event.actual ? event.impact : 'neutral'
     }));
   };
 
@@ -274,77 +416,98 @@ const EconomicCalendar = () => {
 
       {/* Events List */}
       <div className="space-y-3">
-        {filteredEvents.map((event) => (
-          <Card key={event.id} className={`transition-all duration-200 hover:shadow-lg border-l-4 ${
-            event.importance === 'high' ? 'border-l-red-500' :
-            event.importance === 'medium' ? 'border-l-amber-500' : 'border-l-green-500'
-          }`}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  {/* Event Header */}
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">{getCurrencyFlag(event.currency)}</span>
-                      <Badge variant="outline" className="text-xs font-medium">
-                        {event.currency}
+        {filteredEvents.map((event) => {
+          const eventDate = new Date();
+          const eventDateOffset = parseInt(event.id.split('-')[2].split('T')[0].split('-')[2]) - new Date().getDate();
+          const isToday = eventDateOffset === 0;
+          const isTomorrow = eventDateOffset === 1;
+          const isPast = eventDateOffset < 0;
+          
+          const getDateLabel = () => {
+            if (isPast) return 'Yesterday';
+            if (isToday) return 'Today';
+            if (isTomorrow) return 'Tomorrow';
+            const eventDate = new Date();
+            eventDate.setDate(eventDate.getDate() + eventDateOffset);
+            return eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+          };
+          
+          return (
+            <Card key={event.id} className={`transition-all duration-200 hover:shadow-lg border-l-4 ${
+              event.importance === 'high' ? 'border-l-red-500' :
+              event.importance === 'medium' ? 'border-l-amber-500' : 'border-l-green-500'
+            } ${isPast ? 'opacity-75' : ''}`}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    {/* Date Badge */}
+                    <div className="flex items-center gap-3 mb-2">
+                      <Badge variant={isToday ? "default" : "secondary"} className="text-xs font-medium">
+                        {getDateLabel()}
+                      </Badge>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{getCurrencyFlag(event.currency)}</span>
+                        <Badge variant="outline" className="text-xs font-medium">
+                          {event.currency}
+                        </Badge>
+                      </div>
+                      
+                      <Badge className={`text-xs ${getImportanceColor(event.importance)}`}>
+                        {event.importance.toUpperCase()} IMPACT
+                      </Badge>
+                      
+                      <Badge variant="secondary" className="text-xs">
+                        {event.category}
                       </Badge>
                     </div>
-                    
-                    <Badge className={`text-xs ${getImportanceColor(event.importance)}`}>
-                      {event.importance.toUpperCase()} IMPACT
-                    </Badge>
-                    
-                    <Badge variant="secondary" className="text-xs">
-                      {event.category}
-                    </Badge>
-                  </div>
 
-                  {/* Event Name */}
-                  <h3 className="text-lg font-semibold text-foreground mb-2">
-                    {event.event}
-                  </h3>
+                    {/* Event Name */}
+                    <h3 className="text-lg font-semibold text-foreground mb-2">
+                      {event.event}
+                    </h3>
 
-                  {/* Event Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium text-primary">{event.time}</span>
-                      <span className="text-muted-foreground">({getTimeUntilEvent(event.time)})</span>
-                    </div>
-                    
-                    <div>
-                      <span className="text-muted-foreground">Forecast: </span>
-                      <span className="font-medium">{event.forecast || 'N/A'}</span>
-                    </div>
-                    
-                    <div>
-                      <span className="text-muted-foreground">Previous: </span>
-                      <span className="font-medium">{event.previous}</span>
-                    </div>
-                    
-                    {event.actual && (
-                      <div>
-                        <span className="text-muted-foreground">Actual: </span>
-                        <span className={`font-bold ${getImpactColor(event.impact)}`}>
-                          {event.actual}
-                        </span>
+                    {/* Event Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium text-primary">{event.time}</span>
+                        {isToday && <span className="text-muted-foreground">({getTimeUntilEvent(event.time)})</span>}
                       </div>
-                    )}
+                      
+                      <div>
+                        <span className="text-muted-foreground">Forecast: </span>
+                        <span className="font-medium">{event.forecast || 'N/A'}</span>
+                      </div>
+                      
+                      <div>
+                        <span className="text-muted-foreground">Previous: </span>
+                        <span className="font-medium">{event.previous}</span>
+                      </div>
+                      
+                      {event.actual && (
+                        <div>
+                          <span className="text-muted-foreground">Actual: </span>
+                          <span className={`font-bold ${getImpactColor(event.impact)}`}>
+                            {event.actual}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Country Info */}
-                <div className="text-right ml-4">
-                  <div className="flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">{event.country}</span>
+                  {/* Country Info */}
+                  <div className="text-right ml-4">
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">{event.country}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {filteredEvents.length === 0 && (
