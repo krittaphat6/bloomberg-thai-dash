@@ -26,6 +26,8 @@ import USDebtClock from './USDebtClock';
 import NoteTaking from './NoteTaking';
 import TradingJournal from './TradingJournal';
 import FedWatch from './FedWatch';
+import PenguinSticker from './PenguinSticker';
+import TicTacToeGame from './TicTacToeGame';
 
 interface PanelData {
   id: string;
@@ -122,7 +124,8 @@ const MarketData = () => {
     { id: 'uamap', title: 'LIVE UA MAP', component: <LiveUAMap /> },
     { id: 'debtclock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
     { id: 'notes', title: 'NOTE TAKING', component: <NoteTaking /> },
-    { id: 'journal', title: 'TRADING JOURNAL', component: <TradingJournal /> }
+    { id: 'journal', title: 'TRADING JOURNAL', component: <TradingJournal /> },
+    { id: 'tictactoe', title: 'หมากฮอส GAME', component: <TicTacToeGame /> }
   ];
 
   const handleTabAdd = () => {
@@ -142,6 +145,7 @@ const MarketData = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
+      <PenguinSticker />
       <DesignSwitcher />
       <div className="bg-background border-b border-border p-3">
         <div className="flex justify-between items-center">
