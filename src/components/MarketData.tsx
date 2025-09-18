@@ -21,10 +21,11 @@ import RealMarketData from './RealMarketData';
 import ABLE3AI from './ABLE3AI';
 import BitcoinMempool from './BitcoinMempool';
 import LiveUAMap from './LiveUAMap';
-import MarineTraffic from './MarineTraffic';
+
 import USDebtClock from './USDebtClock';
-import KoyfinMarkets from './KoyfinMarkets';
 import NoteTaking from './NoteTaking';
+import ForexFactory from './ForexFactory';
+import TradingJournal from './TradingJournal';
 
 interface PanelData {
   id: string;
@@ -104,12 +105,12 @@ const MarketData = () => {
   const availableComponents = [
     { id: 'tradingview', title: 'TRADINGVIEW CHART', component: <TradingViewChart /> },
     { id: 'us-debt-clock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
-    { id: 'koyfin-markets', title: 'KOYFIN MARKETS', component: <KoyfinMarkets /> },
+    { id: 'forex-factory', title: 'FOREX FACTORY', component: <ForexFactory /> },
+    { id: 'trading-journal', title: 'TRADING JOURNAL', component: <TradingJournal /> },
     { id: 'note-taking', title: 'ABLE NOTES', component: <NoteTaking /> },
     { id: 'able3-ai', title: 'ABLE 3.0 AI', component: <ABLE3AI /> },
     { id: 'bitcoin-mempool', title: 'BITCOIN MEMPOOL', component: <BitcoinMempool /> },
     { id: 'live-ua-map', title:'LIVE UA MAP', component: <LiveUAMap /> },
-    { id: 'marine-traffic', title: 'MARINE TRAFFIC', component: <MarineTraffic /> },
     { id: 'real-market', title: 'REAL MARKET DATA', component: <RealMarketData /> },
     { id: 'economic', title: 'ECONOMIC INDICATORS', component: <EconomicIndicators /> },
     { id: 'cot', title: 'COT REPORT', component: <COTData /> },

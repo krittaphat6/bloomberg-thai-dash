@@ -169,11 +169,12 @@ export default function GraphView({
       .data(links)
       .enter().append("line")
       .attr("stroke", (d: any) => {
-        return d.type === 'shared-tag' ? "hsl(var(--terminal-green))" : "hsl(var(--foreground))";
+        return d.type === 'shared-tag' ? "#10B981" : "#E5E7EB";
       })
-      .attr("stroke-opacity", (d: any) => d.type === 'shared-tag' ? 0.8 : 0.6)
-      .attr("stroke-width", (d: any) => d.type === 'shared-tag' ? 2 : 1)
-      .attr("stroke-dasharray", (d: any) => d.type === 'shared-tag' ? "5,5" : "none");
+      .attr("stroke-opacity", (d: any) => d.type === 'shared-tag' ? 0.9 : 0.7)
+      .attr("stroke-width", (d: any) => d.type === 'shared-tag' ? 3 : 2)
+      .attr("stroke-dasharray", (d: any) => d.type === 'shared-tag' ? "8,4" : "none")
+      .style("filter", d => d.type === 'shared-tag' ? "drop-shadow(0px 1px 2px rgba(16,185,129,0.4))" : "none");
 
     // Create nodes
     const node = g.append("g")
@@ -199,27 +200,30 @@ export default function GraphView({
 
     // Add circles for nodes
     node.append("circle")
-      .attr("r", d => Math.max(8, Math.min(20, 8 + d.connections * 2)))
+      .attr("r", d => Math.max(12, Math.min(25, 12 + d.connections * 2)))
       .attr("fill", d => {
-        if (d.note.isFavorite) return "hsl(var(--yellow))";
-        if (selectedNote?.id === d.id) return "hsl(var(--terminal-green))";
-        if (d.note.folder === "1") return "hsl(var(--blue))";
-        if (d.note.folder === "2") return "hsl(var(--green))";
-        if (d.note.folder === "3") return "hsl(var(--purple))";
-        return "hsl(var(--primary))";
+        if (d.note.isFavorite) return "#FFD700";
+        if (selectedNote?.id === d.id) return "#00D9FF";
+        if (d.note.folder === "1") return "#9333EA";
+        if (d.note.folder === "2") return "#10B981";
+        if (d.note.folder === "3") return "#F97316";
+        return "#8B5CF6";
       })
-      .attr("stroke", d => selectedNote?.id === d.id ? "hsl(var(--terminal-green))" : "hsl(var(--border))")
-      .attr("stroke-width", d => selectedNote?.id === d.id ? 3 : 1);
+      .attr("stroke", d => selectedNote?.id === d.id ? "#00D9FF" : "#E5E7EB")
+      .attr("stroke-width", d => selectedNote?.id === d.id ? 3 : 2)
+      .style("filter", "drop-shadow(0px 2px 4px rgba(0,0,0,0.3))");
 
     // Add labels
     node.append("text")
-      .text(d => d.title.length > 15 ? d.title.substring(0, 15) + "..." : d.title)
+      .text(d => d.title.length > 12 ? d.title.substring(0, 12) + "..." : d.title)
       .attr("x", 0)
-      .attr("y", 25)
+      .attr("y", 30)
       .attr("text-anchor", "middle")
-      .attr("font-size", "10px")
-      .attr("fill", "hsl(var(--foreground))")
-      .style("pointer-events", "none");
+      .attr("font-size", "11px")
+      .attr("font-weight", "600")
+      .attr("fill", "#374151")
+      .style("pointer-events", "none")
+      .style("text-shadow", "0px 1px 2px rgba(255,255,255,0.8)");
 
     // Add click handler
     node.on("click", (event, d) => {
