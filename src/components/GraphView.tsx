@@ -169,12 +169,11 @@ export default function GraphView({
       .data(links)
       .enter().append("line")
       .attr("stroke", (d: any) => {
-        return d.type === 'shared-tag' ? "#10B981" : "#E5E7EB";
+        return d.type === 'shared-tag' ? "#A7C957" : "#6C727F";
       })
-      .attr("stroke-opacity", (d: any) => d.type === 'shared-tag' ? 0.9 : 0.7)
-      .attr("stroke-width", (d: any) => d.type === 'shared-tag' ? 3 : 2)
-      .attr("stroke-dasharray", (d: any) => d.type === 'shared-tag' ? "8,4" : "none")
-      .style("filter", d => d.type === 'shared-tag' ? "drop-shadow(0px 1px 2px rgba(16,185,129,0.4))" : "none");
+      .attr("stroke-opacity", (d: any) => d.type === 'shared-tag' ? 0.8 : 0.6)
+      .attr("stroke-width", (d: any) => d.type === 'shared-tag' ? 2 : 1.5)
+      .attr("stroke-dasharray", (d: any) => d.type === 'shared-tag' ? "6,3" : "none");
 
     // Create nodes
     const node = g.append("g")
@@ -200,30 +199,30 @@ export default function GraphView({
 
     // Add circles for nodes
     node.append("circle")
-      .attr("r", d => Math.max(12, Math.min(25, 12 + d.connections * 2)))
+      .attr("r", d => Math.max(8, Math.min(20, 8 + d.connections * 1.5)))
       .attr("fill", d => {
-        if (d.note.isFavorite) return "#FFD700";
-        if (selectedNote?.id === d.id) return "#00D9FF";
-        if (d.note.folder === "1") return "#9333EA";
-        if (d.note.folder === "2") return "#10B981";
-        if (d.note.folder === "3") return "#F97316";
-        return "#8B5CF6";
+        if (d.note.isFavorite) return "#FFB347";
+        if (selectedNote?.id === d.id) return "#7C3AED";
+        if (d.note.folder === "1") return "#A855F7";
+        if (d.note.folder === "2") return "#10B981";  
+        if (d.note.folder === "3") return "#F59E0B";
+        return "#6366F1";
       })
-      .attr("stroke", d => selectedNote?.id === d.id ? "#00D9FF" : "#E5E7EB")
-      .attr("stroke-width", d => selectedNote?.id === d.id ? 3 : 2)
-      .style("filter", "drop-shadow(0px 2px 4px rgba(0,0,0,0.3))");
+      .attr("stroke", d => selectedNote?.id === d.id ? "#A855F7" : "#4B5563")
+      .attr("stroke-width", d => selectedNote?.id === d.id ? 2.5 : 1.5)
+      .style("filter", "drop-shadow(0px 1px 3px rgba(0,0,0,0.5))");
 
     // Add labels
     node.append("text")
-      .text(d => d.title.length > 12 ? d.title.substring(0, 12) + "..." : d.title)
+      .text(d => d.title.length > 10 ? d.title.substring(0, 10) + "..." : d.title)
       .attr("x", 0)
-      .attr("y", 30)
+      .attr("y", 25)
       .attr("text-anchor", "middle")
-      .attr("font-size", "11px")
-      .attr("font-weight", "600")
-      .attr("fill", "#374151")
+      .attr("font-size", "10px")
+      .attr("font-weight", "500")
+      .attr("fill", "#E5E7EB")
       .style("pointer-events", "none")
-      .style("text-shadow", "0px 1px 2px rgba(255,255,255,0.8)");
+      .style("text-shadow", "0px 1px 2px rgba(0,0,0,0.8)");
 
     // Add click handler
     node.on("click", (event, d) => {
@@ -249,16 +248,17 @@ export default function GraphView({
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="flex-1 bg-background border border-border rounded-lg overflow-hidden">
+      <div className="flex-1 bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
         <svg
           ref={svgRef}
           width="100%"
           height="600"
           className="w-full h-full"
+          style={{ background: '#0F172A' }}
         />
       </div>
-      <div className="mt-2 text-xs text-muted-foreground text-center">
-        🔗 Graph View - Click and drag nodes • Scroll to zoom • Larger nodes have more connections
+      <div className="mt-2 text-xs text-slate-400 text-center">
+        🔗 Graph View - Click and drag nodes • Scroll to zoom • White lines: direct links • Green lines: shared tags
       </div>
     </div>
   );

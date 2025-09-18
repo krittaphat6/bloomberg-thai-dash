@@ -87,6 +87,49 @@ export default function TradingJournal() {
     };
   };
 
+  const getTradesByMonth = () => {
+    const months = [];
+    const now = new Date();
+    for (let i = 0; i < 6; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthTrades = trades.filter(t => {
+        const tradeDate = new Date(t.date);
+        return tradeDate.getMonth() === date.getMonth() && 
+               tradeDate.getFullYear() === date.getFullYear() &&
+               t.status === 'CLOSED';
+      });
+      const monthPnL = monthTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+      months.push({
+        month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        trades: monthTrades.length,
+        pnl: monthPnL
+      });
+    }
+    return months.reverse();
+  };
+
+  const generateCalendarData = () => {
+    const calendarData = [];
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    
+    for (let d = 1; d <= endOfMonth.getDate(); d++) {
+      const date = new Date(now.getFullYear(), now.getMonth(), d);
+      const dateStr = date.toISOString().split('T')[0];
+      const dayTrades = trades.filter(t => t.date === dateStr && t.status === 'CLOSED');
+      const dayPnL = dayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+      
+      calendarData.push({
+        date: d,
+        trades: dayTrades.length,
+        pnl: dayPnL,
+        dateStr
+      });
+    }
+    return calendarData;
+  };
+
   const handleAddTrade = () => {
     if (!newTrade.symbol || !newTrade.entryPrice || !newTrade.strategy) {
       toast({
@@ -169,42 +212,127 @@ export default function TradingJournal() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <Card className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border-emerald-500/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Total Trades</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Net P&L</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalTrades}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Win Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.winRate.toFixed(1)}%</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Total P&L</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${stats.totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className={`text-3xl font-bold ${stats.totalPnL >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
               ${stats.totalPnL.toFixed(2)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Last updated: {new Date().toLocaleDateString()}
             </div>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Trade Expectancy</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-400">
+              ${((stats.avgWin * stats.winRate/100) - (stats.avgLoss * (100-stats.winRate)/100)).toFixed(2)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Per trade</div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">Profit Factor</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.profitFactor.toFixed(2)}</div>
+            <div className="text-3xl font-bold text-purple-400">{stats.profitFactor.toFixed(2)}</div>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-8 h-8 rounded-full border-2 border-emerald-500 relative">
+                <div 
+                  className="absolute top-0 left-0 w-full h-full rounded-full bg-emerald-500"
+                  style={{ 
+                    clipPath: `polygon(50% 50%, 50% 0%, ${50 + (stats.winRate * 0.5)}% 0%, ${50 + (stats.winRate * 0.5)}% 100%, 50% 100%)`
+                  }}
+                ></div>
+              </div>
+              <span className="text-xs text-muted-foreground">{stats.winRate.toFixed(0)}% win rate</span>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Avg Win/Loss Trade</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-lg font-bold text-amber-400">${stats.avgWin.toFixed(0)} / ${stats.avgLoss.toFixed(0)}</div>
+            <div className="flex justify-between text-xs mt-2">
+              <span className="text-emerald-500">${stats.largestWin.toFixed(0)}</span>
+              <span className="text-red-500">${stats.largestLoss.toFixed(0)}</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Dashboard Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Performance Chart */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-lg">Performance Overview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {getTradesByMonth().map((month, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div>
+                    <div className="font-medium">{month.month}</div>
+                    <div className="text-sm text-muted-foreground">{month.trades} trades</div>
+                  </div>
+                  <div className={`text-lg font-bold ${month.pnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    ${month.pnl.toFixed(2)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Calendar View */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Trading Calendar</CardTitle>
+            <div className="text-sm text-muted-foreground">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                <div key={day} className="font-medium text-muted-foreground p-1">{day}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {generateCalendarData().map((day, idx) => (
+                <div 
+                  key={idx} 
+                  className={`
+                    p-2 text-xs rounded transition-all cursor-pointer
+                    ${day.trades > 0 
+                      ? day.pnl >= 0 
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                        : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      : 'bg-muted/20 text-muted-foreground hover:bg-muted/40'
+                    }
+                  `}
+                >
+                  <div className="font-medium">{day.date}</div>
+                  {day.trades > 0 && (
+                    <div className="mt-1">
+                      <div className="text-[10px]">${day.pnl.toFixed(0)}</div>
+                      <div className="text-[9px] opacity-70">{day.trades} trades</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
