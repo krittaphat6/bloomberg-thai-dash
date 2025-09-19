@@ -120,26 +120,55 @@ export default function TradingJournal() {
     return months.reverse();
   };
 
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  
   const generateCalendarData = () => {
-    const calendarData = [];
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
     
-    for (let d = 1; d <= endOfMonth.getDate(); d++) {
-      const date = new Date(now.getFullYear(), now.getMonth(), d);
-      const dateStr = date.toISOString().split('T')[0];
+    // Get first day of month and adjust to start from Sunday
+    const firstDay = new Date(year, month, 1);
+    const startDate = new Date(firstDay);
+    startDate.setDate(startDate.getDate() - firstDay.getDay());
+    
+    // Get last day of month and adjust to end on Saturday  
+    const lastDay = new Date(year, month + 1, 0);
+    const endDate = new Date(lastDay);
+    endDate.setDate(endDate.getDate() + (6 - lastDay.getDay()));
+    
+    const calendarData = [];
+    const current = new Date(startDate);
+    
+    while (current <= endDate) {
+      const dateStr = current.toISOString().split('T')[0];
       const dayTrades = trades.filter(t => t.date === dateStr && t.status === 'CLOSED');
       const dayPnL = dayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+      const isCurrentMonth = current.getMonth() === month;
       
       calendarData.push({
-        date: d,
+        date: current.getDate(),
         trades: dayTrades.length,
         pnl: dayPnL,
-        dateStr
+        dateStr,
+        isCurrentMonth
       });
+      
+      current.setDate(current.getDate() + 1);
     }
+    
     return calendarData;
+  };
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    setCalendarMonth(prev => {
+      const newDate = new Date(prev);
+      if (direction === 'prev') {
+        newDate.setMonth(newDate.getMonth() - 1);
+      } else {
+        newDate.setMonth(newDate.getMonth() + 1);
+      }
+      return newDate;
+    });
   };
 
   const getZellaScore = () => {
@@ -548,69 +577,85 @@ export default function TradingJournal() {
         {/* Enhanced Trading Calendar */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Daily Trading Performance - {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-            </CardTitle>
-            <div className="text-sm text-muted-foreground">Track your daily profits and losses at a glance</div>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Trading Calendar
+                </CardTitle>
+                <div className="text-sm text-muted-foreground">Daily P&L Overview</div>
+              </div>
+              <div className="flex items-center gap-4">
+                <Button variant="outline" size="sm" onClick={() => navigateMonth('prev')}>
+                  ←
+                </Button>
+                <div className="font-semibold text-lg min-w-[140px] text-center">
+                  {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                </div>
+                <Button variant="outline" size="sm" onClick={() => navigateMonth('next')}>
+                  →
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-7 gap-3 text-center text-sm mb-6">
-              {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, idx) => (
-                <div key={day} className="font-bold text-primary p-3 bg-gradient-to-r from-muted/30 to-muted/10 rounded-lg border border-border/30">
-                  {day.substring(0, 3)}
+            {/* Days of week header */}
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
+                  {day}
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-3">
+            
+            {/* Calendar grid */}
+            <div className="grid grid-cols-7 gap-1">
               {generateCalendarData().map((day, idx) => (
                 <div 
                   key={idx} 
                   className={`
-                    p-4 text-center rounded-xl border-2 transition-all duration-300 cursor-pointer hover:scale-105 hover:shadow-lg min-h-[80px] flex flex-col justify-between
-                    ${day.trades > 0 
-                      ? day.pnl >= 0 
-                        ? 'bg-gradient-to-br from-emerald-500/25 to-emerald-400/10 border-emerald-400/70 shadow-emerald-400/20' 
-                        : 'bg-gradient-to-br from-red-500/25 to-red-400/10 border-red-400/70 shadow-red-400/20'
-                      : 'bg-gradient-to-br from-muted/40 to-muted/10 border-border/60 hover:bg-muted/60'
+                    relative aspect-square p-2 text-center rounded-lg border transition-all duration-200 cursor-pointer hover:shadow-md
+                    ${!day.isCurrentMonth 
+                      ? 'bg-muted/30 text-muted-foreground/50 border-border/30' 
+                      : day.trades > 0 
+                        ? day.pnl >= 0 
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100' 
+                          : 'bg-red-50 border-red-200 text-red-900 hover:bg-red-100'
+                        : 'bg-background border-border hover:bg-muted/50'
                     }
                   `}
-                  title={`${day.trades} trades, $${day.pnl.toFixed(2)} P&L`}
+                  title={day.isCurrentMonth ? `${day.trades} trades, $${day.pnl.toFixed(2)} P&L` : ''}
                 >
-                  <div className="text-lg font-bold text-foreground mb-1">{day.date}</div>
-                  {day.trades > 0 ? (
-                     <div className="space-y-1">
-                       <div className="text-xs font-medium text-muted-foreground">
-                         {day.trades} trade{day.trades !== 1 ? 's' : ''}
-                       </div>
-                       <div className={`text-xs font-bold px-2 py-1 rounded-md whitespace-nowrap overflow-hidden text-ellipsis max-w-full ${
-                         day.pnl >= 0 
-                           ? 'text-emerald-300 bg-emerald-400/20 border border-emerald-400/40' 
-                           : 'text-red-300 bg-red-400/20 border border-red-400/40'
-                       }`}>
-                         ${day.pnl > 0 ? '+' : ''}${Math.abs(day.pnl) >= 1000 ? (day.pnl/1000).toFixed(1) + 'k' : day.pnl.toFixed(0)}
-                       </div>
-                     </div>
-                  ) : (
-                    <div className="text-xs text-muted-foreground/50">No trades</div>
+                  <div className="text-xs font-medium mb-1">{day.date}</div>
+                  {day.isCurrentMonth && day.trades > 0 && (
+                    <div className="space-y-0.5">
+                      <div className={`text-xs font-bold ${
+                        day.pnl >= 0 ? 'text-emerald-700' : 'text-red-700'
+                      }`}>
+                        ${day.pnl >= 0 ? '+' : ''}${Math.abs(day.pnl) >= 1000 ? (day.pnl/1000).toFixed(1) + 'k' : day.pnl.toFixed(0)}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {day.trades} trade{day.trades !== 1 ? 's' : ''}
+                      </div>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
             
-            {/* Enhanced Legend */}
-            <div className="flex justify-center gap-8 mt-8 pt-6 border-t border-border/40">
+            {/* Legend */}
+            <div className="flex justify-center gap-6 mt-4 pt-4 border-t">
               <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-lg bg-emerald-400/50 border-2 border-emerald-400/70"></div>
-                <span className="text-sm font-medium text-muted-foreground">Profitable Days</span>
+                <div className="w-4 h-4 rounded bg-emerald-100 border border-emerald-200"></div>
+                <span className="text-sm text-muted-foreground">Profit</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-lg bg-red-400/50 border-2 border-red-400/70"></div>
-                <span className="text-sm font-medium text-muted-foreground">Loss Days</span>
+                <div className="w-4 h-4 rounded bg-red-100 border border-red-200"></div>
+                <span className="text-sm text-muted-foreground">Loss</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-lg bg-muted/50 border-2 border-border/60"></div>
-                <span className="text-sm font-medium text-muted-foreground">No Activity</span>
+                <div className="w-4 h-4 rounded bg-background border border-border"></div>
+                <span className="text-sm text-muted-foreground">No trades</span>
               </div>
             </div>
           </CardContent>
