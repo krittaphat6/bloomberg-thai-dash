@@ -12,6 +12,7 @@ import { RichTextEditor } from './RichTextEditor';
 import { BlockEditor, Block } from './BlockEditor';
 import { DatabaseView, Database, DatabaseProperty, DatabaseRow } from './DatabaseView';
 import { NotionTemplates, NotionTemplate } from './NotionTemplates';
+import { SpreadsheetEditor } from './SpreadsheetEditor';
 import { 
   Plus, 
   Search, 
@@ -27,7 +28,7 @@ import {
   BookOpen,
   Network,
   Database as DatabaseIcon,
-  
+  Table,
   MessageCircle,
   Share2,
   Download,
@@ -86,8 +87,8 @@ export default function NoteTaking() {
   ]);
   const [databases, setDatabases] = useState<Database[]>([]);
   const [templates, setTemplates] = useState<NotionTemplate[]>([]);
-  const [mainView, setMainView] = useState<'notes' | 'databases' | 'templates'>('notes');
-  const [editorMode, setEditorMode] = useState<'simple' | 'rich' | 'blocks'>('simple');
+  const [mainView, setMainView] = useState<'notes' | 'databases' | 'templates' | 'spreadsheets'>('notes');
+  const [editorMode, setEditorMode] = useState<'simple' | 'rich' | 'blocks' | 'spreadsheet'>('simple');
   
   // Initialize with sample data on mount to avoid hydration issues
   useEffect(() => {
@@ -341,12 +342,12 @@ export default function NoteTaking() {
           {/* Sidebar */}
           <div className="w-80 flex flex-col gap-4 border-r border-border pr-4">
             {/* Main View Toggle */}
-            <div className="flex gap-1 mb-4">
+            <div className="grid grid-cols-2 gap-1 mb-4">
               <Button
                 variant={mainView === 'notes' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setMainView('notes')}
-                className="flex-1 text-xs"
+                className="text-xs"
               >
                 <FileText className="h-3 w-3 mr-1" />
                 Notes
@@ -355,7 +356,7 @@ export default function NoteTaking() {
                 variant={mainView === 'databases' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setMainView('databases')}
-                className="flex-1 text-xs"
+                className="text-xs"
               >
                 <DatabaseIcon className="h-3 w-3 mr-1" />
                 Databases
@@ -364,10 +365,19 @@ export default function NoteTaking() {
                 variant={mainView === 'templates' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setMainView('templates')}
-                className="flex-1 text-xs"
+                className="text-xs"
               >
                 <Layers className="h-3 w-3 mr-1" />
                 Templates
+              </Button>
+              <Button
+                variant={mainView === 'spreadsheets' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setMainView('spreadsheets')}
+                className="text-xs"
+              >
+                <Table className="h-3 w-3 mr-1" />
+                Tables
               </Button>
             </div>
 

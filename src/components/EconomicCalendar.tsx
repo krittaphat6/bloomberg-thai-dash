@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, TrendingUp, Clock, Globe, Filter, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Calendar, TrendingUp, Clock, Globe, Filter, RefreshCw, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,9 @@ const EconomicCalendar = () => {
   const [selectedCurrency, setSelectedCurrency] = useState<string>('all');
   const [selectedImportance, setSelectedImportance] = useState<string>('all');
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [showTradingViewWidget, setShowTradingViewWidget] = useState(true);
+  
+  const tradingViewRef = useRef<HTMLDivElement>(null);
 
   // Realistic economic events for this week and upcoming events
   const getCurrentEvents = (): EconomicEvent[] => {
@@ -294,6 +297,29 @@ const EconomicCalendar = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Initialize TradingView Economic Calendar Widget
+  useEffect(() => {
+    if (showTradingViewWidget && tradingViewRef.current) {
+      // Clear any existing widget
+      tradingViewRef.current.innerHTML = '';
+      
+      const script = document.createElement('script');
+      script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-events.js';
+      script.async = true;
+      script.innerHTML = JSON.stringify({
+        "width": "100%",
+        "height": "400",
+        "colorTheme": "dark",
+        "isTransparent": true,
+        "locale": "en",
+        "importanceFilter": "0,1",
+        "countryFilter": "us,eu,jp,gb,ca,au,ch"
+      });
+      
+      tradingViewRef.current.appendChild(script);
+    }
+  }, [showTradingViewWidget]);
+
   useEffect(() => {
     let filtered = events;
     
@@ -374,6 +400,14 @@ const EconomicCalendar = () => {
         </div>
         
         <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowTradingViewWidget(!showTradingViewWidget)}
+          >
+            <ExternalLink className="h-4 w-4 mr-1" />
+            {showTradingViewWidget ? 'Hide' : 'Show'} TradingView
+          </Button>
           <Button variant="outline" size="sm">
             <RefreshCw className="h-4 w-4 mr-1" />
             Refresh
@@ -413,6 +447,25 @@ const EconomicCalendar = () => {
           </SelectContent>
         </Select>
       </div>
+
+      {/* TradingView Economic Calendar Widget */}
+      {showTradingViewWidget && (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-primary">
+              <TrendingUp className="h-5 w-5" />
+              TradingView Economic Calendar
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div 
+              ref={tradingViewRef}
+              className="w-full min-h-[400px] bg-black rounded-lg"
+              style={{ colorScheme: 'dark' }}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Events List */}
       <div className="space-y-3">
