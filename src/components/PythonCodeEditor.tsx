@@ -315,15 +315,33 @@ if __name__ == "__main__":
     setIsRunning(true);
     const currentFile = getCurrentFile();
     
-    // Simulate code execution
+    // Simulate code execution with table results
     setTimeout(() => {
-      const newOutput: ModelOutput = {
+      const logOutput: ModelOutput = {
         type: 'log',
         content: `Executing ${currentFile?.name}...\n\n✓ Data fetched successfully\n✓ Model parameters optimized\n✓ Backtesting completed\n\nResults:\n- Sharpe Ratio: 1.23\n- Maximum Drawdown: -8.5%\n- Annual Return: 15.2%\n- Volatility: 12.3%`,
         timestamp: new Date()
       };
       
-      setOutput(prev => [newOutput, ...prev].slice(0, 10));
+      // Add table data output
+      const tableOutput: ModelOutput = {
+        type: 'data',
+        content: {
+          title: 'Portfolio Analysis Results',
+          headers: ['Asset', 'Weight (%)', 'Expected Return (%)', 'Risk (%)', 'Sharpe Ratio'],
+          rows: [
+            ['AAPL', '25.4', '12.5', '18.2', '0.68'],
+            ['GOOGL', '22.1', '14.8', '22.1', '0.67'],
+            ['MSFT', '18.9', '11.2', '16.5', '0.68'],
+            ['AMZN', '20.3', '15.6', '24.8', '0.63'],
+            ['TSLA', '13.3', '18.9', '35.4', '0.53'],
+            ['Total Portfolio', '100.0', '15.2', '12.3', '1.23']
+          ]
+        },
+        timestamp: new Date()
+      };
+      
+      setOutput(prev => [tableOutput, logOutput, ...prev].slice(0, 10));
       setIsRunning(false);
     }, 2000);
   };
@@ -547,11 +565,57 @@ if __name__ == "__main__":
                   </TabsContent>
                   
                   <TabsContent value="plots" className="flex-1 p-4">
-                    <div className="h-full flex items-center justify-center text-muted-foreground">
-                      Plots will appear here after running models
+                    <div className="space-y-4">
+                      {output.filter(o => o.type === 'data').length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-muted-foreground">
+                          Data tables will appear here after running models
+                        </div>
+                      ) : (
+                        output.filter(o => o.type === 'data').map((result, index) => (
+                          <div key={index} className="bg-card rounded-lg border border-border">
+                            <div className="p-3 border-b border-border">
+                              <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
+                                <Database className="h-4 w-4" />
+                                {result.content.title}
+                              </h3>
+                              <p className="text-xs text-muted-foreground">
+                                Generated: {result.timestamp.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="p-3">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b border-border">
+                                      {result.content.headers.map((header:string, idx:number) => (
+                                        <th key={idx} className="text-left p-2 font-medium text-primary">
+                                          {header}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {result.content.rows.map((row:string[], rowIdx:number) => (
+                                      <tr key={rowIdx} className={`border-b border-border/50 ${
+                                        rowIdx === result.content.rows.length - 1 ? 'bg-primary/5 font-medium' : 'hover:bg-muted/30'
+                                      }`}>
+                                        {row.map((cell, cellIdx) => (
+                                          <td key={cellIdx} className="p-2 text-foreground">
+                                            {cell}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </TabsContent>
-                  
+                   
                   <TabsContent value="debug" className="flex-1 p-4">
                     <div className="h-full flex items-center justify-center text-muted-foreground">
                       Debug information will appear here

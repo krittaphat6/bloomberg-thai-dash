@@ -314,8 +314,8 @@ const EconomicCalendar = () => {
       script.innerHTML = JSON.stringify({
         "width": "100%",
         "height": "400",
-        "colorTheme": colorTheme,
-        "isTransparent": true,
+        "colorTheme": "dark",
+        "isTransparent": false,
         "locale": "en",
         "importanceFilter": "0,1",
         "countryFilter": "us,eu,jp,gb,ca,au,ch"

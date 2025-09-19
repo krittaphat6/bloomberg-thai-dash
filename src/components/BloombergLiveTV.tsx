@@ -168,77 +168,36 @@ export const BloombergLiveTV: React.FC = () => {
         <div className="lg:col-span-2 bg-black relative">
           <div 
             ref={videoRef}
-            className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-900 to-black relative overflow-hidden"
+            className="w-full h-full relative overflow-hidden"
           >
-            {/* Simulated Live Feed */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-amber-900/20" />
+            {/* Bloomberg Live TV Embed */}
+            <iframe
+              src="https://www.bloomberg.com/live/us"
+              className="w-full h-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title="Bloomberg Live TV"
+            />
             
-            {/* Live Indicator */}
-            <div className="absolute top-4 left-4 flex items-center gap-2">
+            {/* Live Indicator Overlay */}
+            <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/70 backdrop-blur-sm rounded px-2 py-1">
               <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
               <span className="text-red-500 font-bold text-sm">LIVE</span>
             </div>
             
-            {/* Current Program Info */}
-            <div className="absolute bottom-20 left-4 right-4">
-              <div className="bg-black/70 backdrop-blur-sm rounded-lg p-4">
-                <h3 className="text-white font-bold">Market Watch</h3>
-                <p className="text-gray-300 text-sm">Live coverage of today's market movements and economic news</p>
+            {/* Connection Status Overlay */}
+            <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded px-2 py-1">
+              <div className="flex items-center gap-2 text-xs text-white">
+                <div className={`w-2 h-2 rounded-full ${
+                  connectionStatus === 'connected' ? 'bg-green-500' : 
+                  connectionStatus === 'connecting' ? 'bg-amber-500' : 'bg-red-500'
+                }`} />
+                <span>
+                  {connectionStatus === 'connected' ? 'Live Stream' : 
+                   connectionStatus === 'connecting' ? 'Connecting...' : 'Offline'}
+                </span>
               </div>
             </div>
-            
-            {/* Player Controls */}
-            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setIsPlaying(!isPlaying)}
-                  className="bg-black/50 border-white/20 text-white hover:bg-black/70"
-                >
-                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                </Button>
-                
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setIsMuted(!isMuted)}
-                  className="bg-black/50 border-white/20 text-white hover:bg-black/70"
-                >
-                  {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                </Button>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="bg-black/50 border-white/20 text-white hover:bg-black/70"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-                
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setIsFullscreen(!isFullscreen)}
-                  className="bg-black/50 border-white/20 text-white hover:bg-black/70"
-                >
-                  <Maximize className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            
-            {/* Center Play Button */}
-            {!isPlaying && (
-              <Button
-                size="lg"
-                onClick={() => setIsPlaying(true)}
-                className="w-16 h-16 rounded-full bg-amber-500 hover:bg-amber-600 text-black"
-              >
-                <Play className="h-8 w-8 ml-1" />
-              </Button>
-            )}
           </div>
           
           {/* Market Ticker */}
