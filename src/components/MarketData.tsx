@@ -28,6 +28,8 @@ import TradingJournal from './TradingJournal';
 import FedWatch from './FedWatch';
 import PenguinSticker from './PenguinSticker';
 import ChessGame from './ChessGame';
+import { BloombergLiveTV } from './BloombergLiveTV';
+import { PythonCodeEditor } from './PythonCodeEditor';
 
 interface PanelData {
   id: string;
@@ -111,6 +113,8 @@ const MarketData = () => {
     { id: 'scatter', title: 'SCATTER ANALYSIS', component: <ScatterAnalysis /> },
     { id: 'piechart', title: 'MARKET PIE CHART', component: <MarketPieChart /> },
     { id: 'news', title: 'BLOOMBERG NEWS', component: <BloombergNews /> },
+    { id: 'tv', title: 'BLOOMBERG LIVE TV', component: <BloombergLiveTV /> },
+    { id: 'code', title: 'PYTHON CODE EDITOR', component: <PythonCodeEditor /> },
     { id: 'depth', title: 'MARKET DEPTH', component: <MarketDepth /> },
     { id: 'volume', title: 'TRADING VOLUME', component: <TradingVolume /> },
     { id: 'heatmap', title: 'HEAT MAP', component: <HeatMap /> },
