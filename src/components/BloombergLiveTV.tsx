@@ -90,9 +90,9 @@ export const BloombergLiveTV: React.FC = () => {
         </div>
 
         <CollapsibleContent>
-          <div className="w-full h-[calc(100vh-200px)]">
+          <div className="flex flex-col h-[calc(100vh-140px)]">
             {/* Main Video Player */}
-            <div className="w-full h-full bg-black relative">
+            <div className="flex-1 bg-black relative">
               <div 
                 ref={videoRef}
                 className="w-full h-full relative overflow-hidden"
@@ -126,20 +126,20 @@ export const BloombergLiveTV: React.FC = () => {
                   </div>
                 </div>
               </div>
-              
-              {/* Market Ticker */}
-              <div className="bg-amber-900/20 border-t border-amber-500/20 p-2 overflow-hidden">
-                <div className="flex animate-scroll">
-                  {marketTickers.map((ticker, index) => (
-                    <div key={index} className="flex items-center gap-2 min-w-fit px-4">
-                      <span className="font-bold text-amber-400">{ticker.symbol}</span>
-                      <span className="text-white">${ticker.price.toLocaleString()}</span>
-                      <span className={`text-sm ${ticker.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {ticker.change >= 0 ? '+' : ''}{ticker.change.toFixed(2)} ({ticker.changePercent >= 0 ? '+' : ''}{ticker.changePercent.toFixed(2)}%)
-                      </span>
-                    </div>
-                  ))}
-                </div>
+            </div>
+            
+            {/* Market Ticker */}
+            <div className="bg-amber-900/20 border-t border-amber-500/20 p-2 overflow-hidden">
+              <div className="flex animate-scroll">
+                {marketTickers.map((ticker, index) => (
+                  <div key={index} className="flex items-center gap-2 min-w-fit px-4">
+                    <span className="font-bold text-amber-400">{ticker.symbol}</span>
+                    <span className="text-white">${ticker.price.toLocaleString()}</span>
+                    <span className={`text-sm ${ticker.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {ticker.change >= 0 ? '+' : ''}{ticker.change.toFixed(2)} ({ticker.changePercent >= 0 ? '+' : ''}{ticker.changePercent.toFixed(2)}%)
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
