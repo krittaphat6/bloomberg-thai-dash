@@ -303,13 +303,18 @@ const EconomicCalendar = () => {
       // Clear any existing widget
       tradingViewRef.current.innerHTML = '';
       
+      // Detect current theme
+      const savedTheme = localStorage.getItem('able-theme') || 'gray';
+      const isLightTheme = savedTheme === 'light-gray' || savedTheme === 'bright';
+      const colorTheme = isLightTheme ? 'light' : 'dark';
+      
       const script = document.createElement('script');
       script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-events.js';
       script.async = true;
       script.innerHTML = JSON.stringify({
         "width": "100%",
         "height": "400",
-        "colorTheme": "dark",
+        "colorTheme": colorTheme,
         "isTransparent": true,
         "locale": "en",
         "importanceFilter": "0,1",
@@ -460,8 +465,11 @@ const EconomicCalendar = () => {
           <CardContent>
             <div 
               ref={tradingViewRef}
-              className="w-full min-h-[400px] bg-black rounded-lg"
-              style={{ colorScheme: 'dark' }}
+              className="w-full min-h-[400px] rounded-lg"
+              style={{ 
+                backgroundColor: 'var(--background)',
+                colorScheme: localStorage.getItem('able-theme') === 'light-gray' || localStorage.getItem('able-theme') === 'bright' ? 'light' : 'dark' 
+              }}
             />
           </CardContent>
         </Card>

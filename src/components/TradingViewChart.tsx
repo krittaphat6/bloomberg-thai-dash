@@ -23,6 +23,13 @@ const TradingViewChart = ({
     // Clear previous widget
     containerRef.current.innerHTML = '';
 
+    // Detect current theme
+    const savedTheme = localStorage.getItem('able-theme') || 'gray';
+    const isLightTheme = savedTheme === 'light-gray' || savedTheme === 'bright';
+    const theme = isLightTheme ? 'light' : 'dark';
+    const backgroundColor = isLightTheme ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+    const gridColor = isLightTheme ? 'rgba(0, 0, 0, 0.1)' : 'rgba(0, 255, 0, 0.1)';
+
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
     script.type = 'text/javascript';
@@ -32,14 +39,14 @@ const TradingViewChart = ({
       symbol: symbol,
       interval: interval,
       timezone: "Etc/UTC",
-      theme: "dark",
+      theme: theme,
       style: "1",
       locale: "en",
       allow_symbol_change: true,
       calendar: false,
       support_host: "https://www.tradingview.com",
-      backgroundColor: "rgba(0, 0, 0, 0.8)",
-      gridColor: "rgba(0, 255, 0, 0.1)",
+      backgroundColor: backgroundColor,
+      gridColor: gridColor,
       hide_top_toolbar: false,
       hide_legend: false,
       save_image: false,
