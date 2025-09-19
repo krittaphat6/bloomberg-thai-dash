@@ -6,7 +6,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import GraphView from './GraphView';
+import { RichTextEditor } from './RichTextEditor';
+import { BlockEditor, Block } from './BlockEditor';
+import { DatabaseView, Database, DatabaseProperty, DatabaseRow } from './DatabaseView';
+import { NotionTemplates, NotionTemplate } from './NotionTemplates';
 import { 
   Plus, 
   Search, 
@@ -20,7 +25,21 @@ import {
   Folder,
   Star,
   BookOpen,
-  Network
+  Network,
+  Database as DatabaseIcon,
+  
+  MessageCircle,
+  Share2,
+  Download,
+  Upload,
+  Copy,
+  Archive,
+  Settings,
+  Layers,
+  Palette,
+  Bold,
+  Italic,
+  Type,
 } from 'lucide-react';
 
 interface Note {
@@ -33,6 +52,23 @@ interface Note {
   linkedNotes: string[];
   isFavorite: boolean;
   folder?: string;
+  blocks?: Block[];
+  richContent?: string;
+  isRichText?: boolean;
+  icon?: string;
+  cover?: string;
+  properties?: Record<string, any>;
+  comments?: Comment[];
+  parentId?: string;
+  children?: string[];
+}
+
+interface Comment {
+  id: string;
+  content: string;
+  author: string;
+  createdAt: Date;
+  resolved: boolean;
 }
 
 interface Folder {
@@ -48,6 +84,10 @@ export default function NoteTaking() {
     { id: '2', name: 'Research', color: 'bg-green-500' },
     { id: '3', name: 'Ideas', color: 'bg-purple-500' }
   ]);
+  const [databases, setDatabases] = useState<Database[]>([]);
+  const [templates, setTemplates] = useState<NotionTemplate[]>([]);
+  const [mainView, setMainView] = useState<'notes' | 'databases' | 'templates'>('notes');
+  const [editorMode, setEditorMode] = useState<'simple' | 'rich' | 'blocks'>('simple');
   
   // Initialize with sample data on mount to avoid hydration issues
   useEffect(() => {
@@ -156,13 +196,71 @@ export default function NoteTaking() {
       updatedAt: new Date(),
       linkedNotes: [],
       isFavorite: false,
-      folder: editingNote.folder
+      folder: editingNote.folder,
+      blocks: [],
+      richContent: '',
+      isRichText: false,
+      icon: editingNote.icon || '📄',
+      properties: {},
+      comments: [],
+      children: []
     };
     
     setNotes([newNote, ...notes]);
     setEditingNote({});
     setIsCreating(false);
     setSelectedNote(newNote);
+  };
+
+  const createDatabase = () => {
+    const newDatabase: Database = {
+      id: Date.now().toString(),
+      name: 'New Database',
+      properties: [
+        { id: '1', name: 'Name', type: 'text' },
+        { id: '2', name: 'Status', type: 'select', options: ['Not Started', 'In Progress', 'Completed'] }
+      ],
+      rows: [],
+      views: [
+        { id: '1', name: 'All Items', type: 'table', filters: [], sorts: [] }
+      ]
+    };
+    
+    setDatabases([...databases, newDatabase]);
+  };
+
+  const useTemplate = (template: NotionTemplate) => {
+    const newNote: Note = {
+      id: Date.now().toString(),
+      title: template.name,
+      content: '',
+      tags: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      linkedNotes: [],
+      isFavorite: false,
+      blocks: [...template.blocks],
+      richContent: '',
+      isRichText: false,
+      icon: template.icon,
+      properties: template.properties || {},
+      comments: [],
+      children: []
+    };
+    
+    setNotes([newNote, ...notes]);
+    setSelectedNote(newNote);
+    setMainView('notes');
+  };
+
+  const createTemplate = (templateData: Omit<NotionTemplate, 'id' | 'createdAt'>) => {
+    const newTemplate: NotionTemplate = {
+      id: Date.now().toString(),
+      createdAt: new Date(),
+      ...templateData
+    };
+    
+    setTemplates([...templates, newTemplate]);
   };
 
   const updateNote = useCallback((noteId: string, updates: Partial<Note>) => {
@@ -232,37 +330,72 @@ export default function NoteTaking() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-terminal-green">
           <BookOpen className="h-5 w-5" />
-          ABLE NOTES - KNOWLEDGE BASE
+          ABLE NOTES - NOTION-STYLE WORKSPACE
         </CardTitle>
         <div className="text-xs text-muted-foreground">
-          Obsidian-like note-taking system with linking, tagging, and organization
+          Advanced note-taking with rich text, blocks, databases, templates, and more
         </div>
       </CardHeader>
       <CardContent className="h-full p-4">
         <div className="flex h-full gap-4">
           {/* Sidebar */}
           <div className="w-80 flex flex-col gap-4 border-r border-border pr-4">
-            {/* View Mode Toggle */}
-            <div className="flex gap-2 mb-4">
+            {/* Main View Toggle */}
+            <div className="flex gap-1 mb-4">
               <Button
-                variant={viewMode === 'list' ? 'default' : 'outline'}
+                variant={mainView === 'notes' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setViewMode('list')}
-                className="flex-1"
+                onClick={() => setMainView('notes')}
+                className="flex-1 text-xs"
               >
-                <FileText className="h-4 w-4 mr-1" />
-                List
+                <FileText className="h-3 w-3 mr-1" />
+                Notes
               </Button>
               <Button
-                variant={viewMode === 'graph' ? 'default' : 'outline'}
+                variant={mainView === 'databases' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setViewMode('graph')}
-                className="flex-1"
+                onClick={() => setMainView('databases')}
+                className="flex-1 text-xs"
               >
-                <Network className="h-4 w-4 mr-1" />
-                Graph
+                <DatabaseIcon className="h-3 w-3 mr-1" />
+                Databases
+              </Button>
+              <Button
+                variant={mainView === 'templates' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setMainView('templates')}
+                className="flex-1 text-xs"
+              >
+                <Layers className="h-3 w-3 mr-1" />
+                Templates
               </Button>
             </div>
+
+            {mainView === 'notes' && (
+              <>
+                {/* View Mode Toggle */}
+                <div className="flex gap-2 mb-4">
+                  <Button
+                    variant={viewMode === 'list' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setViewMode('list')}
+                    className="flex-1"
+                  >
+                    <FileText className="h-4 w-4 mr-1" />
+                    List
+                  </Button>
+                  <Button
+                    variant={viewMode === 'graph' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setViewMode('graph')}
+                    className="flex-1"
+                  >
+                    <Network className="h-4 w-4 mr-1" />
+                    Graph
+                  </Button>
+                </div>
+              </>
+            )}
 
             {/* Search */}
             <div className="relative">
@@ -314,14 +447,16 @@ export default function NoteTaking() {
               </div>
             </div>
 
-            {/* Create Note Button */}
-            <Dialog open={isCreating} onOpenChange={setIsCreating}>
-              <DialogTrigger asChild>
-                <Button className="w-full" size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Note
-                </Button>
-              </DialogTrigger>
+            {/* Action Buttons */}
+            <div className="space-y-2">
+              {mainView === 'notes' && (
+                <Dialog open={isCreating} onOpenChange={setIsCreating}>
+                  <DialogTrigger asChild>
+                    <Button className="w-full" size="sm">
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Note
+                    </Button>
+                  </DialogTrigger>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Create New Note</DialogTitle>
@@ -364,11 +499,27 @@ export default function NoteTaking() {
                   </div>
                 </div>
               </DialogContent>
-            </Dialog>
+                </Dialog>
+              )}
+              
+              {mainView === 'databases' && (
+                <Button className="w-full" size="sm" onClick={createDatabase}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Database
+                </Button>
+              )}
+              
+              {mainView === 'templates' && (
+                <Button className="w-full" size="sm" onClick={() => setMainView('templates')}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Browse Templates
+                </Button>
+              )}
+            </div>
 
-            {/* Notes List */}
+            {/* Content List */}
             <div className="flex-1 overflow-auto space-y-2">
-              {filteredNotes.map(note => (
+              {mainView === 'notes' && filteredNotes.map(note => (
                 <div
                   key={note.id}
                   className={`p-3 border border-border rounded cursor-pointer hover:bg-muted/50 transition-colors ${
@@ -377,7 +528,10 @@ export default function NoteTaking() {
                   onClick={() => setSelectedNote(note)}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-medium text-sm truncate">{note.title}</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">{note.icon || '📄'}</span>
+                      <h3 className="font-medium text-sm truncate">{note.title}</h3>
+                    </div>
                     <div className="flex items-center gap-1">
                       {note.isFavorite && <Star className="h-3 w-3 text-yellow-400 fill-current" />}
                       <Button
@@ -408,16 +562,62 @@ export default function NoteTaking() {
                   </div>
                 </div>
               ))}
+              
+              {mainView === 'databases' && databases.map(database => (
+                <div
+                  key={database.id}
+                  className="p-3 border border-border rounded cursor-pointer hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <DatabaseIcon className="h-4 w-4" />
+                    <h3 className="font-medium text-sm">{database.name}</h3>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {database.rows.length} rows • {database.properties.length} properties
+                  </div>
+                </div>
+              ))}
+              
+              {mainView === 'templates' && (
+                <div className="text-center py-8">
+                  <Layers className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Browse templates in main area</p>
+                </div>
+              )}
             </div>
 
-            <div className="text-xs text-terminal-amber">
-              📝 {notes.length} notes • 🏷️ {allTags.length} tags • 📁 {folders.length} folders
+            <div className="text-xs text-terminal-amber space-y-1">
+              <div>📝 {notes.length} notes • 🏷️ {allTags.length} tags • 📁 {folders.length} folders</div>
+              <div>🗄️ {databases.length} databases • 📋 {templates.length} templates</div>
             </div>
           </div>
 
           {/* Main Content */}
           <div className="flex-1 flex flex-col">
-            {viewMode === 'graph' ? (
+            {mainView === 'templates' ? (
+              <NotionTemplates
+                templates={templates}
+                onUseTemplate={useTemplate}
+                onCreateTemplate={createTemplate}
+              />
+            ) : mainView === 'databases' ? (
+              databases.length > 0 ? (
+                <DatabaseView
+                  database={databases[0]}
+                  onUpdate={(updatedDb) => {
+                    setDatabases(databases.map(db => db.id === updatedDb.id ? updatedDb : db));
+                  }}
+                />
+              ) : (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center">
+                    <DatabaseIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground mb-4">No databases yet</p>
+                    <Button onClick={createDatabase}>Create your first database</Button>
+                  </div>
+                </div>
+              )
+            ) : viewMode === 'graph' ? (
               <GraphView
                 notes={notes}
                 onNodeClick={setSelectedNote}
@@ -430,12 +630,41 @@ export default function NoteTaking() {
               <>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
+                    <span className="text-2xl">{selectedNote.icon || '📄'}</span>
                     <h1 className="text-2xl font-bold">{selectedNote.title}</h1>
                     {selectedNote.isFavorite && (
                       <Star className="h-5 w-5 text-yellow-400 fill-current" />
                     )}
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* Editor Mode Toggle */}
+                    <div className="flex border border-border rounded">
+                      <Button
+                        variant={editorMode === 'simple' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setEditorMode('simple')}
+                        className="rounded-r-none"
+                      >
+                        <Type className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant={editorMode === 'rich' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setEditorMode('rich')}
+                        className="rounded-none"
+                      >
+                        <Bold className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant={editorMode === 'blocks' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setEditorMode('blocks')}
+                        className="rounded-l-none"
+                      >
+                        <Layers className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
                     <Button
                       variant="outline"
                       size="sm"
@@ -443,6 +672,15 @@ export default function NoteTaking() {
                     >
                       <Star className={`h-4 w-4 ${selectedNote.isFavorite ? 'text-yellow-400 fill-current' : ''}`} />
                     </Button>
+                    
+                    <Button variant="outline" size="sm">
+                      <MessageCircle className="h-4 w-4" />
+                    </Button>
+                    
+                    <Button variant="outline" size="sm">
+                      <Share2 className="h-4 w-4" />
+                    </Button>
+                    
                     <Button
                       variant="outline"
                       size="sm"
