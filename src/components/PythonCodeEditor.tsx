@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,8 +21,10 @@ import {
   BarChart3,
   TrendingUp,
   Calculator,
-  Database
+  Database,
+  Loader2
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface CodeFile {
   id: string;
@@ -300,8 +302,58 @@ if __name__ == "__main__":
   const [output, setOutput] = useState<ModelOutput[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [newFileName, setNewFileName] = useState('');
+  const [pyodideReady, setPyodideReady] = useState<boolean>(false);
   
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const pyodideRef = useRef<any>(null);
+
+  // Initialize Pyodide
+  useEffect(() => {
+    const initPyodide = async () => {
+      try {
+        toast.info('กำลังโหลด Python runtime...');
+        
+        // Load Pyodide from CDN
+        const pyodideScript = document.createElement('script');
+        pyodideScript.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
+        pyodideScript.onload = async () => {
+          try {
+            // @ts-ignore - Pyodide is loaded globally
+            const pyodide = await loadPyodide({
+              indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
+              stdout: (text: string) => {
+                console.log('Python output:', text);
+              },
+              stderr: (text: string) => {
+                console.error('Python error:', text);
+              }
+            });
+            
+            // Install common packages
+            await pyodide.loadPackage(['numpy', 'pandas', 'micropip']);
+            
+            pyodideRef.current = pyodide;
+            setPyodideReady(true);
+            toast.success('Python runtime พร้อมใช้งาน');
+          } catch (error) {
+            console.error('Failed to initialize Pyodide:', error);
+            toast.error('ไม่สามารถโหลด Python runtime ได้');
+          }
+        };
+        
+        pyodideScript.onerror = () => {
+          toast.error('ไม่สามารถโหลด Python runtime ได้');
+        };
+        
+        document.head.appendChild(pyodideScript);
+      } catch (error) {
+        console.error('Failed to load Pyodide:', error);
+        toast.error('เกิดข้อผิดพลาดในการโหลด Python');
+      }
+    };
+
+    initPyodide();
+  }, []);
 
   const getCurrentFile = () => files.find(f => f.id === activeFile);
 
@@ -311,40 +363,146 @@ if __name__ == "__main__":
     ));
   };
 
-  const runCode = async () => {
-    setIsRunning(true);
+  const runCode = useCallback(async () => {
     const currentFile = getCurrentFile();
-    
-    // Simulate code execution with table results
-    setTimeout(() => {
-      const logOutput: ModelOutput = {
+    if (!currentFile) return;
+
+    if (!pyodideReady || !pyodideRef.current) {
+      toast.error('Python runtime ยังไม่พร้อม กรุณารอสักครู่');
+      return;
+    }
+
+    setIsRunning(true);
+    setOutput([]);
+
+    try {
+      const timestamp = new Date().toLocaleTimeString();
+      
+      // Add initial log
+      setOutput([{
         type: 'log',
-        content: `Executing ${currentFile?.name}...\n\n✓ Data fetched successfully\n✓ Model parameters optimized\n✓ Backtesting completed\n\nResults:\n- Sharpe Ratio: 1.23\n- Maximum Drawdown: -8.5%\n- Annual Return: 15.2%\n- Volatility: 12.3%`,
+        content: `[${timestamp}] กำลังรัน ${currentFile.name}...\n[${timestamp}] กำลังโหลดโมดูล...`,
         timestamp: new Date()
-      };
+      }]);
+
+      // Capture stdout
+      let stdoutBuffer = '';
+      let stderrBuffer = '';
       
-      // Add table data output
-      const tableOutput: ModelOutput = {
-        type: 'data',
-        content: {
-          title: 'Portfolio Analysis Results',
-          headers: ['Asset', 'Weight (%)', 'Expected Return (%)', 'Risk (%)', 'Sharpe Ratio'],
-          rows: [
-            ['AAPL', '25.4', '12.5', '18.2', '0.68'],
-            ['GOOGL', '22.1', '14.8', '22.1', '0.67'],
-            ['MSFT', '18.9', '11.2', '16.5', '0.68'],
-            ['AMZN', '20.3', '15.6', '24.8', '0.63'],
-            ['TSLA', '13.3', '18.9', '35.4', '0.53'],
-            ['Total Portfolio', '100.0', '15.2', '12.3', '1.23']
-          ]
-        },
+      pyodideRef.current.runPython(`
+        import sys
+        from io import StringIO
+        
+        # Redirect stdout to capture print statements
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = StringIO()
+        sys.stderr = StringIO()
+      `);
+
+      // Run the user's code
+      try {
+        await pyodideRef.current.runPythonAsync(currentFile.content);
+        
+        // Get the captured output
+        const stdout = pyodideRef.current.runPython(`
+          captured_output = sys.stdout.getvalue()
+          sys.stdout = old_stdout
+          sys.stderr = old_stderr
+          captured_output
+        `);
+        
+        const stderr = pyodideRef.current.runPython(`sys.stderr.getvalue()`);
+        
+        const finalTimestamp = new Date().toLocaleTimeString();
+        const executionResults: ModelOutput[] = [{
+          type: 'log',
+          content: `[${timestamp}] กำลังรัน ${currentFile.name}...\n[${timestamp}] กำลังโหลดโมดูล...\n[${finalTimestamp}] รันเสร็จเรียบร้อย`,
+          timestamp: new Date()
+        }];
+
+        if (stdout.trim()) {
+          executionResults.push({
+            type: 'log',
+            content: stdout,
+            timestamp: new Date()
+          });
+          
+          // Try to parse output into table format for better visualization
+          const lines = stdout.split('\n');
+          const tableRows = [];
+          let currentSection = '';
+          
+          for (const line of lines) {
+            if (line.includes('===') && line.includes('===')) {
+              currentSection = line.replace(/=/g, '').trim();
+            } else if (line.includes(':') && !line.startsWith('Trade')) {
+              const [key, value] = line.split(':').map(s => s.trim());
+              if (key && value) {
+                tableRows.push([currentSection || 'Results', key, value]);
+              }
+            } else if (line.startsWith('Trade')) {
+              const parts = line.split('|');
+              if (parts.length >= 2) {
+                const tradeInfo = parts[0].trim();
+                const returnInfo = parts[1].trim();
+                tableRows.push(['Trades', tradeInfo, returnInfo]);
+              }
+            }
+          }
+          
+          if (tableRows.length > 0) {
+            const tableOutput: ModelOutput = {
+              type: 'data',
+              content: {
+                title: 'Python Execution Results',
+                headers: ['Section', 'Metric', 'Value'],
+                rows: tableRows
+              },
+              timestamp: new Date()
+            };
+            executionResults.push(tableOutput);
+          }
+        }
+
+        if (stderr.trim()) {
+          executionResults.push({
+            type: 'error',
+            content: stderr,
+            timestamp: new Date()
+          });
+        }
+
+        setOutput(executionResults);
+        toast.success('รันโค้ดเสร็จสิ้น');
+
+      } catch (pythonError) {
+        // Reset stdout/stderr
+        pyodideRef.current.runPython(`
+          sys.stdout = old_stdout
+          sys.stderr = old_stderr
+        `);
+        
+        setOutput([{
+          type: 'error',
+          content: `Python Error: ${pythonError}`,
+          timestamp: new Date()
+        }]);
+        toast.error('เกิดข้อผิดพลาดในการรันโค้ด');
+      }
+
+    } catch (error) {
+      console.error('Code execution error:', error);
+      setOutput([{
+        type: 'error',
+        content: `Execution Error: ${error}`,
         timestamp: new Date()
-      };
-      
-      setOutput(prev => [tableOutput, logOutput, ...prev].slice(0, 10));
+      }]);
+      toast.error('เกิดข้อผิดพลาดในการรันโค้ด');
+    } finally {
       setIsRunning(false);
-    }, 2000);
-  };
+    }
+  }, [pyodideReady]);
 
   const createNewFile = () => {
     if (!newFileName) return;
@@ -466,18 +624,18 @@ if __name__ == "__main__":
                 <Button 
                   size="sm" 
                   onClick={runCode} 
-                  disabled={isRunning}
-                  className="bg-terminal-green hover:bg-terminal-green/90 text-black"
+                  disabled={!pyodideReady || isRunning}
+                  className="bg-terminal-green hover:bg-terminal-green/90 text-black disabled:opacity-50"
                 >
                   {isRunning ? (
                     <>
-                      <div className="animate-spin h-3 w-3 border-2 border-black border-t-transparent rounded-full mr-1" />
-                      Running...
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      กำลังรัน...
                     </>
                   ) : (
                     <>
                       <Play className="h-3 w-3 mr-1" />
-                      Run Model
+                      {pyodideReady ? 'Run Python' : 'Loading Python...'}
                     </>
                   )}
                 </Button>
