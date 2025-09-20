@@ -81,12 +81,20 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
   const createSurface = (data: AllocationData[]) => {
     if (!containerRef.current) return;
 
-    // Clear previous scene
-    if (rendererRef.current) {
-      rendererRef.current.dispose();
-    }
+    // Clear previous scene properly
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+    
+    if (rendererRef.current && containerRef.current) {
+      // Safely remove canvas if it exists
+      const canvas = rendererRef.current.domElement;
+      if (canvas && canvas.parentNode === containerRef.current) {
+        containerRef.current.removeChild(canvas);
+      }
+      rendererRef.current.dispose();
+      rendererRef.current = null;
     }
 
     // Scene setup
@@ -103,8 +111,13 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    containerRef.current.innerHTML = '';
-    containerRef.current.appendChild(renderer.domElement);
+    // Safely clear and append canvas
+    if (containerRef.current) {
+      while (containerRef.current.firstChild) {
+        containerRef.current.removeChild(containerRef.current.firstChild);
+      }
+      containerRef.current.appendChild(renderer.domElement);
+    }
 
     // Handle resize
     const handleResize = () => {
@@ -276,17 +289,32 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
 
     // Cleanup function
     return () => {
-      window.removeEventListener('resize', handleResize);
-      renderer.domElement.removeEventListener('mousedown', handleMouseDown);
-      renderer.domElement.removeEventListener('mouseup', handleMouseUp);
-      renderer.domElement.removeEventListener('mousemove', handleMouseMove);
-      
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+      try {
+        window.removeEventListener('resize', handleResize);
+        
+        if (renderer && renderer.domElement) {
+          renderer.domElement.removeEventListener('mousedown', handleMouseDown);
+          renderer.domElement.removeEventListener('mouseup', handleMouseUp);
+          renderer.domElement.removeEventListener('mousemove', handleMouseMove);
+        }
+        
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = null;
+        }
+        
+        if (renderer) {
+          renderer.dispose();
+        }
+        if (geometry) {
+          geometry.dispose();
+        }
+        if (material) {
+          material.dispose();
+        }
+      } catch (error) {
+        console.warn('AllocationSurfacePlot cleanup error:', error);
       }
-      renderer.dispose();
-      geometry.dispose();
-      material.dispose();
     };
   };
 
@@ -298,11 +326,28 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
       console.log('AllocationSurfacePlot: Calculated data:', data);
       const cleanup = createSurface(data);
 
-      return cleanup;
+      return () => {
+        if (cleanup) {
+          cleanup();
+        }
+      };
     } catch (error) {
       console.error('AllocationSurfacePlot: Error creating surface:', error);
+      return () => {}; // Return empty cleanup function
     }
   }, [trades]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+      }
+    };
+  }, []);
 
   const allocationData = calculateAllocationData();
 
