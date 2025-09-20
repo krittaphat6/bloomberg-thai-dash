@@ -12,7 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, ScatterChart, Scatter, ComposedChart, Line } from 'recharts';
 import TradeAnalysisPanel from './TradeAnalysisPanel';
 import { SectorBubbleChart } from './SectorBubbleChart';
-import { VolatilitySurface } from './VolatilitySurface';
+import { D3Surface } from './D3Surface';
 
 interface Trade {
   id: string;
@@ -1032,9 +1032,9 @@ export default function TradingJournal() {
           <SectorBubbleChart trades={trades} />
         </div>
 
-        {/* Implied Volatility Surface */}
+        {/* D3 Portfolio Analytics */}
         <div className="lg:col-span-2 xl:col-span-2 2xl:col-span-2">
-          <VolatilitySurface trades={trades} />
+          <D3Surface trades={trades} />
         </div>
       </div>
 
