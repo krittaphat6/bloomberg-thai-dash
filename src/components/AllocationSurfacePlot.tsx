@@ -79,7 +79,7 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
   };
 
   const createSurface = (data: AllocationData[]) => {
-    if (!containerRef.current || data.length === 0) return;
+    if (!containerRef.current) return;
 
     // Clear previous scene
     if (rendererRef.current) {
@@ -94,8 +94,8 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
     scene.background = new THREE.Color(0x0f172a); // Dark background
 
     // Get container dimensions
-    const containerWidth = containerRef.current.clientWidth;
-    const containerHeight = containerRef.current.clientHeight;
+    const containerWidth = containerRef.current.clientWidth || 800;
+    const containerHeight = containerRef.current.clientHeight || 320;
     
     const camera = new THREE.PerspectiveCamera(75, containerWidth / containerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -123,9 +123,18 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
     const height = 20;
     const geometry = new THREE.PlaneGeometry(width, height, width - 1, height - 1);
     
-    // Generate surface based on data
+    // Generate surface based on data or fallback
     const vertices = geometry.attributes.position.array as Float32Array;
     const colors: number[] = [];
+    
+    // Create fallback data if no actual data exists
+    const fallbackData = data.length === 0 ? [
+      { diversification: 5, strategicPosition: 30, annualReturn: 15, period: '2024-09' },
+      { diversification: 8, strategicPosition: 50, annualReturn: 8, period: '2024-08' },
+      { diversification: 12, strategicPosition: 70, annualReturn: 25, period: '2024-07' },
+    ] : data;
+    
+    console.log('AllocationSurfacePlot: Using data points:', fallbackData.length);
     
     for (let i = 0; i < vertices.length; i += 3) {
       const x = vertices[i];
@@ -137,8 +146,8 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
       
       // Find closest data point or interpolate
       let annualReturn = 0;
-      if (data.length > 0) {
-        const closest = data.reduce((prev, curr) => {
+      if (fallbackData.length > 0) {
+        const closest = fallbackData.reduce((prev, curr) => {
           const prevDist = Math.abs(prev.diversification - diversification) + 
                           Math.abs(prev.strategicPosition - strategicPosition);
           const currDist = Math.abs(curr.diversification - diversification) + 
@@ -282,10 +291,17 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
   };
 
   useEffect(() => {
-    const data = calculateAllocationData();
-    const cleanup = createSurface(data);
+    console.log('AllocationSurfacePlot: Initializing with trades:', trades.length);
+    
+    try {
+      const data = calculateAllocationData();
+      console.log('AllocationSurfacePlot: Calculated data:', data);
+      const cleanup = createSurface(data);
 
-    return cleanup;
+      return cleanup;
+    } catch (error) {
+      console.error('AllocationSurfacePlot: Error creating surface:', error);
+    }
   }, [trades]);
 
   const allocationData = calculateAllocationData();
@@ -306,10 +322,10 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
             style={{ minHeight: '320px' }}
           >
             {allocationData.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center text-center text-muted-foreground">
+              <div className="absolute inset-0 flex items-center justify-center text-center text-muted-foreground z-10 pointer-events-none">
                 <div>
-                  <p>Insufficient data for 3D visualization</p>
-                  <p className="text-xs mt-1">Need at least 1+ trade per month</p>
+                  <p>Sample 3D visualization</p>
+                  <p className="text-xs mt-1">Load sample data to see your actual trading patterns</p>
                 </div>
               </div>
             )}
