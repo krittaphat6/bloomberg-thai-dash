@@ -5,14 +5,14 @@ interface Trade {
   id: string;
   date: string;
   symbol: string;
-  position: 'Long' | 'Short';
+  side: 'LONG' | 'SHORT';
   type: 'CFD' | 'STOCK';
   entryPrice: number;
   exitPrice?: number;
-  size: number;
-  pnl: number;
+  quantity: number;
+  pnl?: number;
   pnlPercentage?: number;
-  status: 'Open' | 'Closed';
+  status: 'OPEN' | 'CLOSED';
   strategy: string;
 }
 
@@ -53,7 +53,7 @@ export const SectorBubbleChart = ({ trades }: Props) => {
       totalVolume: number;
     }>();
 
-    const closedTrades = trades.filter(t => t.status === 'Closed' && t.pnl !== undefined);
+    const closedTrades = trades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined);
     
     // Calculate stats per symbol
     closedTrades.forEach(trade => {
@@ -63,7 +63,7 @@ export const SectorBubbleChart = ({ trades }: Props) => {
       symbolStats.set(symbol, {
         totalPnL: existing.totalPnL + (trade.pnl || 0),
         totalTrades: existing.totalTrades + 1,
-        totalVolume: existing.totalVolume + (trade.size * trade.entryPrice)
+        totalVolume: existing.totalVolume + (trade.quantity * trade.entryPrice)
       });
     });
 
@@ -102,59 +102,88 @@ export const SectorBubbleChart = ({ trades }: Props) => {
   const sectorData = calculateSectorData();
 
   return (
-    <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
-      <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">Sector Attribution Analysis</h3>
-      <div className="h-[280px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--trading-border))" />
-            <XAxis 
-              type="number" 
-              dataKey="relativeReturn" 
-              name="Relative Return %" 
-              stroke="hsl(var(--trading-muted))" 
-              fontSize={9}
-              domain={['dataMin - 5', 'dataMax + 5']}
-            />
-            <YAxis 
-              type="number" 
-              dataKey="relativeWeight" 
-              name="Relative Weight %" 
-              stroke="hsl(var(--trading-muted))" 
-              fontSize={9}
-              domain={['dataMin - 5', 'dataMax + 5']}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <ReferenceLine x={0} stroke="hsl(var(--trading-muted))" strokeDasharray="2 2" />
-            <ReferenceLine y={0} stroke="hsl(var(--trading-muted))" strokeDasharray="2 2" />
-            <Scatter name="Sectors" data={sectorData} fill="hsl(var(--trading-accent))">
-              {sectorData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Scatter>
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
-      
-      {/* Quadrant Legend */}
-      <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-        <div className="p-2 rounded bg-[hsl(var(--trading-darker))]/50">
-          <div className="font-medium text-[hsl(var(--trading-success))]">Outperform/Overweight</div>
-          <div className="text-[hsl(var(--trading-muted))]">Top right: Strong performers</div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Sector Attribution Analysis</CardTitle>
+        <p className="text-sm text-muted-foreground">Symbol performance vs portfolio weight</p>
+      </CardHeader>
+      <CardContent>
+        <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart
+              margin={{ top: 20, right: 30, bottom: 40, left: 40 }}
+              data={sectorData}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis 
+                type="number" 
+                dataKey="relativeReturn"
+                name="Relative Return"
+                unit="%"
+                domain={['dataMin - 5', 'dataMax + 5']}
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                label={{ 
+                  value: 'Relative Return (%)', 
+                  position: 'insideBottom', 
+                  offset: -10,
+                  style: { textAnchor: 'middle', fontSize: 12, fill: 'hsl(var(--muted-foreground))' }
+                }}
+              />
+              <YAxis 
+                type="number" 
+                dataKey="relativeWeight"
+                name="Portfolio Weight"
+                unit="%"
+                domain={[0, 'dataMax + 2']}
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                label={{ 
+                  value: 'Portfolio Weight (%)', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  style: { textAnchor: 'middle', fontSize: 12, fill: 'hsl(var(--muted-foreground))' }
+                }}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              
+              {/* Reference Lines for Quadrants */}
+              <ReferenceLine x={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" />
+              
+              <Scatter 
+                dataKey="totalPnL" 
+                fill="hsl(var(--primary))"
+              >
+                {sectorData.map((entry, index) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={entry.color}
+                    r={Math.max(4, Math.min(12, Math.abs(entry.totalPnL) / 100 + 4))}
+                  />
+                ))}
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
         </div>
-        <div className="p-2 rounded bg-[hsl(var(--trading-darker))]/50">
-          <div className="font-medium text-[hsl(var(--trading-accent))]">Outperform/Underweight</div>
-          <div className="text-[hsl(var(--trading-muted))]">Top left: Increase allocation</div>
+        
+        {/* Quadrant Legend */}
+        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+          <div className="p-2 rounded bg-muted/30">
+            <div className="font-medium text-emerald-600">Outperform/Overweight</div>
+            <div className="text-muted-foreground">Top right: Strong performers with high allocation</div>
+          </div>
+          <div className="p-2 rounded bg-muted/30">
+            <div className="font-medium text-blue-600">Outperform/Underweight</div>
+            <div className="text-muted-foreground">Top left: Opportunity to increase allocation</div>
+          </div>
+          <div className="p-2 rounded bg-muted/30">
+            <div className="font-medium text-orange-600">Underperform/Overweight</div>
+            <div className="text-muted-foreground">Bottom right: Consider reducing allocation</div>
+          </div>
+          <div className="p-2 rounded bg-muted/30">
+            <div className="font-medium text-gray-600">Underperform/Underweight</div>
+            <div className="text-muted-foreground">Bottom left: Low impact performers</div>
+          </div>
         </div>
-        <div className="p-2 rounded bg-[hsl(var(--trading-darker))]/50">
-          <div className="font-medium text-[hsl(var(--trading-warning))]">Underperform/Overweight</div>
-          <div className="text-[hsl(var(--trading-muted))]">Bottom right: Reduce allocation</div>
-        </div>
-        <div className="p-2 rounded bg-[hsl(var(--trading-darker))]/50">
-          <div className="font-medium text-[hsl(var(--trading-muted))]">Underperform/Underweight</div>
-          <div className="text-[hsl(var(--trading-muted))]">Bottom left: Low impact</div>
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 };
