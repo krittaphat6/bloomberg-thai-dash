@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, ScatterChart, Scatter, ComposedChart, Line } from 'recharts';
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, ScatterChart, Scatter, ComposedChart, Line, ReferenceLine } from 'recharts';
 import TradeAnalysisPanel from './TradeAnalysisPanel';
 import { SectorBubbleChart } from './SectorBubbleChart';
 import { D3Surface } from './D3Surface';
@@ -890,48 +890,118 @@ export default function TradingJournal() {
 
       {/* Analytics Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4 sm:gap-6 mb-4 sm:mb-6">
-        {/* Profit Factor by Symbols Chart */}
+        {/* Profit Factor by Symbols Chart - Circular */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Profit Factor by Symbols</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart 
-                  data={getProfitFactorBySymbols().slice(0, 6)} 
-                  layout="horizontal"
-                  margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis 
-                    type="number" 
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    axisLine={{ stroke: '#4B5563' }}
-                  />
-                  <YAxis 
-                    type="category" 
-                    dataKey="symbol" 
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    axisLine={{ stroke: '#4B5563' }}
-                    width={40}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1F2937', 
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#F3F4F6'
-                    }}
-                    formatter={(value: any, name) => [value.toFixed(2), 'Profit Factor']}
-                  />
-                  <Bar 
-                    dataKey="profitFactor" 
-                    radius={[0, 4, 4, 0]}
-                    fill="#10B981"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              {(() => {
+                const symbolData = getProfitFactorBySymbols().slice(0, 8);
+                const maxProfitFactor = Math.max(...symbolData.map(d => d.profitFactor), 1);
+                const centerX = 120;
+                const centerY = 120;
+                const maxRadius = 80;
+                
+                return (
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    <svg width="240" height="240" viewBox="0 0 240 240">
+                      {/* Background circles */}
+                      {[20, 40, 60, 80].map((radius, i) => (
+                        <circle
+                          key={i}
+                          cx={centerX}
+                          cy={centerY}
+                          r={radius}
+                          fill="none"
+                          stroke="hsl(var(--border))"
+                          strokeWidth="1"
+                          opacity="0.3"
+                        />
+                      ))}
+                      
+                      {/* Data points */}
+                      {symbolData.map((item, index) => {
+                        const angle = (index / symbolData.length) * 2 * Math.PI - Math.PI / 2;
+                        const radius = (item.profitFactor / maxProfitFactor) * maxRadius;
+                        const x = centerX + Math.cos(angle) * radius;
+                        const y = centerY + Math.sin(angle) * radius;
+                        const color = item.profitFactor > 1 ? '#10B981' : '#EF4444';
+                        
+                        return (
+                          <g key={index}>
+                            {/* Line from center */}
+                            <line
+                              x1={centerX}
+                              y1={centerY}
+                              x2={x}
+                              y2={y}
+                              stroke={color}
+                              strokeWidth="2"
+                              opacity="0.6"
+                            />
+                            {/* Data point */}
+                            <circle
+                              cx={x}
+                              cy={y}
+                              r="6"
+                              fill={color}
+                              stroke="white"
+                              strokeWidth="2"
+                            />
+                            {/* Symbol label */}
+                            <text
+                              x={centerX + Math.cos(angle) * (maxRadius + 15)}
+                              y={centerY + Math.sin(angle) * (maxRadius + 15)}
+                              textAnchor="middle"
+                              dominantBaseline="middle"
+                              fontSize="10"
+                              fill="hsl(var(--muted-foreground))"
+                              fontWeight="medium"
+                            >
+                              {item.symbol}
+                            </text>
+                          </g>
+                        );
+                      })}
+                      
+                      {/* Center point */}
+                      <circle
+                        cx={centerX}
+                        cy={centerY}
+                        r="4"
+                        fill="hsl(var(--primary))"
+                      />
+                      
+                      {/* Radial labels */}
+                      {[0.5, 1.0, 1.5, 2.0].map((value, i) => (
+                        <text
+                          key={i}
+                          x={centerX + 5}
+                          y={centerY - (value / maxProfitFactor) * maxRadius}
+                          fontSize="8"
+                          fill="hsl(var(--muted-foreground))"
+                        >
+                          {value}
+                        </text>
+                      ))}
+                    </svg>
+                    
+                    {/* Legend */}
+                    <div className="absolute bottom-0 left-0 text-xs">
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span>Profitable</span>
+                      </div>
+                      <div className="flex items-center gap-1 mt-1">
+                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                        <span>Loss</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </CardContent>
         </Card>
@@ -1027,13 +1097,13 @@ export default function TradingJournal() {
           </CardContent>
         </Card>
 
-        {/* Sector Attribution Bubble Chart */}
+        {/* Sector Attribution Analysis */}
         <div className="lg:col-span-1 xl:col-span-1 2xl:col-span-1">
           <SectorBubbleChart trades={trades} />
         </div>
 
         {/* D3 Portfolio Analytics */}
-        <div className="lg:col-span-2 xl:col-span-2 2xl:col-span-2">
+        <div className="lg:col-span-1 xl:col-span-1 2xl:col-span-1">
           <D3Surface trades={trades} />
         </div>
       </div>
@@ -1294,49 +1364,125 @@ export default function TradingJournal() {
           <CardContent>
             <div className="h-64">
               {(() => {
-                const riskRewardData = getProfitFactorBySymbols().map(item => ({
-                  symbol: item.symbol,
-                  avgRisk: item.totalLosses / (item.lossCount || 1),
-                  avgReward: item.totalWins / (item.winCount || 1),
-                  riskRewardRatio: (item.totalWins / (item.winCount || 1)) / (item.totalLosses / (item.lossCount || 1) || 1)
-                })).filter(item => item.avgRisk > 0 && item.avgReward > 0);
+                const riskRewardData = getProfitFactorBySymbols()
+                  .filter(item => item.totalTrades >= 3) // At least 3 trades for meaningful data
+                  .map(item => ({
+                    symbol: item.symbol,
+                    avgRisk: item.totalLosses / Math.max(item.lossCount, 1),
+                    avgReward: item.totalWins / Math.max(item.winCount, 1),
+                    riskRewardRatio: (item.totalWins / Math.max(item.winCount, 1)) / (item.totalLosses / Math.max(item.lossCount, 1)) || 0,
+                    winRate: item.winRate,
+                    totalTrades: item.totalTrades
+                  }))
+                  .filter(item => item.avgRisk > 0 || item.avgReward > 0)
+                  .slice(0, 10); // Top 10 symbols
+
+                if (riskRewardData.length === 0) {
+                  return (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      <div className="text-center">
+                        <p>No risk-reward data available</p>
+                        <p className="text-sm">Need at least 3 closed trades per symbol</p>
+                      </div>
+                    </div>
+                  );
+                }
 
                 return (
                   <ResponsiveContainer width="100%" height="100%">
-                    <ScatterChart data={riskRewardData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <ScatterChart data={riskRewardData} margin={{ top: 20, right: 30, bottom: 40, left: 40 }}>
+                      <CartesianGrid 
+                        strokeDasharray="3 3" 
+                        stroke="hsl(var(--border))" 
+                      />
                       <XAxis 
                         dataKey="avgRisk" 
                         type="number"
-                        tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                        label={{ value: 'Avg Risk ($)', position: 'insideBottom', offset: -10, style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
+                        domain={['dataMin - 10', 'dataMax + 10']}
+                        tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                        label={{ 
+                          value: 'Average Risk ($)', 
+                          position: 'insideBottom', 
+                          offset: -10, 
+                          style: { textAnchor: 'middle', fontSize: 10, fill: 'hsl(var(--muted-foreground))' } 
+                        }}
                       />
                       <YAxis 
                         dataKey="avgReward" 
                         type="number"
-                        tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                        label={{ value: 'Avg Reward ($)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
+                        domain={['dataMin - 10', 'dataMax + 10']}
+                        tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                        label={{ 
+                          value: 'Average Reward ($)', 
+                          angle: -90, 
+                          position: 'insideLeft', 
+                          style: { textAnchor: 'middle', fontSize: 10, fill: 'hsl(var(--muted-foreground))' } 
+                        }}
                       />
                       <Tooltip 
                         contentStyle={{ 
-                          backgroundColor: '#1F2937', 
-                          border: '1px solid #374151',
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
                           borderRadius: '8px',
-                          color: '#F3F4F6'
+                          color: 'hsl(var(--card-foreground))'
                         }}
                         formatter={(value: any, name: string) => [
                           `$${value.toFixed(2)}`,
-                          name === 'avgReward' ? 'Avg Reward' : 'Avg Risk'
+                          name === 'avgReward' ? 'Avg Reward' : name === 'avgRisk' ? 'Avg Risk' : name
                         ]}
                         labelFormatter={(label, payload) => 
-                          payload?.[0]?.payload ? `${payload[0].payload.symbol} (R:R ${payload[0].payload.riskRewardRatio.toFixed(2)})` : ''
+                          payload?.[0]?.payload ? 
+                            `${payload[0].payload.symbol} | R:R ${payload[0].payload.riskRewardRatio.toFixed(2)} | Win Rate: ${payload[0].payload.winRate.toFixed(1)}%` 
+                            : ''
                         }
                       />
-                      <Scatter dataKey="avgReward" fill="#3B82F6" />
+                      <Scatter 
+                        dataKey="avgReward" 
+                        fill="hsl(var(--primary))"
+                      >
+                        {riskRewardData.map((entry, index) => (
+                          <svg key={index}>
+                            <circle 
+                              r={Math.max(4, Math.min(10, entry.totalTrades))}
+                              fill={entry.riskRewardRatio >= 2 ? '#10B981' : entry.riskRewardRatio >= 1 ? '#F59E0B' : '#EF4444'}
+                              fillOpacity={0.7}
+                              stroke="white"
+                              strokeWidth={1}
+                            />
+                          </svg>
+                        ))}
+                      </Scatter>
+                      
+                      {/* Reference lines */}
+                      <ReferenceLine 
+                        segment={[
+                          { x: 0, y: 0 },
+                          { x: Math.max(...riskRewardData.map(d => d.avgRisk)) * 2, y: Math.max(...riskRewardData.map(d => d.avgRisk)) * 2 }
+                        ]}
+                        stroke="hsl(var(--muted-foreground))"
+                        strokeDasharray="5 5"
+                        strokeOpacity={0.5}
+                      />
                     </ScatterChart>
                   </ResponsiveContainer>
                 );
               })()}
+            </div>
+            
+            {/* Legend */}
+            <div className="mt-4 flex justify-center gap-6 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span>Excellent (R:R ≥ 2)</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                <span>Good (R:R ≥ 1)</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                <span>Poor (R:R &lt; 1)</span>
+              </div>
             </div>
           </CardContent>
         </Card>
