@@ -16,6 +16,13 @@ import { SectorBubbleChart } from './SectorBubbleChart';
 import { AllocationSurfacePlot } from './AllocationSurfacePlot';
 import TradingScatterChart from './TradingScatterChart';
 import TradingPieChart from './TradingPieChart';
+import VolumeChart from './VolumeChart';
+import CandlestickChart from './CandlestickChart';
+import HeatMap from './HeatMap';
+import PriceChart from './PriceChart';
+import MarketDepth from './MarketDepth';
+import TradingVolume from './TradingVolume';
+import EconomicCalendar from './EconomicCalendar';
 
 interface Trade {
   id: string;
@@ -603,10 +610,16 @@ export default function TradingJournal() {
         </div>
       </div>
 
+      {/* Advanced Analysis Section */}
+      <div className="px-6">
+        <h2 className="text-lg font-semibold text-[hsl(var(--trading-text))] mb-4 uppercase tracking-wide">Advanced Analysis</h2>
+        <TradeAnalysisPanel trades={trades} />
+      </div>
+
       {/* Asset Breakdown Section */}
       <div className="px-6">
         <h2 className="text-lg font-semibold text-[hsl(var(--trading-text))] mb-4 uppercase tracking-wide">Asset Breakdown</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
             <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">Asset Distribution</h3>
             <TradingPieChart trades={trades} />
@@ -635,6 +648,56 @@ export default function TradingJournal() {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Market Tools & Charts Section */}
+      <div className="px-6">
+        <h2 className="text-lg font-semibold text-[hsl(var(--trading-text))] mb-4 uppercase tracking-wide">Market Tools & Charts</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+          {/* Price Chart */}
+          <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">Price Chart</h3>
+            <PriceChart />
+          </div>
+
+          {/* Volume Analysis */}
+          <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">Volume Analysis</h3>
+            <VolumeChart />
+          </div>
+
+          {/* Market Heat Map */}
+          <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">Market Heat Map</h3>
+            <HeatMap />
+          </div>
+
+          {/* Candlestick Chart */}
+          <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">Candlestick Chart</h3>
+            <CandlestickChart />
+          </div>
+
+          {/* Market Depth */}
+          <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">Market Depth</h3>
+            <MarketDepth />
+          </div>
+
+          {/* Trading Volume */}
+          <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">Trading Volume</h3>
+            <TradingVolume />
+          </div>
+        </div>
+      </div>
+
+      {/* Economic Calendar Section */}
+      <div className="px-6">
+        <h2 className="text-lg font-semibold text-[hsl(var(--trading-text))] mb-4 uppercase tracking-wide">Economic Events</h2>
+        <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4 mb-6">
+          <EconomicCalendar />
         </div>
       </div>
 
