@@ -11,6 +11,8 @@ import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar } from 'lucide-
 import { useToast } from '@/components/ui/use-toast';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, ScatterChart, Scatter, ComposedChart, Line } from 'recharts';
 import TradeAnalysisPanel from './TradeAnalysisPanel';
+import { SectorBubbleChart } from './SectorBubbleChart';
+import { AllocationSurfacePlot } from './AllocationSurfacePlot';
 
 interface Trade {
   id: string;
@@ -834,7 +836,7 @@ export default function TradingJournal() {
       </div>
 
       {/* Analytics Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4 sm:gap-6 mb-4 sm:mb-6">
         {/* Profit Factor by Symbols Chart */}
         <Card>
           <CardHeader>
@@ -971,6 +973,16 @@ export default function TradingJournal() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Sector Attribution Bubble Chart */}
+        <div className="lg:col-span-1 xl:col-span-1 2xl:col-span-1">
+          <SectorBubbleChart trades={trades} />
+        </div>
+
+        {/* Asset Allocation 3D Surface Plot */}
+        <div className="lg:col-span-1 xl:col-span-1 2xl:col-span-1">
+          <AllocationSurfacePlot trades={trades} />
+        </div>
       </div>
 
       {/* Performance Summary Grid */}
