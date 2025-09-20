@@ -407,6 +407,48 @@ export default function TradingJournal() {
     return Array.from(groups.values());
   };
 
+  const loadSampleData = () => {
+    const sampleTrades: Trade[] = [
+      // Forex CFD Trades
+      { id: '1', date: '2024-08-15', symbol: 'EURUSD', side: 'LONG', type: 'CFD', entryPrice: 1.0950, exitPrice: 1.1020, quantity: 1, lotSize: 1, contractSize: 100000, leverage: 100, pnl: 700, pnlPercentage: 6.39, status: 'CLOSED', strategy: 'Scalping', commission: 5 },
+      { id: '2', date: '2024-08-16', symbol: 'GBPJPY', side: 'SHORT', type: 'CFD', entryPrice: 186.50, exitPrice: 185.20, quantity: 1, lotSize: 0.5, contractSize: 100000, leverage: 50, pnl: 650, pnlPercentage: 3.49, status: 'CLOSED', strategy: 'Swing', commission: 8 },
+      { id: '3', date: '2024-08-20', symbol: 'XAUUSD', side: 'LONG', type: 'CFD', entryPrice: 2380, exitPrice: 2360, quantity: 1, lotSize: 0.1, contractSize: 100, leverage: 200, pnl: -200, pnlPercentage: -1.68, status: 'CLOSED', strategy: 'Day Trading', commission: 3 },
+      
+      // Stock Trades
+      { id: '4', date: '2024-09-02', symbol: 'AAPL', side: 'LONG', type: 'STOCK', entryPrice: 175.50, exitPrice: 182.30, quantity: 50, pnl: 340, pnlPercentage: 3.87, status: 'CLOSED', strategy: 'Position', commission: 15 },
+      { id: '5', date: '2024-09-05', symbol: 'TSLA', side: 'SHORT', type: 'STOCK', entryPrice: 245.80, exitPrice: 238.90, quantity: 20, pnl: 138, pnlPercentage: 2.81, status: 'CLOSED', strategy: 'Swing', commission: 10 },
+      { id: '6', date: '2024-09-10', symbol: 'NVDA', side: 'LONG', type: 'STOCK', entryPrice: 420.00, exitPrice: 395.50, quantity: 15, pnl: -367.50, pnlPercentage: -5.83, status: 'CLOSED', strategy: 'Day Trading', commission: 12 },
+      
+      // More Recent Trades  
+      { id: '7', date: '2024-09-12', symbol: 'EURUSD', side: 'SHORT', type: 'CFD', entryPrice: 1.1080, exitPrice: 1.1020, quantity: 1, lotSize: 1.5, contractSize: 100000, leverage: 100, pnl: 900, pnlPercentage: 5.42, status: 'CLOSED', strategy: 'Scalping', commission: 6 },
+      { id: '8', date: '2024-09-14', symbol: 'MSFT', side: 'LONG', type: 'STOCK', entryPrice: 340.20, exitPrice: 348.75, quantity: 25, pnl: 213.75, pnlPercentage: 2.51, status: 'CLOSED', strategy: 'Position', commission: 8 },
+      { id: '9', date: '2024-09-15', symbol: 'USDJPY', side: 'LONG', type: 'CFD', entryPrice: 142.80, exitPrice: 144.20, quantity: 1, lotSize: 0.8, contractSize: 100000, leverage: 100, pnl: 1120, pnlPercentage: 9.80, status: 'CLOSED', strategy: 'Day Trading', commission: 4 },
+      { id: '10', date: '2024-09-16', symbol: 'GOOGL', side: 'SHORT', type: 'STOCK', entryPrice: 155.30, exitPrice: 148.90, quantity: 30, pnl: 192, pnlPercentage: 4.12, status: 'CLOSED', strategy: 'Swing', commission: 12 },
+      
+      // More diverse trades for better visualization
+      { id: '11', date: '2024-09-17', symbol: 'USDCAD', side: 'SHORT', type: 'CFD', entryPrice: 1.3520, exitPrice: 1.3480, quantity: 1, lotSize: 1, contractSize: 100000, leverage: 50, pnl: 400, pnlPercentage: 1.48, status: 'CLOSED', strategy: 'Scalping', commission: 5 },
+      { id: '12', date: '2024-09-18', symbol: 'AMD', side: 'LONG', type: 'STOCK', entryPrice: 95.20, exitPrice: 102.15, quantity: 40, pnl: 278, pnlPercentage: 7.30, status: 'CLOSED', strategy: 'Day Trading', commission: 14 },
+      { id: '13', date: '2024-09-19', symbol: 'AUDUSD', side: 'LONG', type: 'CFD', entryPrice: 0.6850, exitPrice: 0.6780, quantity: 1, lotSize: 2, contractSize: 100000, leverage: 100, pnl: -1400, pnlPercentage: -10.22, status: 'CLOSED', strategy: 'Position', commission: 8 },
+      { id: '14', date: '2024-09-20', symbol: 'SPY', side: 'LONG', type: 'STOCK', entryPrice: 445.20, exitPrice: 452.80, quantity: 20, pnl: 152, pnlPercentage: 1.71, status: 'CLOSED', strategy: 'Swing', commission: 6 },
+      
+      // August trades for more monthly data
+      { id: '15', date: '2024-08-05', symbol: 'NZDUSD', side: 'SHORT', type: 'CFD', entryPrice: 0.6120, exitPrice: 0.6080, quantity: 1, lotSize: 1, contractSize: 100000, leverage: 100, pnl: 400, pnlPercentage: 6.54, status: 'CLOSED', strategy: 'Day Trading', commission: 4 },
+      { id: '16', date: '2024-08-10', symbol: 'META', side: 'LONG', type: 'STOCK', entryPrice: 385.50, exitPrice: 398.20, quantity: 15, pnl: 190.50, pnlPercentage: 3.29, status: 'CLOSED', strategy: 'Position', commission: 9 },
+      { id: '17', date: '2024-08-25', symbol: 'EURCHF', side: 'LONG', type: 'CFD', entryPrice: 0.9650, exitPrice: 0.9720, quantity: 1, lotSize: 0.5, contractSize: 100000, leverage: 100, pnl: 350, pnlPercentage: 7.25, status: 'CLOSED', strategy: 'Swing', commission: 3 },
+      
+      // July trades
+      { id: '18', date: '2024-07-12', symbol: 'QQQ', side: 'SHORT', type: 'STOCK', entryPrice: 465.80, exitPrice: 458.30, quantity: 25, pnl: 187.50, pnlPercentage: 1.61, status: 'CLOSED', strategy: 'Day Trading', commission: 8 },
+      { id: '19', date: '2024-07-18', symbol: 'GBPUSD', side: 'LONG', type: 'CFD', entryPrice: 1.2980, exitPrice: 1.3040, quantity: 1, lotSize: 1.2, contractSize: 100000, leverage: 100, pnl: 720, pnlPercentage: 4.62, status: 'CLOSED', strategy: 'Scalping', commission: 6 },
+      { id: '20', date: '2024-07-22', symbol: 'CRM', side: 'LONG', type: 'STOCK', entryPrice: 245.60, exitPrice: 238.90, quantity: 18, pnl: -120.60, pnlPercentage: -2.73, status: 'CLOSED', strategy: 'Position', commission: 11 }
+    ];
+    
+    setTrades(sampleTrades);
+    toast({
+      title: "Sample Data Loaded",
+      description: "20 sample trades have been added to demonstrate the features"
+    });
+  };
+
   const handleDeleteTrade = (tradeId: string) => {
     setTrades(trades.filter(t => t.id !== tradeId));
     toast({
@@ -420,10 +462,21 @@ export default function TradingJournal() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
         <h2 className="text-xl sm:text-2xl font-bold text-primary">Trading Journal</h2>
-        <Button onClick={() => setIsAddingTrade(true)} className="bg-primary hover:bg-primary/90 w-full sm:w-auto text-sm sm:text-base">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Trade
-        </Button>
+        <div className="flex gap-2">
+          {trades.length === 0 && (
+            <Button 
+              onClick={loadSampleData} 
+              variant="outline" 
+              className="w-full sm:w-auto text-sm sm:text-base"
+            >
+              Load Sample Data
+            </Button>
+          )}
+          <Button onClick={() => setIsAddingTrade(true)} className="bg-primary hover:bg-primary/90 w-full sm:w-auto text-sm sm:text-base">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Trade
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}

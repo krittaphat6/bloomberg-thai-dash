@@ -50,7 +50,7 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
     });
 
     return Array.from(monthlyData.entries())
-      .filter(([_, trades]) => trades.length >= 3) // At least 3 trades per month
+      .filter(([_, trades]) => trades.length >= 1) // At least 1 trade per month
       .map(([period, periodTrades]) => {
         // Calculate diversification (unique symbols)
         const uniqueSymbols = new Set(periodTrades.map(t => t.symbol)).size;
@@ -93,14 +93,30 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0f172a); // Dark background
 
-    const camera = new THREE.PerspectiveCamera(75, 400 / 300, 0.1, 1000);
+    // Get container dimensions
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    
+    const camera = new THREE.PerspectiveCamera(75, containerWidth / containerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(400, 300);
+    renderer.setSize(containerWidth, containerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     containerRef.current.innerHTML = '';
     containerRef.current.appendChild(renderer.domElement);
+
+    // Handle resize
+    const handleResize = () => {
+      if (!containerRef.current) return;
+      const width = containerRef.current.clientWidth;
+      const height = containerRef.current.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    };
+
+    window.addEventListener('resize', handleResize);
 
     // Create surface geometry
     const width = 20;
@@ -251,6 +267,7 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
 
     // Cleanup function
     return () => {
+      window.removeEventListener('resize', handleResize);
       renderer.domElement.removeEventListener('mousedown', handleMouseDown);
       renderer.domElement.removeEventListener('mouseup', handleMouseUp);
       renderer.domElement.removeEventListener('mousemove', handleMouseMove);
@@ -285,13 +302,15 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
         <div className="space-y-4">
           <div 
             ref={containerRef} 
-            className="w-full h-80 bg-slate-900 rounded-lg flex items-center justify-center border border-border"
-            style={{ minHeight: '300px' }}
+            className="w-full h-80 bg-slate-900 rounded-lg border border-border overflow-hidden relative"
+            style={{ minHeight: '320px' }}
           >
             {allocationData.length === 0 && (
-              <div className="text-center text-muted-foreground">
-                <p>Insufficient data for 3D visualization</p>
-                <p className="text-xs mt-1">Need at least 3+ trades per month</p>
+              <div className="absolute inset-0 flex items-center justify-center text-center text-muted-foreground">
+                <div>
+                  <p>Insufficient data for 3D visualization</p>
+                  <p className="text-xs mt-1">Need at least 1+ trade per month</p>
+                </div>
               </div>
             )}
           </div>
