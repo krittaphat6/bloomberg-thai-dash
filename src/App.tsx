@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { PasswordScreen } from "@/components/PasswordScreen";
 import Index from "./pages/Index";
+import NotesAndVisualization from "./pages/NotesAndVisualization";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/notes" element={<NotesAndVisualization />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

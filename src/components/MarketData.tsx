@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import TabManager from './TabManager';
 import TabSelector from './TabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
-import { Expand, Minimize } from 'lucide-react';
+import { Expand, Minimize, Hash, BarChart3 } from 'lucide-react';
 import TradingViewChart from './TradingViewChart';
 import ScatterAnalysis from './ScatterChart';
 import MarketPieChart from './MarketPieChart';
@@ -38,6 +39,7 @@ interface PanelData {
 }
 
 const MarketData = () => {
+  const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [panels, setPanels] = useState<PanelData[]>([]);
   const [showTabSelector, setShowTabSelector] = useState(false);
@@ -157,7 +159,16 @@ const MarketData = () => {
             <span className="text-lg sm:text-2xl font-bold text-terminal-green">ABLE TERMINAL</span>
             <span className="text-sm sm:text-base text-terminal-amber">PROFESSIONAL TRADING PLATFORM</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/notes')}
+              className="flex items-center gap-2 text-terminal-green border-terminal-green hover:bg-terminal-green/10"
+            >
+              <Hash className="h-4 w-4" />
+              Notes & 3D
+            </Button>
             <Button
               variant="ghost"
               size="icon"
