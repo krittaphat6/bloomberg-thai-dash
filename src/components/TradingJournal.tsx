@@ -14,8 +14,8 @@ import { Textarea } from '@/components/ui/textarea';
 import TradeAnalysisPanel from './TradeAnalysisPanel';
 import { SectorBubbleChart } from './SectorBubbleChart';
 import { AllocationSurfacePlot } from './AllocationSurfacePlot';
-import ScatterChart from './ScatterChart';
-import MarketPieChart from './MarketPieChart';
+import TradingScatterChart from './TradingScatterChart';
+import TradingPieChart from './TradingPieChart';
 
 interface Trade {
   id: string;
@@ -598,7 +598,7 @@ export default function TradingJournal() {
           {/* Risk vs Return Scatter */}
           <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
             <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">Risk vs Return</h3>
-            <ScatterChart trades={trades} />
+            <TradingScatterChart trades={trades} />
           </div>
         </div>
       </div>
@@ -609,7 +609,7 @@ export default function TradingJournal() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
             <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">Asset Distribution</h3>
-            <MarketPieChart trades={trades} />
+            <TradingPieChart trades={trades} />
           </div>
 
           <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
