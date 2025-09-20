@@ -12,7 +12,6 @@ import { useToast } from '@/components/ui/use-toast';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, ScatterChart, Scatter, ComposedChart, Line } from 'recharts';
 import TradeAnalysisPanel from './TradeAnalysisPanel';
 import { SectorBubbleChart } from './SectorBubbleChart';
-import { AllocationSurfacePlot } from './AllocationSurfacePlot';
 import { VolatilitySurface } from './VolatilitySurface';
 
 interface Trade {
@@ -1033,14 +1032,9 @@ export default function TradingJournal() {
           <SectorBubbleChart trades={trades} />
         </div>
 
-        {/* Asset Allocation 3D Surface Plot */}
-        <div className="lg:col-span-1 xl:col-span-1 2xl:col-span-1">
-          <AllocationSurfacePlot trades={trades} />
-        </div>
-
         {/* Implied Volatility Surface */}
         <div className="lg:col-span-2 xl:col-span-2 2xl:col-span-2">
-          <VolatilitySurface ticker="AAPL" />
+          <VolatilitySurface trades={trades} />
         </div>
       </div>
 

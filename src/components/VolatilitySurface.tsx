@@ -7,7 +7,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import * as THREE from 'three';
 import { Settings, Play, Pause } from 'lucide-react';
 
+interface Trade {
+  id: string;
+  date: string;
+  symbol: string;
+  side: 'LONG' | 'SHORT';
+  type: 'CFD' | 'STOCK';
+  entryPrice: number;
+  exitPrice?: number;
+  quantity: number;
+  pnl?: number;
+  pnlPercentage?: number;
+  status: 'OPEN' | 'CLOSED';
+  strategy: string;
+}
+
 interface VolatilitySurfaceProps {
+  trades: Trade[];
   ticker?: string;
 }
 
@@ -20,7 +36,7 @@ interface SurfaceParameters {
   yAxisType: 'strike' | 'moneyness';
 }
 
-export const VolatilitySurface = ({ ticker = 'AAPL' }: VolatilitySurfaceProps) => {
+export const VolatilitySurface = ({ trades, ticker }: VolatilitySurfaceProps) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene>();
   const rendererRef = useRef<THREE.WebGLRenderer>();
@@ -30,8 +46,21 @@ export const VolatilitySurface = ({ ticker = 'AAPL' }: VolatilitySurfaceProps) =
   
   const [autoRotate, setAutoRotate] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  // Get most traded symbol from trades data
+  const getMostTradedSymbol = () => {
+    if (!trades || trades.length === 0) return 'AAPL';
+    
+    const symbolCounts = trades.reduce((acc, trade) => {
+      acc[trade.symbol] = (acc[trade.symbol] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    return Object.entries(symbolCounts)
+      .sort(([,a], [,b]) => b - a)[0]?.[0] || 'AAPL';
+  };
+
   const [parameters, setParameters] = useState<SurfaceParameters>({
-    ticker: ticker,
+    ticker: ticker || getMostTradedSymbol(),
     riskFreeRate: 0.05,
     dividendYield: 0.02,
     minStrikeFilter: 80,
@@ -39,12 +68,36 @@ export const VolatilitySurface = ({ ticker = 'AAPL' }: VolatilitySurfaceProps) =
     yAxisType: 'strike'
   });
 
+  // Calculate volatility from actual trade data
+  const calculateTradeVolatility = () => {
+    if (!trades || trades.length === 0) return 0.20; // Default 20%
+    
+    const symbolTrades = trades.filter(t => 
+      t.symbol === parameters.ticker && 
+      t.status === 'CLOSED' && 
+      t.pnlPercentage !== undefined
+    );
+    
+    if (symbolTrades.length < 2) return 0.20;
+    
+    // Calculate historical volatility from returns
+    const returns = symbolTrades
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map(t => t.pnlPercentage! / 100);
+    
+    const meanReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+    const variance = returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / (returns.length - 1);
+    const volatility = Math.sqrt(variance * 252); // Annualized
+    
+    return Math.max(0.05, Math.min(0.80, volatility));
+  };
+
   // Generate realistic implied volatility surface data
   const generateVolatilityData = () => {
+    const baseVolatility = calculateTradeVolatility();
     const spotPrice = 100; // Normalized spot price
     const timeToExpirations = []; // Days to expiration
     const strikes = [];
-    const volatilities = [];
 
     // Generate time to expiration range (7 days to 365 days)
     for (let t = 7; t <= 365; t += 14) {
@@ -59,7 +112,7 @@ export const VolatilitySurface = ({ ticker = 'AAPL' }: VolatilitySurfaceProps) =
       strikes.push(s);
     }
 
-    // Generate implied volatility surface with realistic patterns
+    // Generate implied volatility surface with realistic patterns based on trade data
     const surface = [];
     for (let i = 0; i < timeToExpirations.length; i++) {
       const row = [];
@@ -68,20 +121,23 @@ export const VolatilitySurface = ({ ticker = 'AAPL' }: VolatilitySurfaceProps) =
         const K = strikes[j];
         const moneyness = K / spotPrice;
         
-        // Base volatility with time decay
-        let iv = 0.20 + 0.05 * Math.exp(-T * 2); // Higher vol for shorter term
+        // Base volatility with time decay - influenced by actual trade volatility
+        let iv = baseVolatility + 0.05 * Math.exp(-T * 2); // Higher vol for shorter term
         
         // Volatility smile/skew
-        const skew = Math.pow(moneyness - 1, 2) * 0.3; // U-shaped smile
+        const skew = Math.pow(moneyness - 1, 2) * (baseVolatility * 1.5); // Scale with base vol
         const skewAsymmetry = (moneyness - 1) * -0.1; // Put skew (higher vol for OTM puts)
         
-        // Add some noise and structure
-        iv += skew + skewAsymmetry;
+        // Add structure influenced by trade performance
+        const tradeInfluence = trades.length > 0 ? 
+          (trades.filter(t => t.pnl && t.pnl > 0).length / trades.length - 0.5) * 0.1 : 0;
+        
+        iv += skew + skewAsymmetry + tradeInfluence;
         iv += Math.sin(moneyness * 3) * 0.02; // Some oscillation
         iv += (Math.random() - 0.5) * 0.01; // Small random noise
         
         // Ensure reasonable bounds
-        iv = Math.max(0.05, Math.min(0.60, iv));
+        iv = Math.max(0.05, Math.min(0.80, iv));
         
         row.push(iv);
       }
