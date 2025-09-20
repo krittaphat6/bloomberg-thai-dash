@@ -13,6 +13,7 @@ import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Area
 import TradeAnalysisPanel from './TradeAnalysisPanel';
 import { SectorBubbleChart } from './SectorBubbleChart';
 import { AllocationSurfacePlot } from './AllocationSurfacePlot';
+import { VolatilitySurface } from './VolatilitySurface';
 
 interface Trade {
   id: string;
@@ -1035,6 +1036,11 @@ export default function TradingJournal() {
         {/* Asset Allocation 3D Surface Plot */}
         <div className="lg:col-span-1 xl:col-span-1 2xl:col-span-1">
           <AllocationSurfacePlot trades={trades} />
+        </div>
+
+        {/* Implied Volatility Surface */}
+        <div className="lg:col-span-2 xl:col-span-2 2xl:col-span-2">
+          <VolatilitySurface ticker="AAPL" />
         </div>
       </div>
 

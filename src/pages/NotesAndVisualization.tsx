@@ -1,5 +1,4 @@
 import { NetworkNotesGraph } from '@/components/NetworkNotesGraph';
-import { Enhanced3DSurfacePlot } from '@/components/Enhanced3DSurfacePlot';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Hash, TrendingUp, BarChart3 } from 'lucide-react';
@@ -130,7 +129,9 @@ const NotesAndVisualization = () => {
         </TabsContent>
 
         <TabsContent value="surface" className="space-y-4">
-          <Enhanced3DSurfacePlot trades={sampleTrades} />
+          <div className="text-center p-8 text-muted-foreground">
+            <p>3D Surface Plot has been moved to Trading Journal</p>
+          </div>
           
           {/* Surface Type Information */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
