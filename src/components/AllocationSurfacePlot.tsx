@@ -29,10 +29,10 @@ interface Props {
 }
 
 export const AllocationSurfacePlot = ({ trades }: Props) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const animationRef = useRef<number | null>(null);
+  const mountRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<THREE.Scene>();
+  const rendererRef = useRef<THREE.WebGLRenderer>();
+  const frameId = useRef<number>();
 
   const calculateAllocationData = (): AllocationData[] => {
     const closedTrades = trades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined);
@@ -78,84 +78,64 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
       .sort((a, b) => a.period.localeCompare(b.period));
   };
 
-  const createSurface = (data: AllocationData[]) => {
-    if (!containerRef.current) return;
+  useEffect(() => {
+    if (!mountRef.current) return;
 
-    // Clear previous scene properly
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-    
-    if (rendererRef.current && containerRef.current) {
-      // Safely remove canvas if it exists
-      const canvas = rendererRef.current.domElement;
-      if (canvas && canvas.parentNode === containerRef.current) {
-        containerRef.current.removeChild(canvas);
-      }
-      rendererRef.current.dispose();
-      rendererRef.current = null;
-    }
+    const width = mountRef.current.clientWidth;
+    const height = mountRef.current.clientHeight;
 
-    // Scene setup
+    // Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0f172a); // Dark background
+    scene.background = new THREE.Color(0x0f172a);
+    sceneRef.current = scene;
 
-    // Get container dimensions
-    const containerWidth = containerRef.current.clientWidth || 800;
-    const containerHeight = containerRef.current.clientHeight || 320;
-    
-    const camera = new THREE.PerspectiveCamera(75, containerWidth / containerHeight, 0.1, 1000);
+    // Camera
+    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+    camera.position.set(15, 15, 15);
+    camera.lookAt(0, 0, 0);
+
+    // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(containerWidth, containerHeight);
+    renderer.setSize(width, height);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    rendererRef.current = renderer;
 
-    // Safely clear and append canvas
-    if (containerRef.current) {
-      while (containerRef.current.firstChild) {
-        containerRef.current.removeChild(containerRef.current.firstChild);
-      }
-      containerRef.current.appendChild(renderer.domElement);
-    }
+    mountRef.current.appendChild(renderer.domElement);
 
-    // Handle resize
-    const handleResize = () => {
-      if (!containerRef.current) return;
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight;
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-    };
+    // Lights
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+    scene.add(ambientLight);
 
-    window.addEventListener('resize', handleResize);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 10, 5);
+    directionalLight.castShadow = true;
+    scene.add(directionalLight);
 
-    // Create surface geometry
-    const width = 20;
-    const height = 20;
-    const geometry = new THREE.PlaneGeometry(width, height, width - 1, height - 1);
-    
-    // Generate surface based on data or fallback
-    const vertices = geometry.attributes.position.array as Float32Array;
-    const colors: number[] = [];
-    
-    // Create fallback data if no actual data exists
+    // Create surface
+    const data = calculateAllocationData();
     const fallbackData = data.length === 0 ? [
       { diversification: 5, strategicPosition: 30, annualReturn: 15, period: '2024-09' },
       { diversification: 8, strategicPosition: 50, annualReturn: 8, period: '2024-08' },
       { diversification: 12, strategicPosition: 70, annualReturn: 25, period: '2024-07' },
     ] : data;
+
+    // Create surface geometry
+    const surfaceWidth = 20;
+    const surfaceHeight = 20;
+    const geometry = new THREE.PlaneGeometry(surfaceWidth, surfaceHeight, surfaceWidth - 1, surfaceHeight - 1);
     
-    console.log('AllocationSurfacePlot: Using data points:', fallbackData.length);
+    // Generate surface based on data
+    const vertices = geometry.attributes.position.array as Float32Array;
+    const colors: number[] = [];
     
     for (let i = 0; i < vertices.length; i += 3) {
       const x = vertices[i];
       const y = vertices[i + 1];
       
       // Map x,y to diversification and strategic position
-      const diversification = ((x + width/2) / width) * 20; // 0 to 20
-      const strategicPosition = ((y + height/2) / height) * 100; // 0 to 100
+      const diversification = ((x + surfaceWidth/2) / surfaceWidth) * 20; // 0 to 20
+      const strategicPosition = ((y + surfaceHeight/2) / surfaceHeight) * 100; // 0 to 100
       
       // Find closest data point or interpolate
       let annualReturn = 0;
@@ -203,15 +183,6 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
     surface.rotation.x = -Math.PI / 3; // Tilt for better viewing
     scene.add(surface);
 
-    // Add lighting
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 10, 5);
-    directionalLight.castShadow = true;
-    scene.add(directionalLight);
-
     // Add wireframe for better visualization
     const wireframeGeometry = geometry.clone();
     const wireframeMaterial = new THREE.WireframeGeometry(wireframeGeometry);
@@ -222,11 +193,7 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
     wireframe.rotation.x = -Math.PI / 3;
     scene.add(wireframe);
 
-    // Position camera
-    camera.position.set(15, 15, 15);
-    camera.lookAt(0, 0, 0);
-
-    // Add orbit controls simulation (simple rotation)
+    // Animation variables
     let mouseDown = false;
     let mouseX = 0;
     let mouseY = 0;
@@ -265,7 +232,7 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
 
     // Animation loop
     const animate = () => {
-      animationRef.current = requestAnimationFrame(animate);
+      frameId.current = requestAnimationFrame(animate);
       
       // Apply rotations
       surface.rotation.y = rotationY;
@@ -283,71 +250,38 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
 
     animate();
 
-    // Store references for cleanup
-    sceneRef.current = scene;
-    rendererRef.current = renderer;
-
-    // Cleanup function
-    return () => {
-      try {
-        window.removeEventListener('resize', handleResize);
-        
-        if (renderer && renderer.domElement) {
-          renderer.domElement.removeEventListener('mousedown', handleMouseDown);
-          renderer.domElement.removeEventListener('mouseup', handleMouseUp);
-          renderer.domElement.removeEventListener('mousemove', handleMouseMove);
-        }
-        
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-          animationRef.current = null;
-        }
-        
-        if (renderer) {
-          renderer.dispose();
-        }
-        if (geometry) {
-          geometry.dispose();
-        }
-        if (material) {
-          material.dispose();
-        }
-      } catch (error) {
-        console.warn('AllocationSurfacePlot cleanup error:', error);
-      }
+    // Handle resize
+    const handleResize = () => {
+      if (!mountRef.current) return;
+      const newWidth = mountRef.current.clientWidth;
+      const newHeight = mountRef.current.clientHeight;
+      camera.aspect = newWidth / newHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(newWidth, newHeight);
     };
-  };
 
-  useEffect(() => {
-    console.log('AllocationSurfacePlot: Initializing with trades:', trades.length);
-    
-    try {
-      const data = calculateAllocationData();
-      console.log('AllocationSurfacePlot: Calculated data:', data);
-      const cleanup = createSurface(data);
+    window.addEventListener('resize', handleResize);
 
-      return () => {
-        if (cleanup) {
-          cleanup();
-        }
-      };
-    } catch (error) {
-      console.error('AllocationSurfacePlot: Error creating surface:', error);
-      return () => {}; // Return empty cleanup function
-    }
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      renderer.domElement.removeEventListener('mousedown', handleMouseDown);
+      renderer.domElement.removeEventListener('mouseup', handleMouseUp);
+      renderer.domElement.removeEventListener('mousemove', handleMouseMove);
+      
+      if (frameId.current) {
+        cancelAnimationFrame(frameId.current);
+      }
+      
+      if (mountRef.current && renderer.domElement) {
+        mountRef.current.removeChild(renderer.domElement);
+      }
+      
+      renderer.dispose();
+      geometry.dispose();
+      material.dispose();
+    };
   }, [trades]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-      if (rendererRef.current) {
-        rendererRef.current.dispose();
-      }
-    };
-  }, []);
 
   const allocationData = calculateAllocationData();
 
@@ -362,7 +296,7 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
       <CardContent>
         <div className="space-y-4">
           <div 
-            ref={containerRef} 
+            ref={mountRef} 
             className="w-full h-80 bg-slate-900 rounded-lg border border-border overflow-hidden relative"
             style={{ minHeight: '320px' }}
           >
