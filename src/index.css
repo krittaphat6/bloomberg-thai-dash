@@ -44,6 +44,19 @@
     --bloomberg-orange: 25 100% 50%;
     --bloomberg-header: 0 0% 10%;
     --terminal-panel: 0 0% 10%;
+    
+    /* TradingView Style Colors */
+    --trading-dark: 210 20% 8%;
+    --trading-darker: 210 25% 6%;
+    --trading-surface: 210 22% 11%;
+    --trading-border: 210 20% 18%;
+    --trading-text: 210 15% 85%;
+    --trading-muted: 210 12% 65%;
+    --trading-success: 134 61% 41%;
+    --trading-danger: 0 84% 60%;
+    --trading-warning: 38 92% 50%;
+    --trading-info: 199 89% 48%;
+    --trading-accent: 217 91% 60%;
   }
 
   /* Dark Terminal Theme */

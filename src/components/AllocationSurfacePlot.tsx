@@ -6,14 +6,14 @@ interface Trade {
   id: string;
   date: string;
   symbol: string;
-  side: 'LONG' | 'SHORT';
+  position: 'Long' | 'Short';
   type: 'CFD' | 'STOCK';
   entryPrice: number;
   exitPrice?: number;
-  quantity: number;
-  pnl?: number;
+  size: number;
+  pnl: number;
   pnlPercentage?: number;
-  status: 'OPEN' | 'CLOSED';
+  status: 'Open' | 'Closed';
   strategy: string;
 }
 
@@ -35,7 +35,7 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
   const animationRef = useRef<number | null>(null);
 
   const calculateAllocationData = (): AllocationData[] => {
-    const closedTrades = trades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined);
+    const closedTrades = trades.filter(t => t.status === 'Closed' && t.pnl !== undefined);
     if (closedTrades.length === 0) return [];
 
     // Group trades by month for time-based analysis
@@ -62,7 +62,7 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
         
         // Calculate monthly return
         const totalPnL = periodTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-        const totalInvestment = periodTrades.reduce((sum, t) => sum + (t.quantity * t.entryPrice), 0);
+        const totalInvestment = periodTrades.reduce((sum, t) => sum + (t.size * t.entryPrice), 0);
         const monthlyReturn = totalInvestment > 0 ? (totalPnL / totalInvestment) * 100 : 0;
         
         // Annualize the return (approximate)
@@ -274,65 +274,57 @@ export const AllocationSurfacePlot = ({ trades }: Props) => {
   const allocationData = calculateAllocationData();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Asset Allocation 3D Surface</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Diversification vs Strategic Position vs Annual Return
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div 
-            ref={containerRef} 
-            className="w-full h-80 bg-slate-900 rounded-lg flex items-center justify-center border border-border"
-            style={{ minHeight: '300px' }}
-          >
-            {allocationData.length === 0 && (
-              <div className="text-center text-muted-foreground">
-                <p>Insufficient data for 3D visualization</p>
-                <p className="text-xs mt-1">Need at least 3+ trades per month</p>
-              </div>
-            )}
-          </div>
-          
-          {/* Legend and Controls */}
-          <div className="grid grid-cols-3 gap-2 text-xs">
-            <div className="text-center">
-              <div className="font-medium text-blue-400">X-Axis</div>
-              <div className="text-muted-foreground">Diversification Score</div>
+    <div className="bg-[hsl(var(--trading-surface))] border border-[hsl(var(--trading-border))] rounded-lg p-4">
+      <h3 className="text-sm font-semibold text-[hsl(var(--trading-text))] mb-3 uppercase tracking-wide">3D Asset Allocation Surface</h3>
+      <div className="space-y-4">
+        <div 
+          ref={containerRef} 
+          className="w-full h-[280px] bg-gradient-to-b from-[hsl(var(--trading-darker))] to-[hsl(var(--trading-dark))] rounded border border-[hsl(var(--trading-border))] flex items-center justify-center"
+        >
+          {allocationData.length === 0 && (
+            <div className="text-center text-[hsl(var(--trading-muted))]">
+              <p>Insufficient data for 3D visualization</p>
+              <p className="text-xs mt-1">Need at least 3+ trades per month</p>
             </div>
-            <div className="text-center">
-              <div className="font-medium text-green-400">Y-Axis</div>
-              <div className="text-muted-foreground">Strategic Position</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-orange-400">Z-Axis</div>
-              <div className="text-muted-foreground">Annual Return (%)</div>
-            </div>
-          </div>
-          
-          {/* Color Legend */}
-          <div className="flex justify-center space-x-4 text-xs">
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-green-500 rounded"></div>
-              <span>High Return (&gt;20%)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-              <span>Moderate (0-20%)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-red-500 rounded"></div>
-              <span>Loss (&lt;0%)</span>
-            </div>
-          </div>
-          
-          <p className="text-xs text-muted-foreground text-center">
-            Click and drag to rotate • Auto-rotates when idle
-          </p>
+          )}
         </div>
-      </CardContent>
-    </Card>
+        
+        {/* Legend and Controls */}
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div className="text-center">
+            <div className="font-medium text-[hsl(var(--trading-accent))]">X-Axis</div>
+            <div className="text-[hsl(var(--trading-muted))]">Diversification Score</div>
+          </div>
+          <div className="text-center">
+            <div className="font-medium text-[hsl(var(--trading-success))]">Y-Axis</div>
+            <div className="text-[hsl(var(--trading-muted))]">Strategic Position</div>
+          </div>
+          <div className="text-center">
+            <div className="font-medium text-[hsl(var(--trading-warning))]">Z-Axis</div>
+            <div className="text-[hsl(var(--trading-muted))]">Annual Return (%)</div>
+          </div>
+        </div>
+        
+        {/* Color Legend */}
+        <div className="flex justify-center space-x-4 text-xs">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-[hsl(var(--trading-success))] rounded"></div>
+            <span className="text-[hsl(var(--trading-text))]">High Return (&gt;20%)</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-[hsl(var(--trading-warning))] rounded"></div>
+            <span className="text-[hsl(var(--trading-text))]">Moderate (0-20%)</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-[hsl(var(--trading-danger))] rounded"></div>
+            <span className="text-[hsl(var(--trading-text))]">Loss (&lt;0%)</span>
+          </div>
+        </div>
+        
+        <p className="text-xs text-[hsl(var(--trading-muted))] text-center">
+          Click and drag to rotate • Auto-rotates when idle
+        </p>
+      </div>
+    </div>
   );
 };
