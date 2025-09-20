@@ -161,15 +161,6 @@ const MarketData = () => {
           </div>
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/notes')}
-              className="flex items-center gap-2 text-terminal-green border-terminal-green hover:bg-terminal-green/10"
-            >
-              <Hash className="h-4 w-4" />
-              Notes & 3D
-            </Button>
-            <Button
               variant="ghost"
               size="icon"
               onClick={toggleFullscreen}
