@@ -13,6 +13,10 @@ import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Area
 import TradeAnalysisPanel from './TradeAnalysisPanel';
 import { SectorBubbleChart } from './SectorBubbleChart';
 import { D3Surface } from './D3Surface';
+import { EnhancedRiskRewardChart } from './EnhancedRiskRewardChart';
+import { EnhancedProfitFactorChart } from './EnhancedProfitFactorChart';
+import { EnhancedSectorAnalysis } from './EnhancedSectorAnalysis';
+import { EnhancedWinRateChart } from './EnhancedWinRateChart';
 
 interface Trade {
   id: string;
@@ -1055,131 +1059,20 @@ export default function TradingJournal() {
           </CardContent>
         </Card>
 
-        {/* Win Rate Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Win Rate by Asset</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={getProfitFactorBySymbols().slice(0, 6)}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis 
-                    dataKey="symbol" 
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    axisLine={{ stroke: '#4B5563' }}
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    axisLine={{ stroke: '#4B5563' }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1F2937', 
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#F3F4F6'
-                    }}
-                    formatter={(value: any) => [`${value.toFixed(1)}%`, 'Win Rate']}
-                  />
-                  <Bar 
-                    dataKey="winRate" 
-                    radius={[4, 4, 0, 0]}
-                    fill="#F59E0B"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Enhanced Win Rate Analysis */}
+        <EnhancedWinRateChart trades={trades} />
 
-        {/* Sector Attribution Analysis */}
-        <div className="lg:col-span-1 xl:col-span-1 2xl:col-span-1">
-          <SectorBubbleChart trades={trades} />
-        </div>
+        {/* Enhanced Sector Attribution Analysis */}
+        <EnhancedSectorAnalysis trades={trades} />
 
         {/* D3 Portfolio Analytics */}
-        <div className="lg:col-span-1 xl:col-span-1 2xl:col-span-1">
-          <D3Surface trades={trades} />
-        </div>
+        <D3Surface trades={trades} />
       </div>
 
       {/* Performance Summary Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        {/* Long vs Short Pie Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Long vs Short Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const breakdown = getLongShortBreakdown();
-              const total = breakdown.long.count + breakdown.short.count;
-              
-              return (
-                <div className="space-y-4">
-                  {/* Simple Pie Visualization */}
-                  <div className="flex justify-center">
-                    <div className="relative w-32 h-32">
-                      <svg className="w-32 h-32 transform -rotate-90">
-                        <circle
-                          cx="64"
-                          cy="64"
-                          r="56"
-                          fill="none"
-                          stroke="#374151"
-                          strokeWidth="12"
-                        />
-                        <circle
-                          cx="64"
-                          cy="64"
-                          r="56"
-                          fill="none"
-                          stroke="#3B82F6"
-                          strokeWidth="12"
-                          strokeDasharray={`${(breakdown.long.percentage * 352) / 100} 352`}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-primary">{total}</div>
-                          <div className="text-xs text-muted-foreground">Trades</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Legend */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                        <span className="text-sm">Long</span>
-                      </div>
-                      <div className="text-sm font-medium">
-                        {breakdown.long.count} ({breakdown.long.percentage.toFixed(1)}%)
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-gray-500 rounded"></div>
-                        <span className="text-sm">Short</span>
-                      </div>
-                      <div className="text-sm font-medium">
-                        {breakdown.short.count} ({breakdown.short.percentage.toFixed(1)}%)
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
+        {/* Enhanced Profit Factor by Symbols */}
+        <EnhancedProfitFactorChart trades={trades} />
 
         {/* CFD vs Stock Distribution */}
         <Card>
@@ -1356,136 +1249,8 @@ export default function TradingJournal() {
           </CardContent>
         </Card>
 
-        {/* Risk-Reward Analysis */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Risk vs Reward Analysis</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              {(() => {
-                const riskRewardData = getProfitFactorBySymbols()
-                  .filter(item => item.totalTrades >= 3) // At least 3 trades for meaningful data
-                  .map(item => ({
-                    symbol: item.symbol,
-                    avgRisk: item.totalLosses / Math.max(item.lossCount, 1),
-                    avgReward: item.totalWins / Math.max(item.winCount, 1),
-                    riskRewardRatio: (item.totalWins / Math.max(item.winCount, 1)) / (item.totalLosses / Math.max(item.lossCount, 1)) || 0,
-                    winRate: item.winRate,
-                    totalTrades: item.totalTrades
-                  }))
-                  .filter(item => item.avgRisk > 0 || item.avgReward > 0)
-                  .slice(0, 10); // Top 10 symbols
-
-                if (riskRewardData.length === 0) {
-                  return (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                      <div className="text-center">
-                        <p>No risk-reward data available</p>
-                        <p className="text-sm">Need at least 3 closed trades per symbol</p>
-                      </div>
-                    </div>
-                  );
-                }
-
-                return (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ScatterChart data={riskRewardData} margin={{ top: 20, right: 30, bottom: 40, left: 40 }}>
-                      <CartesianGrid 
-                        strokeDasharray="3 3" 
-                        stroke="hsl(var(--border))" 
-                      />
-                      <XAxis 
-                        dataKey="avgRisk" 
-                        type="number"
-                        domain={['dataMin - 10', 'dataMax + 10']}
-                        tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                        label={{ 
-                          value: 'Average Risk ($)', 
-                          position: 'insideBottom', 
-                          offset: -10, 
-                          style: { textAnchor: 'middle', fontSize: 10, fill: 'hsl(var(--muted-foreground))' } 
-                        }}
-                      />
-                      <YAxis 
-                        dataKey="avgReward" 
-                        type="number"
-                        domain={['dataMin - 10', 'dataMax + 10']}
-                        tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                        label={{ 
-                          value: 'Average Reward ($)', 
-                          angle: -90, 
-                          position: 'insideLeft', 
-                          style: { textAnchor: 'middle', fontSize: 10, fill: 'hsl(var(--muted-foreground))' } 
-                        }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
-                          color: 'hsl(var(--card-foreground))'
-                        }}
-                        formatter={(value: any, name: string) => [
-                          `$${value.toFixed(2)}`,
-                          name === 'avgReward' ? 'Avg Reward' : name === 'avgRisk' ? 'Avg Risk' : name
-                        ]}
-                        labelFormatter={(label, payload) => 
-                          payload?.[0]?.payload ? 
-                            `${payload[0].payload.symbol} | R:R ${payload[0].payload.riskRewardRatio.toFixed(2)} | Win Rate: ${payload[0].payload.winRate.toFixed(1)}%` 
-                            : ''
-                        }
-                      />
-                      <Scatter 
-                        dataKey="avgReward" 
-                        fill="hsl(var(--primary))"
-                      >
-                        {riskRewardData.map((entry, index) => (
-                          <svg key={index}>
-                            <circle 
-                              r={Math.max(4, Math.min(10, entry.totalTrades))}
-                              fill={entry.riskRewardRatio >= 2 ? '#10B981' : entry.riskRewardRatio >= 1 ? '#F59E0B' : '#EF4444'}
-                              fillOpacity={0.7}
-                              stroke="white"
-                              strokeWidth={1}
-                            />
-                          </svg>
-                        ))}
-                      </Scatter>
-                      
-                      {/* Reference lines */}
-                      <ReferenceLine 
-                        segment={[
-                          { x: 0, y: 0 },
-                          { x: Math.max(...riskRewardData.map(d => d.avgRisk)) * 2, y: Math.max(...riskRewardData.map(d => d.avgRisk)) * 2 }
-                        ]}
-                        stroke="hsl(var(--muted-foreground))"
-                        strokeDasharray="5 5"
-                        strokeOpacity={0.5}
-                      />
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                );
-              })()}
-            </div>
-            
-            {/* Legend */}
-            <div className="mt-4 flex justify-center gap-6 text-xs">
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span>Excellent (R:R ≥ 2)</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                <span>Good (R:R ≥ 1)</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                <span>Poor (R:R &lt; 1)</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Enhanced Risk vs Reward Analysis */}
+        <EnhancedRiskRewardChart trades={trades} />
       </div>
 
       {/* Add Trade Form */}
