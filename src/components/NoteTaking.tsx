@@ -13,7 +13,6 @@ import { BlockEditor, Block } from './BlockEditor';
 import { DatabaseView, Database, DatabaseProperty, DatabaseRow } from './DatabaseView';
 import { NotionTemplates, NotionTemplate } from './NotionTemplates';
 import { SpreadsheetEditor } from './SpreadsheetEditor';
-import { CanvasWorkspace } from './CanvasWorkspace';
 import { 
   Plus, 
   Search, 
@@ -148,7 +147,7 @@ export default function NoteTaking() {
   const [selectedTag, setSelectedTag] = useState<string>('');
   const [isCreating, setIsCreating] = useState(false);
   const [editingNote, setEditingNote] = useState<Partial<Note>>({});
-  const [viewMode, setViewMode] = useState<'list' | 'graph' | 'canvas'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Load notes from localStorage
@@ -385,14 +384,14 @@ export default function NoteTaking() {
             {mainView === 'notes' && (
               <>
                 {/* View Mode Toggle */}
-                <div className="flex gap-1 mb-4">
+                <div className="flex gap-2 mb-4">
                   <Button
                     variant={viewMode === 'list' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setViewMode('list')}
                     className="flex-1"
                   >
-                    <FileText className="h-3 w-3 mr-1" />
+                    <FileText className="h-4 w-4 mr-1" />
                     List
                   </Button>
                   <Button
@@ -401,17 +400,8 @@ export default function NoteTaking() {
                     onClick={() => setViewMode('graph')}
                     className="flex-1"
                   >
-                    <Network className="h-3 w-3 mr-1" />
+                    <Network className="h-4 w-4 mr-1" />
                     Graph
-                  </Button>
-                  <Button
-                    variant={viewMode === 'canvas' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setViewMode('canvas')}
-                    className="flex-1"
-                  >
-                    <Layers className="h-3 w-3 mr-1" />
-                    Canvas
                   </Button>
                 </div>
               </>
@@ -645,14 +635,6 @@ export default function NoteTaking() {
                 searchTerm={searchTerm}
                 selectedFolder={selectedFolder}
                 selectedTag={selectedTag}
-              />
-            ) : viewMode === 'canvas' ? (
-              <CanvasWorkspace
-                notes={filteredNotes}
-                onUpdateNote={updateNote}
-                onCreateNote={createNote}
-                onSelectNote={setSelectedNote}
-                selectedNote={selectedNote}
               />
             ) : selectedNote ? (
               <>
