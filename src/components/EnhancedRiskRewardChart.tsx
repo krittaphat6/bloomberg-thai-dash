@@ -72,7 +72,7 @@ export const EnhancedRiskRewardChart = ({ trades }: Props) => {
     });
     
     return Array.from(symbolStats.values())
-      .filter(stats => stats.totalTrades >= 3)
+      .filter(stats => stats.totalTrades >= 2)
       .map(stats => {
         const avgRisk = stats.totalLosses / Math.max(stats.lossCount, 1);
         const avgReward = stats.totalWins / Math.max(stats.winCount, 1);
@@ -119,7 +119,8 @@ export const EnhancedRiskRewardChart = ({ trades }: Props) => {
           <div className="flex items-center justify-center h-64 text-muted-foreground">
             <div className="text-center">
               <p>No risk-reward data available</p>
-              <p className="text-sm">Need at least 3 closed trades per symbol</p>
+              <p className="text-sm">Need at least 2 closed trades per symbol</p>
+              <p className="text-xs text-muted-foreground mt-1">Currently have trades but insufficient per symbol for analysis</p>
             </div>
           </div>
         </CardContent>
