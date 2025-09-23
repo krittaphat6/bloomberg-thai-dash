@@ -378,3 +378,58 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--terminal-amber) / 0.5);
 }
+
+/* Canvas Styling */
+.canvas-flow {
+  background: #0a0a0a !important;
+  border: 2px solid rgba(34, 197, 94, 0.3) !important;
+}
+
+.canvas-flow .react-flow__viewport {
+  background: #0a0a0a;
+}
+
+.canvas-flow .react-flow__background {
+  background: #0a0a0a;
+}
+
+.canvas-flow .react-flow__node {
+  border: 2px solid rgba(34, 197, 94, 0.5) !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  color: #22c55e !important;
+}
+
+.canvas-flow .react-flow__node.selected {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.5) !important;
+}
+
+.canvas-flow .react-flow__edge path {
+  stroke: #22c55e !important;
+  stroke-width: 2px !important;
+}
+
+.canvas-flow .react-flow__edge.selected path {
+  stroke: #f59e0b !important;
+  stroke-width: 3px !important;
+}
+
+.canvas-flow .react-flow__controls {
+  background: rgba(0, 0, 0, 0.9) !important;
+  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+}
+
+.canvas-flow .react-flow__controls button {
+  background: transparent !important;
+  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+  color: #22c55e !important;
+}
+
+.canvas-flow .react-flow__controls button:hover {
+  background: rgba(34, 197, 94, 0.1) !important;
+}
+
+.canvas-flow .react-flow__minimap {
+  background: rgba(0, 0, 0, 0.9) !important;
+  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+}

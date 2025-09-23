@@ -13,7 +13,7 @@ import { BlockEditor, Block } from './BlockEditor';
 import { DatabaseView, Database, DatabaseProperty, DatabaseRow } from './DatabaseView';
 import { NotionTemplates, NotionTemplate } from './NotionTemplates';
 import { SpreadsheetEditor } from './SpreadsheetEditor';
-import { ObsidianCanvas } from './Canvas/ObsidianCanvas';
+import ObsidianCanvas from './Canvas/ObsidianCanvas';
 import { CanvasProvider } from './Canvas/CanvasProvider';
 import { 
   Plus, 

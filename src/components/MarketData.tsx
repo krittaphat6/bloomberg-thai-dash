@@ -6,7 +6,10 @@ import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
 import { Expand, Minimize, Hash, BarChart3 } from 'lucide-react';
-import TradingViewChart from './TradingViewChart';
+import StockdioCharts from './StockdioCharts';
+import InvestingCharts from './InvestingCharts';
+import CryptoLiveCharts from './CryptoLiveCharts';
+import ForexEconomicData from './ForexEconomicData';
 import ScatterAnalysis from './ScatterChart';
 import MarketPieChart from './MarketPieChart';
 import BloombergNews from './BloombergNews';
@@ -22,7 +25,6 @@ import RealMarketData from './RealMarketData';
 import ABLE3AI from './ABLE3AI';
 import BitcoinMempool from './BitcoinMempool';
 import LiveUAMap from './LiveUAMap';
-
 import USDebtClock from './USDebtClock';
 import NoteTaking from './NoteTaking';
 import TradingJournal from './TradingJournal';
@@ -31,6 +33,7 @@ import PenguinSticker from './PenguinSticker';
 import ChessGame from './ChessGame';
 import { BloombergLiveTV } from './BloombergLiveTV';
 import { PythonCodeEditor } from './PythonCodeEditor';
+import ObsidianCanvas from './Canvas/ObsidianCanvas';
 
 interface PanelData {
   id: string;
@@ -109,9 +112,15 @@ const MarketData = () => {
   };
 
   const availableComponents = [
+    // New Financial Components  
+    { id: 'stockdio', title: 'STOCKDIO CHARTS', component: <StockdioCharts /> },
+    { id: 'investing', title: 'INVESTING.COM CHARTS', component: <InvestingCharts /> },
+    { id: 'crypto', title: 'CRYPTO LIVE CHARTS', component: <CryptoLiveCharts /> },
+    { id: 'forex', title: 'FOREX & ECONOMIC DATA', component: <ForexEconomicData /> },
+    
+    // Keep existing working components:
     { id: 'fedwatch', title: 'FEDWATCH TOOL', component: <FedWatch /> },
     { id: 'calendar', title: 'ECONOMIC CALENDAR', component: <EconomicCalendar /> },
-    { id: 'tradingview', title: 'TRADING VIEW CHART', component: <TradingViewChart /> },
     { id: 'scatter', title: 'SCATTER ANALYSIS', component: <ScatterAnalysis /> },
     { id: 'piechart', title: 'MARKET PIE CHART', component: <MarketPieChart /> },
     { id: 'news', title: 'BLOOMBERG NEWS', component: <BloombergNews /> },
@@ -131,7 +140,8 @@ const MarketData = () => {
     { id: 'debtclock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
     { id: 'notes', title: 'NOTE TAKING', component: <NoteTaking /> },
     { id: 'journal', title: 'TRADING JOURNAL', component: <TradingJournal /> },
-    { id: 'chess', title: 'CHESS PUZZLE', component: <ChessGame /> }
+    { id: 'chess', title: 'CHESS PUZZLE', component: <ChessGame /> },
+    { id: 'canvas', title: 'CANVAS', component: <ObsidianCanvas notes={[]} onUpdateNote={() => {}} onCreateNote={() => {}} /> }
   ];
 
   const handleTabAdd = () => {

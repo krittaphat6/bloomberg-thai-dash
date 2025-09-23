@@ -29,6 +29,7 @@ import { SmartEdge } from './edges/SmartEdge';
 import { LabeledEdge } from './edges/LabeledEdge';
 import { KeyboardShortcuts } from './utils/KeyboardShortcuts';
 import { TextNodeData, FileNodeData, GroupNodeData, ImageNodeData, EdgeData } from '@/types/canvas';
+import { FileText } from 'lucide-react';
 
 const nodeTypes: NodeTypes = {
   text: TextNode,
@@ -49,6 +50,12 @@ interface ObsidianCanvasProps {
 }
 
 function CanvasInner({ notes, onUpdateNote, onCreateNote }: ObsidianCanvasProps) {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
+  const [clipboard, setClipboard] = useState<any[]>([]);
+  
   const { 
     data, 
     viewport, 
@@ -63,147 +70,47 @@ function CanvasInner({ notes, onUpdateNote, onCreateNote }: ObsidianCanvasProps)
     deleteEdge,
     setTool
   } = useCanvasStore();
-  
-  // Convert canvas data to ReactFlow format
-  const convertNodesToReactFlow = (canvasNodes: any[]): Node[] => {
-    return canvasNodes.map(node => ({
-      id: node.id,
-      type: node.type,
-      position: { x: node.x || 0, y: node.y || 0 },
-      data: node,
-      style: { 
-        width: node.width || 200, 
-        height: node.height || 100 
-      }
-    }));
-  };
 
-  const convertEdgesToReactFlow = (canvasEdges: EdgeData[]): Edge[] => {
-    return canvasEdges.map(edge => ({
-      id: edge.id,
-      source: edge.fromNode,
-      target: edge.toNode,
-      sourceHandle: edge.fromSide,
-      targetHandle: edge.toSide,
-      type: 'smart',
-      animated: edge.animated || false,
-      data: edge
-    }));
-  };
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(convertNodesToReactFlow(data.nodes));
-  const [edges, setEdges, onEdgesChange] = useEdgesState(convertEdgesToReactFlow(data.edges));
-  const [contextMenu, setContextMenu] = useState<{x: number, y: number} | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getViewport, setViewport } = useReactFlow();
+  const { screenToFlowPosition } = useReactFlow();
 
-  // Sync store data with ReactFlow
-  useEffect(() => {
-    setNodes(convertNodesToReactFlow(data.nodes));
-    setEdges(convertEdgesToReactFlow(data.edges));
-  }, [data.nodes, data.edges, setNodes, setEdges]);
+  const onSelectionChange = useCallback(({ nodes: selectedNodes }: { nodes: Node[] }) => {
+    setSelectedNodes(selectedNodes);
+    updateSelection({ nodeIds: selectedNodes.map(n => n.id), edgeIds: [] });
+  }, [updateSelection]);
 
-  // Sync viewport
-  useEffect(() => {
-    setViewport(viewport, { duration: 0 });
-  }, [viewport, setViewport]);
+  const onDeleteSelected = useCallback(() => {
+    selectedNodes.forEach(node => {
+      deleteNode(node.id);
+    });
+    setNodes(nds => nds.filter(n => !selectedNodes.find(sn => sn.id === n.id)));
+    setSelectedNodes([]);
+  }, [selectedNodes, deleteNode, setNodes]);
 
   const onConnect = useCallback(
     (params: Connection) => {
-      const canvasEdge: EdgeData = {
+      const newEdge: EdgeData = {
         id: `edge-${Date.now()}`,
         fromNode: params.source!,
         toNode: params.target!,
         fromSide: params.sourceHandle as any,
         toSide: params.targetHandle as any,
-        animated: false,
+        toEnd: 'arrow'
       };
       
-      const reactFlowEdge = {
-        id: canvasEdge.id,
-        source: canvasEdge.fromNode,
-        target: canvasEdge.toNode,
-        sourceHandle: canvasEdge.fromSide,
-        targetHandle: canvasEdge.toSide,
+      const reactFlowEdge: Edge = {
+        id: newEdge.id,
+        source: newEdge.fromNode,
+        target: newEdge.toNode,
         type: 'smart',
-        animated: false,
-        data: canvasEdge
+        data: newEdge
       };
       
       setEdges((eds) => addEdge(reactFlowEdge, eds));
-      addCanvasEdge(canvasEdge);
+      addCanvasEdge(newEdge);
     },
     [setEdges, addCanvasEdge]
   );
-
-  const onNodeDoubleClick = useCallback((event: React.MouseEvent, node: Node) => {
-    if (node.type === 'file') {
-      // Open the linked note in the main editor
-      const noteId = node.data.file;
-      const note = notes.find(n => n.id === noteId);
-      if (note) {
-        // This would trigger opening the note in the main NoteTaking component
-        console.log('Open note:', note);
-      }
-    } else if (node.type === 'text') {
-      // Enable inline editing
-      updateNode(node.id, { ...node.data, editing: true });
-    }
-  }, [notes, updateNode]);
-
-  const onNodeDragStop = useCallback((event: React.MouseEvent, node: Node) => {
-    updateNode(node.id, { 
-      ...node.data,
-      x: node.position.x, 
-      y: node.position.y 
-    });
-  }, [updateNode]);
-
-  const onViewportChange = useCallback((newViewport: any) => {
-    updateViewport(newViewport);
-  }, [updateViewport]);
-
-  const onSelectionChange = useCallback(({ nodes: selectedNodes, edges: selectedEdges }) => {
-    updateSelection({
-      nodeIds: selectedNodes.map(n => n.id),
-      edgeIds: selectedEdges.map(e => e.id)
-    });
-  }, [updateSelection]);
-
-  const onCanvasDoubleClick = useCallback((event: React.MouseEvent) => {
-    if (tool === 'text' || event.detail === 2) {
-      const position = screenToFlowPosition({ 
-        x: event.clientX, 
-        y: event.clientY 
-      });
-      
-      const canvasNode: TextNodeData = {
-        id: `text-${Date.now()}`,
-        type: 'text',
-        x: position.x,
-        y: position.y,
-        width: 200,
-        height: 100,
-        text: 'New text node',
-        fontSize: 14,
-        textAlign: 'left'
-      };
-      
-      const reactFlowNode: Node = {
-        id: canvasNode.id,
-        type: canvasNode.type,
-        position: { x: canvasNode.x, y: canvasNode.y },
-        data: canvasNode,
-        style: {
-          width: canvasNode.width,
-          height: canvasNode.height
-        }
-      };
-      
-      setNodes(nds => [...nds, reactFlowNode]);
-      addNode(canvasNode);
-    }
-  }, [tool, screenToFlowPosition, setNodes, addNode]);
 
   const onContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
@@ -214,153 +121,246 @@ function CanvasInner({ notes, onUpdateNote, onCreateNote }: ObsidianCanvasProps)
     setContextMenu(null);
   }, []);
 
-  const createNoteNode = useCallback((position: { x: number; y: number }) => {
-    // Create a new note in the NoteTaking system
-    const newNote = {
-      id: `note-${Date.now()}`,
-      title: 'Canvas Note',
-      content: 'Created from canvas',
-      tags: ['canvas'],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      linkedNotes: [],
-      isFavorite: false,
-      folder: undefined
-    };
+  // Drag and Drop functionality
+  const onDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    const noteId = event.dataTransfer.getData('application/note-id');
     
-    onCreateNote(newNote);
-    
-    // Create the file node on canvas
-    const canvasNode: FileNodeData = {
-      id: `file-${Date.now()}`,
-      type: 'file',
-      x: position.x,
-      y: position.y,
-      width: 250,
-      height: 150,
-      file: newNote.id,
-      preview: true
-    };
-    
-    const reactFlowNode: Node = {
-      id: canvasNode.id,
-      type: canvasNode.type,
-      position: { x: canvasNode.x, y: canvasNode.y },
-      data: { ...canvasNode, note: newNote },
-      style: {
-        width: canvasNode.width,
-        height: canvasNode.height
+    if (noteId) {
+      const note = notes.find(n => n.id === noteId);
+      if (note) {
+        const position = screenToFlowPosition({
+          x: event.clientX - (reactFlowWrapper.current?.offsetLeft || 0),
+          y: event.clientY - (reactFlowWrapper.current?.offsetTop || 0),
+        });
+        
+        const fileNode: FileNodeData = {
+          id: `file-${Date.now()}`,
+          type: 'file',
+          x: position.x,
+          y: position.y,
+          width: 250,
+          height: 150,
+          file: noteId,
+          preview: true
+        };
+        
+        const reactFlowNode: Node = {
+          id: fileNode.id,
+          type: 'file',
+          position: { x: fileNode.x, y: fileNode.y },
+          data: { ...fileNode, note },
+          style: { width: fileNode.width, height: fileNode.height }
+        };
+        
+        setNodes(nds => [...nds, reactFlowNode]);
+        addNode(fileNode);
       }
-    };
-    
-    setNodes(nds => [...nds, reactFlowNode]);
-    addNode(canvasNode);
-    
-    setTool('select');
-  }, [onCreateNote, setNodes, addNode, setTool]);
+    }
+  }, [notes, screenToFlowPosition, setNodes, addNode]);
 
-  const dropExistingNote = useCallback((noteId: string, position: { x: number; y: number }) => {
-    const note = notes.find(n => n.id === noteId);
-    
-    const canvasNode: FileNodeData = {
-      id: `file-${Date.now()}`,
-      type: 'file',
-      x: position.x,
-      y: position.y,
-      width: 250,
-      height: 150,
-      file: noteId,
-      preview: true
-    };
-    
-    const reactFlowNode: Node = {
-      id: canvasNode.id,
-      type: canvasNode.type,
-      position: { x: canvasNode.x, y: canvasNode.y },
-      data: { ...canvasNode, note },
-      style: {
-        width: canvasNode.width,
-        height: canvasNode.height
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Delete' && selectedNodes.length > 0) {
+        onDeleteSelected();
+      }
+      if (event.ctrlKey || event.metaKey) {
+        if (event.key === 'c' && selectedNodes.length > 0) {
+          setClipboard([...selectedNodes.map(n => n.data)]);
+        }
+        if (event.key === 'v' && clipboard.length > 0) {
+          // Paste at center of viewport
+          const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+          clipboard.forEach((item, index) => {
+            const newNode = {
+              ...item,
+              id: `${item.type}-${Date.now()}-${index}`,
+              x: center.x + (index * 20),
+              y: center.y + (index * 20)
+            };
+            
+            const reactFlowNode: Node = {
+              id: newNode.id,
+              type: newNode.type,
+              position: { x: newNode.x, y: newNode.y },
+              data: newNode,
+              style: { width: newNode.width, height: newNode.height }
+            };
+            
+            setNodes(nds => [...nds, reactFlowNode]);
+            addNode(newNode);
+          });
+        }
       }
     };
-    
-    setNodes(nds => [...nds, reactFlowNode]);
-    addNode(canvasNode);
-  }, [notes, setNodes, addNode]);
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNodes, onDeleteSelected, clipboard, screenToFlowPosition, setNodes, addNode]);
 
   return (
-    <div className="w-full h-full relative" ref={reactFlowWrapper}>
-      <KeyboardShortcuts />
+    <div className="flex h-full bg-background">
+      {/* Notes Sidebar */}
+      <div className="w-64 bg-card border-r border-terminal-green/30 p-4 overflow-y-auto">
+        <h3 className="text-sm font-medium text-terminal-green mb-3 flex items-center">
+          <FileText className="h-4 w-4 mr-2" />
+          Notes Library
+        </h3>
+        <div className="space-y-1">
+          {notes.map((note) => (
+            <div
+              key={note.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/note-id', note.id);
+              }}
+              className="p-2 text-xs bg-background/50 border border-border rounded cursor-move hover:bg-terminal-green/10 hover:border-terminal-green/50 transition-colors"
+            >
+              <div className="font-medium truncate text-terminal-green">{note.title}</div>
+              <div className="text-muted-foreground truncate mt-1">
+                {note.content.substring(0, 50)}...
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {note.tags?.slice(0, 2).map((tag: string) => (
+                  <span key={tag} className="px-1 py-0.5 bg-terminal-amber/20 text-terminal-amber rounded text-xs">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
       
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeDoubleClick={onNodeDoubleClick}
-        onNodeDragStop={onNodeDragStop}
-        onMove={onViewportChange}
-        onSelectionChange={onSelectionChange}
-        onDoubleClick={onCanvasDoubleClick}
-        onContextMenu={onContextMenu}
-        onClick={onCanvasClick}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-        attributionPosition="bottom-left"
-        className="bg-background"
-        minZoom={0.1}
-        maxZoom={4}
-        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-      >
-        <Background 
-          variant={BackgroundVariant.Dots}
-          gap={50}
-          size={1}
-          className="opacity-30"
-        />
-        
-        <Panel position="top-left">
-          <CanvasToolbar 
-            currentTool={tool}
-            onToolChange={setTool}
-            onCreateNote={createNoteNode}
+      {/* Canvas Area */}
+      <div className="flex-1 relative" ref={reactFlowWrapper}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onContextMenu={onContextMenu}
+          onPaneClick={onCanvasClick}
+          onSelectionChange={onSelectionChange}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          className="canvas-flow"
+          style={{ 
+            backgroundColor: '#0a0a0a',
+          }}
+          attributionPosition="bottom-left"
+        >
+          <Background 
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={1}
+            color="rgba(34, 197, 94, 0.2)"
+            className="opacity-50"
           />
-        </Panel>
-        
-        <Controls 
-          position="bottom-right"
-          showZoom
-          showFitView
-          showInteractive={false}
-        />
-        
-        <MiniMap 
-          position="bottom-left"
-          className="bg-background border border-border"
-          nodeColor="#10b981"
-          maskColor="rgba(0,0,0,0.3)"
-        />
-      </ReactFlow>
+          <Controls 
+            showZoom={true}
+            showFitView={true}
+            showInteractive={true}
+            className="bg-background/90 border border-terminal-green/30 rounded"
+          />
+          <MiniMap 
+            className="bg-background/90 border border-terminal-green/30 rounded"
+            maskColor="rgba(0, 0, 0, 0.6)"
+            nodeColor={(node) => {
+              switch (node.type) {
+                case 'text': return '#22c55e';
+                case 'file': return '#f59e0b';
+                case 'image': return '#8b5cf6';
+                case 'group': return '#06b6d4';
+                default: return '#6b7280';
+              }
+            }}
+          />
+          
+          {/* Floating Toolbar */}
+          <Panel position="top-center">
+            <CanvasToolbar 
+              currentTool={tool}
+              onToolChange={setTool}
+              onCreateNote={(position) => {
+                const newNote = {
+                  id: `note-${Date.now()}`,
+                  title: 'New Canvas Note',
+                  content: '# New Note\n\nStart writing here...',
+                  tags: ['canvas'],
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                  linkedNotes: [],
+                  isFavorite: false,
+                };
+                
+                onCreateNote(newNote);
+                
+                const fileNode: FileNodeData = {
+                  id: `file-${Date.now()}`,
+                  type: 'file',
+                  x: position.x,
+                  y: position.y,
+                  width: 250,
+                  height: 150,
+                  file: newNote.id,
+                  preview: true
+                };
+                
+                const reactFlowNode: Node = {
+                  id: fileNode.id,
+                  type: 'file',
+                  position: { x: fileNode.x, y: fileNode.y },
+                  data: { ...fileNode, note: newNote },
+                  style: { width: fileNode.width, height: fileNode.height }
+                };
+                
+                setNodes(nds => [...nds, reactFlowNode]);
+                addNode(fileNode);
+              }}
+            />
+          </Panel>
+        </ReactFlow>
 
-      {contextMenu && (
-        <CanvasContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={() => setContextMenu(null)}
-          onCreateNote={createNoteNode}
-          screenToFlowPosition={screenToFlowPosition}
-        />
-      )}
+        {/* Context Menu */}
+        {contextMenu && (
+          <CanvasContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={() => setContextMenu(null)}
+            onCreateNote={onCreateNote}
+            screenToFlowPosition={screenToFlowPosition}
+            setNodes={setNodes}
+            addNode={addNode}
+            selectedNodes={selectedNodes}
+            onDeleteSelected={onDeleteSelected}
+            clipboard={clipboard}
+            setTool={setTool}
+          />
+        )}
+
+        {/* Keyboard Shortcuts Component */}
+        <KeyboardShortcuts />
+      </div>
     </div>
   );
 }
 
-export function ObsidianCanvas(props: ObsidianCanvasProps) {
+export default function ObsidianCanvas(props: ObsidianCanvasProps) {
   return (
-    <ReactFlowProvider>
-      <CanvasInner {...props} />
-    </ReactFlowProvider>
+    <div className="w-full h-full">
+      <ReactFlowProvider>
+        <CanvasInner {...props} />
+      </ReactFlowProvider>
+    </div>
   );
 }
