@@ -15,6 +15,8 @@ import { NotionTemplates, NotionTemplate } from './NotionTemplates';
 import { SpreadsheetEditor } from './SpreadsheetEditor';
 import ObsidianCanvas from './Canvas/ObsidianCanvas';
 import { CanvasProvider } from './Canvas/CanvasProvider';
+import AutoSaveCanvas from './AutoSaveCanvas';
+import AdvancedSpreadsheet from './AdvancedSpreadsheet';
 import { 
   Plus, 
   Search, 

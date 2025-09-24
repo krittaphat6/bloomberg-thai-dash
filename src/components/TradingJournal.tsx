@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
+import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar, Upload } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, ScatterChart, Scatter, ComposedChart, Line, ReferenceLine } from 'recharts';
 import TradeAnalysisPanel from './TradeAnalysisPanel';
@@ -17,6 +17,7 @@ import { EnhancedRiskRewardChart } from './EnhancedRiskRewardChart';
 import { EnhancedProfitFactorChart } from './EnhancedProfitFactorChart';
 import { EnhancedSectorAnalysis } from './EnhancedSectorAnalysis';
 import { EnhancedWinRateChart } from './EnhancedWinRateChart';
+import CSVImportDialog from './CSVImportDialog';
 
 interface Trade {
   id: string;
@@ -59,6 +60,7 @@ export default function TradingJournal() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isAddingTrade, setIsAddingTrade] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
+  const [showCSVImport, setShowCSVImport] = useState(false);
   const [newTrade, setNewTrade] = useState<Partial<Trade>>({
     date: new Date().toISOString().split('T')[0],
     side: 'LONG',
@@ -222,6 +224,14 @@ export default function TradingJournal() {
   const stats = calculateStats();
   const zellaScore = getZellaScore();
   const overallScore = zellaScore.length > 0 ? Math.round(zellaScore.reduce((sum, item) => sum + item.value, 0) / zellaScore.length) : 0;
+
+  const handleImportTrades = (importedTrades: Trade[]) => {
+    setTrades(prev => [...prev, ...importedTrades]);
+    toast({
+      title: "Import Successful",
+      description: `Imported ${importedTrades.length} trades successfully`
+    });
+  };
 
   const handleAddTrade = () => {
     if (!newTrade.symbol || !newTrade.entryPrice || !newTrade.strategy) {
