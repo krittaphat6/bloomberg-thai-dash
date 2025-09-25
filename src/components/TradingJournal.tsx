@@ -486,6 +486,14 @@ export default function TradingJournal() {
               Load Sample Data
             </Button>
           )}
+          <Button 
+            onClick={() => setShowCSVImport(true)} 
+            variant="outline"
+            className="bg-terminal-amber hover:bg-terminal-amber/90 text-black w-full sm:w-auto text-sm sm:text-base"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Import CSV
+          </Button>
           <Button onClick={() => setIsAddingTrade(true)} className="bg-primary hover:bg-primary/90 w-full sm:w-auto text-sm sm:text-base">
             <Plus className="h-4 w-4 mr-2" />
             Add Trade
@@ -1520,6 +1528,14 @@ export default function TradingJournal() {
           )}
         </CardContent>
       </Card>
+
+      {/* CSV Import Dialog */}
+      <CSVImportDialog
+        open={showCSVImport}
+        onOpenChange={setShowCSVImport}
+        onImport={handleImportTrades}
+        existingTrades={trades}
+      />
     </div>
   );
 }

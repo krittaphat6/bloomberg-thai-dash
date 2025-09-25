@@ -55,13 +55,20 @@ interface ColumnMapping {
 
 const THAI_OANDA_MAPPING = {
   'ซื้อขาย #': 'id',
-  'ประเภท': 'side',
-  'วัน/เวลา': 'date',
+  'ประเภท': 'type',
+  'วัน/เวลา': 'date', 
   'สัญญาณ': 'symbol',
   'ราคา USD': 'entryPrice',
   'ขนาดของสถานะ (ปริมาณ)': 'quantity',
   'P&L สุทธิ USD': 'pnl',
-  'P&L สุทธิ %': 'pnlPercentage'
+  'P&L สุทธิ %': 'pnlPercentage',
+  // Ignored columns
+  'กำไรติดต่อกัน USD': '',
+  'กำไรติดต่อกัน %': '',
+  'ถอยลง USD': '',
+  'ถอยลง %': '',
+  'P&L สะสม USD': '',
+  'P&L สะสม %': ''
 };
 
 const TRADE_FIELD_OPTIONS = [
@@ -88,6 +95,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState<ImportStep['step']>('upload');
   const [csvData, setCsvData] = useState<any[]>([]);
+  const [fullCsvData, setFullCsvData] = useState<any[]>([]); // Store full data for processing
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -134,6 +142,8 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
 
         setCsvHeaders(headers);
         setCsvData(data.slice(0, 10)); // Preview first 10 rows
+        setFullCsvData(data); // Store full data for processing
+        
         
         // Auto-detect Thai OANDA format and create mappings
         const mappings: ColumnMapping[] = headers.map(header => {
@@ -211,99 +221,131 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
     const trades: Trade[] = [];
     const newConflicts: { existing: Trade; new: Trade }[] = [];
 
-    Papa.parse(csvData[0], {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const data = results.data as any[];
+    // Use fullCsvData instead of Papa.parse
+    fullCsvData.forEach((row, index) => {
+      try {
+        const trade: Partial<Trade> = {
+          id: `imported-${Date.now()}-${index}`,
+          status: 'CLOSED',
+          strategy: 'Imported',
+          tags: ['imported']
+        };
 
-        data.forEach((row, index) => {
-          try {
-            const trade: Partial<Trade> = {
-              id: `imported-${Date.now()}-${index}`,
-              status: 'CLOSED',
-              strategy: 'Imported',
-              tags: ['imported']
-            };
+        // Map CSV columns to trade fields
+        columnMappings.forEach(mapping => {
+          if (mapping.tradeField && row[mapping.csvColumn] !== undefined && row[mapping.csvColumn] !== '') {
+            const value = row[mapping.csvColumn];
 
-            // Map CSV columns to trade fields
-            columnMappings.forEach(mapping => {
-              if (mapping.tradeField && row[mapping.csvColumn]) {
-                const value = row[mapping.csvColumn];
-
-                switch (mapping.tradeField) {
-                  case 'date':
-                    // Parse Thai date format or common formats
-                    const dateValue = new Date(value);
-                    trade.date = dateValue.toISOString().split('T')[0];
-                    break;
-                  case 'side':
-                    trade.side = value.includes('ซื้อ') || value.toUpperCase() === 'BUY' ? 'LONG' : 'SHORT';
-                    break;
-                  case 'type':
-                    trade.type = value.toUpperCase().includes('CFD') ? 'CFD' : 'STOCK';
-                    break;
-                  case 'entryPrice':
-                  case 'exitPrice':
-                  case 'quantity':
-                  case 'pnl':
-                  case 'pnlPercentage':
-                  case 'commission':
-                  case 'swap':
-                  case 'leverage':
-                  case 'lotSize':
-                    const numValue = parseFloat(String(value).replace(/[,\s]/g, ''));
-                    if (!isNaN(numValue)) {
-                      (trade as any)[mapping.tradeField] = numValue;
-                    }
-                    break;
-                  default:
-                    (trade as any)[mapping.tradeField] = String(value);
+            switch (mapping.tradeField) {
+              case 'date':
+                // Parse Thai date format DD/MM/YYYY or standard formats
+                let dateValue;
+                if (value.includes('/')) {
+                  const [day, month, year] = value.split('/');
+                  dateValue = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                } else {
+                  dateValue = new Date(value);
                 }
-              }
-            });
-
-            // Auto-detect trade type from symbol
-            if (trade.symbol) {
-              if (trade.symbol.includes('USD') || trade.symbol.includes('EUR') || trade.symbol.includes('GBP')) {
-                trade.type = 'CFD';
-                trade.leverage = trade.leverage || 100;
-                trade.lotSize = trade.lotSize || 1;
-                trade.contractSize = 100000;
-              } else {
-                trade.type = 'STOCK';
-                trade.leverage = 1;
-              }
+                if (!isNaN(dateValue.getTime())) {
+                  trade.date = dateValue.toISOString().split('T')[0];
+                }
+                break;
+              case 'side':
+                // Handle Thai side mapping: ซื้อ = LONG, ขาย = SHORT
+                if (value.includes('ซื้อ') || value.toUpperCase().includes('BUY')) {
+                  trade.side = 'LONG';
+                } else if (value.includes('ขาย') || value.toUpperCase().includes('SELL')) {
+                  trade.side = 'SHORT';
+                }
+                break;
+              case 'symbol':
+                // Auto-detect and fix symbols
+                let symbol = String(value).toUpperCase();
+                if (symbol.includes('XAU') && !symbol.includes('USD')) {
+                  symbol = 'XAUUSD';
+                }
+                trade.symbol = symbol;
+                break;
+              case 'type':
+                trade.type = value.toUpperCase().includes('CFD') ? 'CFD' : 'STOCK';
+                break;
+              case 'entryPrice':
+              case 'exitPrice':
+              case 'quantity':
+              case 'pnl':
+              case 'pnlPercentage':
+              case 'commission':
+              case 'swap':
+              case 'leverage':
+              case 'lotSize':
+                // Remove commas, spaces and parse as float
+                const numValue = parseFloat(String(value).replace(/[,\s]/g, ''));
+                if (!isNaN(numValue)) {
+                  (trade as any)[mapping.tradeField] = numValue;
+                }
+                break;
+              default:
+                (trade as any)[mapping.tradeField] = String(value);
             }
-
-            // Set status based on P&L existence
-            if (trade.pnl !== undefined) {
-              trade.status = 'CLOSED';
-              trade.exitPrice = trade.exitPrice || (trade.entryPrice! + (trade.pnl / (trade.quantity || 1)));
-            }
-
-            // Check for conflicts with existing trades
-            const existingTrade = existingTrades.find(t => 
-              t.symbol === trade.symbol && 
-              t.date === trade.date && 
-              Math.abs((t.entryPrice || 0) - (trade.entryPrice || 0)) < 0.01
-            );
-
-            if (existingTrade) {
-              newConflicts.push({ existing: existingTrade, new: trade as Trade });
-            } else {
-              trades.push(trade as Trade);
-            }
-          } catch (error) {
-            console.error('Error parsing trade at row', index, error);
           }
         });
 
-        setParsedTrades(trades);
-        setConflicts(newConflicts);
-        setCurrentStep('validation');
+        // Auto-detect trade type from symbol
+        if (trade.symbol) {
+          if (trade.symbol.includes('USD') || trade.symbol.includes('EUR') || 
+              trade.symbol.includes('GBP') || trade.symbol.includes('XAU')) {
+            trade.type = 'CFD';
+            trade.leverage = trade.leverage || 100;
+            trade.lotSize = trade.lotSize || 1;
+            trade.contractSize = 100000;
+          } else {
+            trade.type = 'STOCK';
+            trade.leverage = 1;
+          }
+        }
+
+        // Calculate exitPrice if not provided but P&L exists
+        if (trade.pnl !== undefined && !trade.exitPrice && trade.entryPrice && trade.quantity) {
+          if (trade.side === 'LONG') {
+            trade.exitPrice = trade.entryPrice + (trade.pnl / trade.quantity);
+          } else {
+            trade.exitPrice = trade.entryPrice - (trade.pnl / trade.quantity);
+          }
+        }
+
+        // Set status based on P&L existence
+        if (trade.pnl !== undefined) {
+          trade.status = 'CLOSED';
+        } else {
+          trade.status = 'OPEN';
+        }
+
+        // Check for required fields
+        if (!trade.symbol || !trade.date || !trade.side || !trade.entryPrice) {
+          console.warn('Skipping incomplete trade at row', index, trade);
+          return;
+        }
+
+        // Check for conflicts with existing trades
+        const existingTrade = existingTrades.find(t => 
+          t.symbol === trade.symbol && 
+          t.date === trade.date && 
+          Math.abs((t.entryPrice || 0) - (trade.entryPrice || 0)) < 0.01
+        );
+
+        if (existingTrade) {
+          newConflicts.push({ existing: existingTrade, new: trade as Trade });
+        } else {
+          trades.push(trade as Trade);
+        }
+      } catch (error) {
+        console.error('Error parsing trade at row', index, error);
       }
     });
+
+    setParsedTrades(trades);
+    setConflicts(newConflicts);
+    setCurrentStep('validation');
   };
 
   const handleImport = async () => {
