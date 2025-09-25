@@ -228,6 +228,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
           id: `imported-${Date.now()}-${index}`,
           status: 'CLOSED',
           strategy: 'Imported',
+          type: 'CFD',
           tags: ['imported']
         };
 
@@ -238,11 +239,13 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
 
             switch (mapping.tradeField) {
               case 'date':
-                // Parse Thai date format DD/MM/YYYY or standard formats
+                // Parse date formats including YYYY-MM-DD and DD/MM/YYYY
                 let dateValue;
                 if (value.includes('/')) {
                   const [day, month, year] = value.split('/');
                   dateValue = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                } else if (value.includes('-')) {
+                  dateValue = new Date(value);
                 } else {
                   dateValue = new Date(value);
                 }
@@ -251,23 +254,25 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
                 }
                 break;
               case 'side':
-                // Handle Thai side mapping: ซื้อ = LONG, ขาย = SHORT
-                if (value.includes('ซื้อ') || value.toUpperCase().includes('BUY')) {
+                // Handle Thai side mapping and new formats
+                if (value.includes('ซื้อ') || value.includes('การซื้อสถานะ') || value.includes('Long') || value.toUpperCase().includes('BUY')) {
                   trade.side = 'LONG';
-                } else if (value.includes('ขาย') || value.toUpperCase().includes('SELL')) {
+                } else if (value.includes('ขาย') || value.includes('การขายสถานะ') || value.includes('Short') || value.toUpperCase().includes('SELL')) {
                   trade.side = 'SHORT';
                 }
                 break;
               case 'symbol':
-                // Auto-detect and fix symbols
-                let symbol = String(value).toUpperCase();
+                // Auto-detect and fix symbols - add USD suffix for forex symbols
+                let symbol = String(value).toUpperCase().trim();
                 if (symbol.includes('XAU') && !symbol.includes('USD')) {
                   symbol = 'XAUUSD';
+                } else if (['PDL4', 'ATH', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD'].some(curr => symbol.includes(curr)) && !symbol.includes('USD')) {
+                  symbol = symbol + 'USD';
                 }
                 trade.symbol = symbol;
                 break;
               case 'type':
-                trade.type = value.toUpperCase().includes('CFD') ? 'CFD' : 'STOCK';
+                trade.type = 'CFD'; // Set all OANDA imports as CFD
                 break;
               case 'entryPrice':
               case 'exitPrice':
@@ -290,18 +295,12 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
           }
         });
 
-        // Auto-detect trade type from symbol
+        // Auto-detect trade type from symbol and set defaults
         if (trade.symbol) {
-          if (trade.symbol.includes('USD') || trade.symbol.includes('EUR') || 
-              trade.symbol.includes('GBP') || trade.symbol.includes('XAU')) {
-            trade.type = 'CFD';
-            trade.leverage = trade.leverage || 100;
-            trade.lotSize = trade.lotSize || 1;
-            trade.contractSize = 100000;
-          } else {
-            trade.type = 'STOCK';
-            trade.leverage = 1;
-          }
+          trade.type = 'CFD';
+          trade.leverage = trade.leverage || 100;
+          trade.lotSize = trade.lotSize || 1;
+          trade.contractSize = 100000;
         }
 
         // Calculate exitPrice if not provided but P&L exists
@@ -313,14 +312,11 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
           }
         }
 
-        // Set status based on P&L existence
-        if (trade.pnl !== undefined) {
-          trade.status = 'CLOSED';
-        } else {
-          trade.status = 'OPEN';
-        }
+        // Set status as CLOSED for all imports with strategy "Imported"
+        trade.status = 'CLOSED';
+        trade.strategy = trade.strategy || 'Imported';
 
-        // Check for required fields
+        // Check for required fields - only require basic fields
         if (!trade.symbol || !trade.date || !trade.side || !trade.entryPrice) {
           console.warn('Skipping incomplete trade at row', index, trade);
           return;
@@ -346,6 +342,52 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
     setParsedTrades(trades);
     setConflicts(newConflicts);
     setCurrentStep('validation');
+  };
+
+  const handleNextStep = () => {
+    if (currentStep === 'preview') {
+      setCurrentStep('mapping');
+    } else if (currentStep === 'mapping') {
+      if (validateMappings()) {
+        parseTradesFromCSV();
+      }
+    } else if (currentStep === 'validation') {
+      handleImport();
+    }
+  };
+
+  const handleBackStep = () => {
+    if (currentStep === 'mapping') {
+      setCurrentStep('preview');
+    } else if (currentStep === 'validation') {
+      setCurrentStep('mapping');
+    } else if (currentStep === 'import') {
+      setCurrentStep('validation');
+    }
+  };
+
+  const handleQuickImport = () => {
+    // Auto-map and import directly
+    parseTradesFromCSV();
+  };
+
+  const autoMapThaiOanda = () => {
+    const mappings: ColumnMapping[] = csvHeaders.map(header => {
+      const thaiMapping = THAI_OANDA_MAPPING[header as keyof typeof THAI_OANDA_MAPPING];
+      const sampleValue = csvData[0]?.[header] || '';
+      
+      return {
+        csvColumn: header,
+        tradeField: (thaiMapping as keyof Trade) || '',
+        sampleValue: String(sampleValue)
+      };
+    });
+
+    setColumnMappings(mappings);
+    toast({
+      title: "Auto-Mapping Applied",
+      description: "Thai OANDA format has been automatically mapped"
+    });
   };
 
   const handleImport = async () => {
@@ -458,6 +500,18 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
                 Download Template
               </Button>
             </div>
+            
+            <div className="mt-4">
+              <Button
+                onClick={() => window.open('/sample-thai-oanda.csv', '_blank')}
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+              >
+                <Download className="h-3 w-3 mr-1" />
+                Thai OANDA Sample
+              </Button>
+            </div>
           </div>
 
           {/* Main Content */}
@@ -511,40 +565,75 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
                 <Card className="h-full">
                   <CardHeader>
                     <CardTitle>Data Preview</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      First 10 rows of your CSV file
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="border rounded-lg overflow-auto max-h-96">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            {csvHeaders.map(header => (
-                              <TableHead key={header} className="whitespace-nowrap">
-                                {header}
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {csvData.map((row, index) => (
-                            <TableRow key={index}>
-                              {csvHeaders.map(header => (
-                                <TableCell key={header} className="whitespace-nowrap">
-                                  {String(row[header] || '')}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    <div className="flex justify-end mt-4">
-                      <Button onClick={() => setCurrentStep('mapping')}>
-                        Next: Column Mapping
+                    <div className="flex gap-2 mt-2">
+                      <Button onClick={autoMapThaiOanda} variant="outline" size="sm">
+                        Auto-Map Thai OANDA Format
+                      </Button>
+                      <Button onClick={handleQuickImport} variant="outline" size="sm" className="text-terminal-green">
+                        Quick Import (Auto-mapped)
                       </Button>
                     </div>
+                  </CardHeader>
+                  <CardContent>
+                    {csvData.length > 0 ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Badge variant="outline">
+                            {fullCsvData.length} total rows • Showing first 10
+                          </Badge>
+                          <Badge variant="outline" className="text-terminal-green">
+                            {csvHeaders.length} columns detected
+                          </Badge>
+                        </div>
+                        
+                        <div className="border rounded-lg overflow-auto max-h-96">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                {csvHeaders.map(header => (
+                                  <TableHead key={header} className="whitespace-nowrap">
+                                    {header}
+                                  </TableHead>
+                                ))}
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {csvData.map((row, index) => (
+                                <TableRow key={index}>
+                                  {csvHeaders.map(header => (
+                                    <TableCell key={header} className="whitespace-nowrap text-xs">
+                                      {String(row[header] || '')}
+                                    </TableCell>
+                                  ))}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+
+                        <Alert>
+                          <FileText className="h-4 w-4" />
+                          <AlertDescription>
+                            Preview shows the first 10 rows. All {fullCsvData.length} rows will be processed during import.
+                          </AlertDescription>
+                        </Alert>
+
+                        <div className="flex justify-between pt-4 border-t">
+                          <Button onClick={() => setCurrentStep('upload')} variant="outline">
+                            Back to Upload
+                          </Button>
+                          <div className="flex gap-2">
+                            <Button onClick={handleNextStep} className="bg-terminal-green hover:bg-terminal-green/90">
+                              Continue to Mapping
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center text-muted-foreground">
+                        No data to preview. Please upload a CSV file first.
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -554,68 +643,69 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
                 <Card className="h-full">
                   <CardHeader>
                     <CardTitle>Column Mapping</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Map CSV columns to trade fields
-                    </p>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4 max-h-96 overflow-auto">
-                      {columnMappings.map(mapping => (
-                        <div key={mapping.csvColumn} className="flex items-center gap-4">
-                          <div className="w-48">
-                            <Badge variant="outline" className="w-full justify-start">
-                              {mapping.csvColumn}
-                            </Badge>
-                          </div>
-                          <div className="flex-1">
-                            <Select
-                              value={mapping.tradeField}
-                              onValueChange={(value) => updateColumnMapping(mapping.csvColumn, value as keyof Trade)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select field..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="">Skip Column</SelectItem>
-                                {TRADE_FIELD_OPTIONS.map(option => (
-                                  <SelectItem key={option.value} value={option.value}>
-                                    {option.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="w-32 text-xs text-muted-foreground truncate">
-                            {mapping.sampleValue}
+                    {columnMappings.length > 0 ? (
+                      <div className="space-y-4">
+                        <Alert>
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            Map CSV columns to trade fields. Required fields: Symbol, Date, Side, Entry Price
+                          </AlertDescription>
+                        </Alert>
+
+                        <div className="space-y-3 max-h-96 overflow-auto">
+                          {columnMappings.map(mapping => (
+                            <div key={mapping.csvColumn} className="grid grid-cols-3 gap-4 items-center p-3 border rounded-lg">
+                              <div>
+                                <p className="font-medium text-sm">{mapping.csvColumn}</p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  Sample: {mapping.sampleValue}
+                                </p>
+                              </div>
+                              
+                              <Select
+                                value={mapping.tradeField}
+                                onValueChange={(value) => updateColumnMapping(mapping.csvColumn, value as keyof Trade | '')}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select field" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">-- Skip Column --</SelectItem>
+                                  {TRADE_FIELD_OPTIONS.map(option => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              <div className="text-right">
+                                {['symbol', 'date', 'side', 'entryPrice'].includes(mapping.tradeField) && (
+                                  <Badge className="bg-terminal-amber/20 text-terminal-amber">Required</Badge>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex justify-between pt-4 border-t">
+                          <Button onClick={handleBackStep} variant="outline">
+                            Back to Preview
+                          </Button>
+                          <div className="flex gap-2">
+                            <Button onClick={handleNextStep} className="bg-terminal-green hover:bg-terminal-green/90">
+                              Continue to Validation
+                            </Button>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                    
-                    {validationErrors.length > 0 && (
-                      <Alert className="mt-4" variant="destructive">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription>
-                          <ul className="list-disc list-inside">
-                            {validationErrors.map((error, index) => (
-                              <li key={index}>{error}</li>
-                            ))}
-                          </ul>
-                        </AlertDescription>
-                      </Alert>
+                      </div>
+                    ) : (
+                      <div className="text-center text-muted-foreground">
+                        No columns to map. Please upload a CSV file first.
+                      </div>
                     )}
-
-                    <div className="flex justify-end mt-4">
-                      <Button 
-                        onClick={() => {
-                          if (validateMappings()) {
-                            parseTradesFromCSV();
-                          }
-                        }}
-                      >
-                        Next: Validation
-                      </Button>
-                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -624,74 +714,130 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
               <TabsContent value="validation" className="h-full">
                 <Card className="h-full">
                   <CardHeader>
-                    <CardTitle>Import Validation</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Review parsed trades and resolve conflicts
-                    </p>
+                    <CardTitle>Validation Results</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <div className="flex gap-4">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-terminal-green" />
-                          <span className="text-sm">{parsedTrades.length} trades ready</span>
-                        </div>
-                        {conflicts.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <AlertTriangle className="h-4 w-4 text-terminal-amber" />
-                            <span className="text-sm">{conflicts.length} conflicts</span>
-                          </div>
-                        )}
-                      </div>
+                      {validationErrors.length > 0 && (
+                        <Alert variant="destructive">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            <div className="font-medium mb-2">Validation Errors:</div>
+                            <ul className="list-disc list-inside space-y-1">
+                              {validationErrors.map((error, index) => (
+                                <li key={index} className="text-sm">{error}</li>
+                              ))}
+                            </ul>
+                          </AlertDescription>
+                        </Alert>
+                      )}
 
                       {conflicts.length > 0 && (
                         <Alert>
                           <AlertTriangle className="h-4 w-4" />
                           <AlertDescription>
-                            Found {conflicts.length} potential duplicate trades. These will be skipped during import.
+                            <div className="font-medium mb-2">Duplicate Trades Found:</div>
+                            <div className="text-sm">
+                              {conflicts.length} trades match existing entries and will be skipped.
+                            </div>
                           </AlertDescription>
                         </Alert>
                       )}
 
-                      <div className="border rounded-lg overflow-auto max-h-64">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Symbol</TableHead>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Side</TableHead>
-                              <TableHead>Entry</TableHead>
-                              <TableHead>P&L</TableHead>
-                              <TableHead>Status</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {parsedTrades.slice(0, 10).map((trade, index) => (
-                              <TableRow key={index}>
-                                <TableCell>{trade.symbol}</TableCell>
-                                <TableCell>{trade.date}</TableCell>
-                                <TableCell>
-                                  <Badge variant={trade.side === 'LONG' ? 'default' : 'destructive'}>
-                                    {trade.side}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>${trade.entryPrice?.toFixed(4)}</TableCell>
-                                <TableCell className={trade.pnl! > 0 ? 'text-terminal-green' : 'text-red-500'}>
-                                  ${trade.pnl?.toFixed(2)}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="outline">{trade.status}</Badge>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm">Import Summary</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span>Total Rows:</span>
+                                <span className="font-medium">{fullCsvData.length}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Valid Trades:</span>
+                                <span className="font-medium text-terminal-green">{parsedTrades.length}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Conflicts:</span>
+                                <span className="font-medium text-terminal-amber">{conflicts.length}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Will Import:</span>
+                                <span className="font-medium text-terminal-green">{parsedTrades.length}</span>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm">Sample Trade</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            {parsedTrades.length > 0 && (
+                              <div className="space-y-1 text-xs">
+                                <div><strong>Symbol:</strong> {parsedTrades[0].symbol}</div>
+                                <div><strong>Date:</strong> {parsedTrades[0].date}</div>
+                                <div><strong>Side:</strong> {parsedTrades[0].side}</div>
+                                <div><strong>Entry:</strong> ${parsedTrades[0].entryPrice}</div>
+                                <div><strong>P&L:</strong> ${parsedTrades[0].pnl || 'N/A'}</div>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
                       </div>
 
-                      <div className="flex justify-end">
-                        <Button onClick={handleImport}>
-                          Import {parsedTrades.length} Trades
+                      {parsedTrades.length > 0 && (
+                        <div className="border rounded-lg p-4">
+                          <h4 className="font-medium mb-3">Preview Import Data</h4>
+                          <div className="max-h-64 overflow-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Symbol</TableHead>
+                                  <TableHead>Date</TableHead>
+                                  <TableHead>Side</TableHead>
+                                  <TableHead>Entry Price</TableHead>
+                                  <TableHead>P&L</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {parsedTrades.slice(0, 5).map((trade, index) => (
+                                  <TableRow key={index}>
+                                    <TableCell>{trade.symbol}</TableCell>
+                                    <TableCell>{trade.date}</TableCell>
+                                    <TableCell>
+                                      <Badge variant={trade.side === 'LONG' ? 'default' : 'secondary'}>
+                                        {trade.side}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>${trade.entryPrice?.toFixed(2)}</TableCell>
+                                    <TableCell className={trade.pnl && trade.pnl > 0 ? 'text-terminal-green' : 'text-red-500'}>
+                                      ${trade.pnl?.toFixed(2) || 'N/A'}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between pt-4 border-t">
+                        <Button onClick={handleBackStep} variant="outline">
+                          Back to Mapping
                         </Button>
+                        <div className="flex gap-2">
+                          <Button 
+                            onClick={handleNextStep} 
+                            className="bg-terminal-green hover:bg-terminal-green/90"
+                            disabled={parsedTrades.length === 0}
+                          >
+                            Start Import ({parsedTrades.length} trades)
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -704,12 +850,28 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
                   <CardHeader>
                     <CardTitle>Importing Trades</CardTitle>
                   </CardHeader>
-                  <CardContent className="flex flex-col items-center justify-center h-full">
-                    <div className="w-full max-w-md space-y-4">
-                      <Progress value={importProgress} className="w-full" />
-                      <p className="text-center text-sm text-muted-foreground">
-                        Importing {parsedTrades.length} trades... {importProgress}%
-                      </p>
+                  <CardContent>
+                    <div className="space-y-6 text-center">
+                      <div className="space-y-2">
+                        <CheckCircle className="h-16 w-16 text-terminal-green mx-auto" />
+                        <h3 className="text-xl font-medium">Import in Progress</h3>
+                        <p className="text-muted-foreground">
+                          Processing {parsedTrades.length} trades...
+                        </p>
+                      </div>
+
+                      <div className="w-full max-w-md mx-auto">
+                        <Progress value={importProgress} className="w-full" />
+                        <p className="text-sm text-muted-foreground mt-2">
+                          {importProgress}% Complete
+                        </p>
+                      </div>
+
+                      <div className="text-sm text-muted-foreground">
+                        <p>• Validating trade data</p>
+                        <p>• Checking for duplicates</p>
+                        <p>• Adding to trading journal</p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
