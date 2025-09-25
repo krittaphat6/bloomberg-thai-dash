@@ -18,6 +18,9 @@ import {
   SortAsc,
   SortDesc,
   Palette,
+  Copy,
+  Scissors,
+  ClipboardPaste,
   Bold,
   Italic,
   AlignLeft,
@@ -32,8 +35,6 @@ import {
   Save,
   Undo,
   Redo,
-  Copy,
-  Scissors,
   Grid,
   Lock,
   Unlock
@@ -683,7 +684,7 @@ export default function AdvancedSpreadsheet() {
               <Scissors className="h-3 w-3" />
             </Button>
             <Button size="sm" variant="outline" onClick={paste}>
-              <Paste className="h-3 w-3" />
+              <ClipboardPaste className="h-3 w-3" />
             </Button>
           </div>
           
