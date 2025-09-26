@@ -38,7 +38,7 @@ interface Trade {
 interface CSVImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImport: (trades: Trade[]) => void;
+  onImport: (trades: Trade[], replaceMode?: boolean) => void;
   existingTrades: Trade[];
 }
 
@@ -363,9 +363,8 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
       if (validateMappings()) {
         parseTradesFromCSV();
       }
-    } else if (currentStep === 'validation') {
-      handleImport();
     }
+    // Removed validation step since we now have direct import buttons
   };
 
   const handleBackStep = () => {
@@ -472,7 +471,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
     });
   };
 
-  const handleImport = async () => {
+  const handleImport = async (mode: 'replace' | 'append' = 'append') => {
     setCurrentStep('import');
     setImportProgress(0);
 
@@ -482,12 +481,23 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    onImport(parsedTrades);
-    
-    toast({
-      title: "Import Successful",
-      description: `Imported ${parsedTrades.length} trades successfully`
-    });
+    if (mode === 'replace') {
+      // Replace all existing trades
+      onImport(parsedTrades, true); // true = replace mode
+      
+      toast({
+        title: "Trades Replaced",
+        description: `Replaced all trades with ${parsedTrades.length} new trades`
+      });
+    } else {
+      // Append to existing trades
+      onImport(parsedTrades, false); // false = append mode
+      
+      toast({
+        title: "Import Successful", 
+        description: `Added ${parsedTrades.length} trades to existing journal`
+      });
+    }
 
     // Reset state
     setCsvData([]);
@@ -911,13 +921,22 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
                         <Button onClick={handleBackStep} variant="outline">
                           Back to Mapping
                         </Button>
+                        
                         <div className="flex gap-2">
                           <Button 
-                            onClick={handleNextStep} 
+                            onClick={() => handleImport('replace')}
+                            variant="destructive"
+                            disabled={parsedTrades.length === 0}
+                          >
+                            Replace All ({parsedTrades.length} trades)
+                          </Button>
+                          
+                          <Button 
+                            onClick={() => handleImport('append')}
                             className="bg-terminal-green hover:bg-terminal-green/90"
                             disabled={parsedTrades.length === 0}
                           >
-                            Start Import ({parsedTrades.length} trades)
+                            Add to Existing ({parsedTrades.length} trades)
                           </Button>
                         </div>
                       </div>

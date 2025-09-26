@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar, Upload } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/use-toast';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, ScatterChart, Scatter, ComposedChart, Line, ReferenceLine } from 'recharts';
 import TradeAnalysisPanel from './TradeAnalysisPanel';
@@ -225,12 +226,33 @@ export default function TradingJournal() {
   const zellaScore = getZellaScore();
   const overallScore = zellaScore.length > 0 ? Math.round(zellaScore.reduce((sum, item) => sum + item.value, 0) / zellaScore.length) : 0;
 
-  const handleImportTrades = (importedTrades: Trade[]) => {
-    setTrades(prev => [...prev, ...importedTrades]);
-    toast({
-      title: "Import Successful",
-      description: `Imported ${importedTrades.length} trades successfully`
-    });
+  const handleImportTrades = (importedTrades: Trade[], replaceMode: boolean = false) => {
+    if (replaceMode) {
+      // Replace all trades
+      setTrades(importedTrades);
+      toast({
+        title: "Trades Replaced!",
+        description: `Replaced all trades with ${importedTrades.length} new trades from CSV`
+      });
+    } else {
+      // Add to existing trades
+      setTrades(prev => [...prev, ...importedTrades]);
+      toast({
+        title: "Import Successful!",
+        description: `Added ${importedTrades.length} trades to existing ${trades.length} trades`
+      });
+    }
+  };
+
+  const clearAllTrades = () => {
+    // Show confirmation dialog
+    if (window.confirm(`Are you sure you want to delete all ${trades.length} trades? This action cannot be undone.`)) {
+      setTrades([]);
+      toast({
+        title: "All Trades Cleared",
+        description: `Successfully deleted ${trades.length} trades`
+      });
+    }
   };
 
   const handleAddTrade = () => {
@@ -485,6 +507,19 @@ export default function TradingJournal() {
             >
               Load Sample Data
             </Button>
+          )}
+          {trades.length > 0 && (
+            <>
+              <Button 
+                onClick={clearAllTrades} 
+                variant="destructive"
+                className="w-full sm:w-auto text-sm sm:text-base"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear All ({trades.length})
+              </Button>
+              <Separator orientation="vertical" className="hidden sm:block" />
+            </>
           )}
           <Button 
             onClick={() => setShowCSVImport(true)} 
@@ -1423,6 +1458,32 @@ export default function TradingJournal() {
         </Card>
       )}
 
+      {/* Bulk Actions Toolbar */}
+      {trades.length > 0 && (
+        <Card className="mb-4">
+          <CardContent className="py-3">
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-muted-foreground">
+                Total: {trades.length} trades | 
+                Showing: {Math.min(trades.length, 50)} trades per page
+              </div>
+              
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline">
+                  Export CSV
+                </Button>
+                <Button size="sm" variant="outline">
+                  Select All
+                </Button>
+                <Button size="sm" variant="destructive" onClick={clearAllTrades}>
+                  Clear All
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Trades Table */}
       <Card className="flex-1">
         <CardHeader>
@@ -1529,7 +1590,31 @@ export default function TradingJournal() {
         </CardContent>
       </Card>
 
-      {/* CSV Import Dialog */}
+      {/* Bulk Actions Toolbar */}
+      {trades.length > 0 && (
+        <Card className="mb-4">
+          <CardContent className="py-3">
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-muted-foreground">
+                Total: {trades.length} trades | 
+                Showing: {Math.min(trades.length, 50)} trades per page
+              </div>
+              
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline">
+                  Export CSV
+                </Button>
+                <Button size="sm" variant="outline">
+                  Select All
+                </Button>
+                <Button size="sm" variant="destructive" onClick={clearAllTrades}>
+                  Clear All
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <CSVImportDialog
         open={showCSVImport}
         onOpenChange={setShowCSVImport}
