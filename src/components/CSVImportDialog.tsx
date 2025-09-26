@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -55,11 +55,12 @@ interface ColumnMapping {
 
 const THAI_OANDA_MAPPING = {
   'ซื้อขาย #': 'id',
-  'ประเภท': 'type',
+  'ประเภท': 'side',               // ✅ Fixed: maps to 'side' for LONG/SHORT
   'วัน/เวลา': 'date', 
   'สัญญาณ': 'symbol',
   'ราคา USD': 'entryPrice',
   'ขนาดของสถานะ (ปริมาณ)': 'quantity',
+  'ขนาดของสถานะ (มูลค่า)': 'lotSize',
   'P&L สุทธิ USD': 'pnl',
   'P&L สุทธิ %': 'pnlPercentage',
   // Ignored columns
@@ -102,6 +103,13 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
   const [parsedTrades, setParsedTrades] = useState<Trade[]>([]);
   const [importProgress, setImportProgress] = useState(0);
   const [conflicts, setConflicts] = useState<{ existing: Trade; new: Trade }[]>([]);
+
+  // Auto-process Thai OANDA data when entering preview step
+  useEffect(() => {
+    if (currentStep === 'preview' && fullCsvData.length > 0 && parsedTrades.length === 0) {
+      autoProcessThaiOandaData();
+    }
+  }, [currentStep, fullCsvData.length, parsedTrades.length]);
 
   const steps: ImportStep[] = [
     { step: 'upload', completed: currentStep !== 'upload' },
@@ -346,6 +354,10 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
 
   const handleNextStep = () => {
     if (currentStep === 'preview') {
+      // Process data before going to mapping
+      if (parsedTrades.length === 0) {
+        autoProcessThaiOandaData();
+      }
       setCurrentStep('mapping');
     } else if (currentStep === 'mapping') {
       if (validateMappings()) {
@@ -367,8 +379,78 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
   };
 
   const handleQuickImport = () => {
-    // Auto-map and import directly
-    parseTradesFromCSV();
+    // Auto-map and import directly using Thai OANDA format
+    autoProcessThaiOandaData();
+    setTimeout(() => {
+      setCurrentStep('validation');
+    }, 100);
+  };
+
+  const autoProcessThaiOandaData = () => {
+    console.log('Processing CSV data:', fullCsvData.length, 'rows');
+    console.log('Sample row:', fullCsvData[0]);
+    
+    const trades: Trade[] = [];
+    const newConflicts: { existing: Trade; new: Trade }[] = [];
+    
+    fullCsvData.forEach((row, index) => {
+      try {
+        // Auto-process Thai OANDA data format
+        const trade: Trade = {
+          id: `oanda-${Date.now()}-${index}`,
+          date: row['วัน/เวลา'] ? row['วัน/เวลา'].split(' ')[0] : '',
+          symbol: row['สัญญาณ'] === 'XAU' ? 'XAUUSD' : 
+                  (row['สัญญาณ'] || 'UNKNOWN') + (row['สัญญาณ'] && !row['สัญญาณ'].includes('USD') ? 'USD' : ''),
+          side: row['ประเภท'] && (row['ประเภท'].includes('ซื้อ') || row['ประเภท'].includes('การซื้อสถานะ') || row['ประเภท'].includes('Long')) ? 'LONG' : 'SHORT',
+          type: 'CFD',
+          entryPrice: parseFloat(row['ราคา USD']) || 0,
+          quantity: parseInt(row['ขนาดของสถานะ (ปริมาณ)']) || 1,
+          lotSize: parseFloat(row['ขนาดของสถานะ (มูลค่า)']) || 1,
+          pnl: parseFloat(row['P&L สุทธิ USD']) || 0,
+          pnlPercentage: parseFloat(row['P&L สุทธิ %']) || 0,
+          status: 'CLOSED',
+          strategy: 'OANDA Import',
+          leverage: 100,
+          contractSize: 100000
+        };
+        
+        // Calculate exitPrice if missing
+        if (!trade.exitPrice && trade.entryPrice && trade.quantity && trade.pnl) {
+          if (trade.side === 'LONG') {
+            trade.exitPrice = trade.entryPrice + (trade.pnl / trade.quantity);
+          } else {
+            trade.exitPrice = trade.entryPrice - (trade.pnl / trade.quantity);
+          }
+        }
+        
+        // Validate required fields
+        if (trade.symbol && trade.date && trade.entryPrice > 0) {
+          // Check for conflicts with existing trades
+          const existingTrade = existingTrades.find(t => 
+            t.symbol === trade.symbol && 
+            t.date === trade.date && 
+            Math.abs((t.entryPrice || 0) - (trade.entryPrice || 0)) < 0.01
+          );
+
+          if (existingTrade) {
+            newConflicts.push({ existing: existingTrade, new: trade });
+          } else {
+            trades.push(trade);
+          }
+        }
+      } catch (error) {
+        console.error('Error processing row:', error);
+      }
+    });
+    
+    setParsedTrades(trades);
+    setConflicts(newConflicts);
+    console.log('Auto-processed trades:', trades.length);
+    
+    toast({
+      title: "Data Processed",
+      description: `Successfully processed ${trades.length} trades from Thai OANDA format`
+    });
   };
 
   const autoMapThaiOanda = () => {
