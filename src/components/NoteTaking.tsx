@@ -45,6 +45,7 @@ import {
   Bold,
   Italic,
   Type,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface Note {
@@ -82,6 +83,18 @@ interface Folder {
   color: string;
 }
 
+interface Spreadsheet {
+  id: string;
+  name: string;
+  sheets: any[];
+  activeSheetId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  tags: string[];
+  folder?: string;
+  linkedNotes?: string[];
+}
+
 export default function NoteTaking() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([
@@ -91,6 +104,8 @@ export default function NoteTaking() {
   ]);
   const [databases, setDatabases] = useState<Database[]>([]);
   const [templates, setTemplates] = useState<NotionTemplate[]>([]);
+  const [spreadsheets, setSpreadsheets] = useState<Spreadsheet[]>([]);
+  const [selectedSpreadsheet, setSelectedSpreadsheet] = useState<Spreadsheet | null>(null);
   const [mainView, setMainView] = useState<'notes' | 'databases' | 'templates' | 'spreadsheets'>('notes');
   const [editorMode, setEditorMode] = useState<'simple' | 'rich' | 'blocks' | 'spreadsheet'>('simple');
   
@@ -327,6 +342,60 @@ export default function NoteTaking() {
     const note = notes.find(n => n.id === noteId);
     if (note) {
       updateNote(noteId, { tags: note.tags.filter(t => t !== tag) });
+    }
+  };
+
+  // Spreadsheet functions
+  const createNewSpreadsheet = () => {
+    const newSpreadsheet: Spreadsheet = {
+      id: `sheet-${Date.now()}`,
+      name: 'Untitled Spreadsheet',
+      sheets: [{
+        id: 'sheet1',
+        name: 'Sheet1',
+        cells: {},
+        rowHeights: {},
+        columnWidths: {},
+        frozenRows: 0,
+        frozenColumns: 0
+      }],
+      activeSheetId: 'sheet1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      tags: [],
+      linkedNotes: []
+    };
+    
+    setSpreadsheets(prev => [...prev, newSpreadsheet]);
+    setSelectedSpreadsheet(newSpreadsheet);
+  };
+
+  const updateSpreadsheetSheets = (spreadsheetId: string, newSheets: any[]) => {
+    setSpreadsheets(prev => prev.map(sheet => 
+      sheet.id === spreadsheetId 
+        ? { ...sheet, sheets: newSheets, updatedAt: new Date() }
+        : sheet
+    ));
+    if (selectedSpreadsheet?.id === spreadsheetId) {
+      setSelectedSpreadsheet(prev => prev ? { ...prev, sheets: newSheets, updatedAt: new Date() } : null);
+    }
+  };
+
+  const updateSpreadsheetName = (spreadsheetId: string, newName: string) => {
+    setSpreadsheets(prev => prev.map(sheet => 
+      sheet.id === spreadsheetId 
+        ? { ...sheet, name: newName, updatedAt: new Date() }
+        : sheet
+    ));
+    if (selectedSpreadsheet?.id === spreadsheetId) {
+      setSelectedSpreadsheet(prev => prev ? { ...prev, name: newName, updatedAt: new Date() } : null);
+    }
+  };
+
+  const deleteSpreadsheet = (spreadsheetId: string) => {
+    setSpreadsheets(prev => prev.filter(sheet => sheet.id !== spreadsheetId));
+    if (selectedSpreadsheet?.id === spreadsheetId) {
+      setSelectedSpreadsheet(null);
     }
   };
 
@@ -607,11 +676,38 @@ export default function NoteTaking() {
                   <p className="text-sm text-muted-foreground">Browse templates in main area</p>
                 </div>
               )}
+              
+              {mainView === 'spreadsheets' && spreadsheets.map(sheet => (
+                <div
+                  key={sheet.id}
+                  className="p-3 border border-border rounded cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => setSelectedSpreadsheet(sheet)}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Table className="h-4 w-4 text-terminal-green" />
+                    <h3 className="font-medium text-sm">{sheet.name}</h3>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {sheet.sheets.length} sheets • Updated {sheet.updatedAt.toLocaleDateString()}
+                  </div>
+                </div>
+              ))}
+              
+              {mainView === 'spreadsheets' && spreadsheets.length === 0 && (
+                <div className="text-center py-8">
+                  <Table className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">No spreadsheets yet</p>
+                  <Button onClick={createNewSpreadsheet} size="sm" className="mt-2">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Create Spreadsheet
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="text-xs text-terminal-amber space-y-1">
               <div>📝 {notes.length} notes • 🏷️ {allTags.length} tags • 📁 {folders.length} folders</div>
-              <div>🗄️ {databases.length} databases • 📋 {templates.length} templates</div>
+              <div>🗄️ {databases.length} databases • 📋 {templates.length} templates • 📊 {spreadsheets.length} spreadsheets</div>
             </div>
           </div>
 
@@ -637,6 +733,67 @@ export default function NoteTaking() {
                     <DatabaseIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                     <p className="text-muted-foreground mb-4">No databases yet</p>
                     <Button onClick={createDatabase}>Create your first database</Button>
+                  </div>
+                </div>
+              )
+            ) : mainView === 'spreadsheets' ? (
+              selectedSpreadsheet ? (
+                <div className="flex-1 flex flex-col">
+                  <div className="flex items-center justify-between p-4 border-b">
+                    <div className="flex items-center gap-2">
+                      <Button onClick={() => setSelectedSpreadsheet(null)} size="sm" variant="ghost">
+                        <ArrowLeft className="h-4 w-4" />
+                      </Button>
+                      <Input 
+                        value={selectedSpreadsheet.name}
+                        onChange={(e) => updateSpreadsheetName(selectedSpreadsheet.id, e.target.value)}
+                        className="font-semibold text-lg border-none bg-transparent"
+                      />
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline">
+                        <LinkIcon className="h-4 w-4 mr-1" />
+                        Link Note
+                      </Button>
+                      <Button size="sm" variant="outline">
+                        <Tag className="h-4 w-4 mr-1" />
+                        Tags
+                      </Button>
+                      <Button size="sm" variant="outline">
+                        <Download className="h-4 w-4 mr-1" />
+                        Export
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => deleteSpreadsheet(selectedSpreadsheet.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1">
+                    <AdvancedSpreadsheet />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center">
+                    <Table className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold mb-2">Excel-Style Spreadsheets</h3>
+                    <p className="text-muted-foreground mb-4">Create powerful spreadsheets with formulas, charts, and data analysis</p>
+                    <div className="flex gap-2 justify-center">
+                      <Button onClick={createNewSpreadsheet}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Spreadsheet
+                      </Button>
+                      <Button variant="outline">
+                        <Upload className="h-4 w-4 mr-2" />
+                        Import Excel
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )
