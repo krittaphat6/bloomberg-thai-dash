@@ -17,6 +17,7 @@ import ObsidianCanvas from './Canvas/ObsidianCanvas';
 import { CanvasProvider } from './Canvas/CanvasProvider';
 import AutoSaveCanvas from './AutoSaveCanvas';
 import AdvancedSpreadsheet from './AdvancedSpreadsheet';
+import { ExcelClone } from './Excel/ExcelClone';
 import { 
   Plus, 
   Search, 
@@ -93,6 +94,7 @@ interface Spreadsheet {
   tags: string[];
   folder?: string;
   linkedNotes?: string[];
+  data?: any;
 }
 
 export default function NoteTaking() {
@@ -396,6 +398,17 @@ export default function NoteTaking() {
     setSpreadsheets(prev => prev.filter(sheet => sheet.id !== spreadsheetId));
     if (selectedSpreadsheet?.id === spreadsheetId) {
       setSelectedSpreadsheet(null);
+    }
+  };
+
+  const updateSpreadsheetData = (spreadsheetId: string, data: any) => {
+    setSpreadsheets(prev => prev.map(sheet => 
+      sheet.id === spreadsheetId 
+        ? { ...sheet, data, updatedAt: new Date() }
+        : sheet
+    ));
+    if (selectedSpreadsheet?.id === spreadsheetId) {
+      setSelectedSpreadsheet(prev => prev ? { ...prev, data, updatedAt: new Date() } : null);
     }
   };
 
@@ -775,7 +788,10 @@ export default function NoteTaking() {
                   </div>
                   
                   <div className="flex-1">
-                    <AdvancedSpreadsheet />
+                    <ExcelClone 
+                      initialData={selectedSpreadsheet.data}
+                      onSave={(data) => updateSpreadsheetData(selectedSpreadsheet.id, data)}
+                    />
                   </div>
                 </div>
               ) : (
