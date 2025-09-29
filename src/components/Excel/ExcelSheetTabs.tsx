@@ -31,7 +31,7 @@ export const ExcelSheetTabs = ({ sheets, activeSheetId, onSheetChange, onSheetAd
   };
 
   return (
-    <div className="flex items-center bg-gray-100 border-t border-gray-300 relative" onClick={handleClickOutside}>
+    <div className="flex items-center bg-[#F3F3F3] border-t border-gray-300 h-7 relative" onClick={handleClickOutside}>
       {/* Navigation arrows */}
       <div className="flex border-r border-gray-300">
         <button className="px-2 py-1 hover:bg-gray-200 text-gray-600">‹</button>
@@ -47,14 +47,16 @@ export const ExcelSheetTabs = ({ sheets, activeSheetId, onSheetChange, onSheetAd
             key={sheet.id}
             className={`relative border-r border-gray-300 ${
               activeSheetId === sheet.id 
-                ? 'bg-white border-t-2 border-t-blue-500 -mb-px' 
+                ? 'bg-white border-t-2 border-t-[#217346] -mb-px' 
                 : 'hover:bg-gray-200'
             }`}
           >
             <button
               onClick={() => onSheetChange(sheet.id)}
               onContextMenu={(e) => handleRightClick(e, sheet.id)}
-              className="px-4 py-1 text-sm min-w-0 max-w-32 truncate"
+              className={`px-4 py-1 text-sm min-w-0 max-w-32 truncate h-6 ${
+                activeSheetId === sheet.id ? 'font-semibold' : ''
+              }`}
             >
               {sheet.name}
             </button>
@@ -64,7 +66,7 @@ export const ExcelSheetTabs = ({ sheets, activeSheetId, onSheetChange, onSheetAd
         {/* Add Sheet Button */}
         <button
           onClick={onSheetAdd}
-          className="px-2 py-1 hover:bg-gray-200 text-gray-600 border-r border-gray-300"
+          className="px-2 py-1 hover:bg-gray-200 text-gray-600 border-r border-gray-300 h-6"
           title="Add Sheet"
         >
           <Plus className="h-4 w-4" />
@@ -72,7 +74,7 @@ export const ExcelSheetTabs = ({ sheets, activeSheetId, onSheetChange, onSheetAd
       </div>
 
       {/* Sheet Menu Button */}
-      <button className="px-2 py-1 hover:bg-gray-200 text-gray-600 ml-auto">
+      <button className="px-2 py-1 hover:bg-gray-200 text-gray-600 ml-auto h-6">
         <MoreHorizontal className="h-4 w-4" />
       </button>
 

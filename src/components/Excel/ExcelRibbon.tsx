@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { 
   Copy, Scissors, ClipboardPaste, Bold, Italic, Underline,
   AlignLeft, AlignCenter, AlignRight, Palette, Type,
@@ -8,16 +9,18 @@ import {
 export const ExcelRibbon = () => {
   const [activeTab, setActiveTab] = useState('Home');
   
+  const tabs = ['File', 'Home', 'Insert', 'Page Layout', 'Formulas', 'Data', 'Review', 'View'];
+  
   return (
-    <div className="border-b border-gray-300 bg-white">
+    <div className="border-b bg-white">
       {/* Ribbon Tabs */}
-      <div className="flex border-b border-gray-200">
-        {['File', 'Home', 'Insert', 'Draw', 'Page Layout', 'Formulas', 'Data', 'Review', 'View'].map(tab => (
+      <div className="flex bg-[#2B579A]">
+        {tabs.map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm hover:bg-gray-100 transition-colors ${
-              activeTab === tab ? 'border-b-2 border-blue-500 bg-blue-50' : ''
+            className={`px-4 py-1.5 text-sm text-white hover:bg-[#3A6DB5] transition-colors ${
+              activeTab === tab ? 'bg-white text-black' : ''
             }`}
           >
             {tab}
@@ -26,7 +29,7 @@ export const ExcelRibbon = () => {
       </div>
       
       {/* Ribbon Content */}
-      <div className="p-2 bg-gray-50 min-h-[80px]">
+      <div className="p-2 bg-[#F3F3F3] border-b min-h-[80px]">
         {activeTab === 'Home' && <HomeRibbon />}
         {activeTab === 'Insert' && <InsertRibbon />}
         {activeTab === 'Formulas' && <FormulasRibbon />}
@@ -37,82 +40,80 @@ export const ExcelRibbon = () => {
 };
 
 const HomeRibbon = () => (
-  <div className="flex gap-6">
-    {/* Clipboard */}
-    <div className="flex flex-col items-start border-r pr-4">
-      <div className="text-xs text-gray-600 mb-2">Clipboard</div>
+  <div className="flex items-center gap-2">
+    {/* Clipboard Group */}
+    <div className="flex flex-col border-r pr-4">
+      <span className="text-[10px] text-gray-600 mb-1">Clipboard</span>
       <div className="flex gap-1">
-        <button className="p-2 hover:bg-gray-200 rounded flex flex-col items-center">
-          <Copy className="h-5 w-5" />
-          <span className="text-xs mt-1">Copy</span>
-        </button>
-        <button className="p-2 hover:bg-gray-200 rounded flex flex-col items-center">
-          <Scissors className="h-5 w-5" />
-          <span className="text-xs mt-1">Cut</span>
-        </button>
-        <button className="p-2 hover:bg-gray-200 rounded flex flex-col items-center">
-          <ClipboardPaste className="h-5 w-5" />
-          <span className="text-xs mt-1">Paste</span>
-        </button>
+        <Button variant="ghost" className="h-12 flex flex-col items-center justify-center p-1 hover:bg-gray-200">
+          <ClipboardPaste className="h-5 w-5 mb-0.5" />
+          <span className="text-[9px]">Paste</span>
+        </Button>
+        <div className="flex flex-col gap-0.5">
+          <Button variant="ghost" className="h-5 p-1 hover:bg-gray-200">
+            <Copy className="h-3 w-3" />
+          </Button>
+          <Button variant="ghost" className="h-5 p-1 hover:bg-gray-200">
+            <Scissors className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
     </div>
     
-    {/* Font */}
+    {/* Font Group */}
     <div className="flex flex-col border-r pr-4">
-      <div className="text-xs text-gray-600 mb-2">Font</div>
-      <div className="flex gap-2 items-center">
-        <select className="text-sm border rounded px-2 py-1 w-24">
+      <span className="text-[10px] text-gray-600 mb-1">Font</span>
+      <div className="flex gap-1 items-center">
+        <select className="text-xs border rounded h-6 px-1 bg-white">
           <option>Calibri</option>
           <option>Arial</option>
           <option>Times New Roman</option>
         </select>
-        <select className="text-sm border rounded px-2 py-1 w-16">
+        <select className="text-xs border rounded h-6 w-12 px-1 bg-white">
           <option>11</option>
           <option>12</option>
           <option>14</option>
           <option>16</option>
           <option>18</option>
         </select>
-        <div className="flex gap-1">
-          <button className="p-1 hover:bg-gray-200 rounded border">
-            <Bold className="h-4 w-4" />
-          </button>
-          <button className="p-1 hover:bg-gray-200 rounded border">
-            <Italic className="h-4 w-4" />
-          </button>
-          <button className="p-1 hover:bg-gray-200 rounded border">
-            <Underline className="h-4 w-4" />
-          </button>
-        </div>
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
+          <Bold className="h-3 w-3" />
+        </Button>
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
+          <Italic className="h-3 w-3" />
+        </Button>
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
+          <Underline className="h-3 w-3" />
+        </Button>
       </div>
     </div>
     
-    {/* Alignment */}
+    {/* Alignment Group */}
     <div className="flex flex-col border-r pr-4">
-      <div className="text-xs text-gray-600 mb-2">Alignment</div>
+      <span className="text-[10px] text-gray-600 mb-1">Alignment</span>
       <div className="flex gap-1">
-        <button className="p-1 hover:bg-gray-200 rounded border">
-          <AlignLeft className="h-4 w-4" />
-        </button>
-        <button className="p-1 hover:bg-gray-200 rounded border">
-          <AlignCenter className="h-4 w-4" />
-        </button>
-        <button className="p-1 hover:bg-gray-200 rounded border">
-          <AlignRight className="h-4 w-4" />
-        </button>
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
+          <AlignLeft className="h-3 w-3" />
+        </Button>
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
+          <AlignCenter className="h-3 w-3" />
+        </Button>
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
+          <AlignRight className="h-3 w-3" />
+        </Button>
       </div>
     </div>
 
-    {/* Format */}
+    {/* Format Group */}
     <div className="flex flex-col">
-      <div className="text-xs text-gray-600 mb-2">Format</div>
+      <span className="text-[10px] text-gray-600 mb-1">Format</span>
       <div className="flex gap-1">
-        <button className="p-1 hover:bg-gray-200 rounded border">
-          <Palette className="h-4 w-4" />
-        </button>
-        <button className="p-1 hover:bg-gray-200 rounded border">
-          <Type className="h-4 w-4" />
-        </button>
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
+          <Palette className="h-3 w-3" />
+        </Button>
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
+          <Type className="h-3 w-3" />
+        </Button>
       </div>
     </div>
   </div>

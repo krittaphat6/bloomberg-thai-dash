@@ -102,11 +102,11 @@ export const ExcelGrid = ({
         {/* Header Row */}
         <thead className="sticky top-0 z-10">
           <tr>
-            <th className="w-12 h-6 bg-gray-100 border border-gray-400 text-xs sticky left-0 z-20"></th>
+            <th className="w-12 h-6 bg-[#F3F3F3] border border-gray-300 text-xs sticky left-0 z-20"></th>
             {Array.from({ length: COLS }, (_, col) => (
               <th
                 key={col}
-                className="w-20 h-6 bg-gray-100 border border-gray-400 text-xs font-normal text-center select-none"
+                className="w-20 h-6 bg-[#F3F3F3] border border-gray-300 text-xs font-normal text-center select-none"
               >
                 {getColumnLabel(col)}
               </th>
@@ -118,7 +118,7 @@ export const ExcelGrid = ({
         <tbody>
           {Array.from({ length: ROWS }, (_, row) => (
             <tr key={row}>
-              <td className="w-12 h-6 bg-gray-100 border border-gray-400 text-xs text-center sticky left-0 z-10 select-none">
+              <td className="w-12 h-6 bg-[#F3F3F3] border border-gray-300 text-xs text-center sticky left-0 z-10 select-none">
                 {row + 1}
               </td>
               {Array.from({ length: COLS }, (_, col) => {
@@ -197,8 +197,8 @@ const ExcelCell = ({ cellAddress, value, isActive, isSelected, onClick, onChange
     <td
       data-cell={cellAddress}
       className={`w-20 h-6 border border-gray-300 text-xs cursor-cell relative ${
-        isActive ? 'bg-blue-100 border-2 border-blue-500 z-10' :
-        isSelected ? 'bg-blue-50' : 'bg-white hover:bg-gray-50'
+        isActive ? 'border-[#217346] border-2 bg-white z-10' :
+        isSelected ? 'bg-[#E7F4F9]' : 'bg-white hover:bg-gray-50'
       }`}
       onClick={onClick}
       onDoubleClick={handleDoubleClick}
@@ -221,7 +221,7 @@ const ExcelCell = ({ cellAddress, value, isActive, isSelected, onClick, onChange
       )}
       
       {isActive && !isEditing && (
-        <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-blue-500 cursor-se-resize"></div>
+        <div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 bg-[#217346] border border-white cursor-se-resize"></div>
       )}
     </td>
   );
