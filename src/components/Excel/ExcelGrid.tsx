@@ -97,16 +97,16 @@ export const ExcelGrid = ({
   }, [activeCell]);
 
   return (
-    <div className="relative overflow-auto h-full bg-white" ref={gridRef}>
+    <div className="relative overflow-auto h-full bg-background" ref={gridRef}>
       <table className="border-collapse table-fixed">
         {/* Header Row */}
         <thead className="sticky top-0 z-10">
           <tr>
-            <th className="w-12 h-6 bg-[#F3F3F3] border border-gray-300 text-xs sticky left-0 z-20"></th>
+            <th className="w-12 h-6 bg-muted border border-border text-xs sticky left-0 z-20"></th>
             {Array.from({ length: COLS }, (_, col) => (
               <th
                 key={col}
-                className="w-20 h-6 bg-[#F3F3F3] border border-gray-300 text-xs font-normal text-center select-none"
+                className="w-20 h-6 bg-muted border border-border text-xs font-normal text-center select-none text-terminal-green"
               >
                 {getColumnLabel(col)}
               </th>
@@ -118,7 +118,7 @@ export const ExcelGrid = ({
         <tbody>
           {Array.from({ length: ROWS }, (_, row) => (
             <tr key={row}>
-              <td className="w-12 h-6 bg-[#F3F3F3] border border-gray-300 text-xs text-center sticky left-0 z-10 select-none">
+              <td className="w-12 h-6 bg-muted border border-border text-xs text-center sticky left-0 z-10 select-none text-terminal-green">
                 {row + 1}
               </td>
               {Array.from({ length: COLS }, (_, col) => {
@@ -196,9 +196,9 @@ const ExcelCell = ({ cellAddress, value, isActive, isSelected, onClick, onChange
   return (
     <td
       data-cell={cellAddress}
-      className={`w-20 h-6 border border-gray-300 text-xs cursor-cell relative ${
-        isActive ? 'border-[#217346] border-2 bg-white z-10' :
-        isSelected ? 'bg-[#E7F4F9]' : 'bg-white hover:bg-gray-50'
+      className={`w-20 h-6 border border-border text-xs cursor-cell relative ${
+        isActive ? 'border-terminal-green border-2 bg-card z-10' :
+        isSelected ? 'bg-terminal-green/10' : 'bg-background hover:bg-muted/50'
       }`}
       onClick={onClick}
       onDoubleClick={handleDoubleClick}
@@ -212,16 +212,16 @@ const ExcelCell = ({ cellAddress, value, isActive, isSelected, onClick, onChange
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleBlur}
-          className="w-full h-full border-none outline-none bg-transparent p-1 text-xs"
+          className="w-full h-full border-none outline-none bg-transparent p-1 text-xs text-foreground"
         />
       ) : (
-        <div className="w-full h-full p-1 text-xs overflow-hidden whitespace-nowrap">
+        <div className="w-full h-full p-1 text-xs overflow-hidden whitespace-nowrap text-foreground">
           {String(value || '')}
         </div>
       )}
       
       {isActive && !isEditing && (
-        <div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 bg-[#217346] border border-white cursor-se-resize"></div>
+        <div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 bg-terminal-green border border-background cursor-se-resize"></div>
       )}
     </td>
   );

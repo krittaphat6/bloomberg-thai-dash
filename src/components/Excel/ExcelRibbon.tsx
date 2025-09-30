@@ -6,21 +6,25 @@ import {
   Calculator, FileSpreadsheet, Save, Download, Upload
 } from 'lucide-react';
 
-export const ExcelRibbon = () => {
+interface ExcelRibbonProps {
+  onExcelImport?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+export const ExcelRibbon = ({ onExcelImport }: ExcelRibbonProps) => {
   const [activeTab, setActiveTab] = useState('Home');
   
   const tabs = ['File', 'Home', 'Insert', 'Page Layout', 'Formulas', 'Data', 'Review', 'View'];
   
   return (
-    <div className="border-b bg-white">
+    <div className="border-b bg-card">
       {/* Ribbon Tabs */}
-      <div className="flex bg-[#2B579A]">
+      <div className="flex bg-background border-b border-border">
         {tabs.map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-1.5 text-sm text-white hover:bg-[#3A6DB5] transition-colors ${
-              activeTab === tab ? 'bg-white text-black' : ''
+            className={`px-4 py-1.5 text-sm transition-colors ${
+              activeTab === tab ? 'bg-terminal-green text-black font-semibold' : 'text-terminal-green hover:bg-terminal-green/10'
             }`}
           >
             {tab}
@@ -29,7 +33,8 @@ export const ExcelRibbon = () => {
       </div>
       
       {/* Ribbon Content */}
-      <div className="p-2 bg-[#F3F3F3] border-b min-h-[80px]">
+      <div className="p-2 bg-muted/30 border-b min-h-[80px]">
+        {activeTab === 'File' && <FileRibbon onExcelImport={onExcelImport} />}
         {activeTab === 'Home' && <HomeRibbon />}
         {activeTab === 'Insert' && <InsertRibbon />}
         {activeTab === 'Formulas' && <FormulasRibbon />}
@@ -39,80 +44,116 @@ export const ExcelRibbon = () => {
   );
 };
 
+const FileRibbon = ({ onExcelImport }: { onExcelImport?: (event: React.ChangeEvent<HTMLInputElement>) => void }) => (
+  <div className="p-4 bg-card">
+    <div className="space-y-2">
+      <Button 
+        variant="outline" 
+        className="w-full justify-start border-terminal-green text-terminal-green hover:bg-terminal-green/10"
+        onClick={() => document.getElementById('excel-file-input')?.click()}
+      >
+        <Upload className="h-4 w-4 mr-2" />
+        Import Excel File (.xlsx, .xls)
+      </Button>
+      <input
+        id="excel-file-input"
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={onExcelImport}
+        className="hidden"
+      />
+      <Button 
+        variant="outline" 
+        className="w-full justify-start border-terminal-green text-terminal-green hover:bg-terminal-green/10"
+      >
+        <Download className="h-4 w-4 mr-2" />
+        Export to Excel
+      </Button>
+      <Button 
+        variant="outline" 
+        className="w-full justify-start border-terminal-amber text-terminal-amber hover:bg-terminal-amber/10"
+      >
+        <Save className="h-4 w-4 mr-2" />
+        Save Spreadsheet
+      </Button>
+    </div>
+  </div>
+);
+
 const HomeRibbon = () => (
   <div className="flex items-center gap-2">
     {/* Clipboard Group */}
-    <div className="flex flex-col border-r pr-4">
-      <span className="text-[10px] text-gray-600 mb-1">Clipboard</span>
+    <div className="flex flex-col border-r border-border pr-4">
+      <span className="text-[10px] text-muted-foreground mb-1">Clipboard</span>
       <div className="flex gap-1">
-        <Button variant="ghost" className="h-12 flex flex-col items-center justify-center p-1 hover:bg-gray-200">
-          <ClipboardPaste className="h-5 w-5 mb-0.5" />
+        <Button variant="ghost" className="h-12 flex flex-col items-center justify-center p-1 hover:bg-terminal-green/10">
+          <ClipboardPaste className="h-5 w-5 mb-0.5 text-terminal-green" />
           <span className="text-[9px]">Paste</span>
         </Button>
         <div className="flex flex-col gap-0.5">
-          <Button variant="ghost" className="h-5 p-1 hover:bg-gray-200">
-            <Copy className="h-3 w-3" />
+          <Button variant="ghost" className="h-5 p-1 hover:bg-terminal-green/10">
+            <Copy className="h-3 w-3 text-terminal-green" />
           </Button>
-          <Button variant="ghost" className="h-5 p-1 hover:bg-gray-200">
-            <Scissors className="h-3 w-3" />
+          <Button variant="ghost" className="h-5 p-1 hover:bg-terminal-green/10">
+            <Scissors className="h-3 w-3 text-terminal-green" />
           </Button>
         </div>
       </div>
     </div>
     
     {/* Font Group */}
-    <div className="flex flex-col border-r pr-4">
-      <span className="text-[10px] text-gray-600 mb-1">Font</span>
+    <div className="flex flex-col border-r border-border pr-4">
+      <span className="text-[10px] text-muted-foreground mb-1">Font</span>
       <div className="flex gap-1 items-center">
-        <select className="text-xs border rounded h-6 px-1 bg-white">
+        <select className="text-xs border border-border rounded h-6 px-1 bg-background text-foreground">
+          <option>JetBrains Mono</option>
           <option>Calibri</option>
           <option>Arial</option>
-          <option>Times New Roman</option>
         </select>
-        <select className="text-xs border rounded h-6 w-12 px-1 bg-white">
+        <select className="text-xs border border-border rounded h-6 w-12 px-1 bg-background text-foreground">
           <option>11</option>
           <option>12</option>
           <option>14</option>
           <option>16</option>
           <option>18</option>
         </select>
-        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
-          <Bold className="h-3 w-3" />
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-terminal-green/10">
+          <Bold className="h-3 w-3 text-terminal-green" />
         </Button>
-        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
-          <Italic className="h-3 w-3" />
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-terminal-green/10">
+          <Italic className="h-3 w-3 text-terminal-green" />
         </Button>
-        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
-          <Underline className="h-3 w-3" />
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-terminal-green/10">
+          <Underline className="h-3 w-3 text-terminal-green" />
         </Button>
       </div>
     </div>
     
     {/* Alignment Group */}
-    <div className="flex flex-col border-r pr-4">
-      <span className="text-[10px] text-gray-600 mb-1">Alignment</span>
+    <div className="flex flex-col border-r border-border pr-4">
+      <span className="text-[10px] text-muted-foreground mb-1">Alignment</span>
       <div className="flex gap-1">
-        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
-          <AlignLeft className="h-3 w-3" />
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-terminal-green/10">
+          <AlignLeft className="h-3 w-3 text-terminal-green" />
         </Button>
-        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
-          <AlignCenter className="h-3 w-3" />
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-terminal-green/10">
+          <AlignCenter className="h-3 w-3 text-terminal-green" />
         </Button>
-        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
-          <AlignRight className="h-3 w-3" />
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-terminal-green/10">
+          <AlignRight className="h-3 w-3 text-terminal-green" />
         </Button>
       </div>
     </div>
 
     {/* Format Group */}
     <div className="flex flex-col">
-      <span className="text-[10px] text-gray-600 mb-1">Format</span>
+      <span className="text-[10px] text-muted-foreground mb-1">Format</span>
       <div className="flex gap-1">
-        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
-          <Palette className="h-3 w-3" />
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-terminal-green/10">
+          <Palette className="h-3 w-3 text-terminal-green" />
         </Button>
-        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-gray-200">
-          <Type className="h-3 w-3" />
+        <Button variant="ghost" className="h-6 w-6 p-0 hover:bg-terminal-green/10">
+          <Type className="h-3 w-3 text-terminal-green" />
         </Button>
       </div>
     </div>

@@ -27,14 +27,14 @@ export const ExcelFormulaBar = ({ activeCell, formulaValue, onFormulaChange }: E
   };
 
   return (
-    <div className="flex items-center gap-2 p-2 border-b border-gray-300 bg-white">
+    <div className="flex items-center gap-2 p-2 border-b border-border bg-card">
       {/* Name Box */}
       <div className="flex items-center gap-1">
-        <span className="text-sm font-medium w-20 text-center border border-gray-300 py-1 bg-white">
+        <span className="text-sm font-medium w-20 text-center border border-terminal-green py-1 bg-background text-terminal-green">
           {activeCell}
         </span>
-        <button className="p-1 hover:bg-gray-100 rounded border border-gray-300">
-          <Calculator className="h-4 w-4" />
+        <button className="p-1 hover:bg-terminal-green/10 rounded border border-border">
+          <Calculator className="h-4 w-4 text-terminal-green" />
         </button>
       </div>
 
@@ -43,15 +43,15 @@ export const ExcelFormulaBar = ({ activeCell, formulaValue, onFormulaChange }: E
         <div className="flex gap-1">
           <button 
             onClick={handleCancel}
-            className="p-1 hover:bg-red-100 rounded border border-gray-300"
+            className="p-1 hover:bg-terminal-red/10 rounded border border-border"
           >
-            <X className="h-4 w-4 text-red-600" />
+            <X className="h-4 w-4 text-terminal-red" />
           </button>
           <button 
             onClick={handleSubmit}
-            className="p-1 hover:bg-green-100 rounded border border-gray-300"
+            className="p-1 hover:bg-terminal-green/10 rounded border border-border"
           >
-            <Check className="h-4 w-4 text-green-600" />
+            <Check className="h-4 w-4 text-terminal-green" />
           </button>
         </div>
       )}
@@ -75,7 +75,7 @@ export const ExcelFormulaBar = ({ activeCell, formulaValue, onFormulaChange }: E
               handleCancel();
             }
           }}
-          className="w-full p-1 border border-gray-300 text-sm focus:outline-none focus:border-blue-500"
+          className="w-full p-1 border border-border text-sm focus:outline-none focus:border-terminal-green bg-background text-foreground"
           placeholder="Enter formula or value"
         />
       </div>

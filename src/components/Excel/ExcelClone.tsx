@@ -3,6 +3,8 @@ import { ExcelRibbon } from './ExcelRibbon';
 import { ExcelFormulaBar } from './ExcelFormulaBar';
 import { ExcelGrid } from './ExcelGrid';
 import { ExcelSheetTabs } from './ExcelSheetTabs';
+import * as XLSX from 'xlsx';
+import { useToast } from '@/hooks/use-toast';
 
 interface ExcelCloneProps {
   initialData?: any;
@@ -16,6 +18,7 @@ interface Sheet {
 }
 
 export const ExcelClone = ({ initialData, onSave }: ExcelCloneProps) => {
+  const { toast } = useToast();
   const [activeCell, setActiveCell] = useState('A1');
   const [selectedRange, setSelectedRange] = useState<string[]>([]);
   const [formulaValue, setFormulaValue] = useState('');
@@ -27,6 +30,75 @@ export const ExcelClone = ({ initialData, onSave }: ExcelCloneProps) => {
   const [activeSheetId, setActiveSheetId] = useState('sheet1');
 
   const currentSheet = sheets.find(s => s.id === activeSheetId);
+
+  const getCellAddress = (row: number, col: number) => {
+    let label = '';
+    let num = col;
+    while (num >= 0) {
+      label = String.fromCharCode(65 + (num % 26)) + label;
+      num = Math.floor(num / 26) - 1;
+    }
+    return `${label}${row + 1}`;
+  };
+
+  const handleExcelImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        const importedSheets: Sheet[] = [];
+        
+        workbook.SheetNames.forEach((sheetName, index) => {
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+            header: 1, 
+            defval: '',
+            raw: false 
+          });
+          
+          const sheetData: Record<string, any> = {};
+          
+          (jsonData as any[][]).forEach((row, rowIndex) => {
+            row.forEach((cellValue, colIndex) => {
+              if (cellValue !== '') {
+                const address = getCellAddress(rowIndex, colIndex);
+                sheetData[address] = cellValue;
+              }
+            });
+          });
+          
+          importedSheets.push({
+            id: `imported-${index + 1}`,
+            name: sheetName,
+            data: sheetData
+          });
+        });
+        
+        setSheets(importedSheets);
+        setActiveSheetId(importedSheets[0]?.id || '');
+        
+        toast({
+          title: "Import Successful!",
+          description: `Imported ${importedSheets.length} sheets from ${file.name}`
+        });
+      } catch (error) {
+        console.error('Import error:', error);
+        toast({
+          title: "Import Failed",
+          description: "Could not read the Excel file. Please check the file format.",
+          variant: "destructive"
+        });
+      }
+    };
+    
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
+  };
 
   const addNewSheet = () => {
     const newSheetNumber = sheets.length + 1;
@@ -64,9 +136,9 @@ export const ExcelClone = ({ initialData, onSave }: ExcelCloneProps) => {
   }, [currentSheet?.data, onSave]);
 
   return (
-    <div className="w-full h-full flex flex-col bg-white text-black">
+    <div className="w-full h-full flex flex-col bg-background text-foreground">
       {/* Excel Ribbon Menu */}
-      <ExcelRibbon />
+      <ExcelRibbon onExcelImport={handleExcelImport} />
       
       {/* Formula Bar */}
       <ExcelFormulaBar 
