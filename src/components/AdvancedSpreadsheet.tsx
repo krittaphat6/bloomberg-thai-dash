@@ -42,6 +42,7 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { HyperFormula } from 'hyperformula';
 import * as XLSX from 'xlsx';
+import { cn } from '@/lib/utils';
 
 interface Cell {
   value: any;
@@ -117,6 +118,12 @@ export default function AdvancedSpreadsheet() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showFormatDialog, setShowFormatDialog] = useState(false);
   const [currentFormat, setCurrentFormat] = useState<CellFormat>({});
+  
+  // Auto-save state
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const hyperFormula = useRef<HyperFormula | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -216,6 +223,8 @@ export default function AdvancedSpreadsheet() {
       }
       return sheet;
     }));
+    
+    setHasUnsavedChanges(true);
   }, [activeSheet, activeSheetId, sheets]);
 
   // Evaluate formula using HyperFormula
@@ -284,6 +293,38 @@ export default function AdvancedSpreadsheet() {
         return 0;
     }
   }, [activeSheet, parseCellAddress, getCellAddress]);
+
+  // Auto-save after 3 seconds of inactivity
+  useEffect(() => {
+    if (hasUnsavedChanges) {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+      
+      autoSaveTimeoutRef.current = setTimeout(() => {
+        saveToLocal();
+      }, 3000);
+    }
+    
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [hasUnsavedChanges, saveToLocal]);
+
+  // Warning before leaving page with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -432,6 +473,7 @@ export default function AdvancedSpreadsheet() {
     
     setSheets(prev => [...prev, newSheet]);
     setActiveSheetId(newSheet.id);
+    setHasUnsavedChanges(true);
   }, [sheets.length]);
 
   const deleteSheet = useCallback((sheetId: string) => {
@@ -446,15 +488,36 @@ export default function AdvancedSpreadsheet() {
       const remainingSheets = sheets.filter(s => s.id !== sheetId);
       setActiveSheetId(remainingSheets[0]?.id || '');
     }
+    
+    setHasUnsavedChanges(true);
   }, [sheets, activeSheetId, toast]);
 
-  const saveToLocal = useCallback(() => {
-    localStorage.setItem('advanced-spreadsheet', JSON.stringify({
-      sheets,
-      charts,
-      activeSheetId
-    }));
-    toast({ title: "Saved", description: "Spreadsheet saved to local storage" });
+  const saveToLocal = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      localStorage.setItem('advanced-spreadsheet', JSON.stringify({
+        sheets,
+        charts,
+        activeSheetId
+      }));
+      
+      setLastSaved(new Date());
+      setHasUnsavedChanges(false);
+      
+      toast({ 
+        title: "Saved successfully", 
+        description: "Spreadsheet saved to local storage",
+        duration: 2000
+      });
+    } catch (error) {
+      toast({ 
+        title: "Save failed", 
+        description: "Could not save spreadsheet",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
   }, [sheets, charts, activeSheetId, toast]);
 
   const loadFromLocal = useCallback(() => {
@@ -660,12 +723,37 @@ export default function AdvancedSpreadsheet() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Save Status Bar */}
+        <div className="flex items-center justify-end gap-2 px-4 py-2 border-b border-border bg-card">
+          <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 rounded-md border border-border">
+            <Button 
+              size="sm" 
+              variant="ghost"
+              onClick={saveToLocal}
+              disabled={isSaving || !hasUnsavedChanges}
+              className="h-7 px-2 hover:bg-terminal-green/10"
+            >
+              <Save className={cn(
+                "h-3.5 w-3.5 text-terminal-green",
+                isSaving && "animate-pulse"
+              )} />
+            </Button>
+            <span className={cn(
+              "text-xs font-medium",
+              isSaving && "text-terminal-amber",
+              !isSaving && lastSaved && "text-terminal-green",
+              !isSaving && !lastSaved && "text-muted-foreground"
+            )}>
+              {isSaving ? "Saving..." : 
+               lastSaved ? `Saved ${lastSaved.toLocaleTimeString()}` : 
+               "Not saved"}
+            </span>
+          </div>
+        </div>
+        
         {/* Toolbar */}
         <div className="flex flex-wrap gap-2 p-2 bg-muted rounded">
           <div className="flex gap-1">
-            <Button size="sm" variant="outline" onClick={saveToLocal}>
-              <Save className="h-3 w-3" />
-            </Button>
             <Button size="sm" variant="outline" onClick={undo} disabled={undoStack.length === 0}>
               <Undo className="h-3 w-3" />
             </Button>
