@@ -294,75 +294,6 @@ export default function AdvancedSpreadsheet() {
     }
   }, [activeSheet, parseCellAddress, getCellAddress]);
 
-  // Auto-save after 3 seconds of inactivity
-  useEffect(() => {
-    if (hasUnsavedChanges) {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-      
-      autoSaveTimeoutRef.current = setTimeout(() => {
-        saveToLocal();
-      }, 3000);
-    }
-    
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, [hasUnsavedChanges, saveToLocal]);
-
-  // Warning before leaving page with unsaved changes
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-      }
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
-  // Handle keyboard shortcuts
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      switch (e.key) {
-        case 'z':
-          e.preventDefault();
-          undo();
-          break;
-        case 'y':
-          e.preventDefault();
-          redo();
-          break;
-        case 'c':
-          e.preventDefault();
-          copy();
-          break;
-        case 'v':
-          e.preventDefault();
-          paste();
-          break;
-        case 'x':
-          e.preventDefault();
-          cut();
-          break;
-        case 's':
-          e.preventDefault();
-          saveToLocal();
-          break;
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
-
   const undo = useCallback(() => {
     if (undoStack.length === 0) return;
     
@@ -519,6 +450,51 @@ export default function AdvancedSpreadsheet() {
       setIsSaving(false);
     }
   }, [sheets, charts, activeSheetId, toast]);
+
+  // Auto-save after 3 seconds of inactivity
+  useEffect(() => {
+    if (hasUnsavedChanges) {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+      
+      autoSaveTimeoutRef.current = setTimeout(() => {
+        saveToLocal();
+      }, 3000);
+    }
+    
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [hasUnsavedChanges, saveToLocal]);
+
+  // Keyboard shortcut handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveToLocal();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [saveToLocal]);
+
+  // Warning before leaving page with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const loadFromLocal = useCallback(() => {
     const saved = localStorage.getItem('advanced-spreadsheet');
