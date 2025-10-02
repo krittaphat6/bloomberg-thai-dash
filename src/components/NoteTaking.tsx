@@ -191,6 +191,55 @@ export default function NoteTaking() {
     localStorage.setItem('able-notes', JSON.stringify(notes));
   }, [notes]);
 
+  // Load spreadsheets from localStorage
+  useEffect(() => {
+    const savedSpreadsheets = localStorage.getItem('able-spreadsheets');
+    if (savedSpreadsheets) {
+      try {
+        const parsed = JSON.parse(savedSpreadsheets);
+        setSpreadsheets(parsed.map((sheet: any) => ({
+          ...sheet,
+          createdAt: new Date(sheet.createdAt),
+          updatedAt: new Date(sheet.updatedAt)
+        })));
+        console.log('✅ Loaded spreadsheets from localStorage:', parsed.length);
+      } catch (e) {
+        console.error('Failed to load spreadsheets:', e);
+      }
+    }
+  }, []);
+
+  // Save spreadsheets to localStorage
+  useEffect(() => {
+    if (spreadsheets.length > 0) {
+      localStorage.setItem('able-spreadsheets', JSON.stringify(spreadsheets));
+      console.log('💾 Saved spreadsheets to localStorage:', spreadsheets.length);
+    }
+  }, [spreadsheets]);
+
+  // Save selected spreadsheet to localStorage when it changes
+  useEffect(() => {
+    if (selectedSpreadsheet) {
+      localStorage.setItem('able-selected-spreadsheet', JSON.stringify(selectedSpreadsheet));
+    }
+  }, [selectedSpreadsheet]);
+
+  // Load selected spreadsheet on mount
+  useEffect(() => {
+    const savedSelected = localStorage.getItem('able-selected-spreadsheet');
+    if (savedSelected && spreadsheets.length > 0) {
+      try {
+        const parsed = JSON.parse(savedSelected);
+        const found = spreadsheets.find(s => s.id === parsed.id);
+        if (found) {
+          setSelectedSpreadsheet(found);
+        }
+      } catch (e) {
+        console.error('Failed to load selected spreadsheet:', e);
+      }
+    }
+  }, [spreadsheets.length]);
+
   // Get all unique tags
   const allTags = useMemo(() => {
     const tags = new Set<string>();
@@ -847,11 +896,7 @@ export default function NoteTaking() {
                     onUpdateNote={updateNote}
                     onCreateNote={(note) => {
                       setNotes([note, ...notes]);
-                      // Auto-save canvas data on note creation
-                      setTimeout(() => {
-                        const canvasData = localStorage.getItem('canvas-data');
-                        console.log('✅ Canvas auto-saved');
-                      }, 1000);
+                      console.log('📝 Note created in canvas:', note.title);
                     }}
                   />
                 </CanvasProvider>
