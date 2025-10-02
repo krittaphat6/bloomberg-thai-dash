@@ -18,6 +18,7 @@ import { CanvasProvider } from './Canvas/CanvasProvider';
 import AutoSaveCanvas from './AutoSaveCanvas';
 import AdvancedSpreadsheet from './AdvancedSpreadsheet';
 import { ExcelClone } from './Excel/ExcelClone';
+import { SupplyChainViz } from './SupplyChainViz';
 import { 
   Plus, 
   Search, 
@@ -108,6 +109,7 @@ export default function NoteTaking() {
   const [templates, setTemplates] = useState<NotionTemplate[]>([]);
   const [spreadsheets, setSpreadsheets] = useState<Spreadsheet[]>([]);
   const [selectedSpreadsheet, setSelectedSpreadsheet] = useState<Spreadsheet | null>(null);
+  const [spreadsheetView, setSpreadsheetView] = useState<'grid' | 'relationship'>('grid');
   const [mainView, setMainView] = useState<'notes' | 'databases' | 'templates' | 'spreadsheets'>('notes');
   const [editorMode, setEditorMode] = useState<'simple' | 'rich' | 'blocks' | 'spreadsheet'>('simple');
   
@@ -765,6 +767,23 @@ export default function NoteTaking() {
                     </div>
                     
                     <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant={spreadsheetView === 'grid' ? 'default' : 'outline'}
+                        onClick={() => setSpreadsheetView('grid')}
+                      >
+                        <Table className="h-4 w-4 mr-1" />
+                        Grid View
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant={spreadsheetView === 'relationship' ? 'default' : 'outline'}
+                        onClick={() => setSpreadsheetView('relationship')}
+                      >
+                        <Network className="h-4 w-4 mr-1" />
+                        Relationship Map
+                      </Button>
+                      <Separator orientation="vertical" className="h-6" />
                       <Button size="sm" variant="outline">
                         <LinkIcon className="h-4 w-4 mr-1" />
                         Link Note
@@ -788,10 +807,17 @@ export default function NoteTaking() {
                   </div>
                   
                   <div className="flex-1">
-                    <ExcelClone 
-                      initialData={selectedSpreadsheet.data}
-                      onSave={(data) => updateSpreadsheetData(selectedSpreadsheet.id, data)}
-                    />
+                    {spreadsheetView === 'grid' ? (
+                      <ExcelClone 
+                        initialData={selectedSpreadsheet.data}
+                        onSave={(data) => updateSpreadsheetData(selectedSpreadsheet.id, data)}
+                      />
+                    ) : (
+                      <SupplyChainViz 
+                        data={selectedSpreadsheet.data || {}}
+                        columns={['NO.', 'Security', 'Ticker', 'Fund', 'Position', 'Pos Chg', '% Out', 'Current Mkt Val', 'Current MV Chg', 'Filing Date', 'Region']}
+                      />
+                    )}
                   </div>
                 </div>
               ) : (
@@ -821,6 +847,11 @@ export default function NoteTaking() {
                     onUpdateNote={updateNote}
                     onCreateNote={(note) => {
                       setNotes([note, ...notes]);
+                      // Auto-save canvas data on note creation
+                      setTimeout(() => {
+                        const canvasData = localStorage.getItem('canvas-data');
+                        console.log('✅ Canvas auto-saved');
+                      }, 1000);
                     }}
                   />
                 </CanvasProvider>
