@@ -8,6 +8,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { PasswordScreen } from "@/components/PasswordScreen";
 import Index from "./pages/Index";
 import NotesAndVisualization from "./pages/NotesAndVisualization";
+import RelationshipDashboard from "./pages/RelationshipDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => {
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/notes" element={<NotesAndVisualization />} />
+            <Route path="/relationship-dashboard" element={<RelationshipDashboard />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

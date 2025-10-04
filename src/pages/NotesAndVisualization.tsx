@@ -1,7 +1,9 @@
 import { NetworkNotesGraph } from '@/components/NetworkNotesGraph';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Hash, TrendingUp, BarChart3 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Hash, TrendingUp, BarChart3, Network, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 // Sample trade data for demonstration
 const sampleTrades = [
@@ -69,12 +71,26 @@ const NotesAndVisualization = () => {
       {/* Header */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-bold flex items-center gap-2">
-            <Hash className="w-6 h-6 text-primary" />
-            Notes & 3D Visualization Dashboard
-          </CardTitle>
-          <p className="text-muted-foreground">
-            Interactive network notes and advanced 3D surface plotting for trading analysis
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                <Hash className="w-6 h-6 text-primary" />
+                Notes & 3D Visualization Dashboard
+              </CardTitle>
+              <p className="text-muted-foreground mt-2">
+                Interactive network notes and advanced 3D surface plotting for trading analysis
+              </p>
+            </div>
+            <Link to="/relationship-dashboard">
+              <Button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700">
+                <Network className="h-4 w-4" />
+                Advanced Dashboard
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+          <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+            💡 Try the new <strong>Relationship Dashboard</strong> - Bloomberg-style multi-panel view with drag & drop, resizable panels, and real-time data
           </p>
         </CardHeader>
       </Card>
