@@ -10,7 +10,7 @@ import {
 interface PanelHeaderProps {
   title: string;
   icon: React.ReactNode;
-  subtitle?: string;
+  subtitle?: string | React.ReactNode;
   onMaximize: () => void;
   onClose: () => void;
 }
@@ -22,7 +22,11 @@ export function PanelHeader({ title, icon, subtitle, onMaximize, onClose }: Pane
         <div className="text-blue-400">{icon}</div>
         <div>
           <h3 className="text-sm font-semibold text-white">{title}</h3>
-          {subtitle && <p className="text-xs text-gray-400">{subtitle}</p>}
+          {subtitle && (
+            <div className="text-xs text-gray-400">
+              {typeof subtitle === 'string' ? subtitle : subtitle}
+            </div>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-1">

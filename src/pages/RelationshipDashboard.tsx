@@ -3,7 +3,8 @@ import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { Button } from '@/components/ui/button';
-import { Settings, RotateCcw, Layout as LayoutIcon, Clock, Network, X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Settings, RotateCcw, Layout as LayoutIcon, Clock, Network, X, Maximize, Minimize } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -69,6 +70,7 @@ export default function RelationshipDashboard() {
   const [showSettings, setShowSettings] = useState(false);
   const [maximizedPanel, setMaximizedPanel] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Load saved layout and preferences
   useEffect(() => {
@@ -140,6 +142,16 @@ export default function RelationshipDashboard() {
     }));
   }, []);
 
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -154,11 +166,23 @@ export default function RelationshipDashboard() {
         e.preventDefault();
         handleReset();
       }
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        localStorage.setItem('dashboard-layout', JSON.stringify(layout));
+      }
+    };
+
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [maximizedPanel, showSettings, handleReset, handleCloseMaximize]);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, [maximizedPanel, showSettings, handleReset, handleCloseMaximize, layout]);
 
   // Filter layout to only show visible panels
   const filteredLayout = layout.filter(item => visiblePanels[item.i]);
@@ -170,6 +194,10 @@ export default function RelationshipDashboard() {
         <div className="flex items-center gap-3">
           <Network className="h-6 w-6 text-blue-400" />
           <h1 className="text-lg font-semibold">Able Terminal - Relationship Dashboard</h1>
+          <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30">
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse mr-1.5" />
+            LIVE
+          </Badge>
         </div>
         
         <div className="flex items-center gap-4">
@@ -208,6 +236,16 @@ export default function RelationshipDashboard() {
           >
             <RotateCcw className="h-4 w-4 mr-2" />
             Reset
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleFullscreen}
+            className="h-9"
+            title="Toggle Fullscreen (F11)"
+          >
+            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
           </Button>
         </div>
       </header>
@@ -316,60 +354,89 @@ export default function RelationshipDashboard() {
 
       {/* Maximized Panel Overlay */}
       {maximizedPanel && (
-        <div className="fixed inset-0 z-50 bg-black/95 animate-fade-in">
-          <div className="h-full flex flex-col p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Maximized View</h2>
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm animate-fade-in">
+          <div className="h-full flex flex-col p-6">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                  <Network className="h-5 w-5 text-blue-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-white">
+                    {maximizedPanel === 'relationship-map' ? 'Relationship Map' :
+                     maximizedPanel === 'news' ? 'News Feed' :
+                     maximizedPanel === 'indices' ? 'Market Indices' :
+                     maximizedPanel === 'peers' ? 'Peer Companies' :
+                     maximizedPanel === 'holders' ? 'Top Holders' :
+                     maximizedPanel === 'board' ? 'Board of Directors' :
+                     'Balance Sheet'}
+                  </h2>
+                  <p className="text-sm text-gray-400">Press ESC to close</p>
+                </div>
+              </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleCloseMaximize}
+                className="h-9"
               >
                 <X className="h-4 w-4 mr-2" />
-                Close (ESC)
+                Close
               </Button>
             </div>
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-hidden rounded-lg">
               {maximizedPanel === 'relationship-map' && (
-                <div className="h-full bg-gray-800 rounded-lg border border-gray-700">
+                <div className="h-full bg-gray-800 rounded-lg border border-gray-700 shadow-2xl">
                   <NetworkNotesGraph />
                 </div>
               )}
               {maximizedPanel === 'news' && (
-                <NewsPanel
-                  onMaximize={() => {}}
-                  onClose={handleCloseMaximize}
-                />
+                <div className="h-full">
+                  <NewsPanel
+                    onMaximize={() => {}}
+                    onClose={handleCloseMaximize}
+                  />
+                </div>
               )}
               {maximizedPanel === 'indices' && (
-                <IndicesPanel
-                  onMaximize={() => {}}
-                  onClose={handleCloseMaximize}
-                />
+                <div className="h-full">
+                  <IndicesPanel
+                    onMaximize={() => {}}
+                    onClose={handleCloseMaximize}
+                  />
+                </div>
               )}
               {maximizedPanel === 'peers' && (
-                <PeersPanel
-                  onMaximize={() => {}}
-                  onClose={handleCloseMaximize}
-                />
+                <div className="h-full">
+                  <PeersPanel
+                    onMaximize={() => {}}
+                    onClose={handleCloseMaximize}
+                  />
+                </div>
               )}
               {maximizedPanel === 'holders' && (
-                <HoldersPanel
-                  onMaximize={() => {}}
-                  onClose={handleCloseMaximize}
-                />
+                <div className="h-full">
+                  <HoldersPanel
+                    onMaximize={() => {}}
+                    onClose={handleCloseMaximize}
+                  />
+                </div>
               )}
               {maximizedPanel === 'board' && (
-                <BoardPanel
-                  onMaximize={() => {}}
-                  onClose={handleCloseMaximize}
-                />
+                <div className="h-full">
+                  <BoardPanel
+                    onMaximize={() => {}}
+                    onClose={handleCloseMaximize}
+                  />
+                </div>
               )}
               {maximizedPanel === 'balance' && (
-                <BalanceSheetPanel
-                  onMaximize={() => {}}
-                  onClose={handleCloseMaximize}
-                />
+                <div className="h-full">
+                  <BalanceSheetPanel
+                    onMaximize={() => {}}
+                    onClose={handleCloseMaximize}
+                  />
+                </div>
               )}
             </div>
           </div>

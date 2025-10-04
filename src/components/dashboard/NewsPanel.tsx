@@ -32,16 +32,27 @@ export function NewsPanel({ onMaximize, onClose }: NewsPanelProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
+    const headlines = [
+      'FDA Approves Breakthrough Cancer Treatment Protocol',
+      'Major Pharma Companies Report Strong Q4 Earnings',
+      'Clinical Trial Shows Promise for New Alzheimer\'s Drug',
+      'Healthcare Sector Rallies on Positive Regulatory News',
+      'Biotech Merger Creates $50B Industry Giant',
+      'New Drug Approval Expected to Boost Revenue by 15%',
+      'Analyst Upgrades Major Pharmaceutical Stocks',
+      'Patent Expiration Concerns Weigh on Stock Price',
+    ];
+
     const interval = setInterval(() => {
       const newItem: NewsItem = {
         id: Date.now().toString(),
-        title: `Breaking: Market Update ${new Date().toLocaleTimeString()}`,
-        source: ['Bloomberg', 'Reuters', 'CNBC', 'WSJ'][Math.floor(Math.random() * 4)],
+        title: headlines[Math.floor(Math.random() * headlines.length)],
+        source: ['Bloomberg', 'Reuters', 'CNBC', 'WSJ', 'FT', 'MarketWatch'][Math.floor(Math.random() * 6)],
         time: 'Just now',
         category: ['Breaking', 'Market', 'Company', 'Analysis'][Math.floor(Math.random() * 4)] as NewsItem['category'],
       };
       setNews(prev => [newItem, ...prev.slice(0, 9)]);
-    }, 30000); // Add new item every 30 seconds
+    }, 15000); // Add new item every 15 seconds
 
     return () => clearInterval(interval);
   }, []);
@@ -60,7 +71,14 @@ export function NewsPanel({ onMaximize, onClose }: NewsPanelProps) {
       <PanelHeader
         title="News"
         icon={<Newspaper className="h-4 w-4" />}
-        subtitle={`${news.length} items`}
+        subtitle={
+          <div className="flex items-center gap-2">
+            <span>{news.length} items</span>
+            <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30 text-[10px] px-1">
+              LIVE
+            </Badge>
+          </div>
+        }
         onMaximize={onMaximize}
         onClose={onClose}
       />
