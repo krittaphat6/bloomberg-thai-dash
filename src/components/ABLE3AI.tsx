@@ -1,8 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Settings, Loader2 } from 'lucide-react';
+import { Send, Bot, User, Settings, Loader2, Sparkles, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
+import { AIFunctionRegistry } from '@/utils/AIFunctionRegistry';
+import { registerAllFunctions } from '@/utils/RegisterAIFunctions';
 
 interface Message {
   id: string;
@@ -45,6 +48,9 @@ const ABLE3AI = () => {
       setApiKey(savedOpenAIKey || savedClaudeKey || '');
       setHasApiKey(true);
     }
+    
+    // Register AI functions
+    registerAllFunctions({});
   }, []);
 
   const saveApiKey = () => {
@@ -135,9 +141,10 @@ const ABLE3AI = () => {
             'anthropic-version': '2023-06-01'
           },
           body: JSON.stringify({
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 1000,
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 2000,
             system: systemMessage,
+            tools: AIFunctionRegistry.getFunctionDefinitionsForClaude(),
             messages: [
               ...messages.slice(-10).map(msg => ({
                 role: msg.isUser ? 'user' : 'assistant',
@@ -153,7 +160,21 @@ const ABLE3AI = () => {
         }
 
         const data = await response.json();
-        aiResponse = data.content[0]?.text || 'Sorry, I could not generate a response.';
+        
+        // Handle function calls
+        if (data.stop_reason === 'tool_use') {
+          const toolUse = data.content.find((c: any) => c.type === 'tool_use');
+          if (toolUse) {
+            try {
+              const result = await AIFunctionRegistry.execute(toolUse.name, toolUse.input);
+              aiResponse = `✅ Executed: **${toolUse.name}**\n\n${result.message || JSON.stringify(result, null, 2)}`;
+            } catch (error) {
+              aiResponse = `❌ Error executing ${toolUse.name}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            }
+          }
+        } else {
+          aiResponse = data.content[0]?.text || 'Sorry, I could not generate a response.';
+        }
       }
 
       const aiMessage: Message = {
@@ -183,6 +204,14 @@ const ABLE3AI = () => {
     }
   };
 
+  // Quick command buttons
+  const quickCommands = [
+    { label: '📊 Analyze Trades', action: 'analyze my recent trades' },
+    { label: '📝 Create Note', action: 'create a new note for today' },
+    { label: '📈 Open Dashboard', action: 'open the relationship dashboard' },
+    { label: '🔍 Search Notes', action: 'search my notes' },
+  ];
+
   return (
     <div className="terminal-panel h-full flex flex-col text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm xl:text-base">
       {/* Header with Logo */}
@@ -198,6 +227,12 @@ const ABLE3AI = () => {
             <span className="text-[0.6rem] xs:text-[0.7rem] sm:text-sm md:text-base lg:text-lg font-bold text-terminal-green">
               ABLE 3.0 AI
             </span>
+            {selectedModel === 'claude' && AIFunctionRegistry.count() > 0 && (
+              <Badge variant="outline" className="text-[0.4rem] h-3 px-1 gap-0.5">
+                <Sparkles className="w-2 h-2" />
+                {AIFunctionRegistry.count()} functions
+              </Badge>
+            )}
             <span className="text-[0.4rem] xs:text-[0.5rem] sm:text-xs text-terminal-gray">
               Powered by {selectedModel === 'openai' ? 'ChatGPT' : selectedModel === 'claude' ? 'Claude' : 'Free AI'}
             </span>

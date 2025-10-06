@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Hash, Link, Save, Trash2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, Hash, Link, Save, Trash2, Network as NetworkIcon } from 'lucide-react';
 import * as d3 from 'd3';
+import { GraphClustering, ClusterResult } from '@/utils/GraphClustering';
 
 interface Note {
   id: string;
@@ -37,6 +39,13 @@ interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
 
 export const NetworkNotesGraph = ({ className }: NetworkNotesGraphProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
+  
+  // Clustering state
+  const [clusteringEnabled, setClusteringEnabled] = useState(true);
+  const [clusterCount, setClusterCount] = useState('5');
+  const [clusters, setClusters] = useState<ClusterResult[]>([]);
+  const [communities, setCommunities] = useState<Map<string, number>>(new Map());
+  
   const [notes, setNotes] = useState<Note[]>([
     {
       id: '2b5be',
@@ -246,21 +255,90 @@ export const NetworkNotesGraph = ({ className }: NetworkNotesGraphProps) => {
     });
 
     // Update positions on simulation tick
-    simulation.on("tick", () => {
-      link
-        .attr("x1", d => (d.source as GraphNode).x!)
-        .attr("y1", d => (d.source as GraphNode).y!)
-        .attr("x2", d => (d.target as GraphNode).x!)
-        .attr("y2", d => (d.target as GraphNode).y!);
+    // Apply clustering if enabled
+    if (clusteringEnabled && nodes.length > parseInt(clusterCount)) {
+      const detectedClusters = GraphClustering.clusterByConnections(
+        nodes.map(n => ({ ...n.note, connections: n.connections, x: n.x, y: n.y })),
+        parseInt(clusterCount)
+      );
+      const detectedCommunities = GraphClustering.detectCommunities(
+        nodes.map(n => ({ ...n.note, connections: n.connections })),
+        links
+      );
+      setClusters(detectedClusters);
+      setCommunities(detectedCommunities);
+      
+      // Draw cluster boundaries
+      const clusterGroup = g.append("g").attr("class", "clusters");
+      
+      const clusterCircles = clusterGroup
+        .selectAll("circle")
+        .data(detectedClusters)
+        .enter().append("circle")
+        .attr("r", 120)
+        .attr("fill", d => d.color)
+        .attr("opacity", 0.1)
+        .attr("stroke", d => d.color)
+        .attr("stroke-width", 2)
+        .attr("stroke-dasharray", "5,5");
+      
+      const clusterLabels = clusterGroup
+        .selectAll("text")
+        .data(detectedClusters)
+        .enter().append("text")
+        .text(d => d.label)
+        .attr("font-size", "14px")
+        .attr("font-weight", "bold")
+        .attr("fill", d => d.color)
+        .attr("text-anchor", "middle");
+      
+      simulation.on("tick", () => {
+        link
+          .attr("x1", d => (d.source as GraphNode).x!)
+          .attr("y1", d => (d.source as GraphNode).y!)
+          .attr("x2", d => (d.target as GraphNode).x!)
+          .attr("y2", d => (d.target as GraphNode).y!);
 
-      node
-        .attr("transform", d => `translate(${d.x},${d.y})`);
-    });
+        node
+          .attr("transform", d => `translate(${d.x},${d.y})`);
+        
+        clusterCircles
+          .attr("cx", d => d.center.x)
+          .attr("cy", d => d.center.y);
+        
+        clusterLabels
+          .attr("x", d => d.center.x)
+          .attr("y", d => d.center.y - 130);
+      });
+    } else {
+      simulation.on("tick", () => {
+        link
+          .attr("x1", d => (d.source as GraphNode).x!)
+          .attr("y1", d => (d.source as GraphNode).y!)
+          .attr("x2", d => (d.target as GraphNode).x!)
+          .attr("y2", d => (d.target as GraphNode).y!);
+
+        node
+          .attr("transform", d => `translate(${d.x},${d.y})`);
+      });
+    }
+
+    // Color nodes by community
+    if (communities.size > 0) {
+      node.select("circle")
+        .attr("fill", d => {
+          if (communities.has(d.id)) {
+            const colors = ['#22C55E', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6'];
+            return colors[communities.get(d.id)! % colors.length];
+          }
+          return d.note.color;
+        });
+    }
 
     return () => {
       simulation.stop();
     };
-  }, [notes, selectedNote]);
+  }, [notes, selectedNote, clusteringEnabled, clusterCount]);
 
   const addNote = () => {
     if (!newNoteTitle.trim()) return;
