@@ -22,7 +22,7 @@ import { BoardPanel } from '@/components/dashboard/BoardPanel';
 import { BalanceSheetPanel } from '@/components/dashboard/BalanceSheetPanel';
 import { LayoutSettings } from '@/components/dashboard/LayoutSettings';
 import { PanelHeader } from '@/components/dashboard/PanelHeader';
-import { NetworkNotesGraph } from '@/components/NetworkNotesGraph';
+import { FinancialRelationshipMap } from '@/components/FinancialRelationshipMap';
 
 const defaultLayout: Layout[] = [
   { i: 'relationship-map', x: 0, y: 0, w: 7, h: 10, minW: 4, minH: 6 },
@@ -276,7 +276,7 @@ export default function RelationshipDashboard() {
                 onClose={() => handleClosePanel('relationship-map')}
               />
               <div className="flex-1 overflow-hidden">
-                <NetworkNotesGraph />
+                <FinancialRelationshipMap />
               </div>
             </div>
           )}
@@ -387,7 +387,7 @@ export default function RelationshipDashboard() {
             <div className="flex-1 overflow-hidden rounded-lg">
               {maximizedPanel === 'relationship-map' && (
                 <div className="h-full bg-gray-800 rounded-lg border border-gray-700 shadow-2xl">
-                  <NetworkNotesGraph />
+                  <FinancialRelationshipMap />
                 </div>
               )}
               {maximizedPanel === 'news' && (
