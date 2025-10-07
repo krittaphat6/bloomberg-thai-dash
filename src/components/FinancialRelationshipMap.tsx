@@ -19,6 +19,21 @@ export const FinancialRelationshipMap = ({ className }: Props) => {
   const [layoutType, setLayoutType] = useState<'region' | 'hierarchical'>('region');
   const [loading, setLoading] = useState(false);
 
+  // Debug helper
+  useEffect(() => {
+    console.log('🔍 FinancialRelationshipMap Debug Info:');
+    console.log('  - Component mounted');
+    console.log('  - Current nodes count:', nodes.length);
+    console.log('  - Layout type:', layoutType);
+    console.log('  - Loading state:', loading);
+    
+    if (nodes.length > 0) {
+      console.log('  - Sample node:', nodes[0]);
+      const regions = [...new Set(nodes.map(n => n.region))];
+      console.log('  - Unique regions:', regions);
+    }
+  }, [nodes, layoutType, loading]);
+
   useEffect(() => {
     loadExcelData();
   }, []);
@@ -26,11 +41,26 @@ export const FinancialRelationshipMap = ({ className }: Props) => {
   const loadExcelData = async () => {
     setLoading(true);
     try {
+      console.log('🔄 Loading Excel data...');
+      
       const response = await fetch('/wisdom14.xlsx');
+      if (!response.ok) throw new Error('File not found');
+      
       const arrayBuffer = await response.arrayBuffer();
+      console.log('✅ File loaded successfully');
+      
       const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      console.log('📊 Workbook parsed, sheets:', workbook.SheetNames);
+      
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
       const data = XLSX.utils.sheet_to_json(firstSheet);
+      console.log('📈 Data rows:', data.length);
+
+      if (data.length === 0) {
+        console.warn('⚠️ No data found in Excel');
+        loadMockData();
+        return;
+      }
 
       const assets: FinancialAsset[] = data.map((row: any, index: number) => ({
         id: `asset-${index}`,
@@ -42,13 +72,61 @@ export const FinancialRelationshipMap = ({ className }: Props) => {
         posChange: row['Pos Chg'] || 0
       }));
 
+      console.log('🎯 Assets created:', assets.length);
+      console.log('📍 Sample asset:', assets[0]);
+      
       const financialNodes = FinancialGraphLayout.createFinancialNodes(assets);
+      console.log('🔵 Nodes created:', financialNodes.length);
+      console.log('🗺️ Sample node:', financialNodes[0]);
+      
+      const regionCounts = financialNodes.reduce((acc, node) => {
+        acc[node.region] = (acc[node.region] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log('🌍 Regions distribution:', regionCounts);
+      
       setNodes(financialNodes);
+      console.log('✅ Nodes set successfully');
     } catch (error) {
-      console.error('Error loading Excel:', error);
+      console.error('❌ Error loading Excel:', error);
+      console.log('🔄 Loading fallback mock data...');
+      loadMockData();
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadMockData = () => {
+    console.log('📝 Creating mock financial data...');
+    
+    const mockAssets: FinancialAsset[] = [
+      // North America
+      { id: '1', name: 'US Treasury Note', position: 'CT10 Govt', region: 'North America', marketValue: '6.96BLN', positionSize: 5593250, posChange: 1 },
+      { id: '2', name: 'Microsoft Corp', position: 'MSFT US', region: 'North America', marketValue: '3.33BLN', positionSize: 4591808, posChange: -8576 },
+      { id: '3', name: 'Apple Inc', position: 'AAPL US', region: 'North America', marketValue: '2.85BLN', positionSize: 3821000, posChange: 2500 },
+      { id: '4', name: 'Tesla Inc', position: 'TSLA US', region: 'North America', marketValue: '1.92BLN', positionSize: 2150000, posChange: -1200 },
+      { id: '5', name: 'Amazon.com', position: 'AMZN US', region: 'North America', marketValue: '2.15BLN', positionSize: 2800000, posChange: 1800 },
+      
+      // Europe
+      { id: '6', name: 'Euro Spot', position: 'EUR Curncy', region: 'Europe', marketValue: '5.80BLN', positionSize: 3941497757, posChange: 5938 },
+      { id: '7', name: 'ASML Holding', position: 'ASML NA', region: 'Europe', marketValue: '1.75BLN', positionSize: 1920000, posChange: 850 },
+      { id: '8', name: 'SAP SE', position: 'SAP GR', region: 'Europe', marketValue: '1.45BLN', positionSize: 1650000, posChange: 620 },
+      { id: '9', name: 'Novo Nordisk', position: 'NOVOB DC', region: 'Europe', marketValue: '1.25BLN', positionSize: 1420000, posChange: -320 },
+      
+      // Asia
+      { id: '10', name: 'Taiwan Semi', position: 'TSM US', region: 'Asia', marketValue: '2.45BLN', positionSize: 2950000, posChange: 1500 },
+      { id: '11', name: 'Alibaba Group', position: 'BABA US', region: 'Asia', marketValue: '1.85BLN', positionSize: 2100000, posChange: -850 },
+      { id: '12', name: 'Tencent Holdings', position: '700 HK', region: 'Asia', marketValue: '1.65BLN', positionSize: 1880000, posChange: 720 },
+      { id: '13', name: 'Samsung Elec', position: '005930 KS', region: 'Asia', marketValue: '1.95BLN', positionSize: 2250000, posChange: 960 },
+      
+      // NONE (Mixed/Other)
+      { id: '14', name: 'Bitcoin Future', position: 'BTC1 Comdty', region: 'NONE', marketValue: '875MLN', positionSize: 850000, posChange: 12500 },
+      { id: '15', name: 'Gold Spot', position: 'XAU Curncy', region: 'NONE', marketValue: '650MLN', positionSize: 620000, posChange: 3200 },
+    ];
+    
+    const mockNodes = FinancialGraphLayout.createFinancialNodes(mockAssets);
+    console.log('✅ Mock nodes created:', mockNodes.length);
+    setNodes(mockNodes);
   };
 
   useEffect(() => {
@@ -240,15 +318,35 @@ export const FinancialRelationshipMap = ({ className }: Props) => {
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className="flex items-center justify-center h-[600px]">
-            <div className="text-terminal-green">Loading...</div>
+          <div className="flex flex-col items-center justify-center h-[600px] gap-4">
+            <RefreshCw className="h-12 w-12 text-terminal-green animate-spin" />
+            <div className="text-terminal-green text-lg">Loading financial data...</div>
+            <div className="text-muted-foreground text-sm">Reading wisdom14.xlsx</div>
+          </div>
+        ) : nodes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-[600px] gap-4">
+            <div className="text-yellow-500 text-lg">⚠️ No data loaded</div>
+            <div className="text-muted-foreground text-sm">Check console for details</div>
+            <Button onClick={loadExcelData} variant="outline">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry Loading
+            </Button>
           </div>
         ) : (
-          <svg ref={svgRef} width="100%" height="600" style={{ background: '#000000' }} />
+          <>
+            <svg 
+              ref={svgRef} 
+              width="100%" 
+              height="600" 
+              style={{ background: '#000000', border: '1px solid #333' }} 
+            />
+            <div className="mt-2 text-xs text-muted-foreground flex justify-between">
+              <span>Total Assets: {nodes.length}</span>
+              <span>Total Value: ${(nodes.reduce((s, n) => s + n.marketValue, 0) / 1e9).toFixed(2)}B</span>
+              <span>Layout: {layoutType === 'region' ? 'Grouped by Region' : 'Hierarchical'}</span>
+            </div>
+          </>
         )}
-        <div className="mt-2 text-xs text-muted-foreground">
-          Assets: {nodes.length} | Total: ${(nodes.reduce((s, n) => s + n.marketValue, 0) / 1e9).toFixed(2)}B
-        </div>
       </CardContent>
     </Card>
   );
