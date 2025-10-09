@@ -206,37 +206,51 @@ export const FinancialRelationshipMap = ({ className }: Props) => {
       .attr("stroke-opacity", 0.3)
       .attr("stroke-width", 1);
 
+    // CRITICAL: Create nodes WITHOUT dragging (which re-enables simulation)
     const nodeGroups = g.append("g").selectAll("g").data(nodes).enter().append("g")
-      .attr("transform", d => `translate(${d.x},${d.y})`)
+      .attr("transform", d => `translate(${d.x},${d.y})`)  // Use FIXED positions
       .style("cursor", "pointer")
-      .on("click", (event, d) => setSelectedNode(d))
+      .on("click", (event, d) => {
+        event.stopPropagation();
+        setSelectedNode(d);
+      })
       .on("mouseover", function(event, d) {
         d3.select(this).select("circle")
-          .attr("stroke-width", 3)
+          .transition().duration(200)
+          .attr("stroke-width", 4)
           .attr("stroke", "#FFFFFF");
       })
       .on("mouseout", function(event, d) {
         if (selectedNode?.id !== d.id) {
           d3.select(this).select("circle")
+            .transition().duration(200)
             .attr("stroke-width", 2)
             .attr("stroke", "#374151");
         }
       });
+      // ❌ NO DRAG BEHAVIOR - keeps positions fixed!
 
     nodeGroups.append("circle")
       .attr("r", d => d.size)
       .attr("fill", d => d.color)
       .attr("stroke", d => selectedNode?.id === d.id ? "#FFFFFF" : "#374151")
-      .attr("stroke-width", d => selectedNode?.id === d.id ? 3 : 2)
-      .style("filter", "drop-shadow(0px 2px 4px rgba(0,0,0,0.4))");
+      .attr("stroke-width", d => selectedNode?.id === d.id ? 4 : 2)
+      .style("filter", "drop-shadow(0px 2px 6px rgba(0,0,0,0.6))")
+      .style("transition", "all 0.3s ease");
 
-    nodeGroups.filter(d => d.size > 15).append("text")
-      .text(d => d.name.length > 12 ? d.name.substring(0, 12) + '...' : d.name)
-      .attr("y", d => d.size + 14)
+    // Show ALL node labels (not just large ones)
+    nodeGroups.append("text")
+      .text(d => {
+        const name = d.name;
+        return name.length > 15 ? name.substring(0, 15) + '...' : name;
+      })
+      .attr("y", d => d.size + 16)
       .attr("text-anchor", "middle")
-      .attr("font-size", "10px")
+      .attr("font-size", "9px")
+      .attr("font-weight", "500")
       .attr("fill", "#FFFFFF")
-      .style("text-shadow", "0px 1px 2px rgba(0,0,0,0.8)");
+      .style("text-shadow", "0px 1px 3px rgba(0,0,0,0.9)")
+      .style("pointer-events", "none");
   };
 
   const renderHierarchicalGraph = (

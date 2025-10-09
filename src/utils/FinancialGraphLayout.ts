@@ -107,28 +107,43 @@ export class FinancialGraphLayout {
       regionGroups.get(node.region)!.push(node);
     });
 
+    console.log('🌍 Regions found:', Array.from(regionGroups.keys()));
+
     const clusters: ClusterGroup[] = [];
-    const regionCount = regionGroups.size;
-    const angleStep = (2 * Math.PI) / regionCount;
+    const regions = Array.from(regionGroups.entries());
+    const regionCount = regions.length;
+    
+    // CRITICAL: Use LARGER radius to separate clusters clearly
     const centerX = width / 2;
     const centerY = height / 2;
-    const mainRadius = Math.min(width, height) * 0.3;
+    const mainRadius = Math.min(width, height) * 0.35; // Increased from 0.3 to 0.35
 
-    let regionIndex = 0;
-    regionGroups.forEach((regionNodes, regionName) => {
-      const angle = regionIndex * angleStep;
+    console.log(`📐 Layout: center=(${centerX},${centerY}), mainRadius=${mainRadius}`);
+
+    regions.forEach(([regionName, regionNodes], regionIndex) => {
+      // Calculate position for this region cluster
+      const angle = (regionIndex / regionCount) * 2 * Math.PI;
       const regionCenterX = centerX + Math.cos(angle) * mainRadius;
       const regionCenterY = centerY + Math.sin(angle) * mainRadius;
 
-      const sortedNodes = [...regionNodes].sort((a, b) => b.marketValue - a.marketValue);
-      const clusterRadius = Math.max(80, Math.sqrt(sortedNodes.length) * 30);
+      console.log(`📍 ${regionName}: center=(${regionCenterX.toFixed(0)},${regionCenterY.toFixed(0)})`);
 
+      // Sort by market value (biggest first)
+      const sortedNodes = [...regionNodes].sort((a, b) => b.marketValue - a.marketValue);
+      const clusterRadius = Math.max(100, Math.sqrt(sortedNodes.length) * 35); // Increased from 30 to 35
+
+      // CRITICAL: Set FIXED positions (not simulation)
       sortedNodes.forEach((node, i) => {
         const nodeAngle = (i / sortedNodes.length) * 2 * Math.PI;
-        const distanceRatio = 1 - (node.size / 40) * 0.3;
-        const nodeRadius = clusterRadius * distanceRatio;
-        node.x = regionCenterX + Math.cos(nodeAngle) * nodeRadius;
-        node.y = regionCenterY + Math.sin(nodeAngle) * nodeRadius;
+        // Bigger nodes closer to center
+        const distanceFromCenter = clusterRadius * (0.5 + (i / sortedNodes.length) * 0.5);
+        
+        node.x = regionCenterX + Math.cos(nodeAngle) * distanceFromCenter;
+        node.y = regionCenterY + Math.sin(nodeAngle) * distanceFromCenter;
+        
+        // LOCK positions so d3 force doesn't move them
+        node.fx = node.x;
+        node.fy = node.y;
       });
 
       clusters.push({
@@ -137,13 +152,12 @@ export class FinancialGraphLayout {
         region: regionName,
         nodes: sortedNodes.map(n => n.id),
         center: { x: regionCenterX, y: regionCenterY },
-        radius: clusterRadius,
+        radius: clusterRadius + 20, // Extra padding
         color: this.REGION_COLORS[regionName] || '#9CA3AF'
       });
-
-      regionIndex++;
     });
 
+    console.log('✅ Created clusters:', clusters.length);
     return clusters;
   }
 
