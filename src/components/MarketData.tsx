@@ -5,7 +5,7 @@ import TabSelector from './TabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
-import { Expand, Minimize, Hash, BarChart3 } from 'lucide-react';
+import { Expand, Minimize, Hash, BarChart3, Network, Calculator } from 'lucide-react';
 import StockdioCharts from './StockdioCharts';
 import InvestingCharts from './InvestingCharts';
 import CryptoLiveCharts from './CryptoLiveCharts';
@@ -170,6 +170,24 @@ const MarketData = () => {
             <span className="text-sm sm:text-base text-terminal-amber">PROFESSIONAL TRADING PLATFORM</span>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/relationship-dashboard')}
+              className="text-terminal-green hover:bg-terminal-green/10 hidden sm:flex"
+            >
+              <Network className="h-4 w-4 mr-2" />
+              Relationship Map
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/options')}
+              className="text-terminal-amber hover:bg-terminal-amber/10 hidden sm:flex"
+            >
+              <Calculator className="h-4 w-4 mr-2" />
+              Options 3D
+            </Button>
             <Button
               variant="ghost"
               size="icon"

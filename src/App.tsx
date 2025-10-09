@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import NotesAndVisualization from "./pages/NotesAndVisualization";
 import RelationshipDashboard from "./pages/RelationshipDashboard";
 import NotFound from "./pages/NotFound";
+import OptionsSurfacePlot from "./components/OptionsSurfacePlot";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => {
             <Route path="/" element={<Index />} />
             <Route path="/notes" element={<NotesAndVisualization />} />
             <Route path="/relationship-dashboard" element={<RelationshipDashboard />} />
+            <Route path="/options" element={<OptionsSurfacePlot />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
