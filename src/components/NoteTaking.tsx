@@ -19,7 +19,6 @@ import AutoSaveCanvas from './AutoSaveCanvas';
 import AdvancedSpreadsheet from './AdvancedSpreadsheet';
 import { ExcelClone } from './Excel/ExcelClone';
 import { SupplyChainViz } from './SupplyChainViz';
-import SpreadsheetRelationshipMap from './SpreadsheetRelationshipMap';
 import { 
   Plus, 
   Search, 
@@ -863,7 +862,7 @@ export default function NoteTaking() {
                         onSave={(data) => updateSpreadsheetData(selectedSpreadsheet.id, data)}
                       />
                     ) : (
-                      <SpreadsheetRelationshipMap 
+                      <SupplyChainViz 
                         data={selectedSpreadsheet.data || {}}
                         columns={['NO.', 'Security', 'Ticker', 'Fund', 'Position', 'Pos Chg', '% Out', 'Current Mkt Val', 'Current MV Chg', 'Filing Date', 'Region']}
                       />
