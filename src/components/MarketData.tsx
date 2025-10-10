@@ -5,7 +5,7 @@ import TabSelector from './TabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
-import { Expand, Minimize, Hash, BarChart3, Network, Calculator } from 'lucide-react';
+import { Expand, Minimize } from 'lucide-react';
 import StockdioCharts from './StockdioCharts';
 import InvestingCharts from './InvestingCharts';
 import CryptoLiveCharts from './CryptoLiveCharts';
@@ -112,6 +112,10 @@ const MarketData = () => {
   };
 
   const availableComponents = [
+    // Advanced Visualization
+    { id: 'able-focus', title: 'ABLE FOCUS', component: <div>ABLE Focus will be loaded</div> },
+    { id: 'options3d', title: 'OPTIONS 3D', component: <div>Options 3D will be loaded</div> },
+    
     // New Financial Components  
     { id: 'stockdio', title: 'STOCKDIO CHARTS', component: <StockdioCharts /> },
     { id: 'investing', title: 'INVESTING.COM CHARTS', component: <InvestingCharts /> },
@@ -149,6 +153,19 @@ const MarketData = () => {
   };
 
   const handleTabSelect = (selectedComponent: any) => {
+    // Handle special navigation for ABLE Focus and Options 3D
+    if (selectedComponent.id === 'able-focus') {
+      navigate('/relationship-dashboard');
+      setShowTabSelector(false);
+      return;
+    }
+    
+    if (selectedComponent.id === 'options3d') {
+      navigate('/options');
+      setShowTabSelector(false);
+      return;
+    }
+    
     const newPanel: PanelData = {
       id: `${selectedComponent.id}-${nextPanelId}`,
       title: selectedComponent.title,
@@ -170,24 +187,6 @@ const MarketData = () => {
             <span className="text-sm sm:text-base text-terminal-amber">PROFESSIONAL TRADING PLATFORM</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/relationship-dashboard')}
-              className="text-terminal-green hover:bg-terminal-green/10 hidden sm:flex"
-            >
-              <Network className="h-4 w-4 mr-2" />
-              Relationship Map
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/options')}
-              className="text-terminal-amber hover:bg-terminal-amber/10 hidden sm:flex"
-            >
-              <Calculator className="h-4 w-4 mr-2" />
-              Options 3D
-            </Button>
             <Button
               variant="ghost"
               size="icon"

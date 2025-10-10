@@ -22,7 +22,9 @@ import { BoardPanel } from '@/components/dashboard/BoardPanel';
 import { BalanceSheetPanel } from '@/components/dashboard/BalanceSheetPanel';
 import { LayoutSettings } from '@/components/dashboard/LayoutSettings';
 import { PanelHeader } from '@/components/dashboard/PanelHeader';
-import { FinancialRelationshipMap } from '@/components/FinancialRelationshipMap';
+import { ABLEFocus } from '@/components/ABLEFocus';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 
 const defaultLayout: Layout[] = [
   { i: 'relationship-map', x: 0, y: 0, w: 7, h: 10, minW: 4, minH: 6 },
@@ -57,6 +59,7 @@ const templates = {
 };
 
 export default function RelationshipDashboard() {
+  const navigate = useNavigate();
   const [layout, setLayout] = useState<Layout[]>(defaultLayout);
   const [visiblePanels, setVisiblePanels] = useState<Record<string, boolean>>({
     'relationship-map': true,
@@ -192,10 +195,19 @@ export default function RelationshipDashboard() {
       {/* Dashboard Header */}
       <header className="h-16 bg-gray-800 border-b border-gray-700 px-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <Network className="h-6 w-6 text-blue-400" />
-          <h1 className="text-lg font-semibold">Able Terminal - Relationship Dashboard</h1>
-          <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse mr-1.5" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/')}
+            className="text-terminal-green hover:bg-terminal-green/10"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Terminal
+          </Button>
+          <Network className="h-6 w-6 text-terminal-green" />
+          <h1 className="text-lg font-semibold text-terminal-green">ABLE Focus</h1>
+          <Badge variant="outline" className="bg-terminal-green/10 text-terminal-green border-terminal-green/30">
+            <span className="w-2 h-2 rounded-full bg-terminal-green animate-pulse mr-1.5" />
             LIVE
           </Badge>
         </div>
@@ -269,14 +281,14 @@ export default function RelationshipDashboard() {
           {visiblePanels['relationship-map'] && (
             <div key="relationship-map" className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden flex flex-col">
               <PanelHeader
-                title="Relationship Map"
+                title="ABLE Focus"
                 icon={<Network className="h-4 w-4" />}
-                subtitle="Network visualization"
+                subtitle="Intelligent Network Clustering"
                 onMaximize={() => handleMaximize('relationship-map')}
                 onClose={() => handleClosePanel('relationship-map')}
               />
               <div className="flex-1 overflow-hidden">
-                <FinancialRelationshipMap />
+                <ABLEFocus />
               </div>
             </div>
           )}
@@ -363,7 +375,7 @@ export default function RelationshipDashboard() {
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-white">
-                    {maximizedPanel === 'relationship-map' ? 'Relationship Map' :
+                    {maximizedPanel === 'relationship-map' ? 'ABLE Focus' :
                      maximizedPanel === 'news' ? 'News Feed' :
                      maximizedPanel === 'indices' ? 'Market Indices' :
                      maximizedPanel === 'peers' ? 'Peer Companies' :
@@ -387,7 +399,7 @@ export default function RelationshipDashboard() {
             <div className="flex-1 overflow-hidden rounded-lg">
               {maximizedPanel === 'relationship-map' && (
                 <div className="h-full bg-gray-800 rounded-lg border border-gray-700 shadow-2xl">
-                  <FinancialRelationshipMap />
+                  <ABLEFocus />
                 </div>
               )}
               {maximizedPanel === 'news' && (
