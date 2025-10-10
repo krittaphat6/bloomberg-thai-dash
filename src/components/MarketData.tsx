@@ -34,6 +34,8 @@ import ChessGame from './ChessGame';
 import { BloombergLiveTV } from './BloombergLiveTV';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import ObsidianCanvas from './Canvas/ObsidianCanvas';
+import OptionsCalculator from './OptionsCalculator';
+import { ABLEFocus } from './ABLEFocus';
 
 interface PanelData {
   id: string;
@@ -112,9 +114,9 @@ const MarketData = () => {
   };
 
   const availableComponents = [
-    // Advanced Visualization
-    { id: 'able-focus', title: 'ABLE FOCUS', component: <div>ABLE Focus will be loaded</div> },
-    { id: 'options3d', title: 'OPTIONS 3D', component: <div>Options 3D will be loaded</div> },
+    // Advanced Visualization - These now work as floating windows!
+    { id: 'able-focus', title: 'ABLE FOCUS', component: <div className="h-full bg-background"><ABLEFocus /></div> },
+    { id: 'options3d', title: 'OPTIONS 3D', component: <div className="h-full bg-background"><OptionsCalculator /></div> },
     
     // New Financial Components  
     { id: 'stockdio', title: 'STOCKDIO CHARTS', component: <StockdioCharts /> },
@@ -153,19 +155,7 @@ const MarketData = () => {
   };
 
   const handleTabSelect = (selectedComponent: any) => {
-    // Handle special navigation for ABLE Focus and Options 3D
-    if (selectedComponent.id === 'able-focus') {
-      navigate('/relationship-dashboard');
-      setShowTabSelector(false);
-      return;
-    }
-    
-    if (selectedComponent.id === 'options3d') {
-      navigate('/options');
-      setShowTabSelector(false);
-      return;
-    }
-    
+    // All components now work as floating windows!
     const newPanel: PanelData = {
       id: `${selectedComponent.id}-${nextPanelId}`,
       title: selectedComponent.title,
