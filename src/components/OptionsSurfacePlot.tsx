@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Text, Line, Stats } from '@react-three/drei';
-import { Calculator, ArrowLeft, Camera, Clock, Grid3x3, Activity } from 'lucide-react';
+import { Calculator, ArrowLeft, Camera, Clock, Grid3x3, Activity, Maximize2, Minimize2 } from 'lucide-react';
 import * as THREE from 'three';
 
 // Black-Scholes implementation for Greeks calculation
@@ -443,6 +443,9 @@ export default function OptionsSurfacePlot() {
   // Surface plot ranges
   const [priceRange] = useState({ min: 80, max: 120, steps: 30 });
   const [timeRange] = useState({ min: 1, max: 90, steps: 30 });
+  
+  // Fullscreen state
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Presets
   const presets = {
@@ -468,6 +471,44 @@ export default function OptionsSurfacePlot() {
       link.click();
     }
   };
+
+  // Fullscreen toggle handler
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }, []);
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      }
+      if (e.key === 'Escape' && isFullscreen) {
+        document.exitFullscreen();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [isFullscreen, toggleFullscreen]);
 
   // Generate surface data
   const generateSurfaceData = (
@@ -609,11 +650,13 @@ export default function OptionsSurfacePlot() {
       <div className="space-y-4">
         <Card className="bg-background border-border">
         <CardHeader>
-          <CardTitle className="text-terminal-green flex items-center gap-2">
-            <Calculator className="h-5 w-5" />
-            Options Greeks 3D Surface Plot - Professional Edition
-            <Badge variant="outline" className="ml-2">Black-Scholes Model</Badge>
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-terminal-green flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Options Greeks 3D Surface Plot - Professional Edition
+              <Badge variant="outline" className="ml-2">Black-Scholes Model</Badge>
+            </CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
@@ -845,6 +888,18 @@ export default function OptionsSurfacePlot() {
               riskFreeRate={riskFreeRate}
               optionType={optionType}
             />
+          </div>
+          
+          {/* Keyboard Shortcuts Info */}
+          <div className="mt-4 pt-4 border-t border-border">
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p className="font-semibold mb-2">⌨️ Keyboard Shortcuts:</p>
+              <p>• Press <kbd className="px-1 py-0.5 bg-muted rounded">F</kbd> for fullscreen</p>
+              <p>• Press <kbd className="px-1 py-0.5 bg-muted rounded">ESC</kbd> to exit</p>
+              <p>• 🖱️ Drag to rotate</p>
+              <p>• 🔍 Scroll to zoom</p>
+              <p>• 👆 Right-click to pan</p>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -288,7 +288,10 @@ export default function RelationshipDashboard() {
                 onClose={() => handleClosePanel('relationship-map')}
               />
               <div className="flex-1 overflow-hidden">
-                <ABLEFocus />
+                <ABLEFocus 
+                  onMaximize={() => handleMaximize('relationship-map')}
+                  onClose={() => handleClosePanel('relationship-map')}
+                />
               </div>
             </div>
           )}
@@ -399,7 +402,9 @@ export default function RelationshipDashboard() {
             <div className="flex-1 overflow-hidden rounded-lg">
               {maximizedPanel === 'relationship-map' && (
                 <div className="h-full bg-gray-800 rounded-lg border border-gray-700 shadow-2xl">
-                  <ABLEFocus />
+                  <ABLEFocus 
+                    onClose={handleCloseMaximize}
+                  />
                 </div>
               )}
               {maximizedPanel === 'news' && (

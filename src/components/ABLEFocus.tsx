@@ -3,7 +3,7 @@ import * as d3 from 'd3';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Network, RefreshCw, ZoomIn, ZoomOut, Minimize2, Maximize2 } from 'lucide-react';
+import { Network, RefreshCw, ZoomIn, ZoomOut, Minimize2, Maximize2, X } from 'lucide-react';
 
 interface Node {
   id: string;
@@ -150,7 +150,14 @@ const generateMockData = (): GraphData => {
   return { nodes, links };
 };
 
-export const ABLEFocus = () => {
+interface ABLEFocusProps {
+  onMaximize?: () => void;
+  onMinimize?: () => void;
+  onClose?: () => void;
+  className?: string;
+}
+
+export const ABLEFocus = ({ onMaximize, onMinimize, onClose, className }: ABLEFocusProps = {}) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] });
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -331,8 +338,26 @@ export const ABLEFocus = () => {
     setData(generateMockData());
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'r' || e.key === 'R') {
+        handleReset();
+      }
+      if (e.key === '+' || e.key === '=') {
+        handleZoomIn();
+      }
+      if (e.key === '-' || e.key === '_') {
+        handleZoomOut();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
   return (
-    <Card className="h-full bg-background border-border flex flex-col">
+    <Card className={`h-full bg-background border-border flex flex-col ${className || ''}`}>
       <CardHeader className="flex-shrink-0 pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-terminal-green flex items-center gap-2">
@@ -344,29 +369,69 @@ export const ABLEFocus = () => {
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
               onClick={handleZoomOut}
-              className="h-8 w-8 p-0"
+              className="h-8 w-8"
+              title="Zoom Out (-)"
             >
               <ZoomOut className="h-4 w-4" />
             </Button>
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
               onClick={handleZoomIn}
-              className="h-8 w-8 p-0"
+              className="h-8 w-8"
+              title="Zoom In (+)"
             >
               <ZoomIn className="h-4 w-4" />
             </Button>
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
               onClick={handleReset}
-              className="h-8 w-8 p-0"
+              className="h-8 w-8"
+              title="Refresh (R)"
             >
               <RefreshCw className="h-4 w-4" />
             </Button>
+            
+            {onMaximize && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onMaximize}
+                className="h-8 w-8 text-terminal-green hover:bg-terminal-green/20"
+                title="Maximize"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            )}
+            
+            {onMinimize && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onMinimize}
+                className="h-8 w-8 text-terminal-amber hover:bg-terminal-amber/20"
+                title="Minimize"
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            )}
+            
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                className="h-8 w-8 text-terminal-red hover:bg-terminal-red/20"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+            
             <Badge variant="outline" className="text-muted-foreground">
               Zoom: {(zoom * 100).toFixed(0)}%
             </Badge>
@@ -391,9 +456,18 @@ export const ABLEFocus = () => {
             </div>
           </div>
         )}
-        <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center text-xs text-muted-foreground">
+        
+        {/* Keyboard Shortcuts Info */}
+        <div className="absolute bottom-4 right-4 bg-muted/90 rounded-lg p-3 text-xs space-y-1 backdrop-blur-sm">
+          <p className="font-semibold mb-2">⌨️ Shortcuts:</p>
+          <p>• <kbd className="px-1 py-0.5 bg-background rounded">R</kbd> Refresh</p>
+          <p>• <kbd className="px-1 py-0.5 bg-background rounded">+</kbd> Zoom in</p>
+          <p>• <kbd className="px-1 py-0.5 bg-background rounded">-</kbd> Zoom out</p>
+          <p>• 🖱️ Click nodes for details</p>
+        </div>
+        
+        <div className="absolute bottom-4 left-4 text-xs text-muted-foreground">
           <span>{data.nodes.length} nodes • {data.links.length} connections</span>
-          <span>Drag nodes • Scroll to zoom • Click to select</span>
         </div>
       </CardContent>
     </Card>
