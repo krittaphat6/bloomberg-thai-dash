@@ -6,9 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Text, Line, Stats } from '@react-three/drei';
-import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { Calculator, ArrowLeft, Camera, Clock, Grid3x3, Activity } from 'lucide-react';
 import * as THREE from 'three';
 
@@ -431,7 +430,6 @@ export default function OptionsSurfacePlot() {
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [showCrosshair, setShowCrosshair] = useState(false);
   const [showIVSurface, setShowIVSurface] = useState(false);
-  const [showBloom, setShowBloom] = useState(true);
   const [showStats, setShowStats] = useState(false);
   
   // Animation
@@ -713,13 +711,6 @@ export default function OptionsSurfacePlot() {
                     🔥 Heatmap
                   </Button>
                   <Button
-                    variant={showBloom ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setShowBloom(!showBloom)}
-                  >
-                    ✨ Bloom
-                  </Button>
-                  <Button
                     variant={showStats ? "default" : "outline"}
                     size="sm"
                     onClick={() => setShowStats(!showStats)}
@@ -835,16 +826,6 @@ export default function OptionsSurfacePlot() {
                 />
                 
                 <gridHelper args={[20, 20, '#333333', '#111111']} position={[0, 0, -4]} />
-                
-                {showBloom && (
-                  <EffectComposer>
-                    <Bloom 
-                      intensity={1.5} 
-                      luminanceThreshold={0.3} 
-                      luminanceSmoothing={0.9} 
-                    />
-                  </EffectComposer>
-                )}
               </Canvas>
             </div>
           </div>
