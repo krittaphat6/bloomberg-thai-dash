@@ -54,7 +54,6 @@ const MarketData = () => {
       setCurrentTime(new Date());
     }, 1000);
 
-    // ตรวจสอบ fullscreen status
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
@@ -112,21 +111,22 @@ const MarketData = () => {
   };
 
   const availableComponents = [
-    // Advanced Visualization
-    { id: 'able-focus', title: 'ABLE FOCUS', component: <div>ABLE Focus will be loaded</div> },
-    { id: 'options3d', title: 'OPTIONS 3D', component: <div>Options 3D will be loaded</div> },
+    // Special Pages & Games
+    { id: 'able-focus', title: 'ABLE-FOCUS', component: <div>ABLE-Focus</div> },
+    { id: 'options-3d', title: 'OPTIONS 3D', component: <div>Options</div> },
+    { id: 'pacman', title: '🎮 PAC-MAN GAME', component: <div>PacMan</div> },
     
-    // New Financial Components  
+    // Trading & Finance Tools
     { id: 'stockdio', title: 'STOCKDIO CHARTS', component: <StockdioCharts /> },
-    { id: 'investing', title: 'INVESTING.COM CHARTS', component: <InvestingCharts /> },
-    { id: 'crypto', title: 'CRYPTO LIVE CHARTS', component: <CryptoLiveCharts /> },
-    { id: 'forex', title: 'FOREX & ECONOMIC DATA', component: <ForexEconomicData /> },
+    { id: 'investing', title: 'INVESTING.COM', component: <InvestingCharts /> },
+    { id: 'crypto', title: 'CRYPTO LIVE', component: <CryptoLiveCharts /> },
+    { id: 'forex', title: 'FOREX & ECONOMICS', component: <ForexEconomicData /> },
     
-    // Keep existing working components:
-    { id: 'fedwatch', title: 'FEDWATCH TOOL', component: <FedWatch /> },
+    // Trading Tools
+    { id: 'fedwatch', title: 'FED WATCH', component: <FedWatch /> },
     { id: 'calendar', title: 'ECONOMIC CALENDAR', component: <EconomicCalendar /> },
     { id: 'scatter', title: 'SCATTER ANALYSIS', component: <ScatterAnalysis /> },
-    { id: 'piechart', title: 'MARKET PIE CHART', component: <MarketPieChart /> },
+    { id: 'pie', title: 'MARKET PIE', component: <MarketPieChart /> },
     { id: 'news', title: 'BLOOMBERG NEWS', component: <BloombergNews /> },
     { id: 'tv', title: 'BLOOMBERG LIVE TV', component: <BloombergLiveTV /> },
     { id: 'code', title: 'PYTHON CODE EDITOR', component: <PythonCodeEditor /> },
@@ -142,7 +142,7 @@ const MarketData = () => {
     { id: 'bitcoin', title: 'BITCOIN MEMPOOL', component: <BitcoinMempool /> },
     { id: 'uamap', title: 'LIVE UA MAP', component: <LiveUAMap /> },
     { id: 'debtclock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
-    { id: 'notes', title: 'NOTE TAKING', component: <NoteTaking /> },
+    { id: 'notes', title: 'NOTES', component: <NoteTaking /> },
     { id: 'journal', title: 'TRADING JOURNAL', component: <TradingJournal /> },
     { id: 'chess', title: 'CHESS PUZZLE', component: <ChessGame /> },
     { id: 'canvas', title: 'CANVAS', component: <ObsidianCanvas notes={[]} onUpdateNote={() => {}} onCreateNote={() => {}} /> }
@@ -153,15 +153,21 @@ const MarketData = () => {
   };
 
   const handleTabSelect = (selectedComponent: any) => {
-    // Handle special navigation for ABLE Focus and Options 3D
+    // Special page navigations
     if (selectedComponent.id === 'able-focus') {
       navigate('/relationship-dashboard');
       setShowTabSelector(false);
       return;
     }
     
-    if (selectedComponent.id === 'options3d') {
+    if (selectedComponent.id === 'options-3d') {
       navigate('/options');
+      setShowTabSelector(false);
+      return;
+    }
+    
+    if (selectedComponent.id === 'pacman') {
+      navigate('/pacman');
       setShowTabSelector(false);
       return;
     }
