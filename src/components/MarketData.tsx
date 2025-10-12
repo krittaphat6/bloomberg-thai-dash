@@ -111,10 +111,34 @@ const MarketData = () => {
   };
 
   const availableComponents = [
-    // Special Pages & Games
-    { id: 'able-focus', title: 'ABLE-FOCUS', component: <div>ABLE-Focus</div> },
-    { id: 'options-3d', title: 'OPTIONS 3D', component: <div>Options</div> },
-    { id: 'pacman', title: '🎮 PAC-MAN GAME', component: <div>PacMan</div> },
+    // Advanced Tools & Games - NOW AS INLINE PANELS WITH IFRAMES
+    { 
+      id: 'able-focus', 
+      title: 'ABLE-FOCUS', 
+      component: (
+        <div className="h-full w-full overflow-auto">
+          <iframe src="/relationship-dashboard" className="w-full h-[800px] border-0" title="ABLE Focus" />
+        </div>
+      )
+    },
+    { 
+      id: 'options-3d', 
+      title: 'OPTIONS-3D', 
+      component: (
+        <div className="h-full w-full overflow-auto">
+          <iframe src="/options" className="w-full h-[800px] border-0" title="Options 3D" />
+        </div>
+      )
+    },
+    { 
+      id: 'pacman', 
+      title: '🎮 PAC-MAN', 
+      component: (
+        <div className="h-full w-full overflow-auto">
+          <iframe src="/pacman" className="w-full h-[800px] border-0" title="Pac-Man Game" />
+        </div>
+      )
+    },
     
     // Trading & Finance Tools
     { id: 'stockdio', title: 'STOCKDIO CHARTS', component: <StockdioCharts /> },
@@ -153,25 +177,7 @@ const MarketData = () => {
   };
 
   const handleTabSelect = (selectedComponent: any) => {
-    // Special page navigations
-    if (selectedComponent.id === 'able-focus') {
-      navigate('/relationship-dashboard');
-      setShowTabSelector(false);
-      return;
-    }
-    
-    if (selectedComponent.id === 'options-3d') {
-      navigate('/options');
-      setShowTabSelector(false);
-      return;
-    }
-    
-    if (selectedComponent.id === 'pacman') {
-      navigate('/pacman');
-      setShowTabSelector(false);
-      return;
-    }
-    
+    // Now all components open as panels (including ABLE-Focus, Options-3D, and Pac-Man)
     const newPanel: PanelData = {
       id: `${selectedComponent.id}-${nextPanelId}`,
       title: selectedComponent.title,
