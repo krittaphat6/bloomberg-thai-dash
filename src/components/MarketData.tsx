@@ -116,6 +116,7 @@ const MarketData = () => {
     // Live Chat
     { id: 'livechat', title: '💬 LIVE CHAT', component: <LiveChat /> },
     { id: 'livechat-real', title: '💬 LIVE CHAT (REAL)', component: <LiveChatReal /> },
+    { id: 'livechat-real', title: '💬 LIVE CHAT (REAL)', component: <LiveChatReal /> },
     
     // Advanced Tools & Games - NOW AS INLINE PANELS WITH IFRAMES
     { 
