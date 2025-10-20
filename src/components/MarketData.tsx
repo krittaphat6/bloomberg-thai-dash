@@ -35,6 +35,7 @@ import { BloombergLiveTV } from './BloombergLiveTV';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import ObsidianCanvas from './Canvas/ObsidianCanvas';
 import LiveChat from './LiveChat';
+import LiveChatReal from './LiveChatReal';
 
 interface PanelData {
   id: string;
@@ -114,6 +115,7 @@ const MarketData = () => {
   const availableComponents = [
     // Live Chat
     { id: 'livechat', title: '💬 LIVE CHAT', component: <LiveChat /> },
+    { id: 'livechat-real', title: '💬 LIVE CHAT (REAL)', component: <LiveChatReal /> },
     
     // Advanced Tools & Games - NOW AS INLINE PANELS WITH IFRAMES
     { 
