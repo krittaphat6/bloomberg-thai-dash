@@ -3,11 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
-import { User, Friendship, ChatRoom, Message, Webhook } from '@/types/chat';
-import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check } from 'lucide-react';
+import { User, Friendship, ChatRoom, Message, Webhook, FriendNickname } from '@/types/chat';
+import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2 } from 'lucide-react';
 
 const LiveChatReal = () => {
   // User state
@@ -18,21 +17,28 @@ const LiveChatReal = () => {
   const [friends, setFriends] = useState<Friendship[]>([]);
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [roomNames, setRoomNames] = useState<{ [key: string]: string }>({});
   
   // Messages
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   
+  // Nicknames
+  const [nicknames, setNicknames] = useState<{ [key: string]: string }>({});
+  const [showEditNickname, setShowEditNickname] = useState(false);
+  const [editingFriendId, setEditingFriendId] = useState<string>('');
+  const [newNickname, setNewNickname] = useState('');
+  
   // UI State
   const [showSettings, setShowSettings] = useState(false);
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showRoomSettings, setShowRoomSettings] = useState(false);
+  const [showInviteToGroup, setShowInviteToGroup] = useState(false);
   const [friendUsername, setFriendUsername] = useState('');
   const [groupName, setGroupName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   
   // Webhooks
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
@@ -81,6 +87,33 @@ const LiveChatReal = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const getDisplayName = (friendId: string, username: string): string => {
+    return nicknames[friendId] || username;
+  };
+
+  // Get friend name for private room
+  const getFriendNameForRoom = async (room: ChatRoom): Promise<string> => {
+    if (room.type !== 'private' || !currentUser) return room.name || 'Private Chat';
+
+    try {
+      const { data: members } = await supabase
+        .from('room_members')
+        .select('user_id, users(username)')
+        .eq('room_id', room.id)
+        .neq('user_id', currentUser.id);
+
+      if (members && members.length > 0 && members[0].users) {
+        const friendId = members[0].user_id;
+        const username = members[0].users.username;
+        return nicknames[friendId] || username;
+      }
+    } catch (error) {
+      console.error('Error getting friend name:', error);
+    }
+
+    return 'Unknown User';
+  };
+
   // Initialize user
   useEffect(() => {
     const initUser = async () => {
@@ -94,7 +127,6 @@ const LiveChatReal = () => {
       if (!storedUsername) localStorage.setItem('able_username', username);
       if (!storedColor) localStorage.setItem('able_color', color);
 
-      // Upsert user in database
       const { error } = await supabase
         .from('users')
         .upsert({
@@ -117,6 +149,28 @@ const LiveChatReal = () => {
     initUser();
   }, []);
 
+  // Load nicknames
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadNicknames = async () => {
+      const { data } = await supabase
+        .from('friend_nicknames')
+        .select('*')
+        .eq('user_id', currentUser.id);
+
+      if (data) {
+        const nicknameMap: { [key: string]: string } = {};
+        data.forEach((n: any) => {
+          nicknameMap[n.friend_id] = n.nickname;
+        });
+        setNicknames(nicknameMap);
+      }
+    };
+
+    loadNicknames();
+  }, [currentUser]);
+
   // Load friends
   useEffect(() => {
     if (!currentUser) return;
@@ -136,7 +190,6 @@ const LiveChatReal = () => {
 
     loadFriendships();
 
-    // Subscribe to friendship changes
     const channel = supabase
       .channel('friendships-changes')
       .on('postgres_changes', {
@@ -189,6 +242,27 @@ const LiveChatReal = () => {
     };
   }, [currentUser]);
 
+  // Load room display names
+  useEffect(() => {
+    const loadRoomNames = async () => {
+      const names: { [key: string]: string } = {};
+      
+      for (const room of rooms) {
+        if (room.type === 'private') {
+          names[room.id] = await getFriendNameForRoom(room);
+        } else {
+          names[room.id] = room.name || 'Group Chat';
+        }
+      }
+      
+      setRoomNames(names);
+    };
+
+    if (rooms.length > 0 && currentUser) {
+      loadRoomNames();
+    }
+  }, [rooms, currentUser, nicknames]);
+
   // Load messages for current room
   useEffect(() => {
     if (!currentRoomId) return;
@@ -210,7 +284,6 @@ const LiveChatReal = () => {
 
     loadMessages();
 
-    // Subscribe to new messages
     const channel = supabase
       .channel(`room:${currentRoomId}`)
       .on('postgres_changes', {
@@ -229,7 +302,7 @@ const LiveChatReal = () => {
     };
   }, [currentRoomId]);
 
-  // Load webhooks for current room
+  // Load webhooks
   useEffect(() => {
     if (!currentRoomId) return;
 
@@ -248,6 +321,39 @@ const LiveChatReal = () => {
 
     loadWebhooks();
   }, [currentRoomId]);
+
+  // Save nickname
+  const saveNickname = async () => {
+    if (!currentUser || !editingFriendId || !newNickname.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('friend_nicknames')
+        .upsert({
+          user_id: currentUser.id,
+          friend_id: editingFriendId,
+          nickname: newNickname.trim(),
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,friend_id'
+        });
+
+      if (error) throw error;
+
+      setNicknames(prev => ({
+        ...prev,
+        [editingFriendId]: newNickname.trim()
+      }));
+
+      toast({ title: 'Nickname Saved!', description: 'Friend nickname updated' });
+      setShowEditNickname(false);
+      setNewNickname('');
+      setEditingFriendId('');
+    } catch (error: any) {
+      console.error('Error saving nickname:', error);
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
 
   // Add friend
   const handleAddFriend = async () => {
@@ -275,7 +381,7 @@ const LiveChatReal = () => {
         .insert({
           user_id: currentUser.id,
           friend_id: friend.id,
-          status: 'accepted', // Auto-accept for simplicity
+          status: 'accepted',
         });
 
       if (error) {
@@ -288,8 +394,6 @@ const LiveChatReal = () => {
         toast({ title: 'Friend Added!', description: `${friendUsername} is now your friend` });
         setFriendUsername('');
         setShowAddFriend(false);
-        
-        // Auto-create private room
         startPrivateChat(friend.id, friend.username);
       }
     } catch (error: any) {
@@ -303,7 +407,6 @@ const LiveChatReal = () => {
     if (!currentUser) return;
 
     try {
-      // Check if private room exists
       const { data: existingRooms } = await supabase
         .from('room_members')
         .select('room_id, chat_rooms!inner(type)')
@@ -329,7 +432,6 @@ const LiveChatReal = () => {
         return;
       }
 
-      // Create new private room
       const { data: newRoom, error: roomError } = await supabase
         .from('chat_rooms')
         .insert({
@@ -341,7 +443,6 @@ const LiveChatReal = () => {
 
       if (roomError) throw roomError;
 
-      // Add both members
       const { error: membersError } = await supabase
         .from('room_members')
         .insert([
@@ -361,7 +462,10 @@ const LiveChatReal = () => {
 
   // Create group
   const handleCreateGroup = async () => {
-    if (!currentUser || !groupName.trim()) return;
+    if (!currentUser || !groupName.trim()) {
+      toast({ title: 'Error', description: 'Please enter a group name', variant: 'destructive' });
+      return;
+    }
 
     try {
       const { data: newRoom, error: roomError } = await supabase
@@ -378,16 +482,81 @@ const LiveChatReal = () => {
 
       const { error: memberError } = await supabase
         .from('room_members')
-        .insert({ room_id: newRoom.id, user_id: currentUser.id });
+        .insert({ 
+          room_id: newRoom.id, 
+          user_id: currentUser.id 
+        });
 
       if (memberError) throw memberError;
 
-      toast({ title: 'Group Created!', description: `"${groupName}" is ready` });
+      await supabase.from('messages').insert({
+        room_id: newRoom.id,
+        user_id: 'system',
+        username: 'SYSTEM',
+        color: '#00ff00',
+        content: `Group "${groupName.trim()}" created by ${currentUser.username}`,
+        message_type: 'text'
+      });
+
+      toast({ 
+        title: 'Group Created!', 
+        description: `${groupName} is ready. Invite friends to join!` 
+      });
+      
       setGroupName('');
       setShowCreateGroup(false);
       setCurrentRoomId(newRoom.id);
     } catch (error: any) {
       console.error('Error creating group:', error);
+      toast({ 
+        title: 'Error', 
+        description: error.message || 'Failed to create group', 
+        variant: 'destructive' 
+      });
+    }
+  };
+
+  // Invite friend to group
+  const inviteFriendToGroup = async (friendId: string, friendUsername: string) => {
+    if (!currentRoomId || !currentUser) return;
+
+    try {
+      const { data: existing } = await supabase
+        .from('room_members')
+        .select('id')
+        .eq('room_id', currentRoomId)
+        .eq('user_id', friendId)
+        .single();
+
+      if (existing) {
+        toast({ title: 'Already Member', description: `${friendUsername} is already in this group` });
+        return;
+      }
+
+      await supabase
+        .from('room_members')
+        .insert({
+          room_id: currentRoomId,
+          user_id: friendId
+        });
+
+      await supabase.from('messages').insert({
+        room_id: currentRoomId,
+        user_id: 'system',
+        username: 'SYSTEM',
+        color: '#00ff00',
+        content: `${friendUsername} joined the group`,
+        message_type: 'text'
+      });
+
+      toast({ 
+        title: 'Friend Added!', 
+        description: `${friendUsername} has been added to the group` 
+      });
+      
+      setShowInviteToGroup(false);
+    } catch (error: any) {
+      console.error('Error inviting friend:', error);
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     }
   };
@@ -424,14 +593,13 @@ const LiveChatReal = () => {
   const handleFileUpload = async (file: File, messageType: 'image' | 'file') => {
     if (!currentUser || !currentRoomId || isUploading) return;
 
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       toast({ title: 'File Too Large', description: 'Maximum file size is 10MB', variant: 'destructive' });
       return;
     }
 
     setIsUploading(true);
-    setUploadProgress(0);
 
     try {
       const fileExt = file.name.split('.').pop();
@@ -473,7 +641,6 @@ const LiveChatReal = () => {
       toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' });
     } finally {
       setIsUploading(false);
-      setUploadProgress(0);
     }
   };
 
@@ -515,7 +682,6 @@ const LiveChatReal = () => {
   };
 
   const currentRoom = rooms.find(r => r.id === currentRoomId);
-  const roomName = currentRoom?.name || (currentRoom?.type === 'private' ? 'Private Chat' : 'Chat Room');
 
   if (!isInitialized) {
     return (
@@ -562,20 +728,38 @@ const LiveChatReal = () => {
                   ? friendship.friend
                   : friendship.friend;
                 const friendId = friendship.friend_id === currentUser?.id ? friendship.user_id : friendship.friend_id;
+                const displayName = getDisplayName(friendId, friend?.username || 'Unknown');
                 
                 return (
                   <div
                     key={friendship.id}
-                    className="flex items-center gap-2 p-2 hover:bg-terminal-green/10 cursor-pointer rounded"
-                    onClick={() => {
-                      const friendData = friendship.friend_id === currentUser?.id 
-                        ? { id: friendship.user_id, username: friend?.username || 'Unknown' }
-                        : { id: friendship.friend_id, username: friend?.username || 'Unknown' };
-                      startPrivateChat(friendData.id, friendData.username);
-                    }}
+                    className="flex items-center gap-2 p-2 hover:bg-terminal-green/10 cursor-pointer rounded group"
                   >
                     <div className="w-2 h-2 rounded-full bg-terminal-green"></div>
-                    <span className="text-sm">{friend?.username || 'Unknown'}</span>
+                    <span 
+                      className="text-sm flex-1"
+                      onClick={() => {
+                        const friendData = friendship.friend_id === currentUser?.id 
+                          ? { id: friendship.user_id, username: friend?.username || 'Unknown' }
+                          : { id: friendship.friend_id, username: friend?.username || 'Unknown' };
+                        startPrivateChat(friendData.id, friendData.username);
+                      }}
+                    >
+                      {displayName}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="opacity-0 group-hover:opacity-100 h-6 w-6"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingFriendId(friendId);
+                        setNewNickname(nicknames[friendId] || '');
+                        setShowEditNickname(true);
+                      }}
+                    >
+                      <Edit2 className="w-3 h-3" />
+                    </Button>
                   </div>
                 );
               })
@@ -601,8 +785,12 @@ const LiveChatReal = () => {
                   className={`p-2 mb-1 rounded cursor-pointer ${currentRoomId === room.id ? 'bg-terminal-green/20' : 'hover:bg-terminal-green/10'}`}
                   onClick={() => setCurrentRoomId(room.id)}
                 >
-                  <div className="text-sm font-bold">{room.name || (room.type === 'private' ? 'Private Chat' : 'Room')}</div>
-                  <div className="text-xs text-terminal-green/60">{room.type}</div>
+                  <div className="text-sm font-bold">
+                    {roomNames[room.id] || 'Loading...'}
+                  </div>
+                  <div className="text-xs text-terminal-green/60">
+                    {room.type === 'private' ? '1:1 Chat' : 'Group Chat'}
+                  </div>
                 </div>
               ))
             )}
@@ -617,13 +805,28 @@ const LiveChatReal = () => {
             {/* Chat Header */}
             <div className="p-4 border-b border-terminal-green/30 flex items-center justify-between">
               <div>
-                <h2 className="font-bold text-lg">{roomName}</h2>
-                <div className="text-xs text-terminal-green/60">{currentRoom?.type === 'group' ? 'Group Chat' : '1:1 Chat'}</div>
+                <h2 className="font-bold text-lg">
+                  {currentRoomId && roomNames[currentRoomId] ? roomNames[currentRoomId] : 'Chat'}
+                </h2>
+                <div className="text-xs text-terminal-green/60">
+                  {currentRoom?.type === 'group' ? 'Group Chat' : 'Private Chat'}
+                </div>
               </div>
+              
               {currentRoom?.type === 'group' && (
-                <Button variant="ghost" size="icon" onClick={() => setShowRoomSettings(true)}>
-                  <Settings className="w-4 h-4" />
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setShowInviteToGroup(true)}
+                  >
+                    <UserPlus className="w-4 h-4 mr-1" />
+                    Invite
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setShowRoomSettings(true)}>
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                </div>
               )}
             </div>
 
@@ -632,42 +835,44 @@ const LiveChatReal = () => {
               {messages.length === 0 ? (
                 <div className="text-center text-terminal-green/60 py-8">No messages yet. Start the conversation!</div>
               ) : (
-                messages.map(msg => (
-                  <div key={msg.id} className="mb-4">
+                messages.map(message => (
+                  <div key={message.id} className="mb-4">
                     <div className="flex items-start gap-2">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0" style={{ backgroundColor: msg.color }}>
-                        {msg.username[0]}
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ backgroundColor: message.color }}>
+                        {message.username[0]}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2 mb-1">
-                          <span className="font-bold text-sm" style={{ color: msg.color }}>{msg.username}</span>
-                          <span className="text-xs text-terminal-green/60">{formatTime(msg.created_at)}</span>
+                          <span className="font-bold text-sm" style={{ color: message.color }}>{message.username}</span>
+                          <span className="text-xs text-terminal-green/40">{formatTime(message.created_at)}</span>
                         </div>
                         
-                        {msg.message_type === 'text' && (
-                          <div className="text-sm break-words">{msg.content}</div>
+                        {message.message_type === 'text' && (
+                          <div className="text-terminal-green/90 break-words">{message.content}</div>
                         )}
                         
-                        {msg.message_type === 'image' && (
+                        {message.message_type === 'image' && (
                           <div className="mt-2">
-                            <img src={msg.file_url} alt={msg.file_name} className="max-w-md rounded border border-terminal-green/30 cursor-pointer hover:opacity-80" onClick={() => window.open(msg.file_url, '_blank')} />
+                            <img src={message.file_url} alt={message.file_name} className="max-w-sm rounded border border-terminal-green/30 cursor-pointer hover:opacity-80" onClick={() => window.open(message.file_url, '_blank')} />
                           </div>
                         )}
                         
-                        {msg.message_type === 'file' && (
-                          <div className="mt-2 p-3 border border-terminal-green/30 rounded inline-flex items-center gap-2 hover:bg-terminal-green/10 cursor-pointer" onClick={() => window.open(msg.file_url, '_blank')}>
-                            <Paperclip className="w-4 h-4" />
-                            <div>
-                              <div className="text-sm">{msg.file_name}</div>
-                              <div className="text-xs text-terminal-green/60">{formatFileSize(msg.file_size)}</div>
+                        {message.message_type === 'file' && (
+                          <div className="mt-2 p-3 bg-terminal-green/10 border border-terminal-green/30 rounded inline-block">
+                            <div className="flex items-center gap-2">
+                              <Paperclip className="w-4 h-4" />
+                              <div>
+                                <a href={message.file_url} target="_blank" rel="noopener noreferrer" className="text-terminal-green hover:underline font-bold">{message.file_name}</a>
+                                <div className="text-xs text-terminal-green/60">{formatFileSize(message.file_size)}</div>
+                              </div>
                             </div>
                           </div>
                         )}
                         
-                        {msg.message_type === 'webhook' && (
-                          <div className="mt-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded">
-                            <div className="text-blue-400 text-xs font-bold mb-2">🔗 WEBHOOK MESSAGE</div>
-                            <pre className="text-xs text-blue-300 overflow-auto">{JSON.stringify(msg.webhook_data, null, 2)}</pre>
+                        {message.message_type === 'webhook' && (
+                          <div className="mt-2 bg-blue-500/10 border border-blue-500/30 rounded p-3">
+                            <div className="text-blue-400 text-xs font-mono mb-2">🔗 WEBHOOK MESSAGE</div>
+                            <pre className="text-xs text-blue-300 overflow-auto">{JSON.stringify(message.webhook_data, null, 2)}</pre>
                           </div>
                         )}
                       </div>
@@ -681,46 +886,33 @@ const LiveChatReal = () => {
             {/* Message Input */}
             <div className="p-4 border-t border-terminal-green/30">
               {isUploading && (
-                <div className="mb-2 text-xs text-terminal-green/60">
-                  Uploading... {uploadProgress}%
-                </div>
+                <div className="mb-2 text-xs text-terminal-green/60">Uploading file...</div>
               )}
-              <div className="flex items-center gap-2">
+              <div className="flex gap-2">
                 <input
-                  ref={fileInputRef}
                   type="file"
+                  ref={fileInputRef}
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleFileUpload(file, 'file');
-                    e.target.value = '';
                   }}
                 />
                 <input
-                  ref={imageInputRef}
                   type="file"
-                  accept="image/*"
+                  ref={imageInputRef}
                   className="hidden"
+                  accept="image/*"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleFileUpload(file, 'image');
-                    e.target.value = '';
                   }}
                 />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                >
+                
+                <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
                   <Paperclip className="w-4 h-4" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => imageInputRef.current?.click()}
-                  disabled={isUploading}
-                >
+                <Button variant="ghost" size="icon" onClick={() => imageInputRef.current?.click()} disabled={isUploading}>
                   <ImageIcon className="w-4 h-4" />
                 </Button>
                 <Input
@@ -729,7 +921,7 @@ const LiveChatReal = () => {
                   onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
                   placeholder="Type a message..."
                   className="flex-1 bg-black border-terminal-green/30 text-terminal-green"
-                  disabled={isUploading}
+                  disabled={isSending || isUploading}
                 />
                 <Button onClick={handleSendMessage} disabled={isSending || isUploading || !newMessage.trim()}>
                   <Send className="w-4 h-4" />
@@ -739,34 +931,46 @@ const LiveChatReal = () => {
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-terminal-green/60">
-            Select a friend or create a room to start chatting
+            Select a chat to start messaging
           </div>
         )}
       </div>
 
-      {/* Dialogs */}
+      {/* Add Friend Dialog */}
       <Dialog open={showAddFriend} onOpenChange={setShowAddFriend}>
         <DialogContent className="bg-black border-terminal-green text-terminal-green">
           <DialogHeader>
             <DialogTitle>Add Friend</DialogTitle>
-            <DialogDescription className="text-terminal-green/60">Enter username to add as friend</DialogDescription>
+            <DialogDescription className="text-terminal-green/60">
+              Enter username to add as friend
+            </DialogDescription>
           </DialogHeader>
           <Input
             value={friendUsername}
             onChange={(e) => setFriendUsername(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleAddFriend()}
-            placeholder="Username..."
+            placeholder="Enter username..."
             className="bg-black border-terminal-green/30 text-terminal-green"
           />
-          <Button onClick={handleAddFriend} disabled={!friendUsername.trim()}>Add Friend</Button>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowAddFriend(false)} className="border-terminal-green/30">
+              Cancel
+            </Button>
+            <Button onClick={handleAddFriend} disabled={!friendUsername.trim()}>
+              Add Friend
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
+      {/* Create Group Dialog */}
       <Dialog open={showCreateGroup} onOpenChange={setShowCreateGroup}>
         <DialogContent className="bg-black border-terminal-green text-terminal-green">
           <DialogHeader>
-            <DialogTitle>Create Group</DialogTitle>
-            <DialogDescription className="text-terminal-green/60">Enter group name</DialogDescription>
+            <DialogTitle>Create Group Chat</DialogTitle>
+            <DialogDescription className="text-terminal-green/60">
+              Enter a name for your group
+            </DialogDescription>
           </DialogHeader>
           <Input
             value={groupName}
@@ -775,73 +979,156 @@ const LiveChatReal = () => {
             placeholder="Group name..."
             className="bg-black border-terminal-green/30 text-terminal-green"
           />
-          <Button onClick={handleCreateGroup} disabled={!groupName.trim()}>Create Group</Button>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowCreateGroup(false)} className="border-terminal-green/30">
+              Cancel
+            </Button>
+            <Button onClick={handleCreateGroup} disabled={!groupName.trim()}>
+              Create Group
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showRoomSettings} onOpenChange={setShowRoomSettings}>
+      {/* Edit Nickname Dialog */}
+      <Dialog open={showEditNickname} onOpenChange={setShowEditNickname}>
         <DialogContent className="bg-black border-terminal-green text-terminal-green">
           <DialogHeader>
-            <DialogTitle>Room Settings</DialogTitle>
-            <DialogDescription className="text-terminal-green/60">Manage webhooks and settings</DialogDescription>
+            <DialogTitle>Set Nickname</DialogTitle>
+            <DialogDescription className="text-terminal-green/60">
+              Give your friend a custom nickname (only you can see it)
+            </DialogDescription>
           </DialogHeader>
+          <Input
+            value={newNickname}
+            onChange={(e) => setNewNickname(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && saveNickname()}
+            placeholder="Enter nickname..."
+            className="bg-black border-terminal-green/30 text-terminal-green"
+            maxLength={50}
+          />
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowEditNickname(false)} className="border-terminal-green/30">
+              Cancel
+            </Button>
+            <Button onClick={saveNickname} disabled={!newNickname.trim()}>
+              Save Nickname
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite to Group Dialog */}
+      <Dialog open={showInviteToGroup} onOpenChange={setShowInviteToGroup}>
+        <DialogContent className="bg-black border-terminal-green text-terminal-green">
+          <DialogHeader>
+            <DialogTitle>Invite Friend to Group</DialogTitle>
+            <DialogDescription className="text-terminal-green/60">
+              Select a friend to add to {roomNames[currentRoomId || '']}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-60">
+            {friends.length === 0 ? (
+              <div className="text-center py-4 text-terminal-green/60">No friends to invite</div>
+            ) : (
+              friends.map(friendship => {
+                const friend = friendship.friend_id === currentUser?.id 
+                  ? friendship.friend 
+                  : friendship.friend;
+                const friendId = friendship.friend_id === currentUser?.id 
+                  ? friendship.user_id 
+                  : friendship.friend_id;
+                
+                return (
+                  <div
+                    key={friendship.id}
+                    className="p-2 hover:bg-terminal-green/10 cursor-pointer rounded flex items-center justify-between"
+                    onClick={() => {
+                      inviteFriendToGroup(friendId, friend?.username || 'Unknown');
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+                        style={{ backgroundColor: friend?.color }}
+                      >
+                        {friend?.username[0]}
+                      </div>
+                      <span>{friend?.username}</span>
+                    </div>
+                    <Button size="sm" variant="ghost">
+                      Invite
+                    </Button>
+                  </div>
+                );
+              })
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Room Settings Dialog */}
+      <Dialog open={showRoomSettings} onOpenChange={setShowRoomSettings}>
+        <DialogContent className="bg-black border-terminal-green text-terminal-green max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Room Settings</DialogTitle>
+          </DialogHeader>
+          
           <div className="space-y-4">
             <div>
               <h4 className="font-bold mb-2">Webhooks</h4>
               {webhooks.length === 0 ? (
-                <div className="text-xs text-terminal-green/60 mb-2">No webhooks yet</div>
+                <div className="text-sm text-terminal-green/60 mb-2">No webhooks configured</div>
               ) : (
                 webhooks.map(webhook => (
-                  <div key={webhook.id} className="p-3 border border-terminal-green/30 rounded mb-2">
-                    <div className="text-xs text-terminal-green/60 mb-1">URL:</div>
+                  <div key={webhook.id} className="p-4 border border-terminal-green/30 rounded mb-2">
+                    <div className="text-xs text-terminal-green/60 mb-1">Webhook URL:</div>
                     <div className="flex items-center gap-2 mb-2">
-                      <code className="text-xs bg-black/50 p-1 rounded flex-1 overflow-auto">{webhook.webhook_url}</code>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => copyToClipboard(webhook.webhook_url, webhook.id)}
-                      >
+                      <code className="text-xs bg-terminal-green/10 p-2 rounded flex-1 overflow-auto">{webhook.webhook_url}</code>
+                      <Button size="icon" variant="ghost" onClick={() => copyToClipboard(webhook.webhook_url, webhook.id)}>
                         {copiedWebhook === webhook.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                       </Button>
                     </div>
                     <div className="text-xs text-terminal-green/60 mb-1">Secret:</div>
                     <div className="flex items-center gap-2">
-                      <code className="text-xs bg-black/50 p-1 rounded flex-1 overflow-auto">{webhook.webhook_secret}</code>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => copyToClipboard(webhook.webhook_secret, `${webhook.id}-secret`)}
-                      >
-                        {copiedWebhook === `${webhook.id}-secret` ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      <code className="text-xs bg-terminal-green/10 p-2 rounded flex-1">{webhook.webhook_secret}</code>
+                      <Button size="icon" variant="ghost" onClick={() => copyToClipboard(webhook.webhook_secret, webhook.id + '-secret')}>
+                        {copiedWebhook === webhook.id + '-secret' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                       </Button>
                     </div>
                   </div>
                 ))
               )}
-              <Button onClick={handleCreateWebhook} className="w-full">Create Webhook</Button>
+              <Button onClick={handleCreateWebhook} size="sm">
+                Create New Webhook
+              </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
+      {/* Settings Dialog */}
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
         <DialogContent className="bg-black border-terminal-green text-terminal-green">
           <DialogHeader>
             <DialogTitle>User Settings</DialogTitle>
-            <DialogDescription className="text-terminal-green/60">Update your profile</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-xs text-terminal-green/60 mb-1 block">Username</label>
-              <div className="text-sm">{currentUser?.username}</div>
+              <div className="text-sm text-terminal-green/60 mb-1">Username</div>
+              <div className="font-bold">{currentUser?.username}</div>
             </div>
             <div>
-              <label className="text-xs text-terminal-green/60 mb-1 block">User ID</label>
-              <code className="text-xs bg-black/50 p-2 rounded block">{currentUser?.id}</code>
+              <div className="text-sm text-terminal-green/60 mb-1">User ID</div>
+              <code className="text-xs bg-terminal-green/10 p-2 rounded block">{currentUser?.id}</code>
             </div>
             <div>
-              <label className="text-xs text-terminal-green/60 mb-1 block">Color</label>
-              <div className="w-8 h-8 rounded" style={{ backgroundColor: currentUser?.color }}></div>
+              <div className="text-sm text-terminal-green/60 mb-1">Color</div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded" style={{ backgroundColor: currentUser?.color }}></div>
+                <span className="text-sm">{currentUser?.color}</span>
+              </div>
             </div>
           </div>
         </DialogContent>

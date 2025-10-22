@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { PasswordScreen } from "@/components/PasswordScreen";
 import Index from "./pages/Index";
 import NotesAndVisualization from "./pages/NotesAndVisualization";
 import RelationshipDashboard from "./pages/RelationshipDashboard";
@@ -13,6 +15,12 @@ import { PacManGame } from "./components/PacManGame";
 const queryClient = new QueryClient();
 
 const App = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  if (!isAuthenticated) {
+    return <PasswordScreen onAuthenticated={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

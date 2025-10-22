@@ -52,3 +52,12 @@ export interface Webhook {
   created_by: string;
   created_at: string;
 }
+
+export interface FriendNickname {
+  id: string;
+  user_id: string;
+  friend_id: string;
+  nickname: string;
+  created_at: string;
+  updated_at: string;
+}
