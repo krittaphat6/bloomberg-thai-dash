@@ -35,6 +35,9 @@ const ThemeSwitcher = () => {
     applyTheme(themeId);
     localStorage.setItem('able-theme', themeId);
     setShowThemes(false);
+    
+    // Dispatch custom event
+    window.dispatchEvent(new Event('theme-changed'));
   };
 
   return (

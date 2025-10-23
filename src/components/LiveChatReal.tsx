@@ -6,12 +6,20 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { User, Friendship, ChatRoom, Message, Webhook, FriendNickname } from '@/types/chat';
-import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2 } from 'lucide-react';
+import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video } from 'lucide-react';
+import { useCurrentTheme } from '@/hooks/useCurrentTheme';
+import { getThemeColors } from '@/utils/themeColors';
+import { VideoCall } from './VideoCall';
 
 const LiveChatReal = () => {
+  // Theme
+  const currentTheme = useCurrentTheme();
+  const colors = getThemeColors(currentTheme);
+  
   // User state
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [tempUsername, setTempUsername] = useState('');
   
   // Friends & Rooms
   const [friends, setFriends] = useState<Friendship[]>([]);
@@ -36,6 +44,7 @@ const LiveChatReal = () => {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showRoomSettings, setShowRoomSettings] = useState(false);
   const [showInviteToGroup, setShowInviteToGroup] = useState(false);
+  const [showVideoCall, setShowVideoCall] = useState(false);
   const [friendUsername, setFriendUsername] = useState('');
   const [groupName, setGroupName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -169,6 +178,51 @@ const LiveChatReal = () => {
     };
 
     loadNicknames();
+  }, [currentUser]);
+
+  // Subscribe to username changes
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const usersChannel = supabase
+      .channel('users-updates')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'users'
+      }, (payload) => {
+        // Reload friends and rooms to show new names
+        const loadFriendships = async () => {
+          const { data, error } = await supabase
+            .from('friendships')
+            .select('*, friend:users!friendships_friend_id_fkey(*)')
+            .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`);
+
+          if (!error) {
+            setFriends(data as any || []);
+          }
+        };
+        
+        const loadRooms = async () => {
+          const { data: memberData, error } = await supabase
+            .from('room_members')
+            .select('room_id, chat_rooms(*)')
+            .eq('user_id', currentUser.id);
+
+          if (!error) {
+            const roomsData = memberData?.map(m => m.chat_rooms).filter(Boolean) || [];
+            setRooms(roomsData as any);
+          }
+        };
+
+        loadFriendships();
+        loadRooms();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(usersChannel);
+    };
   }, [currentUser]);
 
   // Load friends
@@ -352,6 +406,42 @@ const LiveChatReal = () => {
     } catch (error: any) {
       console.error('Error saving nickname:', error);
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  // Save username
+  const handleSaveUsername = async () => {
+    if (!tempUsername.trim() || !currentUser) return;
+
+    const newUsername = tempUsername.trim();
+    
+    try {
+      // 1. Update in users table (so everyone sees the new name)
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ username: newUsername })
+        .eq('id', currentUser.id);
+
+      if (updateError) throw updateError;
+
+      // 2. Update local state
+      setCurrentUser({ ...currentUser, username: newUsername });
+      
+      // 3. Update localStorage
+      localStorage.setItem('able_username', newUsername);
+
+      toast({ 
+        title: 'Username Updated!', 
+        description: `Your name is now "${newUsername}"` 
+      });
+      setShowSettings(false);
+    } catch (error: any) {
+      console.error('Error updating username:', error);
+      toast({ 
+        title: 'Error', 
+        description: error.message, 
+        variant: 'destructive' 
+      });
     }
   };
 
@@ -692,36 +782,67 @@ const LiveChatReal = () => {
   }
 
   return (
-    <div className="h-full flex bg-black text-terminal-green font-mono">
+    <div 
+      className="h-full flex font-mono"
+      style={{ 
+        backgroundColor: colors.background,
+        color: colors.foreground 
+      }}
+    >
       {/* Sidebar */}
-      <div className="w-72 border-r border-terminal-green/30 flex flex-col">
+      <div 
+        className="w-72 flex flex-col"
+        style={{ borderRight: `1px solid ${colors.border}` }}
+      >
         {/* User Profile */}
-        <div className="p-4 border-b border-terminal-green/30">
+        <div 
+          className="p-4"
+          style={{ borderBottom: `1px solid ${colors.border}` }}
+        >
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold" style={{ backgroundColor: currentUser?.color }}>
+            <div 
+              className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold" 
+              style={{ backgroundColor: currentUser?.color }}
+            >
               {currentUser?.username[0]}
             </div>
             <div className="flex-1">
               <div className="font-bold">{currentUser?.username}</div>
-              <div className="text-xs text-terminal-green/60">● Online</div>
+              <div className="text-xs opacity-60">● Online</div>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setShowSettings(true)}>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => {
+                setTempUsername(currentUser?.username || '');
+                setShowSettings(true);
+              }}
+              style={{ color: colors.foreground }}
+            >
               <Settings className="w-4 h-4" />
             </Button>
           </div>
         </div>
 
         {/* Friends List */}
-        <div className="p-4 border-b border-terminal-green/30">
+        <div 
+          className="p-4"
+          style={{ borderBottom: `1px solid ${colors.border}` }}
+        >
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold">FRIENDS</h3>
-            <Button variant="ghost" size="icon" onClick={() => setShowAddFriend(true)}>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setShowAddFriend(true)}
+              style={{ color: colors.foreground }}
+            >
               <UserPlus className="w-4 h-4" />
             </Button>
           </div>
           <ScrollArea className="h-40">
             {friends.length === 0 ? (
-              <div className="text-xs text-terminal-green/60 text-center py-4">No friends yet</div>
+              <div className="text-xs opacity-60 text-center py-4">No friends yet</div>
             ) : (
               friends.map(friendship => {
                 const friend = friendship.friend_id === currentUser?.id 
@@ -733,9 +854,17 @@ const LiveChatReal = () => {
                 return (
                   <div
                     key={friendship.id}
-                    className="flex items-center gap-2 p-2 hover:bg-terminal-green/10 cursor-pointer rounded group"
+                    className="flex items-center gap-2 p-2 cursor-pointer rounded group"
+                    style={{
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = colors.accent}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    <div className="w-2 h-2 rounded-full bg-terminal-green"></div>
+                    <div 
+                      className="w-2 h-2 rounded-full" 
+                      style={{ backgroundColor: colors.primary }}
+                    ></div>
                     <span 
                       className="text-sm flex-1"
                       onClick={() => {
@@ -751,6 +880,7 @@ const LiveChatReal = () => {
                       variant="ghost"
                       size="icon"
                       className="opacity-0 group-hover:opacity-100 h-6 w-6"
+                      style={{ color: colors.foreground }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditingFriendId(friendId);
@@ -771,24 +901,43 @@ const LiveChatReal = () => {
         <div className="flex-1 p-4 overflow-hidden flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold">ROOMS</h3>
-            <Button variant="ghost" size="icon" onClick={() => setShowCreateGroup(true)}>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setShowCreateGroup(true)}
+              style={{ color: colors.foreground }}
+            >
               <Users className="w-4 h-4" />
             </Button>
           </div>
           <ScrollArea className="flex-1">
             {rooms.length === 0 ? (
-              <div className="text-xs text-terminal-green/60 text-center py-4">No rooms yet</div>
+              <div className="text-xs opacity-60 text-center py-4">No rooms yet</div>
             ) : (
               rooms.map(room => (
                 <div
                   key={room.id}
-                  className={`p-2 mb-1 rounded cursor-pointer ${currentRoomId === room.id ? 'bg-terminal-green/20' : 'hover:bg-terminal-green/10'}`}
+                  className="p-2 mb-1 rounded cursor-pointer"
+                  style={{
+                    backgroundColor: currentRoomId === room.id ? colors.accent : 'transparent',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (currentRoomId !== room.id) {
+                      e.currentTarget.style.backgroundColor = colors.accent;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (currentRoomId !== room.id) {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }
+                  }}
                   onClick={() => setCurrentRoomId(room.id)}
                 >
                   <div className="text-sm font-bold">
                     {roomNames[room.id] || 'Loading...'}
                   </div>
-                  <div className="text-xs text-terminal-green/60">
+                  <div className="text-xs opacity-60">
                     {room.type === 'private' ? '1:1 Chat' : 'Group Chat'}
                   </div>
                 </div>
@@ -803,31 +952,43 @@ const LiveChatReal = () => {
         {currentRoomId ? (
           <>
             {/* Chat Header */}
-            <div className="p-4 border-b border-terminal-green/30 flex items-center justify-between">
+            <div 
+              className="p-4 flex items-center justify-between"
+              style={{ borderBottom: `1px solid ${colors.border}` }}
+            >
               <div>
                 <h2 className="font-bold text-lg">
                   {currentRoomId && roomNames[currentRoomId] ? roomNames[currentRoomId] : 'Chat'}
                 </h2>
-                <div className="text-xs text-terminal-green/60">
+                <div className="text-xs opacity-60">
                   {currentRoom?.type === 'group' ? 'Group Chat' : 'Private Chat'}
                 </div>
               </div>
               
-              {currentRoom?.type === 'group' && (
-                <div className="flex gap-2">
+              <div className="flex gap-2">
+                {/* Video Call Button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowVideoCall(true)}
+                  title="Start Video Call"
+                  style={{ color: colors.foreground }}
+                >
+                  <Video className="w-4 h-4" />
+                </Button>
+                
+                {currentRoom?.type === 'group' && (
                   <Button 
                     variant="ghost" 
                     size="sm"
                     onClick={() => setShowInviteToGroup(true)}
+                    style={{ color: colors.foreground }}
                   >
                     <UserPlus className="w-4 h-4 mr-1" />
                     Invite
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setShowRoomSettings(true)}>
-                    <Settings className="w-4 h-4" />
-                  </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             {/* Messages Area */}
@@ -1116,8 +1277,15 @@ const LiveChatReal = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <div className="text-sm text-terminal-green/60 mb-1">Username</div>
-              <div className="font-bold">{currentUser?.username}</div>
+              <div className="text-sm text-terminal-green/60 mb-2">Username</div>
+              <Input
+                value={tempUsername}
+                onChange={(e) => setTempUsername(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSaveUsername()}
+                placeholder="Enter new username..."
+                className="bg-black border-terminal-green/30 text-terminal-green"
+                maxLength={30}
+              />
             </div>
             <div>
               <div className="text-sm text-terminal-green/60 mb-1">User ID</div>
@@ -1130,9 +1298,26 @@ const LiveChatReal = () => {
                 <span className="text-sm">{currentUser?.color}</span>
               </div>
             </div>
+            <div className="flex gap-2 justify-end pt-2">
+              <Button variant="outline" onClick={() => setShowSettings(false)} className="border-terminal-green/30">
+                Cancel
+              </Button>
+              <Button onClick={handleSaveUsername} disabled={!tempUsername.trim() || tempUsername === currentUser?.username}>
+                Save Changes
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Video Call */}
+      {showVideoCall && currentRoomId && currentUser && (
+        <VideoCall
+          roomId={currentRoomId}
+          currentUser={currentUser}
+          onClose={() => setShowVideoCall(false)}
+        />
+      )}
     </div>
   );
 };
