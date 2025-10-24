@@ -9,7 +9,7 @@ import { User, Friendship, ChatRoom, Message, Webhook, FriendNickname } from '@/
 import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video } from 'lucide-react';
 import { useCurrentTheme } from '@/hooks/useCurrentTheme';
 import { getThemeColors } from '@/utils/themeColors';
-import { VideoCall } from './VideoCall';
+import { VideoCallPeerJS } from './VideoCallPeerJS';
 
 const LiveChatReal = () => {
   // Theme
@@ -1312,7 +1312,7 @@ const LiveChatReal = () => {
 
       {/* Video Call */}
       {showVideoCall && currentRoomId && currentUser && (
-        <VideoCall
+        <VideoCallPeerJS
           roomId={currentRoomId}
           currentUser={currentUser}
           onClose={() => setShowVideoCall(false)}
