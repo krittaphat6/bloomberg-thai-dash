@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      active_video_calls: {
+        Row: {
+          id: string
+          is_active: boolean | null
+          joined_at: string | null
+          peer_id: string
+          room_id: string
+          updated_at: string | null
+          user_id: string
+          username: string
+        }
+        Insert: {
+          id?: string
+          is_active?: boolean | null
+          joined_at?: string | null
+          peer_id: string
+          room_id: string
+          updated_at?: string | null
+          user_id: string
+          username: string
+        }
+        Update: {
+          id?: string
+          is_active?: boolean | null
+          joined_at?: string | null
+          peer_id?: string
+          room_id?: string
+          updated_at?: string | null
+          user_id?: string
+          username?: string
+        }
+        Relationships: []
+      }
       chat_rooms: {
         Row: {
           created_at: string | null
