@@ -78,14 +78,17 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { 
-              width: { ideal: 1280 }, 
-              height: { ideal: 720 }, 
+              width: { min: 320, ideal: 640, max: 1280 },
+              height: { min: 240, ideal: 480, max: 720 },
+              frameRate: { ideal: 15, max: 30 },
               facingMode: 'user' 
             },
             audio: { 
               echoCancellation: true, 
               noiseSuppression: true, 
-              autoGainControl: true 
+              autoGainControl: true,
+              sampleRate: 48000,
+              channelCount: 1
             }
           });
         } catch (permError: any) {
@@ -125,14 +128,30 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
           host: '0.peerjs.com',
           secure: true,
           port: 443,
-          debug: 2,
+          debug: 1,
           config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
               { urls: 'stun:stun1.l.google.com:19302' },
-              { urls: 'stun:stun2.l.google.com:19302' },
-              { urls: 'stun:stun3.l.google.com:19302' }
-            ]
+              { urls: 'stun:stun.relay.metered.ca:80' },
+              {
+                urls: 'turn:global.relay.metered.ca:80',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+              },
+              {
+                urls: 'turn:global.relay.metered.ca:443',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+              },
+              {
+                urls: 'turn:global.relay.metered.ca:443?transport=tcp',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+              }
+            ],
+            sdpSemantics: 'unified-plan',
+            iceTransportPolicy: 'all'
           }
         });
 
@@ -313,6 +332,24 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
     console.log('📞 Calling:', remotePeerId);
     
     const call = peerInstance.call(remotePeerId, stream);
+
+    // Monitor connection state
+    if (call.peerConnection) {
+      call.peerConnection.onconnectionstatechange = () => {
+        const state = call.peerConnection.connectionState;
+        console.log(`Connection state for ${remotePeerId}:`, state);
+        
+        if (state === 'failed' || state === 'disconnected') {
+          console.log('🔄 Connection lost, attempting reconnect...');
+          setTimeout(() => {
+            if (peerInstance && peerInstance.open) {
+              console.log('🔄 Reconnecting to:', remotePeerId);
+              callPeer(peerInstance, remotePeerId, userId, username, stream);
+            }
+          }, 2000);
+        }
+      };
+    }
 
     call.on('stream', (remoteStream) => {
       console.log('📺 Got stream from:', remotePeerId);
@@ -622,6 +659,8 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
               autoPlay
               playsInline
               muted
+              preload="auto"
+              disablePictureInPicture
               className="w-full h-full object-cover"
             />
             {/* Speaking Indicator */}
@@ -661,6 +700,8 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
                 autoPlay
                 playsInline
                 muted={isDeafened}
+                preload="auto"
+                disablePictureInPicture
                 className="w-full h-full object-cover"
               />
               {/* Speaking Indicator */}
