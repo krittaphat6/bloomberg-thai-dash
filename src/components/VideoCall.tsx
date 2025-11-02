@@ -78,16 +78,16 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { 
-              width: { min: 320, ideal: 640, max: 1280 },
-              height: { min: 240, ideal: 480, max: 720 },
-              frameRate: { ideal: 15, max: 30 },
+              width: { min: 160, ideal: 320, max: 640 },
+              height: { min: 120, ideal: 240, max: 480 },
+              frameRate: { min: 10, ideal: 15, max: 24 },
               facingMode: 'user' 
             },
             audio: { 
-              echoCancellation: true, 
-              noiseSuppression: true, 
-              autoGainControl: true,
-              sampleRate: 48000,
+              echoCancellation: { exact: true }, 
+              noiseSuppression: { exact: true }, 
+              autoGainControl: { exact: true },
+              sampleRate: 16000,
               channelCount: 1
             }
           });
@@ -128,7 +128,7 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
           host: '0.peerjs.com',
           secure: true,
           port: 443,
-          debug: 1,
+          debug: 0,
           config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
@@ -151,7 +151,10 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
               }
             ],
             sdpSemantics: 'unified-plan',
-            iceTransportPolicy: 'all'
+            iceTransportPolicy: 'all',
+            bundlePolicy: 'max-bundle',
+            rtcpMuxPolicy: 'require',
+            iceCandidatePoolSize: 10
           }
         });
 
@@ -198,6 +201,19 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         peerInstance.on('call', (call) => {
           console.log('📞 Incoming call from:', call.peer);
           call.answer(stream);
+          
+          // Set receiver constraints for incoming calls
+          if (call.peerConnection) {
+            call.peerConnection.getReceivers().forEach((receiver) => {
+              if (receiver.track && receiver.track.kind === 'video') {
+                receiver.track.applyConstraints({
+                  frameRate: { max: 15 },
+                  width: { max: 320 },
+                  height: { max: 240 }
+                }).catch((err) => console.error('Constraint error:', err));
+              }
+            });
+          }
 
           call.on('stream', (remoteStream) => {
             console.log('📺 Got stream from:', call.peer);
@@ -331,24 +347,90 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
   const callPeer = (peerInstance: Peer, remotePeerId: string, userId: string, username: string, stream: MediaStream) => {
     console.log('📞 Calling:', remotePeerId);
     
-    const call = peerInstance.call(remotePeerId, stream);
+    // Call with SDP transform for bandwidth control
+    const call = peerInstance.call(remotePeerId, stream, {
+      sdpTransform: (sdp: string) => {
+        // Add bandwidth limits to SDP
+        sdp = sdp.replace(/a=mid:(\d+)\r\n/g, (match) => {
+          return match + 'b=AS:256\r\n';
+        });
+        
+        // Force VP8 codec for better performance
+        sdp = sdp.replace(/m=video (\d+) /, 'm=video $1 RTP/SAVPF 96 ');
+        
+        return sdp;
+      }
+    });
 
-    // Monitor connection state
+    // Set bitrate constraints
     if (call.peerConnection) {
+      // Set sender parameters for bitrate control
+      call.peerConnection.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'video') {
+          const params = sender.getParameters();
+          if (!params.encodings) {
+            params.encodings = [{}];
+          }
+          
+          params.encodings[0].maxBitrate = 250000; // 250 kbps
+          params.encodings[0].maxFramerate = 15;
+          params.encodings[0].scaleResolutionDownBy = 2;
+          
+          sender.setParameters(params).catch((err) => {
+            console.error('Error setting sender parameters:', err);
+          });
+        }
+        
+        if (sender.track && sender.track.kind === 'audio') {
+          const params = sender.getParameters();
+          if (!params.encodings) {
+            params.encodings = [{}];
+          }
+          
+          params.encodings[0].maxBitrate = 32000; // 32 kbps for audio
+          
+          sender.setParameters(params).catch((err) => {
+            console.error('Error setting audio parameters:', err);
+          });
+        }
+      });
+
+      // Monitor connection state
       call.peerConnection.onconnectionstatechange = () => {
         const state = call.peerConnection.connectionState;
-        console.log(`Connection state for ${remotePeerId}:`, state);
+        console.log(`Connection ${remotePeerId}:`, state);
         
         if (state === 'failed' || state === 'disconnected') {
-          console.log('🔄 Connection lost, attempting reconnect...');
+          console.log('Attempting reconnection...');
           setTimeout(() => {
             if (peerInstance && peerInstance.open) {
-              console.log('🔄 Reconnecting to:', remotePeerId);
+              removeRemotePeer(remotePeerId);
               callPeer(peerInstance, remotePeerId, userId, username, stream);
             }
           }, 2000);
         }
       };
+
+      // Monitor stats for quality
+      const statsInterval = setInterval(async () => {
+        if (call.peerConnection.connectionState !== 'connected') {
+          clearInterval(statsInterval);
+          return;
+        }
+
+        const stats = await call.peerConnection.getStats();
+        stats.forEach((report) => {
+          if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+            const packetsLost = report.packetsLost || 0;
+            const packetsReceived = report.packetsReceived || 0;
+            const lossRate = packetsLost / (packetsLost + packetsReceived);
+            
+            if (lossRate > 0.05) {
+              console.warn('High packet loss detected:', lossRate);
+            }
+          }
+        });
+      }, 5000);
     }
 
     call.on('stream', (remoteStream) => {
@@ -661,7 +743,13 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
               muted
               preload="auto"
               disablePictureInPicture
+              disableRemotePlayback
+              webkit-playsinline="true"
               className="w-full h-full object-cover"
+              style={{
+                transform: 'scaleX(-1)',
+                objectFit: 'cover'
+              }}
             />
             {/* Speaking Indicator */}
             {isSpeaking && (
@@ -695,6 +783,7 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
                   if (el && remotePeer.stream) {
                     remoteVideosRef.current.set(remotePeer.peerId, el);
                     el.srcObject = remotePeer.stream;
+                    el.play().catch(err => console.log('Play error:', err));
                   }
                 }}
                 autoPlay
@@ -702,6 +791,8 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
                 muted={isDeafened}
                 preload="auto"
                 disablePictureInPicture
+                disableRemotePlayback
+                webkit-playsinline="true"
                 className="w-full h-full object-cover"
               />
               {/* Speaking Indicator */}
