@@ -78,17 +78,14 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { 
-              width: { min: 160, ideal: 320, max: 640 },
-              height: { min: 120, ideal: 240, max: 480 },
-              frameRate: { ideal: 15, max: 24 },
+              width: { ideal: 1280 }, 
+              height: { ideal: 720 }, 
               facingMode: 'user' 
             },
             audio: { 
               echoCancellation: true, 
               noiseSuppression: true, 
-              autoGainControl: true,
-              sampleRate: 48000,
-              channelCount: 1
+              autoGainControl: true 
             }
           });
         } catch (permError: any) {
@@ -128,34 +125,14 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
           host: '0.peerjs.com',
           secure: true,
           port: 443,
-          debug: 1,
+          debug: 2,
           config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
               { urls: 'stun:stun1.l.google.com:19302' },
               { urls: 'stun:stun2.l.google.com:19302' },
-              { urls: 'stun:stun.relay.metered.ca:80' },
-              {
-                urls: 'turn:global.relay.metered.ca:80',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              },
-              {
-                urls: 'turn:global.relay.metered.ca:443',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              },
-              {
-                urls: 'turn:global.relay.metered.ca:443?transport=tcp',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              }
-            ],
-            sdpSemantics: 'unified-plan',
-            iceTransportPolicy: 'all',
-            bundlePolicy: 'max-bundle',
-            rtcpMuxPolicy: 'require',
-            iceCandidatePoolSize: 10
+              { urls: 'stun:stun3.l.google.com:19302' }
+            ]
           }
         });
 
@@ -201,43 +178,21 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         // Handle incoming calls
         peerInstance.on('call', (call) => {
           console.log('📞 Incoming call from:', call.peer);
-          
-          // Check if already connected
-          if (remotePeers.has(call.peer)) {
-            console.log('⚠️ Already connected, ignoring duplicate call');
-            return;
-          }
-          
           call.answer(stream);
-          
-          // Set receiver constraints for incoming calls
-          if (call.peerConnection) {
-            setTimeout(() => {
-              call.peerConnection.getReceivers().forEach((receiver) => {
-                if (receiver.track && receiver.track.kind === 'video') {
-                  receiver.track.applyConstraints({
-                    frameRate: { max: 15 },
-                    width: { max: 320 },
-                    height: { max: 240 }
-                  }).catch((err) => console.error('❌ Receiver constraint error:', err));
-                }
-              });
-            }, 100);
-          }
 
           call.on('stream', (remoteStream) => {
-            console.log('📺 Received stream from:', call.peer);
+            console.log('📺 Got stream from:', call.peer);
             addRemotePeer(call.peer, remoteStream, call);
             setupRemoteAudioDetection(call.peer, remoteStream);
           });
 
           call.on('close', () => {
-            console.log('📴 Incoming call closed:', call.peer);
+            console.log('📴 Call closed:', call.peer);
             removeRemotePeer(call.peer);
           });
 
           call.on('error', (err) => {
-            console.error('❌ Incoming call error:', err);
+            console.error('❌ Call error:', err);
             removeRemotePeer(call.peer);
           });
         });
@@ -355,98 +310,9 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
   };
 
   const callPeer = (peerInstance: Peer, remotePeerId: string, userId: string, username: string, stream: MediaStream) => {
-    console.log('📞 Calling peer:', remotePeerId);
+    console.log('📞 Calling:', remotePeerId);
     
-    // Check if already connected
-    if (remotePeers.has(remotePeerId)) {
-      console.log('⚠️ Already connected to:', remotePeerId);
-      return;
-    }
-    
-    // Call with SDP transform for bandwidth control
-    const call = peerInstance.call(remotePeerId, stream, {
-      sdpTransform: (sdp: string) => {
-        // Add bandwidth limits to SDP
-        sdp = sdp.replace(/a=mid:(\d+)\r\n/g, (match) => {
-          return match + 'b=AS:300\r\n';
-        });
-        
-        // Prefer VP8 codec for better compatibility
-        sdp = sdp.replace(/m=video (\d+) /, 'm=video $1 RTP/SAVPF 96 ');
-        
-        return sdp;
-      }
-    });
-
-    // Set bitrate constraints after connection
-    if (call.peerConnection) {
-      // Wait for senders to be available
-      setTimeout(() => {
-        call.peerConnection.getSenders().forEach((sender) => {
-          if (sender.track && sender.track.kind === 'video') {
-            const params = sender.getParameters();
-            if (!params.encodings || params.encodings.length === 0) {
-              params.encodings = [{}];
-            }
-            
-            params.encodings[0].maxBitrate = 300000; // 300 kbps
-            params.encodings[0].maxFramerate = 15;
-            
-            sender.setParameters(params).catch((err) => {
-              console.error('❌ Video params error:', err);
-            });
-          }
-          
-          if (sender.track && sender.track.kind === 'audio') {
-            const params = sender.getParameters();
-            if (!params.encodings || params.encodings.length === 0) {
-              params.encodings = [{}];
-            }
-            
-            params.encodings[0].maxBitrate = 48000; // 48 kbps for audio
-            
-            sender.setParameters(params).catch((err) => {
-              console.error('❌ Audio params error:', err);
-            });
-          }
-        });
-      }, 100);
-
-      // Monitor connection state
-      call.peerConnection.onconnectionstatechange = () => {
-        const state = call.peerConnection?.connectionState;
-        console.log(`📊 Connection ${remotePeerId}:`, state);
-        
-        if (state === 'failed') {
-          console.log('🔄 Connection failed, attempting reconnect...');
-          removeRemotePeer(remotePeerId);
-          setTimeout(() => {
-            if (peerInstance && peerInstance.open) {
-              callPeer(peerInstance, remotePeerId, userId, username, stream);
-            }
-          }, 3000);
-        } else if (state === 'disconnected') {
-          console.log('⚠️ Connection disconnected');
-          setTimeout(() => {
-            if (call.peerConnection?.connectionState === 'disconnected') {
-              console.log('🔄 Still disconnected, reconnecting...');
-              removeRemotePeer(remotePeerId);
-              if (peerInstance && peerInstance.open) {
-                callPeer(peerInstance, remotePeerId, userId, username, stream);
-              }
-            }
-          }, 5000);
-        } else if (state === 'connected') {
-          console.log('✅ Connection established with', remotePeerId);
-        }
-      };
-
-      // Monitor ICE connection state
-      call.peerConnection.oniceconnectionstatechange = () => {
-        const iceState = call.peerConnection?.iceConnectionState;
-        console.log(`🧊 ICE ${remotePeerId}:`, iceState);
-      };
-    }
+    const call = peerInstance.call(remotePeerId, stream);
 
     call.on('stream', (remoteStream) => {
       console.log('📺 Got stream from:', remotePeerId);
@@ -476,25 +342,11 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
       }, (payload) => {
         const newPeer = payload.new as any;
         if (newPeer.peer_id !== myPeerId && newPeer.is_active) {
-          console.log('👋 New peer joined:', newPeer.username, newPeer.peer_id);
-          
-          // Call new peer after delay to ensure they're ready
+          console.log('👋 New peer:', newPeer.username);
           setTimeout(() => {
-            if (!remotePeers.has(newPeer.peer_id)) {
-              callPeer(peerInstance, newPeer.peer_id, newPeer.user_id, newPeer.username, stream);
-            }
-          }, 1500);
+            callPeer(peerInstance, newPeer.peer_id, newPeer.user_id, newPeer.username, stream);
+          }, 1000);
         }
-      })
-      .on('postgres_changes', {
-        event: 'DELETE',
-        schema: 'public',
-        table: 'active_video_calls',
-        filter: `room_id=eq.${roomId}`
-      }, (payload) => {
-        const oldPeer = payload.old as any;
-        console.log('👋 Peer left:', oldPeer.peer_id);
-        removeRemotePeer(oldPeer.peer_id);
       })
       .subscribe();
 
@@ -551,19 +403,23 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
   };
 
   const toggleDeafen = () => {
-    const newDeafenState = !isDeafened;
-    setIsDeafened(newDeafenState);
+    setIsDeafened(!isDeafened);
     
-    // When deafening: mute own mic
-    // When un-deafening: restore previous mic state
-    if (newDeafenState && localStream) {
+    // Mute all remote audio
+    remotePeers.forEach(peer => {
+      if (peer.stream) {
+        peer.stream.getAudioTracks().forEach(track => {
+          track.enabled = isDeafened; // Toggle opposite
+        });
+      }
+    });
+
+    // Also mute own mic when deafened
+    if (!isDeafened && localStream) {
       localStream.getAudioTracks().forEach(track => {
         track.enabled = false;
       });
       setIsAudioOn(false);
-      toast({ title: '🔇 Deafened', description: 'You will not hear others and your mic is muted' });
-    } else {
-      toast({ title: '🔊 Undeafened', description: 'Audio restored' });
     }
   };
 
@@ -766,15 +622,7 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
               autoPlay
               playsInline
               muted
-              preload="auto"
-              disablePictureInPicture
-              disableRemotePlayback
-              webkit-playsinline="true"
               className="w-full h-full object-cover"
-              style={{
-                transform: 'scaleX(-1)',
-                objectFit: 'cover'
-              }}
             />
             {/* Speaking Indicator */}
             {isSpeaking && (
@@ -808,16 +656,11 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
                   if (el && remotePeer.stream) {
                     remoteVideosRef.current.set(remotePeer.peerId, el);
                     el.srcObject = remotePeer.stream;
-                    el.play().catch(err => console.log('Play error:', err));
                   }
                 }}
                 autoPlay
                 playsInline
                 muted={isDeafened}
-                preload="auto"
-                disablePictureInPicture
-                disableRemotePlayback
-                webkit-playsinline="true"
                 className="w-full h-full object-cover"
               />
               {/* Speaking Indicator */}
