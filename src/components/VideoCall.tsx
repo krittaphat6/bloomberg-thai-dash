@@ -85,9 +85,9 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
               facingMode: 'user' 
             },
             audio: { 
-              echoCancellation: { exact: true }, 
-              noiseSuppression: { exact: true }, 
-              autoGainControl: { exact: true },
+              echoCancellation: true, 
+              noiseSuppression: true, 
+              autoGainControl: true,
               sampleRate: 48000,
               channelCount: 1
             }
@@ -689,9 +689,9 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
           <img 
             src={ableTerminalLogo} 
             alt="ABLE TERMINAL" 
-            className="h-8 w-auto"
+            className="h-12 w-auto"
           />
-          <div className="h-8 w-px" style={{ backgroundColor: colors.border }}></div>
+          <div className="h-12 w-px" style={{ backgroundColor: colors.border }}></div>
           <Video className="w-5 h-5" style={{ color: colors.primary }} />
           <div>
             <span className="font-bold">Video Call</span>
