@@ -11,6 +11,7 @@ import { useCurrentTheme } from '@/hooks/useCurrentTheme';
 import { getThemeColors } from '@/utils/themeColors';
 import { Alert, AlertDescription } from './ui/alert';
 import { ScrollArea } from './ui/scroll-area';
+import ableTerminalLogo from '@/assets/able-terminal-logo-green.png';
 
 interface VideoCallProps {
   roomId: string;
@@ -78,14 +79,17 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { 
-              width: { ideal: 1280 }, 
-              height: { ideal: 720 }, 
+              width: { min: 320, ideal: 640, max: 1280 }, 
+              height: { min: 240, ideal: 480, max: 720 }, 
+              frameRate: { ideal: 15, max: 30 },
               facingMode: 'user' 
             },
             audio: { 
-              echoCancellation: true, 
-              noiseSuppression: true, 
-              autoGainControl: true 
+              echoCancellation: { exact: true }, 
+              noiseSuppression: { exact: true }, 
+              autoGainControl: { exact: true },
+              sampleRate: 48000,
+              channelCount: 1
             }
           });
         } catch (permError: any) {
@@ -125,14 +129,33 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
           host: '0.peerjs.com',
           secure: true,
           port: 443,
-          debug: 2,
+          debug: 1,
           config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
               { urls: 'stun:stun1.l.google.com:19302' },
               { urls: 'stun:stun2.l.google.com:19302' },
-              { urls: 'stun:stun3.l.google.com:19302' }
-            ]
+              { urls: 'stun:stun.relay.metered.ca:80' },
+              {
+                urls: 'turn:global.relay.metered.ca:80',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+              },
+              {
+                urls: 'turn:global.relay.metered.ca:443',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+              },
+              {
+                urls: 'turn:global.relay.metered.ca:443?transport=tcp',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+              }
+            ],
+            sdpSemantics: 'unified-plan',
+            iceTransportPolicy: 'all',
+            bundlePolicy: 'max-bundle',
+            rtcpMuxPolicy: 'require'
           }
         });
 
@@ -178,7 +201,28 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         // Handle incoming calls
         peerInstance.on('call', (call) => {
           console.log('📞 Incoming call from:', call.peer);
+          
+          // Check if already have call from this peer
+          const existing = remotePeers.get(call.peer);
+          if (existing?.call) {
+            console.log('Already have call from:', call.peer);
+            return;
+          }
+
           call.answer(stream);
+
+          // Set receiver parameters
+          if (call.peerConnection) {
+            call.peerConnection.getReceivers().forEach((receiver) => {
+              if (receiver.track && receiver.track.kind === 'video') {
+                receiver.track.applyConstraints({
+                  frameRate: { max: 15 },
+                  width: { max: 640 },
+                  height: { max: 480 }
+                }).catch((err) => console.error('Receiver constraint error:', err));
+              }
+            });
+          }
 
           call.on('stream', (remoteStream) => {
             console.log('📺 Got stream from:', call.peer);
@@ -312,7 +356,70 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
   const callPeer = (peerInstance: Peer, remotePeerId: string, userId: string, username: string, stream: MediaStream) => {
     console.log('📞 Calling:', remotePeerId);
     
-    const call = peerInstance.call(remotePeerId, stream);
+    // Check if already calling this peer
+    const existing = remotePeers.get(remotePeerId);
+    if (existing?.call) {
+      console.log('Already calling:', remotePeerId);
+      return;
+    }
+
+    const call = peerInstance.call(remotePeerId, stream, {
+      sdpTransform: (sdp: string) => {
+        // Add bandwidth limits to prevent choppy audio
+        sdp = sdp.replace(/a=mid:(\d+)\r\n/g, (match) => {
+          return match + 'b=AS:300\r\n';  // 300 kbps max
+        });
+        return sdp;
+      }
+    });
+
+    // Set sender parameters for better quality
+    if (call.peerConnection) {
+      call.peerConnection.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'video') {
+          const params = sender.getParameters();
+          if (!params.encodings) {
+            params.encodings = [{}];
+          }
+          
+          params.encodings[0].maxBitrate = 300000; // 300 kbps
+          params.encodings[0].maxFramerate = 15;
+          
+          sender.setParameters(params).catch((err) => {
+            console.error('Error setting video parameters:', err);
+          });
+        }
+        
+        if (sender.track && sender.track.kind === 'audio') {
+          const params = sender.getParameters();
+          if (!params.encodings) {
+            params.encodings = [{}];
+          }
+          
+          params.encodings[0].maxBitrate = 48000; // 48 kbps for audio
+          
+          sender.setParameters(params).catch((err) => {
+            console.error('Error setting audio parameters:', err);
+          });
+        }
+      });
+
+      // Monitor connection state
+      call.peerConnection.onconnectionstatechange = () => {
+        const state = call.peerConnection.connectionState;
+        console.log(`Connection ${remotePeerId}:`, state);
+        
+        if (state === 'failed' || state === 'disconnected') {
+          console.log('Connection failed, attempting reconnection...');
+          setTimeout(() => {
+            if (peerInstance && peerInstance.open) {
+              removeRemotePeer(remotePeerId);
+              callPeer(peerInstance, remotePeerId, userId, username, stream);
+            }
+          }, 2000);
+        }
+      };
+    }
 
     call.on('stream', (remoteStream) => {
       console.log('📺 Got stream from:', remotePeerId);
@@ -578,7 +685,13 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
           color: colors.foreground 
         }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          <img 
+            src={ableTerminalLogo} 
+            alt="ABLE TERMINAL" 
+            className="h-8 w-auto"
+          />
+          <div className="h-8 w-px" style={{ backgroundColor: colors.border }}></div>
           <Video className="w-5 h-5" style={{ color: colors.primary }} />
           <div>
             <span className="font-bold">Video Call</span>
@@ -622,6 +735,8 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
               autoPlay
               playsInline
               muted
+              preload="auto"
+              disablePictureInPicture
               className="w-full h-full object-cover"
             />
             {/* Speaking Indicator */}
@@ -656,11 +771,15 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
                   if (el && remotePeer.stream) {
                     remoteVideosRef.current.set(remotePeer.peerId, el);
                     el.srcObject = remotePeer.stream;
+                    // Force play
+                    el.play().catch(err => console.log('Play error:', err));
                   }
                 }}
                 autoPlay
                 playsInline
                 muted={isDeafened}
+                preload="auto"
+                disablePictureInPicture
                 className="w-full h-full object-cover"
               />
               {/* Speaking Indicator */}
