@@ -59,6 +59,33 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Capacitor (for iOS/mobile support)
+- Supabase (backend)
+- React Three Fiber (3D visualizations)
+- TradingView Widgets
+
+## iOS Support
+
+This project now supports iOS via Capacitor! 📱
+
+To build and run on iOS:
+
+1. See **[README_IOS.md](./README_IOS.md)** for complete setup instructions
+2. See **[IOS_SETUP.md](./IOS_SETUP.md)** for directory structure details
+
+Quick start:
+```sh
+npm install
+npm run build
+npm run ios:init    # First time only
+npm run ios:sync
+npm run ios:open    # Opens Xcode
+```
+
+**Requirements:**
+- macOS with Xcode 14+
+- CocoaPods installed
+- Apple Developer account (for physical device testing)
 
 ## How can I deploy this project?
 
