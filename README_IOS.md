@@ -151,6 +151,12 @@ The status bar is configured to use `black-translucent` style, which overlays th
 
 The app uses `@react-three/fiber` for 3D components. WebGL is fully supported on iOS Safari and should work without issues.
 
+**Performance Tips:**
+- Test 3D components on actual devices for performance
+- iOS devices may have lower performance than desktop
+- Consider reducing polygon count or effects on mobile
+- Monitor frame rate using React Three Fiber's performance monitoring
+
 ### TradingView Widget
 
 The TradingView widget uses iframes. These work on iOS but ensure you have proper CORS and iframe policies configured.
