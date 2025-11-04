@@ -1,88 +1,83 @@
 import { useEffect, useState } from 'react';
-
-interface MarketDataPoint {
-  symbol: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  high: number;
-  low: number;
-  volume: number;
-}
+import { dataPipelineService, MarketQuote } from '@/services/DataPipelineService';
+import { DEFAULT_SYMBOLS } from '@/config/DataSourceConfig';
+import { supabase } from '@/integrations/supabase/client';
+import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
 
 const RealMarketData = () => {
-  const [marketData, setMarketData] = useState<MarketDataPoint[]>([]);
+  const [marketData, setMarketData] = useState<MarketQuote[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [isRealtime, setIsRealtime] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // Initial fetch
   useEffect(() => {
-    const fetchMarketData = async () => {
-      try {
-        // Using Yahoo Finance alternative API (free with CORS support)
-        const symbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'NVDA', 'META', 'NFLX'];
-        const promises = symbols.map(async (symbol) => {
-          try {
-            // Using Alpha Vantage demo API (replace with your API key for production)
-            const response = await fetch(
-              `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=demo`
-            );
-            const data = await response.json();
-            
-            if (data['Global Quote']) {
-              const quote = data['Global Quote'];
-              return {
-                symbol: symbol,
-                price: parseFloat(quote['05. price']) || Math.random() * 200 + 100,
-                change: parseFloat(quote['09. change']) || (Math.random() - 0.5) * 10,
-                changePercent: parseFloat(quote['10. change percent']?.replace('%', '')) || (Math.random() - 0.5) * 5,
-                high: parseFloat(quote['03. high']) || Math.random() * 220 + 100,
-                low: parseFloat(quote['04. low']) || Math.random() * 180 + 80,
-                volume: parseInt(quote['06. volume']) || Math.floor(Math.random() * 1000000)
-              };
-            }
-            
-            // Fallback to realistic mock data if API fails
-            return {
-              symbol: symbol,
-              price: Math.random() * 200 + 100,
-              change: (Math.random() - 0.5) * 10,
-              changePercent: (Math.random() - 0.5) * 5,
-              high: Math.random() * 220 + 100,
-              low: Math.random() * 180 + 80,
-              volume: Math.floor(Math.random() * 1000000)
-            };
-          } catch {
-            // Fallback data
-            return {
-              symbol: symbol,
-              price: Math.random() * 200 + 100,
-              change: (Math.random() - 0.5) * 10,
-              changePercent: (Math.random() - 0.5) * 5,
-              high: Math.random() * 220 + 100,
-              low: Math.random() * 180 + 80,
-              volume: Math.floor(Math.random() * 1000000)
-            };
-          }
-        });
-
-        const results = await Promise.all(promises);
-        setMarketData(results);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching market data:', error);
-        setLoading(false);
-      }
-    };
-
-    fetchMarketData();
-    const interval = setInterval(fetchMarketData, 900000); // Update every 15 minutes
-
+    fetchData();
+    const interval = setInterval(fetchData, 60000); // Update every minute
     return () => clearInterval(interval);
   }, []);
+
+  // Subscribe to real-time updates from Supabase
+  useEffect(() => {
+    const channel = supabase
+      .channel('market-data-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'market_data'
+        },
+        (payload) => {
+          const newQuote = payload.new as any;
+          setMarketData(prev => {
+            const updated = prev.filter(q => q.symbol !== newQuote.symbol);
+            return [...updated, {
+              symbol: newQuote.symbol,
+              price: parseFloat(newQuote.price),
+              change: parseFloat(newQuote.change),
+              changePercent: parseFloat(newQuote.change_percent),
+              volume: newQuote.volume,
+              high: parseFloat(newQuote.high),
+              low: parseFloat(newQuote.low),
+              open: parseFloat(newQuote.open),
+              bid: newQuote.bid ? parseFloat(newQuote.bid) : undefined,
+              ask: newQuote.ask ? parseFloat(newQuote.ask) : undefined,
+              timestamp: new Date(newQuote.timestamp),
+              source: newQuote.source
+            }];
+          });
+          setLastUpdate(new Date());
+          setIsRealtime(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setError(null);
+      const data = await dataPipelineService.fetchMarketData(DEFAULT_SYMBOLS);
+      setMarketData(data);
+      setLastUpdate(new Date());
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to fetch market data:', err);
+      setError('Failed to fetch data. Using cached data.');
+      setLoading(false);
+    }
+  };
 
   const formatPrice = (price: number) => price.toFixed(2);
   const formatChange = (change: number) => (change > 0 ? '+' : '') + change.toFixed(2);
   const formatPercent = (percent: number) => (percent > 0 ? '+' : '') + percent.toFixed(2) + '%';
-  const getChangeColor = (change: number) => change > 0 ? 'change-positive' : change < 0 ? 'change-negative' : 'change-neutral';
+  const getChangeColor = (change: number) => 
+    change > 0 ? 'text-terminal-green' : change < 0 ? 'text-terminal-red' : 'text-terminal-amber';
 
   if (loading) {
     return (
@@ -96,23 +91,69 @@ const RealMarketData = () => {
   }
 
   return (
-    <div className="terminal-panel h-full text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm xl:text-base">
-      <div className="panel-header text-[0.5rem] xs:text-[0.6rem] sm:text-[0.7rem] md:text-sm lg:text-base xl:text-lg">REAL-TIME MARKET DATA (15min delay)</div>
+    <div className="terminal-panel h-full">
+      <div className="panel-header flex justify-between items-center">
+        <span>REAL-TIME MARKET DATA</span>
+        <div className="flex items-center gap-2 text-xs">
+          {isRealtime ? (
+            <Wifi className="w-3 h-3 text-terminal-green" />
+          ) : (
+            <WifiOff className="w-3 h-3 text-terminal-amber" />
+          )}
+          <button 
+            onClick={fetchData}
+            className="hover:text-terminal-green transition-colors"
+            title="Refresh data"
+          >
+            <RefreshCw className="w-3 h-3" />
+          </button>
+          {lastUpdate && (
+            <span className="text-terminal-cyan">
+              {lastUpdate.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      </div>
+      
       <div className="panel-content">
-        <div className="grid grid-cols-4 gap-1 text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm font-semibold text-terminal-amber mb-2 pb-1 border-b border-terminal-amber/30">
+        {error && (
+          <div className="bg-terminal-amber/10 border border-terminal-amber/30 p-2 mb-2 text-xs text-terminal-amber">
+            ⚠️ {error}
+          </div>
+        )}
+
+        <div className="grid grid-cols-5 gap-2 text-xs font-semibold text-terminal-amber mb-2 pb-1 border-b border-terminal-amber/30">
           <div>SYMBOL</div>
           <div className="text-right">PRICE</div>
           <div className="text-right">CHANGE</div>
           <div className="text-right">%</div>
+          <div className="text-right">VOLUME</div>
         </div>
-        {marketData.map((stock) => (
-          <div key={stock.symbol} className="data-row">
-            <div className="symbol">{stock.symbol}</div>
-            <div className="price">${formatPrice(stock.price)}</div>
-            <div className={getChangeColor(stock.change)}>{formatChange(stock.change)}</div>
-            <div className={getChangeColor(stock.changePercent)}>{formatPercent(stock.changePercent)}</div>
+
+        {marketData.length === 0 ? (
+          <div className="text-center py-4 text-terminal-amber">
+            No market data available. Please configure API keys.
           </div>
-        ))}
+        ) : (
+          marketData.map((quote) => (
+            <div 
+              key={quote.symbol} 
+              className="grid grid-cols-5 gap-2 text-xs py-1 border-b border-border/20 hover:bg-terminal-amber/5 transition-colors"
+            >
+              <div className="text-terminal-white font-semibold">{quote.symbol}</div>
+              <div className="text-right text-terminal-cyan">${formatPrice(quote.price)}</div>
+              <div className={`text-right ${getChangeColor(quote.change)}`}>
+                {formatChange(quote.change)}
+              </div>
+              <div className={`text-right ${getChangeColor(quote.changePercent)}`}>
+                {formatPercent(quote.changePercent)}
+              </div>
+              <div className="text-right text-terminal-gray">
+                {(quote.volume / 1000000).toFixed(2)}M
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

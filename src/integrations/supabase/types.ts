@@ -47,6 +47,75 @@ export type Database = {
         }
         Relationships: []
       }
+      alerts: {
+        Row: {
+          created_at: string | null
+          data: Json | null
+          id: string
+          is_read: boolean | null
+          message: string
+          severity: string
+          symbol: string | null
+          title: string
+          type: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          data?: Json | null
+          id?: string
+          is_read?: boolean | null
+          message: string
+          severity: string
+          symbol?: string | null
+          title: string
+          type: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          data?: Json | null
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          severity?: string
+          symbol?: string | null
+          title?: string
+          type?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      api_usage_logs: {
+        Row: {
+          api_name: string
+          endpoint: string | null
+          error_message: string | null
+          id: string
+          response_time_ms: number | null
+          status_code: number | null
+          timestamp: string | null
+        }
+        Insert: {
+          api_name: string
+          endpoint?: string | null
+          error_message?: string | null
+          id?: string
+          response_time_ms?: number | null
+          status_code?: number | null
+          timestamp?: string | null
+        }
+        Update: {
+          api_name?: string
+          endpoint?: string | null
+          error_message?: string | null
+          id?: string
+          response_time_ms?: number | null
+          status_code?: number | null
+          timestamp?: string | null
+        }
+        Relationships: []
+      }
       chat_rooms: {
         Row: {
           created_at: string | null
@@ -144,6 +213,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      market_data: {
+        Row: {
+          ask: number | null
+          bid: number | null
+          change: number | null
+          change_percent: number | null
+          created_at: string | null
+          high: number | null
+          id: string
+          low: number | null
+          open: number | null
+          price: number | null
+          source: string
+          symbol: string
+          timestamp: string | null
+          volume: number | null
+        }
+        Insert: {
+          ask?: number | null
+          bid?: number | null
+          change?: number | null
+          change_percent?: number | null
+          created_at?: string | null
+          high?: number | null
+          id?: string
+          low?: number | null
+          open?: number | null
+          price?: number | null
+          source: string
+          symbol: string
+          timestamp?: string | null
+          volume?: number | null
+        }
+        Update: {
+          ask?: number | null
+          bid?: number | null
+          change?: number | null
+          change_percent?: number | null
+          created_at?: string | null
+          high?: number | null
+          id?: string
+          low?: number | null
+          open?: number | null
+          price?: number | null
+          source?: string
+          symbol?: string
+          timestamp?: string | null
+          volume?: number | null
+        }
+        Relationships: []
       }
       messages: {
         Row: {
@@ -243,6 +363,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sentiment_data: {
+        Row: {
+          created_at: string | null
+          id: string
+          keyword: string
+          mentions: number | null
+          metadata: Json | null
+          sentiment_score: number | null
+          source: string
+          timestamp: string | null
+          volume: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          keyword: string
+          mentions?: number | null
+          metadata?: Json | null
+          sentiment_score?: number | null
+          source: string
+          timestamp?: string | null
+          volume?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          keyword?: string
+          mentions?: number | null
+          metadata?: Json | null
+          sentiment_score?: number | null
+          source?: string
+          timestamp?: string | null
+          volume?: number | null
+        }
+        Relationships: []
       }
       users: {
         Row: {
