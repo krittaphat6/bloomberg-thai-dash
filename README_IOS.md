@@ -256,12 +256,57 @@ Use the iOS Simulator to take screenshots for various device sizes required by A
 
 Complete all required metadata and submit for review at [App Store Connect](https://appstoreconnect.apple.com).
 
+## iOS-Specific Code Considerations
+
+### Detecting iOS Platform
+
+You can detect if the app is running on iOS using Capacitor's platform detection:
+
+```typescript
+import { Capacitor } from '@capacitor/core';
+
+const isIOS = Capacitor.getPlatform() === 'ios';
+const isNative = Capacitor.isNativePlatform();
+```
+
+### Handling Device Features
+
+For iOS-specific features (camera, geolocation, etc.), you'll need to add the appropriate permissions to `ios/App/App/Info.plist`:
+
+```xml
+<key>NSCameraUsageDescription</key>
+<string>This app needs camera access</string>
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>This app needs location access</string>
+```
+
+### Status Bar Plugin (Optional)
+
+If you need to control the status bar, install the plugin:
+
+```bash
+npm install @capacitor/status-bar
+npx cap sync ios
+```
+
+Then use in your code:
+```typescript
+import { StatusBar, Style } from '@capacitor/status-bar';
+
+// Hide the status bar
+await StatusBar.hide();
+
+// Change status bar style
+await StatusBar.setStyle({ style: Style.Dark });
+```
+
 ## Additional Resources
 
 - [Capacitor Documentation](https://capacitorjs.com/docs)
 - [iOS Developer Documentation](https://developer.apple.com/documentation)
 - [Xcode User Guide](https://developer.apple.com/documentation/xcode)
 - [App Store Review Guidelines](https://developer.apple.com/app-store/review/guidelines/)
+- [Capacitor iOS Platform](https://capacitorjs.com/docs/ios)
 
 ## Quick Reference Commands
 
