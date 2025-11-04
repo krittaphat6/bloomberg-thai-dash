@@ -107,8 +107,8 @@ class DataPipelineService {
 
       } catch (error) {
         console.error(`❌ ${config.name} failed:`, error);
-        await this.logAPIUsage(apiName, 0, error);
-        continue; // Try next API
+        await this.logAPIUsage(apiName, 'error', error);
+        continue;
       }
     }
 
@@ -133,18 +133,18 @@ class DataPipelineService {
         const data = await response.json();
         
         if (data.status === 'error') {
-          throw new Error(data.message || 'API error');
+          throw new Error(data.message || 'API returned error');
         }
         
         return {
           symbol: data.symbol,
-          price: parseFloat(data.close),
-          change: parseFloat(data.change),
-          changePercent: parseFloat(data.percent_change),
-          volume: parseInt(data.volume),
-          high: parseFloat(data.high),
-          low: parseFloat(data.low),
-          open: parseFloat(data.open),
+          price: parseFloat(data.close || data.price || '0'),
+          change: parseFloat(data.change || '0'),
+          changePercent: parseFloat(data.percent_change || '0'),
+          volume: parseInt(data.volume || '0'),
+          high: parseFloat(data.high || '0'),
+          low: parseFloat(data.low || '0'),
+          open: parseFloat(data.open || '0'),
           timestamp: new Date(),
           source: 'twelvedata'
         } as MarketQuote;
@@ -154,7 +154,7 @@ class DataPipelineService {
     return results;
   }
 
-  // Yahoo Finance implementation (via RapidAPI)
+  // Yahoo Finance implementation
   private async fetchFromYahooFinance(symbols: string[]): Promise<MarketQuote[]> {
     const apiKey = DATA_SOURCES.yahooFinance.apiKey;
     if (!apiKey) throw new Error('RapidAPI key not configured');
@@ -175,18 +175,18 @@ class DataPipelineService {
         
         const data = await response.json();
         const quote = data.body?.[0];
-        
+
         if (!quote) throw new Error('No quote data returned');
 
         return {
           symbol: quote.symbol,
-          price: quote.regularMarketPrice,
-          change: quote.regularMarketChange,
-          changePercent: quote.regularMarketChangePercent,
-          volume: quote.regularMarketVolume,
-          high: quote.regularMarketDayHigh,
-          low: quote.regularMarketDayLow,
-          open: quote.regularMarketOpen,
+          price: quote.regularMarketPrice || 0,
+          change: quote.regularMarketChange || 0,
+          changePercent: quote.regularMarketChangePercent || 0,
+          volume: quote.regularMarketVolume || 0,
+          high: quote.regularMarketDayHigh || 0,
+          low: quote.regularMarketDayLow || 0,
+          open: quote.regularMarketOpen || 0,
           bid: quote.bid,
           ask: quote.ask,
           timestamp: new Date(),
@@ -198,10 +198,9 @@ class DataPipelineService {
     return results;
   }
 
-  // Alpha Vantage implementation (fallback)
+  // Alpha Vantage implementation
   private async fetchFromAlphaVantage(symbols: string[]): Promise<MarketQuote[]> {
-    const apiKey = DATA_SOURCES.alphaVantage.apiKey;
-    if (!apiKey) throw new Error('Alpha Vantage API key not configured');
+    const apiKey = DATA_SOURCES.alphaVantage.apiKey || 'demo';
 
     const results = await Promise.all(
       symbols.map(async (symbol) => {
@@ -213,20 +212,18 @@ class DataPipelineService {
         
         const data = await response.json();
         const quote = data['Global Quote'];
-        
-        if (!quote || Object.keys(quote).length === 0) {
-          throw new Error('No quote data returned');
-        }
+
+        if (!quote) throw new Error('No quote data returned');
 
         return {
           symbol: quote['01. symbol'],
-          price: parseFloat(quote['05. price']),
-          change: parseFloat(quote['09. change']),
-          changePercent: parseFloat(quote['10. change percent'].replace('%', '')),
-          volume: parseInt(quote['06. volume']),
-          high: parseFloat(quote['03. high']),
-          low: parseFloat(quote['04. low']),
-          open: parseFloat(quote['02. open']),
+          price: parseFloat(quote['05. price'] || '0'),
+          change: parseFloat(quote['09. change'] || '0'),
+          changePercent: parseFloat(quote['10. change percent']?.replace('%', '') || '0'),
+          volume: parseInt(quote['06. volume'] || '0'),
+          high: parseFloat(quote['03. high'] || '0'),
+          low: parseFloat(quote['04. low'] || '0'),
+          open: parseFloat(quote['02. open'] || '0'),
           timestamp: new Date(),
           source: 'alphavantage'
         } as MarketQuote;
@@ -268,28 +265,27 @@ class DataPipelineService {
       .from('market_data')
       .select('*')
       .in('symbol', symbols)
-      .order('timestamp', { ascending: false })
-      .limit(symbols.length);
+      .order('timestamp', { ascending: false });
 
-    if (error || !data || data.length === 0) {
+    if (error || !data) {
       console.error('Database fallback failed:', error);
       return [];
     }
 
-    // Get the most recent quote for each symbol
+    // Get most recent quote for each symbol
     const latestQuotes = new Map<string, any>();
-    data.forEach(d => {
-      if (!latestQuotes.has(d.symbol)) {
-        latestQuotes.set(d.symbol, d);
+    for (const row of data) {
+      if (!latestQuotes.has(row.symbol)) {
+        latestQuotes.set(row.symbol, row);
       }
-    });
+    }
 
     return Array.from(latestQuotes.values()).map(d => ({
       symbol: d.symbol,
       price: parseFloat(d.price),
       change: parseFloat(d.change),
       changePercent: parseFloat(d.change_percent),
-      volume: d.volume,
+      volume: parseInt(d.volume),
       high: parseFloat(d.high),
       low: parseFloat(d.low),
       open: parseFloat(d.open),
@@ -301,31 +297,17 @@ class DataPipelineService {
   }
 
   // Log API usage
-  private async logAPIUsage(apiName: string, statusCode: number, error?: any): Promise<void> {
+  private async logAPIUsage(apiName: string, status: string, error?: any): Promise<void> {
     try {
       await supabase
         .from('api_usage_logs')
         .insert({
           api_name: apiName,
-          status_code: statusCode,
-          error_message: error?.message || null
+          status_code: error ? 0 : 200,
+          error_message: error?.message
         });
     } catch (e) {
       console.error('Failed to log API usage:', e);
-    }
-  }
-
-  // WebSocket connection management (for future Phase 2)
-  connectWebSocket(apiName: string, symbols: string[], onUpdate: (quote: MarketQuote) => void): void {
-    console.log('WebSocket support coming in Phase 2');
-    // WebSocket implementation will be added later
-  }
-
-  disconnectWebSocket(apiName: string): void {
-    const ws = this.wsConnections.get(apiName);
-    if (ws) {
-      ws.close();
-      this.wsConnections.delete(apiName);
     }
   }
 

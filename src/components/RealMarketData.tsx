@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { dataPipelineService, MarketQuote } from '@/services/DataPipelineService';
 import { DEFAULT_SYMBOLS } from '@/config/DataSourceConfig';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, TrendingUp, TrendingDown } from 'lucide-react';
 
 const RealMarketData = () => {
   const [marketData, setMarketData] = useState<MarketQuote[]>([]);
@@ -75,7 +75,10 @@ const RealMarketData = () => {
 
   const formatPrice = (price: number) => price.toFixed(2);
   const formatChange = (change: number) => (change > 0 ? '+' : '') + change.toFixed(2);
-  const formatPercent = (percent: number) => (percent > 0 ? '+' : '') + percent.toFixed(2) + '%';
+  const formatPercent = (percent: number) => {
+    const change = percent;
+    return (change > 0 ? '+' : '') + change.toFixed(2) + '%';
+  };
   const getChangeColor = (change: number) => 
     change > 0 ? 'text-terminal-green' : change < 0 ? 'text-terminal-red' : 'text-terminal-amber';
 
@@ -122,34 +125,45 @@ const RealMarketData = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-5 gap-2 text-xs font-semibold text-terminal-amber mb-2 pb-1 border-b border-terminal-amber/30">
+        <div className="grid grid-cols-6 gap-2 text-xs font-semibold text-terminal-amber mb-2 pb-1 border-b border-terminal-amber/30 sticky top-0 bg-background">
           <div>SYMBOL</div>
           <div className="text-right">PRICE</div>
           <div className="text-right">CHANGE</div>
           <div className="text-right">%</div>
           <div className="text-right">VOLUME</div>
+          <div className="text-right">SOURCE</div>
         </div>
 
         {marketData.length === 0 ? (
-          <div className="text-center py-4 text-terminal-amber">
+          <div className="text-center py-4 text-terminal-amber text-xs">
             No market data available. Please configure API keys.
           </div>
         ) : (
           marketData.map((quote) => (
             <div 
               key={quote.symbol} 
-              className="grid grid-cols-5 gap-2 text-xs py-1 border-b border-border/20 hover:bg-terminal-amber/5 transition-colors"
+              className="grid grid-cols-6 gap-2 text-xs py-1.5 border-b border-border/10 hover:bg-terminal-amber/5 transition-colors"
             >
-              <div className="text-terminal-white font-semibold">{quote.symbol}</div>
+              <div className="text-terminal-white font-semibold flex items-center gap-1">
+                {quote.change > 0 ? (
+                  <TrendingUp className="w-3 h-3 text-terminal-green" />
+                ) : (
+                  <TrendingDown className="w-3 h-3 text-terminal-red" />
+                )}
+                {quote.symbol}
+              </div>
               <div className="text-right text-terminal-cyan">${formatPrice(quote.price)}</div>
-              <div className={`text-right ${getChangeColor(quote.change)}`}>
+              <div className={`text-right font-medium ${getChangeColor(quote.change)}`}>
                 {formatChange(quote.change)}
               </div>
-              <div className={`text-right ${getChangeColor(quote.changePercent)}`}>
+              <div className={`text-right font-medium ${getChangeColor(quote.changePercent)}`}>
                 {formatPercent(quote.changePercent)}
               </div>
               <div className="text-right text-terminal-gray">
                 {(quote.volume / 1000000).toFixed(2)}M
+              </div>
+              <div className="text-right text-terminal-gray uppercase text-[10px]">
+                {quote.source}
               </div>
             </div>
           ))

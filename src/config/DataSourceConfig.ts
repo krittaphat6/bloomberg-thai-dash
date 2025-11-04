@@ -30,7 +30,7 @@ export const DATA_SOURCES: Record<string, APIConfig> = {
   alphaVantage: {
     name: 'Alpha Vantage',
     baseUrl: 'https://www.alphavantage.co',
-    apiKey: import.meta.env.VITE_ALPHA_VANTAGE_KEY || 'demo',
+    apiKey: import.meta.env.VITE_ALPHA_VANTAGE_KEY,
     rateLimit: 5,
     cacheDuration: 60000,
     priority: 3,
