@@ -142,10 +142,18 @@
   body {
     @apply bg-background text-foreground;
     font-family: "JetBrains Mono", monospace;
-    font-size: 11px;
-    line-height: 1.1;
+    font-size: 16px; /* Mobile-first: Prevent auto-zoom on iOS */
+    line-height: 1.5;
     overflow-x: hidden;
     transition: all 0.3s ease;
+  }
+
+  /* Desktop override */
+  @media (min-width: 769px) {
+    body {
+      font-size: 11px;
+      line-height: 1.1;
+    }
   }
 }
 
@@ -432,4 +440,170 @@
 .canvas-flow .react-flow__minimap {
   background: rgba(0, 0, 0, 0.9) !important;
   border: 1px solid rgba(34, 197, 94, 0.3) !important;
+}
+
+/* ===== Mobile-First & iOS Optimizations ===== */
+
+/* Touch-friendly buttons - iOS standard 44x44px minimum */
+button, 
+.interactive-element,
+[role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation; /* Prevents double-tap zoom on iOS */
+}
+
+@media (min-width: 769px) {
+  button, 
+  .interactive-element,
+  [role="button"] {
+    min-height: auto;
+    min-width: auto;
+  }
+}
+
+/* Larger touch targets for interactive elements */
+.card, 
+.panel,
+.terminal-panel {
+  padding: 16px;
+  margin: 8px;
+}
+
+@media (min-width: 769px) {
+  .card, 
+  .panel,
+  .terminal-panel {
+    padding: 6px;
+    margin: 0;
+  }
+}
+
+/* iOS-specific smooth scrolling */
+.scrollable,
+.panel-content,
+.terminal-panel {
+  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
+}
+
+/* Responsive terminal grid - single column on mobile */
+@media (max-width: 768px) {
+  .terminal-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto !important;
+    gap: 12px;
+    height: auto;
+    min-height: calc(100vh - 140px);
+  }
+
+  /* Adjust panel header for mobile readability */
+  .panel-header {
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+
+  .panel-content {
+    font-size: 14px;
+    padding: 12px;
+  }
+
+  /* Adjust data rows for mobile */
+  .data-row {
+    font-size: 13px;
+    padding: 8px;
+    gap: 12px;
+  }
+
+  /* Make ticker tape more readable on mobile */
+  .ticker-tape {
+    height: 40px;
+  }
+
+  .ticker-content {
+    font-size: 13px;
+  }
+
+  .ticker-item {
+    margin-right: 50px;
+    gap: 12px;
+  }
+
+  /* Adjust tabs for mobile */
+  .tabs-trigger {
+    font-size: 14px;
+    padding: 12px 20px;
+    min-height: 44px;
+  }
+}
+
+/* Prevent text selection on interactive elements */
+button,
+.interactive-element {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+
+/* Active state for better touch feedback */
+button:active,
+.interactive-element:active {
+  opacity: 0.7;
+  transform: scale(0.98);
+  transition: all 0.1s ease;
+}
+
+/* Improve form inputs for iOS */
+input,
+textarea,
+select {
+  font-size: 16px; /* Prevents auto-zoom on iOS */
+  border-radius: 8px;
+  padding: 12px;
+}
+
+@media (min-width: 769px) {
+  input,
+  textarea,
+  select {
+    font-size: inherit;
+    padding: 8px;
+  }
+}
+
+/* Safe area for iOS notch and home indicator */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+
+  .ticker-tape {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Landscape mode optimizations for mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  .terminal-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px;
+  }
+}
+
+/* Loading and skeleton states for better perceived performance */
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+.loading-skeleton {
+  animation: shimmer 2s infinite linear;
+  background: linear-gradient(
+    to right,
+    hsl(var(--card)) 0%,
+    hsl(var(--muted)) 50%,
+    hsl(var(--card)) 100%
+  );
+  background-size: 1000px 100%;
 }
