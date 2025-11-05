@@ -8,6 +8,7 @@ import { PasswordScreen } from "@/components/PasswordScreen";
 import Index from "./pages/Index";
 import NotesAndVisualization from "./pages/NotesAndVisualization";
 import RelationshipDashboard from "./pages/RelationshipDashboard";
+import IntelligencePlatform from "./pages/IntelligencePlatform";
 import NotFound from "./pages/NotFound";
 import OptionsSurfacePlot from "./components/OptionsSurfacePlot";
 import { PacManGame } from "./components/PacManGame";
@@ -31,6 +32,7 @@ const App = () => {
             <Route path="/" element={<Index />} />
             <Route path="/notes" element={<NotesAndVisualization />} />
             <Route path="/relationship-dashboard" element={<RelationshipDashboard />} />
+            <Route path="/intelligence" element={<IntelligencePlatform />} />
             <Route path="/options" element={<OptionsSurfacePlot />} />
             <Route path="/pacman" element={<PacManGame />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
