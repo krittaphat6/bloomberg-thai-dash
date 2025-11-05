@@ -607,3 +607,45 @@ select {
   );
   background-size: 1000px 100%;
 }
+
+/* Mobile optimizations for floating windows */
+@media (max-width: 768px) {
+  /* Make floating windows fill the screen on mobile */
+  .floating-window,
+  [class*="FloatingWindow"] {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* Ensure panel content is scrollable */
+  .floating-window > div,
+  [class*="FloatingWindow"] > div {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Improve button padding for touch targets */
+.Button,
+button[type="button"],
+button[type="submit"] {
+  padding: 12px 16px;
+}
+
+@media (min-width: 769px) {
+  .Button,
+  button[type="button"],
+  button[type="submit"] {
+    padding: 8px 12px;
+  }
+}
