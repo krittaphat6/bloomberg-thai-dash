@@ -572,14 +572,14 @@ select {
 }
 
 /* Safe area for iOS notch and home indicator */
-@supports (padding: max(0px)) {
+@supports (padding: env(safe-area-inset-left)) {
   body {
-    padding-left: max(0px, env(safe-area-inset-left));
-    padding-right: max(0px, env(safe-area-inset-right));
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
   .ticker-tape {
-    padding-bottom: max(0px, env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 

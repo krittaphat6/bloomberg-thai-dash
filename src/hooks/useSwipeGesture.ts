@@ -1,4 +1,4 @@
-import { useEffect, RefObject } from 'react';
+import { useEffect, RefObject, useRef } from 'react';
 
 interface SwipeHandlers {
   onSwipeLeft?: () => void;
@@ -12,6 +12,13 @@ export const useSwipeGesture = (
   handlers: SwipeHandlers,
   threshold = 50
 ) => {
+  // Store handlers in a ref to avoid re-creating listeners on every render
+  const handlersRef = useRef(handlers);
+  
+  useEffect(() => {
+    handlersRef.current = handlers;
+  }, [handlers]);
+
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -33,13 +40,13 @@ export const useSwipeGesture = (
 
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
         if (Math.abs(deltaX) > threshold) {
-          if (deltaX > 0) handlers.onSwipeRight?.();
-          else handlers.onSwipeLeft?.();
+          if (deltaX > 0) handlersRef.current.onSwipeRight?.();
+          else handlersRef.current.onSwipeLeft?.();
         }
       } else {
         if (Math.abs(deltaY) > threshold) {
-          if (deltaY > 0) handlers.onSwipeDown?.();
-          else handlers.onSwipeUp?.();
+          if (deltaY > 0) handlersRef.current.onSwipeDown?.();
+          else handlersRef.current.onSwipeUp?.();
         }
       }
     };
@@ -51,5 +58,5 @@ export const useSwipeGesture = (
       element.removeEventListener('touchstart', handleTouchStart);
       element.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [ref, handlers, threshold]);
+  }, [ref, threshold]);
 };

@@ -45,9 +45,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, enableHaptic = true, onClick, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
     
-    const handleClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
       if (enableHaptic) {
-        await hapticFeedback.light();
+        // Fire haptic feedback without blocking onClick execution
+        hapticFeedback.light();
       }
       onClick?.(e);
     };

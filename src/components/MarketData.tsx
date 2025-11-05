@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TabManager from './TabManager';
 import TabSelector from './TabSelector';
@@ -9,6 +9,9 @@ import { Expand, Minimize, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 import { hapticFeedback } from '@/utils/haptics';
 import StockdioCharts from './StockdioCharts';
+
+// Mobile breakpoint constant to match CSS media query
+const MOBILE_BREAKPOINT = 769;
 import InvestingCharts from './InvestingCharts';
 import CryptoLiveCharts from './CryptoLiveCharts';
 import ForexEconomicData from './ForexEconomicData';
@@ -65,7 +68,7 @@ const MarketData = () => {
     };
 
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 769);
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
     };
 
     checkMobile();
@@ -204,19 +207,19 @@ const MarketData = () => {
     setShowTabSelector(false);
   };
 
-  const navigateToNextPanel = () => {
+  const navigateToNextPanel = useCallback(() => {
     if (panels.length > 0 && currentPanelIndex < panels.length - 1) {
       setCurrentPanelIndex(currentPanelIndex + 1);
       hapticFeedback.light();
     }
-  };
+  }, [panels.length, currentPanelIndex]);
 
-  const navigateToPreviousPanel = () => {
+  const navigateToPreviousPanel = useCallback(() => {
     if (currentPanelIndex > 0) {
       setCurrentPanelIndex(currentPanelIndex - 1);
       hapticFeedback.light();
     }
-  };
+  }, [currentPanelIndex]);
 
   // Setup swipe gestures for mobile
   useSwipeGesture(containerRef, {
