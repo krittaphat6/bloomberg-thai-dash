@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface AnomalyReport {
   anomalies: Array<{
     symbol: string;
+    type: string;
     timestamp: Date;
     severity: 'low' | 'medium' | 'high';
     description: string;
@@ -226,6 +227,7 @@ export class FoundryCore {
         
         anomalies.push({
           symbol: item.symbol,
+          type: 'price_deviation',
           timestamp: new Date(item.timestamp),
           severity,
           description: `Price deviation detected: ${deviation.toFixed(2)}σ`,
@@ -243,6 +245,7 @@ export class FoundryCore {
       if (volumeRatio > 3) {
         anomalies.push({
           symbol: item.symbol,
+          type: 'volume_spike',
           timestamp: new Date(item.timestamp),
           severity: volumeRatio > 5 ? 'high' : 'medium',
           description: `Volume spike: ${volumeRatio.toFixed(1)}x average`,

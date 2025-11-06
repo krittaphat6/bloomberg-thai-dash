@@ -1,36 +1,175 @@
 import { useEffect, useState } from 'react';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useIntelligenceStore } from '@/stores/IntelligenceStore';
 import { foundryCore } from '@/services/foundry/FoundryCore';
 import { dataLakeManager } from '@/services/foundry/DataLakeManager';
-import { Activity, Database, Brain, Satellite, Shield, TrendingUp, AlertTriangle } from 'lucide-react';
+import { dataPipelineService } from '@/services/DataPipelineService';
+import { DEFAULT_SYMBOLS } from '@/config/DataSourceConfig';
+import { supabase } from '@/integrations/supabase/client';
+import { Activity, Database, Brain, Satellite, Shield, TrendingUp, TrendingDown, AlertTriangle, Zap } from 'lucide-react';
 
 export const ControlRoom = () => {
-  const { systemStatus, analytics, threats, alerts, updateSystemStatus, updateAnalytics } = useIntelligenceStore();
+  const { systemStatus, analytics, threats, alerts, updateSystemStatus, updateAnalytics, addThreat } = useIntelligenceStore();
   const [lakeStats, setLakeStats] = useState<any>(null);
+  const [liveData, setLiveData] = useState<any[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   useEffect(() => {
     // Initialize all systems
     initializeSystems();
     
     // Fetch data lake statistics
-    dataLakeManager.getStatistics().then(stats => {
-      setLakeStats(stats);
-      updateAnalytics({
-        totalDataPoints: stats.totalRecords.market_data,
-        alertsGenerated: stats.alertsSummary.total
-      });
-    });
+    fetchDataLakeStats();
+
+    // Start real data collection
+    startDataCollection();
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('market-data-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'market_data'
+        },
+        (payload) => {
+          console.log('📊 New market data:', payload);
+          updateLiveData(payload.new);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      dataPipelineService.cleanup();
+    };
   }, []);
 
   const initializeSystems = async () => {
     console.log('🚀 Initializing ABLE Intelligence Platform...');
     
-    updateSystemStatus('foundry', 'active');
-    updateSystemStatus('gotham', 'active');
-    updateSystemStatus('apollo', 'active');
-    updateSystemStatus('skynet', 'active');
+    updateSystemStatus('foundry', 'idle');
+    updateSystemStatus('gotham', 'idle');
+    updateSystemStatus('apollo', 'idle');
+    updateSystemStatus('skynet', 'idle');
+  };
+
+  const fetchDataLakeStats = async () => {
+    try {
+      const stats = await dataLakeManager.getStatistics();
+      setLakeStats(stats);
+      
+      updateAnalytics({
+        totalDataPoints: stats.totalRecords || 0,
+        anomaliesDetected: stats.alerts?.anomaly || 0,
+        correlationsFound: stats.alerts?.correlation || 0,
+        alertsGenerated: stats.alerts?.total || 0,
+      });
+    } catch (error) {
+      console.error('Error fetching data lake stats:', error);
+    }
+  };
+
+  const startDataCollection = async () => {
+    try {
+      updateSystemStatus('skynet', 'active');
+      console.log('🛰️ Starting SKYNET data collection...');
+
+      // Fetch market data from real APIs
+      const quotes = await dataPipelineService.fetchMarketData(DEFAULT_SYMBOLS);
+      console.log(`📊 Fetched ${quotes.length} quotes from market`);
+
+      if (quotes.length === 0) {
+        console.warn('⚠️ No data fetched, using fallback');
+        updateSystemStatus('skynet', 'error');
+        return;
+      }
+
+      // Ingest into Foundry for processing
+      updateSystemStatus('foundry', 'active');
+      for (const quote of quotes) {
+        await foundryCore.ingestDataStream('market-data', {
+          symbol: quote.symbol,
+          price: quote.price,
+          change: quote.change,
+          change_percent: quote.changePercent,
+          volume: quote.volume,
+          high: quote.high,
+          low: quote.low,
+          open: quote.open,
+          source: quote.source,
+        });
+      }
+
+      // Detect anomalies (Gotham)
+      updateSystemStatus('gotham', 'active');
+      const anomalyReport = await foundryCore.detectAnomalies(quotes);
+      console.log(`🔍 Detected ${anomalyReport.anomalies.length} anomalies`);
+
+      // Add threats to store
+      for (const anomaly of anomalyReport.anomalies.slice(0, 5)) {
+        addThreat({
+          id: `threat-${Date.now()}-${Math.random()}`,
+          title: `${anomaly.type?.toUpperCase() || 'ANOMALY'}: ${anomaly.symbol}`,
+          severity: anomaly.severity as 'low' | 'medium' | 'high' | 'critical',
+          description: `Anomaly detected with ${anomaly.deviation.toFixed(2)}% deviation`,
+          type: 'market',
+          symbols: [anomaly.symbol],
+          probability: 0.75,
+          impact: anomaly.severity === 'high' ? 0.8 : 0.5,
+          timestamp: new Date(),
+        });
+      }
+
+      // Update analytics (Apollo)
+      updateSystemStatus('apollo', 'active');
+      updateAnalytics({
+        totalDataPoints: quotes.length,
+        anomaliesDetected: anomalyReport.anomalies.length,
+        correlationsFound: 0,
+        alertsGenerated: anomalyReport.anomalies.filter(a => a.severity === 'high').length,
+      });
+
+      // Start real-time streaming
+      setIsStreaming(true);
+      await dataPipelineService.startRealtimeStream(DEFAULT_SYMBOLS);
+
+      console.log('✅ Intelligence Platform fully operational');
+
+      // Refresh data every 60 seconds
+      setInterval(async () => {
+        const newQuotes = await dataPipelineService.fetchMarketData(DEFAULT_SYMBOLS);
+        if (newQuotes.length > 0) {
+          for (const quote of newQuotes) {
+            await foundryCore.ingestDataStream('market-data', {
+              symbol: quote.symbol,
+              price: quote.price,
+              change: quote.change,
+              change_percent: quote.changePercent,
+              volume: quote.volume,
+              high: quote.high,
+              low: quote.low,
+              open: quote.open,
+              source: quote.source,
+            });
+          }
+        }
+      }, 60000);
+
+    } catch (error) {
+      console.error('❌ Error in data collection:', error);
+      updateSystemStatus('skynet', 'error');
+    }
+  };
+
+  const updateLiveData = (newData: any) => {
+    setLiveData(prev => {
+      const updated = [newData, ...prev].slice(0, 10);
+      return updated;
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -100,13 +239,19 @@ export const ControlRoom = () => {
       {/* Analytics Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/30">
-          <div className="flex items-center gap-3">
-            <Database className="w-8 h-8 text-blue-400" />
-            <div>
-              <p className="text-xs text-muted-foreground">Total Data Points</p>
+          <CardHeader className="p-0 pb-2">
+            <CardTitle className="text-xs text-muted-foreground flex items-center justify-between">
+              Total Data Points
+              {isStreaming && <Badge variant="outline" className="text-xs animate-pulse">LIVE</Badge>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="flex items-center gap-3">
+              <Database className="w-8 h-8 text-blue-400" />
               <p className="text-2xl font-bold text-blue-400">{analytics.totalDataPoints.toLocaleString()}</p>
             </div>
-          </div>
+            <p className="text-xs text-muted-foreground mt-2">Real-time market data streaming</p>
+          </CardContent>
         </Card>
 
         <Card className="p-4 bg-gradient-to-br from-red-500/10 to-orange-500/10 border-red-500/30">
@@ -209,6 +354,43 @@ export const ControlRoom = () => {
                 >
                   {threat.severity.toUpperCase()}
                 </Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Live Market Data Stream */}
+      {liveData.length > 0 && (
+        <Card className="p-6 bg-card/50 backdrop-blur border-primary/20">
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-yellow-500 animate-pulse" />
+            Live Market Data Stream
+          </h3>
+          
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {liveData.map((data, idx) => (
+              <div key={idx} className="flex items-center justify-between p-3 bg-background/50 rounded-lg border border-border/50">
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline" className="font-mono">{data.symbol}</Badge>
+                  <div>
+                    <div className="font-semibold">${parseFloat(data.price).toFixed(2)}</div>
+                    <div className="text-xs text-muted-foreground">{data.source}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {parseFloat(data.change) >= 0 ? (
+                    <TrendingUp className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <TrendingDown className="h-4 w-4 text-red-500" />
+                  )}
+                  <span className={parseFloat(data.change) >= 0 ? 'text-green-500' : 'text-red-500'}>
+                    {parseFloat(data.change).toFixed(2)} ({parseFloat(data.change_percent).toFixed(2)}%)
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Vol: {parseInt(data.volume).toLocaleString()}
+                </div>
               </div>
             ))}
           </div>

@@ -44,7 +44,7 @@ const RealMarketData = () => {
               open: parseFloat(newQuote.open),
               bid: newQuote.bid ? parseFloat(newQuote.bid) : undefined,
               ask: newQuote.ask ? parseFloat(newQuote.ask) : undefined,
-              timestamp: new Date(newQuote.timestamp),
+              timestamp: newQuote.timestamp,
               source: newQuote.source
             }];
           });
