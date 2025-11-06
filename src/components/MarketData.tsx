@@ -126,6 +126,15 @@ const MarketData = () => {
       )
     },
     { 
+      id: 'intelligence', 
+      title: 'INTELLIGENCE PLATFORM', 
+      component: (
+        <div className="h-full w-full overflow-auto">
+          <iframe src="/intelligence" className="w-full h-[800px] border-0" title="Intelligence Platform" />
+        </div>
+      )
+    },
+    { 
       id: 'options-3d', 
       title: 'OPTIONS-3D', 
       component: (
