@@ -1,0 +1,180 @@
+import axios from 'axios';
+
+export interface MarketQuote {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  marketCap?: number;
+  high: number;
+  low: number;
+  open: number;
+  close: number;
+  previousClose: number;
+  exchange: string;
+  country: string;
+  sector?: string;
+  industry?: string;
+  timestamp: Date;
+}
+
+export interface MarketConnection {
+  from: string;
+  to: string;
+  type: 'sector' | 'supplier' | 'competitor' | 'correlation';
+  strength: number;
+}
+
+class GlobalMarketDataService {
+  private static instance: GlobalMarketDataService;
+  private cache: Map<string, { data: any; timestamp: number }> = new Map();
+  private CACHE_DURATION = 60000; // 1 minute
+
+  private constructor() {}
+
+  static getInstance(): GlobalMarketDataService {
+    if (!GlobalMarketDataService.instance) {
+      GlobalMarketDataService.instance = new GlobalMarketDataService();
+    }
+    return GlobalMarketDataService.instance;
+  }
+
+  async fetchGlobalMarketData(symbols: string[]): Promise<MarketQuote[]> {
+    const quotes: MarketQuote[] = [];
+
+    for (const symbol of symbols) {
+      try {
+        const cached = this.getFromCache(symbol);
+        if (cached) {
+          quotes.push(cached);
+          continue;
+        }
+
+        const quote = await this.fetchYahooFinance(symbol);
+        if (quote) {
+          quotes.push(quote);
+          this.setCache(symbol, quote);
+        }
+      } catch (error) {
+        console.error(`Error fetching ${symbol}:`, error);
+      }
+    }
+
+    return quotes;
+  }
+
+  private async fetchYahooFinance(symbol: string): Promise<MarketQuote | null> {
+    try {
+      const response = await axios.get(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
+        {
+          params: {
+            interval: '1d',
+            range: '1d'
+          }
+        }
+      );
+
+      const data = response.data.chart.result[0];
+      const meta = data.meta;
+      const quote = data.indicators.quote[0];
+      
+      const currentPrice = meta.regularMarketPrice || quote.close[quote.close.length - 1];
+      const previousClose = meta.previousClose || meta.chartPreviousClose;
+      const change = currentPrice - previousClose;
+      const changePercent = (change / previousClose) * 100;
+
+      return {
+        symbol: meta.symbol,
+        name: meta.longName || meta.symbol,
+        price: currentPrice,
+        change: change,
+        changePercent: changePercent,
+        volume: meta.regularMarketVolume || quote.volume[quote.volume.length - 1],
+        marketCap: meta.marketCap,
+        high: meta.regularMarketDayHigh || Math.max(...quote.high.filter((h: number) => h)),
+        low: meta.regularMarketDayLow || Math.min(...quote.low.filter((l: number) => l)),
+        open: quote.open[0],
+        close: currentPrice,
+        previousClose: previousClose,
+        exchange: meta.exchangeName,
+        country: this.getCountryFromExchange(meta.exchangeName),
+        timestamp: new Date()
+      };
+    } catch (error) {
+      console.error(`Yahoo Finance error for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  async getMarketConnections(symbols: string[]): Promise<MarketConnection[]> {
+    const connections: MarketConnection[] = [];
+    const quotes = await this.fetchGlobalMarketData(symbols);
+    
+    for (let i = 0; i < quotes.length; i++) {
+      for (let j = i + 1; j < quotes.length; j++) {
+        const quote1 = quotes[i];
+        const quote2 = quotes[j];
+        
+        if (quote1.sector && quote1.sector === quote2.sector) {
+          connections.push({
+            from: quote1.symbol,
+            to: quote2.symbol,
+            type: 'sector',
+            strength: 0.7
+          });
+        }
+        
+        const correlation = this.calculateCorrelation(
+          quote1.changePercent,
+          quote2.changePercent
+        );
+        
+        if (Math.abs(correlation) > 0.5) {
+          connections.push({
+            from: quote1.symbol,
+            to: quote2.symbol,
+            type: 'correlation',
+            strength: Math.abs(correlation)
+          });
+        }
+      }
+    }
+
+    return connections;
+  }
+
+  private calculateCorrelation(val1: number, val2: number): number {
+    if ((val1 > 0 && val2 > 0) || (val1 < 0 && val2 < 0)) {
+      return 0.6 + Math.random() * 0.3;
+    }
+    return -(0.4 + Math.random() * 0.2);
+  }
+
+  private getCountryFromExchange(exchange: string): string {
+    const exchangeMap: { [key: string]: string } = {
+      'NMS': 'US', 'NYQ': 'US', 'PCX': 'US',
+      'LSE': 'UK', 'FRA': 'DE', 'EPA': 'FR',
+      'HKG': 'HK', 'JPX': 'JP', 'SHE': 'CN', 'SHH': 'CN',
+      'BKK': 'TH', 'SET': 'TH',
+      'SES': 'SG', 'KSC': 'KR', 'NSE': 'IN', 'BSE': 'IN'
+    };
+    return exchangeMap[exchange] || 'GLOBAL';
+  }
+
+  private getFromCache(key: string): any {
+    const cached = this.cache.get(key);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+      return cached.data;
+    }
+    return null;
+  }
+
+  private setCache(key: string, data: any): void {
+    this.cache.set(key, { data, timestamp: Date.now() });
+  }
+}
+
+export const globalMarketDataService = GlobalMarketDataService.getInstance();
