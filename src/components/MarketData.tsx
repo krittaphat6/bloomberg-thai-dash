@@ -1,12 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TabManager from './TabManager';
 import TabSelector from './TabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
-import { Expand, Minimize } from 'lucide-react';
+import { Expand, Minimize, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useSwipeGesture } from '@/hooks/useSwipeGesture';
+import { hapticFeedback } from '@/utils/haptics';
 import StockdioCharts from './StockdioCharts';
+
+// Mobile breakpoint constant to match CSS media query
+const MOBILE_BREAKPOINT = 769;
 import InvestingCharts from './InvestingCharts';
 import CryptoLiveCharts from './CryptoLiveCharts';
 import ForexEconomicData from './ForexEconomicData';
@@ -49,6 +54,9 @@ const MarketData = () => {
   const [showTabSelector, setShowTabSelector] = useState(false);
   const [nextPanelId, setNextPanelId] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [currentPanelIndex, setCurrentPanelIndex] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const timeInterval = setInterval(() => {
@@ -59,10 +67,17 @@ const MarketData = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
 
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
 
     return () => {
       clearInterval(timeInterval);
+      window.removeEventListener('resize', checkMobile);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, []);
@@ -201,15 +216,35 @@ const MarketData = () => {
     setShowTabSelector(false);
   };
 
+  const navigateToNextPanel = useCallback(() => {
+    if (panels.length > 0 && currentPanelIndex < panels.length - 1) {
+      setCurrentPanelIndex(currentPanelIndex + 1);
+      hapticFeedback.light();
+    }
+  }, [panels.length, currentPanelIndex]);
+
+  const navigateToPreviousPanel = useCallback(() => {
+    if (currentPanelIndex > 0) {
+      setCurrentPanelIndex(currentPanelIndex - 1);
+      hapticFeedback.light();
+    }
+  }, [currentPanelIndex]);
+
+  // Setup swipe gestures for mobile
+  useSwipeGesture(containerRef, {
+    onSwipeLeft: navigateToNextPanel,
+    onSwipeRight: navigateToPreviousPanel,
+  }, 50);
+
   return (
-    <div className="h-screen flex flex-col bg-background text-foreground">
+    <div className="h-screen flex flex-col bg-background text-foreground" ref={containerRef}>
       <PenguinSticker />
       <DesignSwitcher />
       <div className="bg-background border-b border-border p-3">
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-3 sm:space-x-6">
             <span className="text-lg sm:text-2xl font-bold text-terminal-green">ABLE TERMINAL</span>
-            <span className="text-sm sm:text-base text-terminal-amber">PROFESSIONAL TRADING PLATFORM</span>
+            <span className="hidden md:inline text-sm sm:text-base text-terminal-amber">PROFESSIONAL TRADING PLATFORM</span>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -221,12 +256,39 @@ const MarketData = () => {
               {isFullscreen ? <Minimize className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
             </Button>
             <ThemeSwitcher />
-            <div className="text-sm sm:text-base text-terminal-green font-mono">
+            <div className="hidden sm:block text-sm sm:text-base text-terminal-green font-mono">
               {currentTime.toLocaleTimeString()} EST | LIVE
             </div>
           </div>
         </div>
       </div>
+
+      {/* Mobile Panel Navigation */}
+      {isMobile && panels.length > 0 && (
+        <div className="bg-background/50 border-b border-border p-2 flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={navigateToPreviousPanel}
+            disabled={currentPanelIndex === 0}
+            className="text-terminal-green"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <div className="text-sm text-terminal-amber font-medium">
+            {panels[currentPanelIndex]?.title || 'No Panel'} ({currentPanelIndex + 1}/{panels.length})
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={navigateToNextPanel}
+            disabled={currentPanelIndex >= panels.length - 1}
+            className="text-terminal-green"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </Button>
+        </div>
+      )}
 
       <TabManager
         panels={panels}

@@ -1,0 +1,62 @@
+import { useEffect, RefObject, useRef } from 'react';
+
+interface SwipeHandlers {
+  onSwipeLeft?: () => void;
+  onSwipeRight?: () => void;
+  onSwipeUp?: () => void;
+  onSwipeDown?: () => void;
+}
+
+export const useSwipeGesture = (
+  ref: RefObject<HTMLElement>,
+  handlers: SwipeHandlers,
+  threshold = 50
+) => {
+  // Store handlers in a ref to avoid re-creating listeners on every render
+  const handlersRef = useRef(handlers);
+  
+  useEffect(() => {
+    handlersRef.current = handlers;
+  }, [handlers]);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touchEndX = e.changedTouches[0].clientX;
+      const touchEndY = e.changedTouches[0].clientY;
+      
+      const deltaX = touchEndX - touchStartX;
+      const deltaY = touchEndY - touchStartY;
+
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        if (Math.abs(deltaX) > threshold) {
+          if (deltaX > 0) handlersRef.current.onSwipeRight?.();
+          else handlersRef.current.onSwipeLeft?.();
+        }
+      } else {
+        if (Math.abs(deltaY) > threshold) {
+          if (deltaY > 0) handlersRef.current.onSwipeDown?.();
+          else handlersRef.current.onSwipeUp?.();
+        }
+      }
+    };
+
+    element.addEventListener('touchstart', handleTouchStart);
+    element.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      element.removeEventListener('touchstart', handleTouchStart);
+      element.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [ref, threshold]);
+};
