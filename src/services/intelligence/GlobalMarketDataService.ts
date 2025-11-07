@@ -1,5 +1,8 @@
 import axios from 'axios';
 
+const ALPHA_VANTAGE_KEY = import.meta.env.VITE_ALPHA_VANTAGE_KEY || 'demo';
+const FINNHUB_KEY = import.meta.env.VITE_FINNHUB_KEY || '';
+
 export interface MarketQuote {
   symbol: string;
   name: string;
@@ -52,7 +55,15 @@ class GlobalMarketDataService {
           continue;
         }
 
-        const quote = await this.fetchYahooFinance(symbol);
+        // Try multiple sources with fallback
+        let quote = await this.fetchYahooFinance(symbol);
+        if (!quote && FINNHUB_KEY) {
+          quote = await this.fetchFinnhub(symbol);
+        }
+        if (!quote && ALPHA_VANTAGE_KEY !== 'demo') {
+          quote = await this.fetchAlphaVantage(symbol);
+        }
+        
         if (quote) {
           quotes.push(quote);
           this.setCache(symbol, quote);
@@ -174,6 +185,83 @@ class GlobalMarketDataService {
 
   private setCache(key: string, data: any): void {
     this.cache.set(key, { data, timestamp: Date.now() });
+  }
+
+  private async fetchAlphaVantage(symbol: string): Promise<MarketQuote | null> {
+    try {
+      const response = await axios.get('https://www.alphavantage.co/query', {
+        params: {
+          function: 'GLOBAL_QUOTE',
+          symbol: symbol,
+          apikey: ALPHA_VANTAGE_KEY
+        }
+      });
+
+      const quote = response.data['Global Quote'];
+      if (!quote || !quote['05. price']) return null;
+
+      const price = parseFloat(quote['05. price']);
+      const change = parseFloat(quote['09. change']);
+      const changePercent = parseFloat(quote['10. change percent'].replace('%', ''));
+
+      return {
+        symbol: quote['01. symbol'],
+        name: quote['01. symbol'],
+        price,
+        change,
+        changePercent,
+        volume: parseInt(quote['06. volume']),
+        high: parseFloat(quote['03. high']),
+        low: parseFloat(quote['04. low']),
+        open: parseFloat(quote['02. open']),
+        close: price,
+        previousClose: parseFloat(quote['08. previous close']),
+        exchange: 'US',
+        country: 'US',
+        timestamp: new Date()
+      };
+    } catch (error) {
+      console.error(`Alpha Vantage error for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  private async fetchFinnhub(symbol: string): Promise<MarketQuote | null> {
+    try {
+      const response = await axios.get('https://finnhub.io/api/v1/quote', {
+        params: {
+          symbol: symbol,
+          token: FINNHUB_KEY
+        }
+      });
+
+      const data = response.data;
+      if (!data.c) return null;
+
+      const price = data.c;
+      const change = data.d;
+      const changePercent = data.dp;
+
+      return {
+        symbol,
+        name: symbol,
+        price,
+        change,
+        changePercent,
+        volume: 0,
+        high: data.h,
+        low: data.l,
+        open: data.o,
+        close: price,
+        previousClose: data.pc,
+        exchange: 'US',
+        country: 'US',
+        timestamp: new Date()
+      };
+    } catch (error) {
+      console.error(`Finnhub error for ${symbol}:`, error);
+      return null;
+    }
   }
 }
 
