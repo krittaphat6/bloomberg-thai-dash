@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Capacitor
+.capacitor/
+
+# iOS
+ios/App/Pods/
+ios/App/*.xcworkspace
+ios/App/build/
+ios/App/*.xcodeproj/xcuserdata/
+ios/App/*.xcodeproj/project.xcworkspace/xcuserdata/
+ios/App/DerivedData/
+ios/App/.DS_Store
+*.hmap
+*.ipa
+
+# Android (not needed for this project)
+android/

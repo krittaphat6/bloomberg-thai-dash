@@ -147,6 +147,14 @@
     overflow-x: hidden;
     transition: all 0.3s ease;
   }
+  
+  /* iOS Safe Area Support */
+  #root {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
 }
 
 /* Design System Styles */
@@ -218,7 +226,7 @@
   grid-template-columns: repeat(6, 1fr);
   grid-template-rows: repeat(4, 1fr);
   gap: 1px;
-  height: calc(100vh - 140px);
+  height: calc(100vh - 140px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   background: hsl(var(--background));
   padding: 1px;
 }
