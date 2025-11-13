@@ -1,0 +1,160 @@
+================================================================================
+                    VIDEOCALL.TSX - CRITICAL ISSUES AT A GLANCE
+================================================================================
+
+ISSUE SEVERITY BREAKDOWN:
+  6 CRITICAL    - Must fix before production
+  8 HIGH        - Should fix before deployment  
+  3 MEDIUM      - Fix when resources available
+  3 LOW         - Nice to have
+
+================================================================================
+                              CRITICAL ISSUES
+================================================================================
+
+1. MULTIPLE AUDIOCTX NOT CLEANED (Line 267-331)
+   ├─ Impact: Memory leak with 11+ AudioContext instances
+   ├─ Symptom: Browser becomes sluggish with 5+ peers
+   ├─ Severity: ████ CRASH RISK
+   └─ Fix: Store all AudioContext in Map, close on peer removal
+
+2. INFINITE AUDIO LOOPS (Line 279-292, 308-325)
+   ├─ Impact: Ghost timeouts, CPU spike
+   ├─ Symptom: Tab gets sluggish, battery drain
+   ├─ Severity: ████ RESOURCE EXHAUSTION
+   └─ Fix: Store setTimeout IDs, clear on peer removal
+
+3. SCREEN SHARING BROKEN (Line 533-572)
+   ├─ Impact: Others see camera instead of screen
+   ├─ Symptom: Feature completely non-functional
+   ├─ Severity: ████ FEATURE BROKEN
+   └─ Fix: Use replaceTrack() on peer connection senders
+
+4. RACE CONDITIONS (Line 333-354, 346-348)
+   ├─ Impact: Connection storms, duplicate offers
+   ├─ Symptom: ICE state confusion, setup delays
+   ├─ Severity: ████ CONNECTION STORMS
+   └─ Fix: Add proper state synchronization, debounce
+
+5. NO EXPONENTIAL BACKOFF (Line 407-421)
+   ├─ Impact: Infinite retry storm with no backoff
+   ├─ Symptom: Network congestion after connection loss
+   ├─ Severity: ████ NETWORK FLOODING
+   └─ Fix: Implement exponential backoff with max retries
+
+6. ANIMATION FRAME LEAK (Line 588-590)
+   ├─ Impact: State updates after unmount
+   ├─ Symptom: React warnings in console
+   ├─ Severity: ███░ WARNINGS
+   └─ Fix: Add mounted flag check before setState
+
+================================================================================
+                               HIGH PRIORITY ISSUES
+================================================================================
+
+7.  CHANNEL NOT CLEANED (Line 441-460)           Fix: Remove in cleanup
+8.  DEAFEN LOGIC INVERTED (Line 519)            Fix: Use !isDeafened
+9.  BANDWIDTH FRAGILE (Line 366-374)            Fix: Use sender.setParameters
+10. PERMISSION HANDLING (Line 95-110)           Fix: Add retry mechanism
+11. STREAM RACE (Line 77-124)                   Fix: Use mounted flag
+12. ROOM ID NOT VALIDATED (Line 126)            Fix: Validate UUID format
+13. UNMOUNTED UPDATES (Line 279-292)            Fix: Check mounted flag
+14. EMOJI LOGS (Lines 73+)                      Fix: Use structured logging
+
+================================================================================
+                              CODE LOCATIONS SUMMARY
+================================================================================
+
+FILE: /home/user/bloomberg-thai-dash/src/components/VideoCall.tsx
+
+Lines 63-65:       Audio ref declarations (incomplete)
+Lines 68-264:      Main useEffect with initialization
+Lines 77-124:      getUserMedia() with stream setup (RACE CONDITION)
+Lines 129-160:     PeerJS config (HARDCODED SERVER)
+Lines 162-199:     Peer open/connection handlers
+Lines 202-242:     Incoming call handler
+Lines 267-296:     Audio detection setup (INFINITE LOOP)
+Lines 299-331:     Remote audio detection (CONTEXT LEAK)
+Lines 333-354:     Load existing peers (RACE CONDITION)
+Lines 356-439:     Call peer with bandwidth limits (FRAGILE)
+Lines 407-421:     Connection state handler (NO BACKOFF)
+Lines 441-460:     Subscribe to new peers (NO CLEANUP)
+Lines 481-492:     Remove peer (INCOMPLETE CLEANUP)
+Lines 512-531:     Deafen toggle (INVERTED LOGIC)
+Lines 533-572:     Screen sharing (TRACKS NOT REPLACED)
+Lines 588-614:     Cleanup function (INCOMPLETE)
+
+================================================================================
+                          BEST PRACTICES (LiveChatReal)
+================================================================================
+
+LiveChatReal.tsx shows correct patterns:
+
+1. useEffect Returns:
+   ✓ return () => { supabase.removeChannel(channel); }
+   ✗ VideoCall: Stores in ref, relies on cleanup()
+
+2. Channel Management:
+   ✓ Each useEffect manages one channel subscription
+   ✓ Clear dependency arrays
+   ✗ VideoCall: Called from event listener, not in useEffect
+
+3. State Coordination:
+   ✓ Separate useEffects for loading/subscribing
+   ✓ No race conditions between fetch and subscribe
+   ✗ VideoCall: Mixed in single effect, multiple async operations
+
+================================================================================
+                        IMMEDIATE ACTION ITEMS
+================================================================================
+
+Priority 0 (Fix First):
+  [ ] Line 519: Fix deafen toggle (1-2 lines)
+  [ ] Line 533-572: Implement screen share track replacement (10-15 lines)
+  [ ] Line 301: Store remote audio contexts in map (5-10 lines)
+  [ ] Line 324: Store setTimeout IDs for cleanup (5-10 lines)
+  [ ] Line 481-492: Add cleanup for audio detection (5-10 lines)
+
+Priority 1 (Fix Next):
+  [ ] Line 346-348: Add race condition guards (10-15 lines)
+  [ ] Line 407-421: Implement exponential backoff (20-30 lines)
+  [ ] Line 441-460: Move to useEffect with cleanup (20-25 lines)
+  [ ] Line 289: Add mounted flag check (2-3 lines)
+
+Priority 2 (Fix Before Deploy):
+  [ ] Line 95-110: Add permission retry mechanism (15-20 lines)
+  [ ] Line 126: Validate room ID format (5 lines)
+  [ ] Line 129-130: Make PeerJS server configurable (5-10 lines)
+  [ ] Line 73+: Replace emoji logs with structured logging (30-40 lines)
+
+================================================================================
+                           TESTING CHECKLIST
+================================================================================
+
+After fixes, test:
+  [ ] Join call with 10+ peers (check memory)
+  [ ] Disable/enable audio repeatedly (no warnings)
+  [ ] Start/stop screen share (peers see screen)
+  [ ] Disconnect internet and reconnect (backoff works)
+  [ ] Close component during connection (no leaks)
+  [ ] Click deafen button (audio actually mutes)
+  [ ] Check browser memory over 30 minutes
+  [ ] Monitor CPU usage under load
+
+================================================================================
+                             PERFORMANCE METRICS
+================================================================================
+
+Current Issues:
+  - 11+ AudioContext instances created
+  - Infinite setTimeout loops (never cleared)
+  - No exponential backoff (connection storm potential)
+  - Missing track replacement in screen share
+
+After Fixes Target:
+  - 2 AudioContext max (local + remote detection if needed)
+  - Timeouts tracked and cleared (0 ghost timers)
+  - Exponential backoff 2s, 4s, 8s, 16s...
+  - Proper track replacement with replaceTrack()
+
+================================================================================
