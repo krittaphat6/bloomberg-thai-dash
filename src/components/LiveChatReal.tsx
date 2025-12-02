@@ -54,6 +54,9 @@ const LiveChatReal = () => {
   // Webhooks
   const [webhooks, setWebhooks] = useState<WebhookType[]>([]);
   const [copiedWebhook, setCopiedWebhook] = useState<string | null>(null);
+  const [showWebhookInfo, setShowWebhookInfo] = useState(false);
+  const [currentWebhookUrl, setCurrentWebhookUrl] = useState('');
+  const [currentWebhookSecret, setCurrentWebhookSecret] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -372,6 +375,12 @@ const LiveChatReal = () => {
         console.error('Error loading webhooks:', error);
       } else {
         setWebhooks(data || []);
+        
+        // ถ้าเป็น webhook room และมี webhook อยู่แล้ว ให้ set URL
+        if (data && data.length > 0) {
+          setCurrentWebhookUrl(data[0].webhook_url);
+          setCurrentWebhookSecret(data[0].webhook_secret);
+        }
       }
     };
 
@@ -867,6 +876,74 @@ const LiveChatReal = () => {
     }
   };
 
+  // Load and show webhook info
+  const loadAndShowWebhookInfo = async () => {
+    if (!currentRoomId) return;
+    
+    try {
+      const { data: webhookData, error } = await supabase
+        .from('webhooks')
+        .select('*')
+        .eq('room_id', currentRoomId)
+        .single();
+      
+      if (error) {
+        // ถ้าไม่มี webhook ให้สร้างใหม่
+        if (error.code === 'PGRST116') {
+          await createWebhookForRoom();
+          return;
+        }
+        throw error;
+      }
+      
+      if (webhookData) {
+        setCurrentWebhookUrl(webhookData.webhook_url);
+        setCurrentWebhookSecret(webhookData.webhook_secret);
+        setShowWebhookInfo(true);
+      }
+    } catch (error: any) {
+      console.error('Error loading webhook info:', error);
+      toast({ 
+        title: 'Error', 
+        description: 'Failed to load webhook info', 
+        variant: 'destructive' 
+      });
+    }
+  };
+
+  // Create webhook for room
+  const createWebhookForRoom = async () => {
+    if (!currentUser || !currentRoomId) return;
+    
+    try {
+      const webhookSecret = `whsec_${Math.random().toString(36).substr(2, 24)}`;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const webhookUrl = `${supabaseUrl}/functions/v1/tradingview-webhook/${currentRoomId}`;
+
+      const { data: webhook, error } = await supabase
+        .from('webhooks')
+        .insert({
+          room_id: currentRoomId,
+          webhook_url: webhookUrl,
+          webhook_secret: webhookSecret,
+          created_by: currentUser.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setCurrentWebhookUrl(webhook.webhook_url);
+      setCurrentWebhookSecret(webhook.webhook_secret);
+      setShowWebhookInfo(true);
+      
+      toast({ title: 'Webhook Created', description: 'Webhook URL is ready!' });
+    } catch (error: any) {
+      console.error('Error creating webhook:', error);
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
+
   const currentRoom = rooms.find(r => r.id === currentRoomId);
 
   if (!isInitialized) {
@@ -1073,6 +1150,19 @@ const LiveChatReal = () => {
               </div>
               
               <div className="flex gap-2">
+                {/* Show Webhook URL Button */}
+                {currentRoom?.type === 'webhook' && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => loadAndShowWebhookInfo()}
+                    title="Show Webhook URL"
+                    className="text-blue-500 hover:text-blue-400"
+                  >
+                    <Webhook className="w-4 h-4" />
+                  </Button>
+                )}
+                
                 {/* Delete Webhook Room Button */}
                 {currentRoom?.type === 'webhook' && (
                   <Button 
@@ -1422,6 +1512,118 @@ const LiveChatReal = () => {
               )}
               <Button onClick={handleCreateWebhook} size="sm">
                 Create New Webhook
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Webhook Info Dialog */}
+      <Dialog open={showWebhookInfo} onOpenChange={setShowWebhookInfo}>
+        <DialogContent className="bg-black border-terminal-green text-terminal-green max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>🔗 Webhook Information</DialogTitle>
+            <DialogDescription className="text-terminal-green/60">
+              ใช้ข้อมูลนี้ใน TradingView Alert
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Webhook URL */}
+            <div>
+              <label className="text-sm text-terminal-green/60 mb-1 block">Webhook URL:</label>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-terminal-green/10 p-3 rounded flex-1 overflow-auto break-all border border-terminal-green/30">
+                  {currentWebhookUrl}
+                </code>
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  onClick={() => {
+                    navigator.clipboard.writeText(currentWebhookUrl);
+                    toast({ title: 'Copied!', description: 'Webhook URL copied to clipboard' });
+                  }}
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            
+            {/* Webhook Secret */}
+            <div>
+              <label className="text-sm text-terminal-green/60 mb-1 block">Secret Key:</label>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-terminal-green/10 p-3 rounded flex-1 border border-terminal-green/30">
+                  {currentWebhookSecret}
+                </code>
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  onClick={() => {
+                    navigator.clipboard.writeText(currentWebhookSecret);
+                    toast({ title: 'Copied!', description: 'Secret copied to clipboard' });
+                  }}
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            
+            {/* TradingView Instructions */}
+            <div className="border border-terminal-green/30 rounded p-4 mt-4">
+              <h4 className="font-bold mb-2">📊 วิธีใช้งานกับ TradingView:</h4>
+              <ol className="text-sm space-y-2 text-terminal-green/80">
+                <li>1. ไปที่ TradingView → สร้าง Alert ใหม่</li>
+                <li>2. ใน "Notifications" เปิด "Webhook URL"</li>
+                <li>3. วาง Webhook URL ด้านบน</li>
+                <li>4. ใน "Message" ใส่ JSON format:</li>
+              </ol>
+              <pre className="text-xs bg-terminal-green/5 p-2 rounded mt-2 overflow-auto">
+{`{
+  "ticker": "{{ticker}}",
+  "action": "{{strategy.order.action}}",
+  "price": "{{close}}",
+  "time": "{{time}}",
+  "message": "Your custom message"
+}`}
+              </pre>
+            </div>
+            
+            {/* Test Button */}
+            <div className="flex justify-between items-center pt-4 border-t border-terminal-green/30">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const response = await fetch(currentWebhookUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        ticker: 'TEST',
+                        action: 'BUY',
+                        price: '100.00',
+                        time: new Date().toISOString(),
+                        message: '🧪 Test alert from ABLE Messenger'
+                      })
+                    });
+                    
+                    if (response.ok) {
+                      toast({ title: '✅ Test Sent!', description: 'Check the chat for the test message' });
+                    } else {
+                      throw new Error('Failed to send test');
+                    }
+                  } catch (error) {
+                    toast({ title: 'Test Failed', description: 'Could not send test webhook', variant: 'destructive' });
+                  }
+                }}
+                className="border-terminal-green/30"
+              >
+                🧪 Send Test Alert
+              </Button>
+              
+              <Button onClick={() => setShowWebhookInfo(false)}>
+                Close
               </Button>
             </div>
           </div>
