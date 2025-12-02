@@ -19,7 +19,7 @@ export interface Friendship {
 export interface ChatRoom {
   id: string;
   name?: string;
-  type: 'private' | 'group';
+  type: 'private' | 'group' | 'webhook';
   created_by: string;
   created_at: string;
   members?: User[];

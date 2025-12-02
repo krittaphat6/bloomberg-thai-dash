@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
-import { User, Friendship, ChatRoom, Message, Webhook, FriendNickname } from '@/types/chat';
-import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video } from 'lucide-react';
+import { User, Friendship, ChatRoom, Message, Webhook as WebhookType, FriendNickname } from '@/types/chat';
+import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2 } from 'lucide-react';
 import { useCurrentTheme } from '@/hooks/useCurrentTheme';
 import { getThemeColors } from '@/utils/themeColors';
 import { VideoCall } from './VideoCall';
@@ -42,15 +42,17 @@ const LiveChatReal = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showCreateWebhookRoom, setShowCreateWebhookRoom] = useState(false);
   const [showRoomSettings, setShowRoomSettings] = useState(false);
   const [showInviteToGroup, setShowInviteToGroup] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [friendUsername, setFriendUsername] = useState('');
   const [groupName, setGroupName] = useState('');
+  const [webhookRoomName, setWebhookRoomName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   
   // Webhooks
-  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [webhooks, setWebhooks] = useState<WebhookType[]>([]);
   const [copiedWebhook, setCopiedWebhook] = useState<string | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -771,6 +773,100 @@ const LiveChatReal = () => {
     setTimeout(() => setCopiedWebhook(null), 2000);
   };
 
+  // Create webhook room
+  const handleCreateWebhookRoom = async () => {
+    if (!currentUser || !webhookRoomName.trim()) return;
+
+    try {
+      // 1. สร้างห้องแชทใหม่ (type: 'webhook')
+      const { data: newRoom, error: roomError } = await supabase
+        .from('chat_rooms')
+        .insert({
+          name: `🔗 ${webhookRoomName.trim()}`,
+          type: 'webhook',
+          created_by: currentUser.id,
+        })
+        .select()
+        .single();
+
+      if (roomError) throw roomError;
+
+      // 2. เพิ่ม user เป็น member
+      await supabase.from('room_members').insert({ 
+        room_id: newRoom.id, 
+        user_id: currentUser.id 
+      });
+
+      // 3. สร้าง webhook สำหรับห้องนี้
+      const webhookSecret = `whsec_${Math.random().toString(36).substr(2, 24)}`;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const projectId = supabaseUrl.split('//')[1].split('.')[0];
+      const webhookUrl = `${supabaseUrl}/functions/v1/tradingview-webhook/${newRoom.id}`;
+
+      const { data: webhook, error: webhookError } = await supabase
+        .from('webhooks')
+        .insert({
+          room_id: newRoom.id,
+          webhook_url: webhookUrl,
+          webhook_secret: webhookSecret,
+          created_by: currentUser.id,
+        })
+        .select()
+        .single();
+
+      if (webhookError) throw webhookError;
+
+      // 4. ส่งข้อความต้อนรับพร้อม webhook URL
+      await supabase.from('messages').insert({
+        room_id: newRoom.id,
+        user_id: 'system',
+        username: 'SYSTEM',
+        color: '#00ff00',
+        content: `🔗 Webhook Room Created!\n\n📡 Webhook URL:\n${webhookUrl}\n\n🔑 Secret:\n${webhookSecret}\n\n📊 Use this URL in TradingView Alert to receive signals here!`,
+        message_type: 'text'
+      });
+
+      toast({ 
+        title: '🔗 Webhook Room Created!', 
+        description: 'Copy webhook URL from chat to use in TradingView' 
+      });
+      
+      setWebhookRoomName('');
+      setShowCreateWebhookRoom(false);
+      setCurrentRoomId(newRoom.id);
+
+    } catch (error: any) {
+      console.error('Error creating webhook room:', error);
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  // Delete webhook room
+  const handleDeleteWebhookRoom = async (roomId: string) => {
+    if (!roomId || !confirm('ต้องการลบ Webhook Room นี้หรือไม่?')) return;
+
+    try {
+      // ลบ webhook ก่อน
+      await supabase.from('webhooks').delete().eq('room_id', roomId);
+      
+      // ลบ messages
+      await supabase.from('messages').delete().eq('room_id', roomId);
+      
+      // ลบ room members
+      await supabase.from('room_members').delete().eq('room_id', roomId);
+      
+      // ลบห้อง
+      await supabase.from('chat_rooms').delete().eq('id', roomId);
+
+      toast({ title: 'Deleted', description: 'Webhook room deleted successfully' });
+      setCurrentRoomId(null);
+      
+    } catch (error: any) {
+      console.error('Error deleting webhook room:', error);
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
+
   const currentRoom = rooms.find(r => r.id === currentRoomId);
 
   if (!isInitialized) {
@@ -901,14 +997,25 @@ const LiveChatReal = () => {
         <div className="flex-1 p-4 overflow-hidden flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold">ROOMS</h3>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setShowCreateGroup(true)}
-              style={{ color: colors.foreground }}
-            >
-              <Users className="w-4 h-4" />
-            </Button>
+            <div className="flex gap-1">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setShowCreateWebhookRoom(true)}
+                title="Create Webhook Room"
+                style={{ color: colors.foreground }}
+              >
+                <Webhook className="w-4 h-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setShowCreateGroup(true)}
+                style={{ color: colors.foreground }}
+              >
+                <Users className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
           <ScrollArea className="flex-1">
             {rooms.length === 0 ? (
@@ -961,11 +1068,24 @@ const LiveChatReal = () => {
                   {currentRoomId && roomNames[currentRoomId] ? roomNames[currentRoomId] : 'Chat'}
                 </h2>
                 <div className="text-xs opacity-60">
-                  {currentRoom?.type === 'group' ? 'Group Chat' : 'Private Chat'}
+                  {currentRoom?.type === 'webhook' ? '🔗 Webhook Room' : currentRoom?.type === 'group' ? 'Group Chat' : 'Private Chat'}
                 </div>
               </div>
               
               <div className="flex gap-2">
+                {/* Delete Webhook Room Button */}
+                {currentRoom?.type === 'webhook' && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => handleDeleteWebhookRoom(currentRoomId)}
+                    title="Delete Webhook Room"
+                    className="text-red-500 hover:text-red-400"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+                
                 {/* Video Call Button */}
                 <Button
                   variant="ghost"
@@ -1031,9 +1151,16 @@ const LiveChatReal = () => {
                         )}
                         
                         {message.message_type === 'webhook' && (
-                          <div className="mt-2 bg-blue-500/10 border border-blue-500/30 rounded p-3">
-                            <div className="text-blue-400 text-xs font-mono mb-2">🔗 WEBHOOK MESSAGE</div>
-                            <pre className="text-xs text-blue-300 overflow-auto">{JSON.stringify(message.webhook_data, null, 2)}</pre>
+                          <div className="mt-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded">
+                            <pre className="text-sm whitespace-pre-wrap text-blue-300">{message.content}</pre>
+                            {message.webhook_data && (
+                              <details className="mt-2">
+                                <summary className="text-xs text-blue-400 cursor-pointer hover:text-blue-300">📊 Raw Data</summary>
+                                <pre className="text-xs mt-1 overflow-auto bg-black/30 p-2 rounded">
+                                  {JSON.stringify(message.webhook_data, null, 2)}
+                                </pre>
+                              </details>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1147,6 +1274,38 @@ const LiveChatReal = () => {
             <Button onClick={handleCreateGroup} disabled={!groupName.trim()}>
               Create Group
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Webhook Room Dialog */}
+      <Dialog open={showCreateWebhookRoom} onOpenChange={setShowCreateWebhookRoom}>
+        <DialogContent className="bg-black border-terminal-green text-terminal-green">
+          <DialogHeader>
+            <DialogTitle>🔗 Create Webhook Room</DialogTitle>
+            <DialogDescription className="text-terminal-green/60">
+              สร้างห้องสำหรับรับสัญญาณจาก TradingView
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              value={webhookRoomName}
+              onChange={(e) => setWebhookRoomName(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleCreateWebhookRoom()}
+              placeholder="ชื่อห้อง (เช่น BTC Signals, Gold Alerts)"
+              className="bg-black border-terminal-green/30 text-terminal-green"
+            />
+            <div className="text-xs text-terminal-green/60">
+              หลังสร้างห้อง คุณจะได้รับ Webhook URL สำหรับใส่ใน TradingView Alert
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowCreateWebhookRoom(false)} className="border-terminal-green/30">
+                Cancel
+              </Button>
+              <Button onClick={handleCreateWebhookRoom} disabled={!webhookRoomName.trim()}>
+                Create Webhook Room
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
