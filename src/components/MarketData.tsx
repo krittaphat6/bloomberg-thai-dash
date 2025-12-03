@@ -7,6 +7,9 @@ import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
 import { Expand, Minimize, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useResponsiveContext } from '@/contexts/ResponsiveContext';
+import { MobileLayout } from './mobile/MobileLayout';
+import { TabletLayout } from './tablet/TabletLayout';
 import StockdioCharts from './StockdioCharts';
 import InvestingCharts from './InvestingCharts';
 import CryptoLiveCharts from './CryptoLiveCharts';
@@ -46,6 +49,7 @@ interface PanelData {
 const MarketData = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { isMobile, isTablet, isDesktop } = useResponsiveContext();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [panels, setPanels] = useState<PanelData[]>([]);
   const [showTabSelector, setShowTabSelector] = useState(false);
@@ -114,10 +118,7 @@ const MarketData = () => {
   };
 
   const availableComponents = [
-    // Live Chat
     { id: 'messenger', title: '💬 MESSENGER', component: <LiveChatReal /> },
-    
-    // Advanced Tools & Games - NOW AS INLINE PANELS WITH IFRAMES
     { 
       id: 'able-focus', 
       title: 'ABLE-FOCUS', 
@@ -154,14 +155,10 @@ const MarketData = () => {
         </div>
       )
     },
-    
-    // Trading & Finance Tools
     { id: 'stockdio', title: 'STOCKDIO CHARTS', component: <StockdioCharts /> },
     { id: 'investing', title: 'INVESTING.COM', component: <InvestingCharts /> },
     { id: 'crypto', title: 'CRYPTO LIVE', component: <CryptoLiveCharts /> },
     { id: 'forex', title: 'FOREX & ECONOMICS', component: <ForexEconomicData /> },
-    
-    // Trading Tools
     { id: 'fedwatch', title: 'FED WATCH', component: <FedWatch /> },
     { id: 'calendar', title: 'ECONOMIC CALENDAR', component: <EconomicCalendar /> },
     { id: 'scatter', title: 'SCATTER ANALYSIS', component: <ScatterAnalysis /> },
@@ -192,7 +189,6 @@ const MarketData = () => {
   };
 
   const handleTabSelect = (selectedComponent: any) => {
-    // Now all components open as panels (including ABLE-Focus, Options-3D, and Pac-Man)
     const newPanel: PanelData = {
       id: `${selectedComponent.id}-${nextPanelId}`,
       title: selectedComponent.title,
@@ -203,6 +199,35 @@ const MarketData = () => {
     setShowTabSelector(false);
   };
 
+  // Mobile Layout
+  if (isMobile) {
+    return (
+      <MobileLayout
+        panels={panels}
+        availableComponents={availableComponents}
+        onPanelAdd={handleTabSelect}
+        onPanelClose={handlePanelClose}
+        currentTime={currentTime}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // Tablet Layout
+  if (isTablet) {
+    return (
+      <TabletLayout
+        panels={panels}
+        availableComponents={availableComponents}
+        onPanelAdd={handleTabSelect}
+        onPanelClose={handlePanelClose}
+        currentTime={currentTime}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // Desktop Layout (existing)
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
       <PenguinSticker />
