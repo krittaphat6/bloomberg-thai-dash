@@ -195,6 +195,18 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+/* Messenger responsive */
+.messenger-container {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 767px) {
+  .messenger-transition {
+    transition: transform 0.3s ease-in-out;
+  }
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }

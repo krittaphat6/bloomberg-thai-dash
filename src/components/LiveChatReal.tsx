@@ -56,6 +56,10 @@ const LiveChatReal = () => {
   const [showInviteToGroup, setShowInviteToGroup] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [friendUsername, setFriendUsername] = useState('');
+  
+  // Mobile responsive state
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [isMobileView, setIsMobileView] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [webhookRoomName, setWebhookRoomName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -89,6 +93,28 @@ const LiveChatReal = () => {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  // Mobile view detection
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobileView(mobile);
+      if (mobile && currentRoomId) {
+        setShowSidebar(false);
+      }
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Switch to chat when selecting room on mobile
+  useEffect(() => {
+    if (isMobileView && currentRoomId) {
+      setShowSidebar(false);
+    }
+  }, [currentRoomId, isMobileView]);
 
   const getDisplayName = (friendId: string, username: string): string => {
     return nicknames[friendId] || username;
@@ -1055,16 +1081,69 @@ const LiveChatReal = () => {
 
   return (
     <div 
-      className="h-full flex font-mono"
+      className="h-full flex flex-col md:flex-row font-mono overflow-hidden"
       style={{ 
         backgroundColor: colors.background,
         color: colors.foreground 
       }}
     >
+      {/* Mobile Header */}
+      {isMobileView && (
+        <div 
+          className="flex items-center justify-between p-3 flex-shrink-0"
+          style={{ borderBottom: `1px solid ${colors.border}` }}
+        >
+          {!showSidebar && currentRoomId ? (
+            <>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => {
+                  setShowSidebar(true);
+                  setCurrentRoomId(null);
+                }}
+                className="text-terminal-green"
+              >
+                ← Back
+              </Button>
+              <span className="font-bold truncate flex-1 text-center px-2">
+                {roomNames[currentRoomId] || 'Chat'}
+              </span>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setShowVideoCall(true)}
+              >
+                <Video className="w-4 h-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <span className="font-bold text-terminal-green">ABLE Messenger</span>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setShowSettings(true)}
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Sidebar */}
       <div 
-        className="w-72 flex flex-col"
-        style={{ borderRight: `1px solid ${colors.border}` }}
+        className={`
+          ${isMobileView 
+            ? showSidebar 
+              ? 'flex w-full h-full' 
+              : 'hidden' 
+            : 'flex w-72'
+          } 
+          flex-col flex-shrink-0
+        `}
+        style={{ borderRight: isMobileView ? 'none' : `1px solid ${colors.border}` }}
       >
         {/* User Profile */}
         <div 
@@ -1247,14 +1326,25 @@ const LiveChatReal = () => {
       </div>
 
       {/* Chat Window */}
-      <div className="flex-1 flex flex-col">
+      <div 
+        className={`
+          ${isMobileView 
+            ? showSidebar 
+              ? 'hidden' 
+              : 'flex w-full h-full' 
+            : 'flex flex-1'
+          } 
+          flex-col min-w-0
+        `}
+      >
         {currentRoomId ? (
           <>
-            {/* Chat Header */}
-            <div 
-              className="p-4 flex items-center justify-between"
-              style={{ borderBottom: `1px solid ${colors.border}` }}
-            >
+            {/* Chat Header - hide on mobile (using Mobile Header instead) */}
+            {!isMobileView && (
+              <div 
+                className="p-4 flex items-center justify-between"
+                style={{ borderBottom: `1px solid ${colors.border}` }}
+              >
               <div>
                 <h2 className="font-bold text-lg">
                   {currentRoomId && roomNames[currentRoomId] ? roomNames[currentRoomId] : 'Chat'}
@@ -1312,6 +1402,7 @@ const LiveChatReal = () => {
                 )}
               </div>
             </div>
+            )}
 
             {/* Messages Area */}
             <ScrollArea className="flex-1 p-4">
