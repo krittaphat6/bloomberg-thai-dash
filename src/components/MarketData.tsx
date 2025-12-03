@@ -5,7 +5,8 @@ import TabSelector from './TabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
-import { Expand, Minimize } from 'lucide-react';
+import { Expand, Minimize, LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import StockdioCharts from './StockdioCharts';
 import InvestingCharts from './InvestingCharts';
 import CryptoLiveCharts from './CryptoLiveCharts';
@@ -44,6 +45,7 @@ interface PanelData {
 
 const MarketData = () => {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [panels, setPanels] = useState<PanelData[]>([]);
   const [showTabSelector, setShowTabSelector] = useState(false);
@@ -224,6 +226,15 @@ const MarketData = () => {
             <div className="text-sm sm:text-base text-terminal-green font-mono">
               {currentTime.toLocaleTimeString()} EST | LIVE
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={signOut}
+              className="text-terminal-red hover:bg-terminal-red/10 font-mono text-xs"
+            >
+              <LogOut className="h-4 w-4 mr-1" />
+              Logout
+            </Button>
           </div>
         </div>
       </div>
