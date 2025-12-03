@@ -1596,24 +1596,47 @@ const LiveChatReal = () => {
                 size="sm"
                 onClick={async () => {
                   try {
-                    const response = await fetch(currentWebhookUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        ticker: 'TEST',
-                        action: 'BUY',
-                        price: '100.00',
-                        time: new Date().toISOString(),
-                        message: '🧪 Test alert from ABLE Messenger'
-                      })
-                    });
-                    
-                    if (response.ok) {
-                      toast({ title: '✅ Test Sent!', description: 'Check the chat for the test message' });
-                    } else {
-                      throw new Error('Failed to send test');
+                    // Ensure tradingview user exists
+                    const { data: tvUser } = await supabase
+                      .from('users')
+                      .select('id')
+                      .eq('id', 'tradingview')
+                      .maybeSingle();
+
+                    if (!tvUser) {
+                      await supabase.from('users').insert({
+                        id: 'tradingview',
+                        username: '📊 TradingView',
+                        color: '#2962FF',
+                        status: 'online'
+                      });
                     }
+
+                    // Insert test message directly
+                    const testData = {
+                      ticker: 'TEST',
+                      action: 'BUY',
+                      price: '100.00',
+                      time: new Date().toISOString(),
+                      message: '🧪 Test alert from ABLE Messenger'
+                    };
+
+                    const { error } = await supabase.from('messages').insert({
+                      room_id: currentRoomId,
+                      user_id: 'tradingview',
+                      username: '📊 TradingView',
+                      color: '#2962FF',
+                      content: `📊 **TradingView Alert**\n\n🏷️ Symbol: TEST\n📌 Action: BUY\n💰 Price: 100.00\n\n💬 🧪 Test alert from ABLE Messenger`,
+                      message_type: 'webhook',
+                      webhook_data: testData
+                    });
+
+                    if (error) throw error;
+                    
+                    toast({ title: '✅ Test Sent!', description: 'Check the chat for the test message' });
+                    setShowWebhookInfo(false);
                   } catch (error) {
+                    console.error('Test webhook error:', error);
                     toast({ title: 'Test Failed', description: 'Could not send test webhook', variant: 'destructive' });
                   }
                 }}
