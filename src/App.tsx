@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ResponsiveProvider } from "@/contexts/ResponsiveContext";
 import { AuthScreen } from "@/components/AuthScreen";
 import Index from "./pages/Index";
 import NotesAndVisualization from "./pages/NotesAndVisualization";
@@ -53,11 +54,13 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <AppContent />
-        </TooltipProvider>
+        <ResponsiveProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <AppContent />
+          </TooltipProvider>
+        </ResponsiveProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
