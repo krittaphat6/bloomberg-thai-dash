@@ -6,12 +6,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { User, Friendship, ChatRoom, Message, Webhook as WebhookType, FriendNickname } from '@/types/chat';
-import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2 } from 'lucide-react';
+import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2, Share2, Loader2 } from 'lucide-react';
 import { useCurrentTheme } from '@/hooks/useCurrentTheme';
 import { getThemeColors } from '@/utils/themeColors';
 import { VideoCall } from './VideoCall';
+import { useAuth } from '@/contexts/AuthContext';
 
 const LiveChatReal = () => {
+  // Auth
+  const { user: authUser } = useAuth();
+  
   // Theme
   const currentTheme = useCurrentTheme();
   const colors = getThemeColors(currentTheme);
@@ -31,6 +35,11 @@ const LiveChatReal = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  
+  // Forward message
+  const [showForwardDialog, setShowForwardDialog] = useState(false);
+  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
   
   // Nicknames
   const [nicknames, setNicknames] = useState<{ [key: string]: string }>({});
@@ -50,6 +59,7 @@ const LiveChatReal = () => {
   const [groupName, setGroupName] = useState('');
   const [webhookRoomName, setWebhookRoomName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   
   // Webhooks
   const [webhooks, setWebhooks] = useState<WebhookType[]>([]);
@@ -61,30 +71,9 @@ const LiveChatReal = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // Helper functions
-  const getUserId = () => {
-    let userId = localStorage.getItem('able_user_id');
-    if (!userId) {
-      userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('able_user_id', userId);
-    }
-    return userId;
-  };
-
-  const generateColor = (id: string) => {
-    const colors = ['#00ff00', '#00ffff', '#ff00ff', '#ffff00', '#ff6b6b', '#4ecdc4', '#95e1d3'];
-    const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
-  };
-
-  const generateUsername = (id: string) => {
-    const adjectives = ['Crypto', 'Quantum', 'Cyber', 'Digital', 'Neural', 'Matrix'];
-    const nouns = ['Trader', 'Hacker', 'Agent', 'Ghost', 'Phoenix', 'Nexus'];
-    const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return `${adjectives[hash % adjectives.length]}${nouns[(hash * 2) % nouns.length]}${hash % 100}`;
-  };
-
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -128,40 +117,58 @@ const LiveChatReal = () => {
     return 'Unknown User';
   };
 
-  // Initialize user
+  // Initialize user from Auth
   useEffect(() => {
     const initUser = async () => {
-      const userId = getUserId();
-      const storedUsername = localStorage.getItem('able_username');
-      const storedColor = localStorage.getItem('able_color');
+      if (!authUser) return;
       
-      const username = storedUsername || generateUsername(userId);
-      const color = storedColor || generateColor(userId);
+      const userId = authUser.id;
+      const username = authUser.user_metadata?.username || authUser.email?.split('@')[0] || 'User';
       
-      if (!storedUsername) localStorage.setItem('able_username', username);
-      if (!storedColor) localStorage.setItem('able_color', color);
-
-      const { error } = await supabase
+      // Get user profile from database
+      const { data: userProfile, error } = await supabase
         .from('users')
-        .upsert({
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      if (userProfile) {
+        setCurrentUser({
+          id: userProfile.id,
+          username: userProfile.username,
+          color: userProfile.color,
+          avatar_url: userProfile.avatar_url,
+          status: 'online',
+          last_seen: new Date().toISOString()
+        });
+        
+        // Update online status
+        await supabase
+          .from('users')
+          .update({ status: 'online', last_seen: new Date().toISOString() })
+          .eq('id', userId);
+      } else {
+        // Create profile if not exists
+        const colors = ['#00ff00', '#00ffff', '#ff00ff', '#ffff00', '#ff6b6b', '#4ecdc4'];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        
+        const newUser = {
           id: userId,
           username,
-          color,
+          color: randomColor,
           status: 'online',
-          last_seen: new Date().toISOString(),
-        });
-
-      if (error) {
-        console.error('Error initializing user:', error);
-        toast({ title: 'Connection Error', description: 'Failed to initialize user', variant: 'destructive' });
-      } else {
-        setCurrentUser({ id: userId, username, color, status: 'online', last_seen: new Date().toISOString() });
-        setIsInitialized(true);
+          last_seen: new Date().toISOString()
+        };
+        
+        await supabase.from('users').upsert(newUser);
+        setCurrentUser(newUser as User);
       }
+      
+      setIsInitialized(true);
     };
 
     initUser();
-  }, []);
+  }, [authUser]);
 
   // Load nicknames
   useEffect(() => {
@@ -354,6 +361,14 @@ const LiveChatReal = () => {
         setMessages(prev => [...prev, payload.new as Message]);
         setTimeout(scrollToBottom, 100);
       })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'messages',
+        filter: `room_id=eq.${currentRoomId}`
+      }, (payload) => {
+        setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+      })
       .subscribe();
 
     return () => {
@@ -376,7 +391,6 @@ const LiveChatReal = () => {
       } else {
         setWebhooks(data || []);
         
-        // ถ้าเป็น webhook room และมี webhook อยู่แล้ว ให้ set URL
         if (data && data.length > 0) {
           setCurrentWebhookUrl(data[0].webhook_url);
           setCurrentWebhookSecret(data[0].webhook_secret);
@@ -386,6 +400,109 @@ const LiveChatReal = () => {
 
     loadWebhooks();
   }, [currentRoomId]);
+
+  // Avatar upload
+  const handleAvatarUpload = async (file: File) => {
+    if (!currentUser || isUploadingAvatar) return;
+    
+    const maxSize = 2 * 1024 * 1024; // 2MB
+    if (file.size > maxSize) {
+      toast({ title: 'File Too Large', description: 'Max size is 2MB', variant: 'destructive' });
+      return;
+    }
+    
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Invalid File', description: 'Please upload an image', variant: 'destructive' });
+      return;
+    }
+    
+    setIsUploadingAvatar(true);
+    
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${currentUser.id}_${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('chat-files')
+        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+      
+      if (uploadError) throw uploadError;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-files')
+        .getPublicUrl(filePath);
+      
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: publicUrl })
+        .eq('id', currentUser.id);
+      
+      if (updateError) throw updateError;
+      
+      setCurrentUser({ ...currentUser, avatar_url: publicUrl });
+      toast({ title: 'Avatar Updated!', description: 'Your profile picture has been changed' });
+    } catch (error: any) {
+      console.error('Avatar upload error:', error);
+      toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  // Delete message
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', messageId)
+        .eq('user_id', currentUser.id);
+      
+      if (error) throw error;
+      
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      setSelectedMessageId(null);
+      toast({ title: 'Message Deleted' });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  // Forward message
+  const handleForwardMessage = async (targetRoomId: string) => {
+    if (!currentUser || !forwardingMessage) return;
+    
+    try {
+      const forwardedContent = forwardingMessage.message_type === 'text' 
+        ? `↪️ Forwarded:\n${forwardingMessage.content}`
+        : forwardingMessage.content;
+      
+      const { error } = await supabase.from('messages').insert({
+        room_id: targetRoomId,
+        user_id: currentUser.id,
+        username: currentUser.username,
+        color: currentUser.color,
+        content: forwardedContent,
+        message_type: forwardingMessage.message_type,
+        file_url: forwardingMessage.file_url,
+        file_name: forwardingMessage.file_name,
+        file_type: forwardingMessage.file_type,
+        file_size: forwardingMessage.file_size,
+      });
+      
+      if (error) throw error;
+      
+      toast({ title: 'Message Forwarded!', description: 'Message sent successfully' });
+      setShowForwardDialog(false);
+      setForwardingMessage(null);
+      setSelectedMessageId(null);
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
 
   // Save nickname
   const saveNickname = async () => {
@@ -427,7 +544,6 @@ const LiveChatReal = () => {
     const newUsername = tempUsername.trim();
     
     try {
-      // 1. Update in users table (so everyone sees the new name)
       const { error: updateError } = await supabase
         .from('users')
         .update({ username: newUsername })
@@ -435,11 +551,7 @@ const LiveChatReal = () => {
 
       if (updateError) throw updateError;
 
-      // 2. Update local state
       setCurrentUser({ ...currentUser, username: newUsername });
-      
-      // 3. Update localStorage
-      localStorage.setItem('able_username', newUsername);
 
       toast({ 
         title: 'Username Updated!', 
@@ -787,7 +899,6 @@ const LiveChatReal = () => {
     if (!currentUser || !webhookRoomName.trim()) return;
 
     try {
-      // 1. สร้างห้องแชทใหม่ (type: 'webhook')
       const { data: newRoom, error: roomError } = await supabase
         .from('chat_rooms')
         .insert({
@@ -800,16 +911,13 @@ const LiveChatReal = () => {
 
       if (roomError) throw roomError;
 
-      // 2. เพิ่ม user เป็น member
       await supabase.from('room_members').insert({ 
         room_id: newRoom.id, 
         user_id: currentUser.id 
       });
 
-      // 3. สร้าง webhook สำหรับห้องนี้
       const webhookSecret = `whsec_${Math.random().toString(36).substr(2, 24)}`;
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const projectId = supabaseUrl.split('//')[1].split('.')[0];
       const webhookUrl = `${supabaseUrl}/functions/v1/tradingview-webhook/${newRoom.id}`;
 
       const { data: webhook, error: webhookError } = await supabase
@@ -825,7 +933,6 @@ const LiveChatReal = () => {
 
       if (webhookError) throw webhookError;
 
-      // 4. ส่งข้อความต้อนรับพร้อม webhook URL
       await supabase.from('messages').insert({
         room_id: newRoom.id,
         user_id: 'system',
@@ -855,16 +962,9 @@ const LiveChatReal = () => {
     if (!roomId || !confirm('ต้องการลบ Webhook Room นี้หรือไม่?')) return;
 
     try {
-      // ลบ webhook ก่อน
       await supabase.from('webhooks').delete().eq('room_id', roomId);
-      
-      // ลบ messages
       await supabase.from('messages').delete().eq('room_id', roomId);
-      
-      // ลบ room members
       await supabase.from('room_members').delete().eq('room_id', roomId);
-      
-      // ลบห้อง
       await supabase.from('chat_rooms').delete().eq('id', roomId);
 
       toast({ title: 'Deleted', description: 'Webhook room deleted successfully' });
@@ -888,7 +988,6 @@ const LiveChatReal = () => {
         .single();
       
       if (error) {
-        // ถ้าไม่มี webhook ให้สร้างใหม่
         if (error.code === 'PGRST116') {
           await createWebhookForRoom();
           return;
@@ -973,12 +1072,28 @@ const LiveChatReal = () => {
           style={{ borderBottom: `1px solid ${colors.border}` }}
         >
           <div className="flex items-center gap-3 mb-2">
+            {/* Avatar - clickable for upload */}
             <div 
-              className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold" 
+              className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold cursor-pointer hover:opacity-80 overflow-hidden relative" 
               style={{ backgroundColor: currentUser?.color }}
+              onClick={() => avatarInputRef.current?.click()}
+              title="Click to change avatar"
             >
-              {currentUser?.username[0]}
+              {isUploadingAvatar ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : currentUser?.avatar_url ? (
+                <img src={currentUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                currentUser?.username[0]
+              )}
             </div>
+            <input
+              type="file"
+              ref={avatarInputRef}
+              className="hidden"
+              accept="image/*"
+              onChange={(e) => e.target.files?.[0] && handleAvatarUpload(e.target.files[0])}
+            />
             <div className="flex-1">
               <div className="font-bold">{currentUser?.username}</div>
               <div className="text-xs opacity-60">● Online</div>
@@ -1122,7 +1237,7 @@ const LiveChatReal = () => {
                     {roomNames[room.id] || 'Loading...'}
                   </div>
                   <div className="text-xs opacity-60">
-                    {room.type === 'private' ? '1:1 Chat' : 'Group Chat'}
+                    {room.type === 'private' ? '1:1 Chat' : room.type === 'webhook' ? '🔗 Webhook' : 'Group Chat'}
                   </div>
                 </div>
               ))
@@ -1150,7 +1265,6 @@ const LiveChatReal = () => {
               </div>
               
               <div className="flex gap-2">
-                {/* Show Webhook URL Button */}
                 {currentRoom?.type === 'webhook' && (
                   <Button 
                     variant="ghost" 
@@ -1163,7 +1277,6 @@ const LiveChatReal = () => {
                   </Button>
                 )}
                 
-                {/* Delete Webhook Room Button */}
                 {currentRoom?.type === 'webhook' && (
                   <Button 
                     variant="ghost" 
@@ -1176,7 +1289,6 @@ const LiveChatReal = () => {
                   </Button>
                 )}
                 
-                {/* Video Call Button */}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1207,9 +1319,18 @@ const LiveChatReal = () => {
                 <div className="text-center text-terminal-green/60 py-8">No messages yet. Start the conversation!</div>
               ) : (
                 messages.map(message => (
-                  <div key={message.id} className="mb-4">
+                  <div 
+                    key={message.id} 
+                    className={`mb-4 group relative ${message.user_id === currentUser?.id ? 'cursor-pointer' : ''}`}
+                    onClick={() => message.user_id === currentUser?.id && message.message_type !== 'webhook' && setSelectedMessageId(
+                      selectedMessageId === message.id ? null : message.id
+                    )}
+                  >
                     <div className="flex items-start gap-2">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ backgroundColor: message.color }}>
+                      <div 
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 overflow-hidden" 
+                        style={{ backgroundColor: message.color }}
+                      >
                         {message.username[0]}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -1224,7 +1345,7 @@ const LiveChatReal = () => {
                         
                         {message.message_type === 'image' && (
                           <div className="mt-2">
-                            <img src={message.file_url} alt={message.file_name} className="max-w-sm rounded border border-terminal-green/30 cursor-pointer hover:opacity-80" onClick={() => window.open(message.file_url, '_blank')} />
+                            <img src={message.file_url} alt={message.file_name} className="max-w-sm rounded border border-terminal-green/30 cursor-pointer hover:opacity-80" onClick={(e) => { e.stopPropagation(); window.open(message.file_url, '_blank'); }} />
                           </div>
                         )}
                         
@@ -1233,7 +1354,7 @@ const LiveChatReal = () => {
                             <div className="flex items-center gap-2">
                               <Paperclip className="w-4 h-4" />
                               <div>
-                                <a href={message.file_url} target="_blank" rel="noopener noreferrer" className="text-terminal-green hover:underline font-bold">{message.file_name}</a>
+                                <a href={message.file_url} target="_blank" rel="noopener noreferrer" className="text-terminal-green hover:underline font-bold" onClick={(e) => e.stopPropagation()}>{message.file_name}</a>
                                 <div className="text-xs text-terminal-green/60">{formatFileSize(message.file_size)}</div>
                               </div>
                             </div>
@@ -1251,6 +1372,37 @@ const LiveChatReal = () => {
                                 </pre>
                               </details>
                             )}
+                          </div>
+                        )}
+
+                        {/* Action Buttons for own messages (not webhook) */}
+                        {selectedMessageId === message.id && message.user_id === currentUser?.id && message.message_type !== 'webhook' && (
+                          <div className="flex gap-2 mt-2 animate-in fade-in">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteMessage(message.id);
+                              }}
+                              className="h-7 text-xs"
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" />
+                              Delete
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setForwardingMessage(message);
+                                setShowForwardDialog(true);
+                              }}
+                              className="h-7 text-xs border-terminal-green/30"
+                            >
+                              <Share2 className="w-3 h-3 mr-1" />
+                              Forward
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -1313,6 +1465,51 @@ const LiveChatReal = () => {
           </div>
         )}
       </div>
+
+      {/* Forward Message Dialog */}
+      <Dialog open={showForwardDialog} onOpenChange={setShowForwardDialog}>
+        <DialogContent className="bg-black border-terminal-green text-terminal-green">
+          <DialogHeader>
+            <DialogTitle>Forward Message</DialogTitle>
+            <DialogDescription className="text-terminal-green/60">
+              Select a chat to forward this message
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-60">
+            {rooms
+              .filter(room => room.type !== 'webhook')
+              .map(room => (
+                <div
+                  key={room.id}
+                  className="p-3 hover:bg-terminal-green/10 cursor-pointer rounded flex items-center justify-between"
+                  onClick={() => handleForwardMessage(room.id)}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-terminal-green/20 flex items-center justify-center">
+                      {room.type === 'group' ? <Users className="w-4 h-4" /> : '💬'}
+                    </div>
+                    <span>{roomNames[room.id] || room.name || 'Chat'}</span>
+                  </div>
+                  <span className="text-xs opacity-60">
+                    {room.type === 'group' ? 'Group' : 'Private'}
+                  </span>
+                </div>
+              ))
+            }
+            
+            {rooms.filter(r => r.type !== 'webhook').length === 0 && (
+              <div className="text-center py-4 opacity-60">No chats available</div>
+            )}
+          </ScrollArea>
+          
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setShowForwardDialog(false)} className="border-terminal-green/30">
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Friend Dialog */}
       <Dialog open={showAddFriend} onOpenChange={setShowAddFriend}>
@@ -1388,15 +1585,48 @@ const LiveChatReal = () => {
             <div className="text-xs text-terminal-green/60">
               หลังสร้างห้อง คุณจะได้รับ Webhook URL สำหรับใส่ใน TradingView Alert
             </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setShowCreateWebhookRoom(false)} className="border-terminal-green/30">
-                Cancel
-              </Button>
-              <Button onClick={handleCreateWebhookRoom} disabled={!webhookRoomName.trim()}>
-                Create Webhook Room
-              </Button>
-            </div>
           </div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowCreateWebhookRoom(false)} className="border-terminal-green/30">
+              Cancel
+            </Button>
+            <Button onClick={handleCreateWebhookRoom} disabled={!webhookRoomName.trim()}>
+              Create Room
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite to Group Dialog */}
+      <Dialog open={showInviteToGroup} onOpenChange={setShowInviteToGroup}>
+        <DialogContent className="bg-black border-terminal-green text-terminal-green">
+          <DialogHeader>
+            <DialogTitle>Invite to Group</DialogTitle>
+            <DialogDescription className="text-terminal-green/60">
+              Select a friend to invite
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-60">
+            {friends.length === 0 ? (
+              <div className="text-center py-4 opacity-60">No friends to invite</div>
+            ) : (
+              friends.map(friendship => {
+                const friend = friendship.friend;
+                const friendId = friendship.friend_id === currentUser?.id ? friendship.user_id : friendship.friend_id;
+                const displayName = getDisplayName(friendId, friend?.username || 'Unknown');
+                
+                return (
+                  <div
+                    key={friendship.id}
+                    className="p-2 hover:bg-terminal-green/10 cursor-pointer rounded"
+                    onClick={() => inviteFriendToGroup(friendId, displayName)}
+                  >
+                    {displayName}
+                  </div>
+                );
+              })
+            )}
+          </ScrollArea>
         </DialogContent>
       </Dialog>
 
@@ -1404,9 +1634,9 @@ const LiveChatReal = () => {
       <Dialog open={showEditNickname} onOpenChange={setShowEditNickname}>
         <DialogContent className="bg-black border-terminal-green text-terminal-green">
           <DialogHeader>
-            <DialogTitle>Set Nickname</DialogTitle>
+            <DialogTitle>Edit Nickname</DialogTitle>
             <DialogDescription className="text-terminal-green/60">
-              Give your friend a custom nickname (only you can see it)
+              Set a personal nickname for this friend (only visible to you)
             </DialogDescription>
           </DialogHeader>
           <Input
@@ -1415,7 +1645,6 @@ const LiveChatReal = () => {
             onKeyPress={(e) => e.key === 'Enter' && saveNickname()}
             placeholder="Enter nickname..."
             className="bg-black border-terminal-green/30 text-terminal-green"
-            maxLength={50}
           />
           <div className="flex gap-2 justify-end">
             <Button variant="outline" onClick={() => setShowEditNickname(false)} className="border-terminal-green/30">
@@ -1428,73 +1657,22 @@ const LiveChatReal = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Invite to Group Dialog */}
-      <Dialog open={showInviteToGroup} onOpenChange={setShowInviteToGroup}>
-        <DialogContent className="bg-black border-terminal-green text-terminal-green">
-          <DialogHeader>
-            <DialogTitle>Invite Friend to Group</DialogTitle>
-            <DialogDescription className="text-terminal-green/60">
-              Select a friend to add to {roomNames[currentRoomId || '']}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <ScrollArea className="max-h-60">
-            {friends.length === 0 ? (
-              <div className="text-center py-4 text-terminal-green/60">No friends to invite</div>
-            ) : (
-              friends.map(friendship => {
-                const friend = friendship.friend_id === currentUser?.id 
-                  ? friendship.friend 
-                  : friendship.friend;
-                const friendId = friendship.friend_id === currentUser?.id 
-                  ? friendship.user_id 
-                  : friendship.friend_id;
-                
-                return (
-                  <div
-                    key={friendship.id}
-                    className="p-2 hover:bg-terminal-green/10 cursor-pointer rounded flex items-center justify-between"
-                    onClick={() => {
-                      inviteFriendToGroup(friendId, friend?.username || 'Unknown');
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
-                        style={{ backgroundColor: friend?.color }}
-                      >
-                        {friend?.username[0]}
-                      </div>
-                      <span>{friend?.username}</span>
-                    </div>
-                    <Button size="sm" variant="ghost">
-                      Invite
-                    </Button>
-                  </div>
-                );
-              })
-            )}
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-
       {/* Room Settings Dialog */}
       <Dialog open={showRoomSettings} onOpenChange={setShowRoomSettings}>
-        <DialogContent className="bg-black border-terminal-green text-terminal-green max-w-2xl">
+        <DialogContent className="bg-black border-terminal-green text-terminal-green">
           <DialogHeader>
             <DialogTitle>Room Settings</DialogTitle>
           </DialogHeader>
-          
           <div className="space-y-4">
             <div>
-              <h4 className="font-bold mb-2">Webhooks</h4>
+              <div className="text-sm text-terminal-green/60 mb-2">Webhooks</div>
               {webhooks.length === 0 ? (
-                <div className="text-sm text-terminal-green/60 mb-2">No webhooks configured</div>
+                <div className="text-xs opacity-60 mb-2">No webhooks configured</div>
               ) : (
                 webhooks.map(webhook => (
-                  <div key={webhook.id} className="p-4 border border-terminal-green/30 rounded mb-2">
-                    <div className="text-xs text-terminal-green/60 mb-1">Webhook URL:</div>
-                    <div className="flex items-center gap-2 mb-2">
+                  <div key={webhook.id} className="mb-4 p-2 border border-terminal-green/20 rounded">
+                    <div className="text-xs text-terminal-green/60 mb-1">URL:</div>
+                    <div className="flex items-center gap-2">
                       <code className="text-xs bg-terminal-green/10 p-2 rounded flex-1 overflow-auto">{webhook.webhook_url}</code>
                       <Button size="icon" variant="ghost" onClick={() => copyToClipboard(webhook.webhook_url, webhook.id)}>
                         {copiedWebhook === webhook.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -1529,7 +1707,6 @@ const LiveChatReal = () => {
           </DialogHeader>
           
           <div className="space-y-4">
-            {/* Webhook URL */}
             <div>
               <label className="text-sm text-terminal-green/60 mb-1 block">Webhook URL:</label>
               <div className="flex items-center gap-2">
@@ -1549,7 +1726,6 @@ const LiveChatReal = () => {
               </div>
             </div>
             
-            {/* Webhook Secret */}
             <div>
               <label className="text-sm text-terminal-green/60 mb-1 block">Secret Key:</label>
               <div className="flex items-center gap-2">
@@ -1569,7 +1745,6 @@ const LiveChatReal = () => {
               </div>
             </div>
             
-            {/* TradingView Instructions */}
             <div className="border border-terminal-green/30 rounded p-4 mt-4">
               <h4 className="font-bold mb-2">📊 วิธีใช้งานกับ TradingView:</h4>
               <ol className="text-sm space-y-2 text-terminal-green/80">
@@ -1589,14 +1764,12 @@ const LiveChatReal = () => {
               </pre>
             </div>
             
-            {/* Test Button */}
             <div className="flex justify-between items-center pt-4 border-t border-terminal-green/30">
               <Button 
                 variant="outline" 
                 size="sm"
                 onClick={async () => {
                   try {
-                    // Ensure tradingview user exists
                     const { data: tvUser } = await supabase
                       .from('users')
                       .select('id')
@@ -1612,7 +1785,6 @@ const LiveChatReal = () => {
                       });
                     }
 
-                    // Insert test message directly
                     const testData = {
                       ticker: 'TEST',
                       action: 'BUY',
@@ -1661,6 +1833,32 @@ const LiveChatReal = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
+              <div className="text-sm text-terminal-green/60 mb-2">Profile Picture</div>
+              <div className="flex items-center gap-3">
+                <div 
+                  className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold cursor-pointer hover:opacity-80 overflow-hidden"
+                  style={{ backgroundColor: currentUser?.color }}
+                  onClick={() => avatarInputRef.current?.click()}
+                >
+                  {currentUser?.avatar_url ? (
+                    <img src={currentUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    currentUser?.username[0]
+                  )}
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="border-terminal-green/30"
+                  disabled={isUploadingAvatar}
+                >
+                  {isUploadingAvatar ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                  Change Avatar
+                </Button>
+              </div>
+            </div>
+            <div>
               <div className="text-sm text-terminal-green/60 mb-2">Username</div>
               <Input
                 value={tempUsername}
@@ -1672,8 +1870,8 @@ const LiveChatReal = () => {
               />
             </div>
             <div>
-              <div className="text-sm text-terminal-green/60 mb-1">User ID</div>
-              <code className="text-xs bg-terminal-green/10 p-2 rounded block">{currentUser?.id}</code>
+              <div className="text-sm text-terminal-green/60 mb-1">Email</div>
+              <code className="text-xs bg-terminal-green/10 p-2 rounded block">{authUser?.email}</code>
             </div>
             <div>
               <div className="text-sm text-terminal-green/60 mb-1">Color</div>
