@@ -64,6 +64,23 @@ serve(async (req) => {
 
     console.log('✅ Webhook found:', webhook.id)
 
+    // Ensure tradingview user exists
+    const { data: tvUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', 'tradingview')
+      .single()
+
+    if (!tvUser) {
+      console.log('📝 Creating tradingview user...')
+      await supabase.from('users').insert({
+        id: 'tradingview',
+        username: '📊 TradingView',
+        color: '#2962FF',
+        status: 'online'
+      })
+    }
+
     // Format TradingView alert message
     const alertContent = formatTradingViewAlert(body)
 
