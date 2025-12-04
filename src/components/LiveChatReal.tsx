@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { User, Friendship, ChatRoom, Message, Webhook as WebhookType, FriendNickname } from '@/types/chat';
-import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2, Share2, Loader2 } from 'lucide-react';
+import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2, Share2, Loader2, RefreshCw } from 'lucide-react';
 import { useCurrentTheme } from '@/hooks/useCurrentTheme';
 import { getThemeColors } from '@/utils/themeColors';
 import { VideoCall } from './VideoCall';
@@ -218,7 +218,7 @@ const LiveChatReal = () => {
     loadNicknames();
   }, [currentUser]);
 
-  // Subscribe to username changes
+  // Subscribe to username and avatar changes
   useEffect(() => {
     if (!currentUser) return;
 
@@ -229,6 +229,28 @@ const LiveChatReal = () => {
         schema: 'public',
         table: 'users'
       }, (payload) => {
+        console.log('👤 User updated:', payload.new);
+        const updatedUser = payload.new as User;
+        
+        // Update friends list with new avatar/username
+        setFriends(prev => prev.map(f => {
+          if (f.friend?.id === updatedUser.id) {
+            return {
+              ...f,
+              friend: { ...f.friend, avatar_url: updatedUser.avatar_url, username: updatedUser.username }
+            };
+          }
+          return f;
+        }));
+        
+        // Update messages to show new avatar
+        setMessages(prev => prev.map(m => {
+          if (m.user_id === updatedUser.id) {
+            return { ...m, avatar_url: updatedUser.avatar_url, username: updatedUser.username };
+          }
+          return m;
+        }));
+        
         // Reload friends and rooms to show new names
         const loadFriendships = async () => {
           const { data, error } = await supabase
@@ -384,6 +406,7 @@ const LiveChatReal = () => {
         table: 'messages',
         filter: `room_id=eq.${currentRoomId}`
       }, (payload) => {
+        console.log('📨 New message received:', payload.new);
         setMessages(prev => [...prev, payload.new as Message]);
         setTimeout(scrollToBottom, 100);
       })
@@ -1359,6 +1382,30 @@ const LiveChatReal = () => {
                   <Button 
                     variant="ghost" 
                     size="icon"
+                    onClick={async () => {
+                      const { data, error } = await supabase
+                        .from('messages')
+                        .select('*')
+                        .eq('room_id', currentRoomId)
+                        .order('created_at', { ascending: true });
+                      
+                      if (data) {
+                        setMessages(data as Message[]);
+                        toast({ title: 'Messages refreshed!' });
+                        setTimeout(scrollToBottom, 100);
+                      }
+                    }}
+                    title="Refresh Messages"
+                    className="text-green-500 hover:text-green-400"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </Button>
+                )}
+                
+                {currentRoom?.type === 'webhook' && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
                     onClick={() => loadAndShowWebhookInfo()}
                     title="Show Webhook URL"
                     className="text-blue-500 hover:text-blue-400"
@@ -1422,7 +1469,11 @@ const LiveChatReal = () => {
                         className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 overflow-hidden" 
                         style={{ backgroundColor: message.color }}
                       >
-                        {message.username[0]}
+                        {message.avatar_url ? (
+                          <img src={message.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          message.username[0]
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2 mb-1">
