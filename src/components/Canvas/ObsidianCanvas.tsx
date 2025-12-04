@@ -29,7 +29,9 @@ import { SmartEdge } from './edges/SmartEdge';
 import { LabeledEdge } from './edges/LabeledEdge';
 import { KeyboardShortcuts } from './utils/KeyboardShortcuts';
 import { TextNodeData, FileNodeData, GroupNodeData, ImageNodeData, EdgeData } from '@/types/canvas';
-import { FileText } from 'lucide-react';
+import { FileText, Save } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/use-toast';
 
 const nodeTypes: NodeTypes = {
   text: TextNode,
@@ -55,6 +57,7 @@ function CanvasInner({ notes, onUpdateNote, onCreateNote }: ObsidianCanvasProps)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
   const [clipboard, setClipboard] = useState<any[]>([]);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   
   const { 
     data, 
@@ -204,6 +207,47 @@ function CanvasInner({ notes, onUpdateNote, onCreateNote }: ObsidianCanvasProps)
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [selectedNodes, onDeleteSelected, clipboard, screenToFlowPosition, setNodes, addNode]);
 
+  // Auto-save effect
+  useEffect(() => {
+    if (nodes.length === 0) return;
+    
+    const saveCanvas = () => {
+      const canvasData = {
+        nodes: nodes,
+        edges: edges,
+        savedAt: new Date().toISOString()
+      };
+      
+      localStorage.setItem('canvas-autosave', JSON.stringify(canvasData));
+      setLastSaved(new Date());
+      console.log('✅ Canvas auto-saved');
+    };
+
+    const interval = setInterval(saveCanvas, 5000);
+    
+    return () => clearInterval(interval);
+  }, [nodes, edges]);
+
+  // Load saved canvas on mount
+  useEffect(() => {
+    const savedCanvas = localStorage.getItem('canvas-autosave');
+    if (savedCanvas) {
+      try {
+        const data = JSON.parse(savedCanvas);
+        if (data.nodes?.length > 0) {
+          setNodes(data.nodes);
+          setEdges(data.edges || []);
+          toast({
+            title: "Canvas Restored",
+            description: `Loaded ${data.nodes.length} nodes from last session`
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load saved canvas:', e);
+      }
+    }
+  }, []);
+
   return (
     <div className="flex h-full bg-background">
       {/* Notes Sidebar */}
@@ -288,46 +332,72 @@ function CanvasInner({ notes, onUpdateNote, onCreateNote }: ObsidianCanvasProps)
           
           {/* Floating Toolbar */}
           <Panel position="top-center">
-            <CanvasToolbar 
-              currentTool={tool}
-              onToolChange={setTool}
-              onCreateNote={(position) => {
-                const newNote = {
-                  id: `note-${Date.now()}`,
-                  title: 'New Canvas Note',
-                  content: '# New Note\n\nStart writing here...',
-                  tags: ['canvas'],
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                  linkedNotes: [],
-                  isFavorite: false,
-                };
-                
-                onCreateNote(newNote);
-                
-                const fileNode: FileNodeData = {
-                  id: `file-${Date.now()}`,
-                  type: 'file',
-                  x: position.x,
-                  y: position.y,
-                  width: 250,
-                  height: 150,
-                  file: newNote.id,
-                  preview: true
-                };
-                
-                const reactFlowNode: Node = {
-                  id: fileNode.id,
-                  type: 'file',
-                  position: { x: fileNode.x, y: fileNode.y },
-                  data: { ...fileNode, note: newNote },
-                  style: { width: fileNode.width, height: fileNode.height }
-                };
-                
-                setNodes(nds => [...nds, reactFlowNode]);
-                addNode(fileNode);
-              }}
-            />
+            <div className="flex items-center gap-2">
+              <CanvasToolbar 
+                currentTool={tool}
+                onToolChange={setTool}
+                onCreateNote={(position) => {
+                  const newNote = {
+                    id: `note-${Date.now()}`,
+                    title: 'New Canvas Note',
+                    content: '# New Note\n\nStart writing here...',
+                    tags: ['canvas'],
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    linkedNotes: [],
+                    isFavorite: false,
+                  };
+                  
+                  onCreateNote(newNote);
+                  
+                  const fileNode: FileNodeData = {
+                    id: `file-${Date.now()}`,
+                    type: 'file',
+                    x: position.x,
+                    y: position.y,
+                    width: 250,
+                    height: 150,
+                    file: newNote.id,
+                    preview: true
+                  };
+                  
+                  const reactFlowNode: Node = {
+                    id: fileNode.id,
+                    type: 'file',
+                    position: { x: fileNode.x, y: fileNode.y },
+                    data: { ...fileNode, note: newNote },
+                    style: { width: fileNode.width, height: fileNode.height }
+                  };
+                  
+                  setNodes(nds => [...nds, reactFlowNode]);
+                  addNode(fileNode);
+                }}
+              />
+              
+              {/* Save indicator */}
+              <div className="flex items-center gap-2 bg-background/90 border border-terminal-green/30 rounded px-2 py-1">
+                {lastSaved && (
+                  <span className="text-xs text-muted-foreground">
+                    Saved: {lastSaved.toLocaleTimeString()}
+                  </span>
+                )}
+                <Button 
+                  size="sm" 
+                  variant="ghost"
+                  className="h-6 px-2"
+                  onClick={() => {
+                    localStorage.setItem('canvas-autosave', JSON.stringify({
+                      nodes, edges, savedAt: new Date().toISOString()
+                    }));
+                    setLastSaved(new Date());
+                    toast({ title: "Canvas saved!" });
+                  }}
+                >
+                  <Save className="h-3 w-3 mr-1" />
+                  Save
+                </Button>
+              </div>
+            </div>
           </Panel>
         </ReactFlow>
 

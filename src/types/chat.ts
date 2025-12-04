@@ -33,6 +33,7 @@ export interface Message {
   user_id: string;
   username: string;
   color: string;
+  avatar_url?: string;
   content?: string;
   message_type: 'text' | 'image' | 'file' | 'webhook';
   file_url?: string;

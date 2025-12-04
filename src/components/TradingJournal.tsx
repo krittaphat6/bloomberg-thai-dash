@@ -7,7 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar, Upload } from 'lucide-react';
+import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar, Upload, Webhook, RefreshCw } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { supabase } from '@/integrations/supabase/client';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/use-toast';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, ScatterChart, Scatter, ComposedChart, Line, ReferenceLine } from 'recharts';
@@ -73,6 +75,12 @@ export default function TradingJournal() {
     leverage: 1,
     lotSize: 1
   });
+  
+  // Webhook import states
+  const [showWebhookImport, setShowWebhookImport] = useState(false);
+  const [webhookRooms, setWebhookRooms] = useState<any[]>([]);
+  const [selectedWebhookRoom, setSelectedWebhookRoom] = useState<string | null>(null);
+  const [isLoadingWebhook, setIsLoadingWebhook] = useState(false);
 
   // Load trades from localStorage
   useEffect(() => {
@@ -493,6 +501,77 @@ export default function TradingJournal() {
     });
   };
 
+  // Load webhook rooms for import
+  const loadWebhookRooms = async () => {
+    try {
+      const { data: rooms, error } = await supabase
+        .from('chat_rooms')
+        .select('*')
+        .eq('type', 'webhook')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setWebhookRooms(rooms || []);
+    } catch (error) {
+      console.error('Error loading webhook rooms:', error);
+    }
+  };
+
+  // Import trades from webhook room
+  const importFromWebhook = async (roomId: string) => {
+    setIsLoadingWebhook(true);
+    try {
+      const { data: messages, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('message_type', 'webhook')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const importedTrades: Trade[] = messages?.map((msg, index) => {
+        const webhookData = (msg.webhook_data as Record<string, any>) || {};
+        
+        return {
+          id: `webhook-${Date.now()}-${index}`,
+          date: new Date(msg.created_at).toISOString().split('T')[0],
+          symbol: (webhookData.ticker || webhookData.symbol || 'UNKNOWN') as string,
+          side: ((webhookData.action as string)?.toUpperCase() === 'BUY' || 
+                 (webhookData.action as string)?.toUpperCase() === 'LONG') ? 'LONG' as const : 'SHORT' as const,
+          type: 'CFD' as const,
+          entryPrice: parseFloat(String(webhookData.price || webhookData.close || '0')),
+          quantity: 1,
+          lotSize: parseFloat(String(webhookData.lots || '1')),
+          contractSize: 100000,
+          leverage: 100,
+          status: 'OPEN' as const,
+          strategy: (webhookData.strategy || 'TradingView Signal') as string,
+          notes: (webhookData.message || '') as string,
+          commission: 0
+        };
+      }) || [];
+
+      setTrades(prev => [...prev, ...importedTrades]);
+      
+      toast({
+        title: "Import Successful!",
+        description: `Imported ${importedTrades.length} trades from webhook signals`
+      });
+      
+      setShowWebhookImport(false);
+      setSelectedWebhookRoom(null);
+    } catch (error: any) {
+      toast({
+        title: "Import Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingWebhook(false);
+    }
+  };
+
   return (
     <div className="w-full min-h-screen flex flex-col bg-background p-2 sm:p-4 space-y-3 sm:space-y-4 overflow-auto">
       {/* Header */}
@@ -521,6 +600,17 @@ export default function TradingJournal() {
               <Separator orientation="vertical" className="hidden sm:block" />
             </>
           )}
+          <Button 
+            onClick={() => {
+              loadWebhookRooms();
+              setShowWebhookImport(true);
+            }} 
+            variant="outline"
+            className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto text-sm sm:text-base"
+          >
+            <Webhook className="h-4 w-4 mr-2" />
+            Import Webhook
+          </Button>
           <Button 
             onClick={() => setShowCSVImport(true)} 
             variant="outline"
@@ -1621,6 +1711,70 @@ export default function TradingJournal() {
         onImport={handleImportTrades}
         existingTrades={trades}
       />
+      
+      {/* Webhook Import Dialog */}
+      <Dialog open={showWebhookImport} onOpenChange={setShowWebhookImport}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Webhook className="h-5 w-5" />
+              Import from Webhook Room
+            </DialogTitle>
+            <DialogDescription>
+              Select a webhook room to import TradingView signals as trades
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {webhookRooms.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Webhook className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No webhook rooms found</p>
+                <p className="text-xs mt-1">Create a webhook room in MESSENGER first</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {webhookRooms.map(room => (
+                  <Button
+                    key={room.id}
+                    variant={selectedWebhookRoom === room.id ? "default" : "outline"}
+                    className="w-full justify-start"
+                    onClick={() => setSelectedWebhookRoom(room.id)}
+                  >
+                    <Webhook className="h-4 w-4 mr-2" />
+                    {room.name || 'Webhook Room'}
+                    <Badge variant="secondary" className="ml-auto">
+                      {new Date(room.created_at).toLocaleDateString()}
+                    </Badge>
+                  </Button>
+                ))}
+              </div>
+            )}
+            
+            <div className="flex gap-2 justify-end pt-4 border-t">
+              <Button variant="outline" onClick={() => setShowWebhookImport(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => selectedWebhookRoom && importFromWebhook(selectedWebhookRoom)}
+                disabled={!selectedWebhookRoom || isLoadingWebhook}
+              >
+                {isLoadingWebhook ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import Trades
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
