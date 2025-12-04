@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import GraphView from './GraphView';
 import { RichTextEditor } from './RichTextEditor';
 import { BlockEditor, Block } from './BlockEditor';
-import { DatabaseView, Database, DatabaseProperty, DatabaseRow } from './DatabaseView';
+import { Database, DatabaseProperty, DatabaseRow } from './DatabaseView';
 import { NotionTemplates, NotionTemplate } from './NotionTemplates';
 import { SpreadsheetEditor } from './SpreadsheetEditor';
 import ObsidianCanvas from './Canvas/ObsidianCanvas';
@@ -19,6 +19,7 @@ import AutoSaveCanvas from './AutoSaveCanvas';
 import AdvancedSpreadsheet from './AdvancedSpreadsheet';
 import { ExcelClone } from './Excel/ExcelClone';
 import { SupplyChainViz } from './SupplyChainViz';
+import AbleCalendar from './Calendar/AbleCalendar';
 import { 
   Plus, 
   Search, 
@@ -26,7 +27,7 @@ import {
   Trash2, 
   Link as LinkIcon, 
   Tag, 
-  Calendar,
+  Calendar as CalendarIcon,
   FileText,
   Hash,
   Folder,
@@ -110,7 +111,7 @@ export default function NoteTaking() {
   const [spreadsheets, setSpreadsheets] = useState<Spreadsheet[]>([]);
   const [selectedSpreadsheet, setSelectedSpreadsheet] = useState<Spreadsheet | null>(null);
   const [spreadsheetView, setSpreadsheetView] = useState<'grid' | 'relationship'>('grid');
-  const [mainView, setMainView] = useState<'notes' | 'databases' | 'templates' | 'spreadsheets'>('notes');
+  const [mainView, setMainView] = useState<'notes' | 'calendar' | 'templates' | 'spreadsheets'>('notes');
   const [editorMode, setEditorMode] = useState<'simple' | 'rich' | 'blocks' | 'spreadsheet'>('simple');
   
   // Initialize with sample data on mount to avoid hydration issues
@@ -490,13 +491,13 @@ export default function NoteTaking() {
                 Notes
               </Button>
               <Button
-                variant={mainView === 'databases' ? 'default' : 'outline'}
+                variant={mainView === 'calendar' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setMainView('databases')}
+                onClick={() => setMainView('calendar')}
                 className="text-xs"
               >
-                <DatabaseIcon className="h-3 w-3 mr-1" />
-                Databases
+                <CalendarIcon className="h-3 w-3 mr-1" />
+                Calendar
               </Button>
               <Button
                 variant={mainView === 'templates' ? 'default' : 'outline'}
@@ -658,11 +659,10 @@ export default function NoteTaking() {
                 </Dialog>
               )}
               
-              {mainView === 'databases' && (
-                <Button className="w-full" size="sm" onClick={createDatabase}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Database
-                </Button>
+              {mainView === 'calendar' && (
+                <div className="text-xs text-muted-foreground text-center py-2">
+                  Create events in the calendar view
+                </div>
               )}
               
               {mainView === 'templates' && (
@@ -719,20 +719,12 @@ export default function NoteTaking() {
                 </div>
               ))}
               
-              {mainView === 'databases' && databases.map(database => (
-                <div
-                  key={database.id}
-                  className="p-3 border border-border rounded cursor-pointer hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <DatabaseIcon className="h-4 w-4" />
-                    <h3 className="font-medium text-sm">{database.name}</h3>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {database.rows.length} rows • {database.properties.length} properties
-                  </div>
+              {mainView === 'calendar' && (
+                <div className="text-center py-8">
+                  <CalendarIcon className="h-8 w-8 mx-auto mb-2 text-terminal-green" />
+                  <p className="text-sm text-muted-foreground">View calendar in main area</p>
                 </div>
-              ))}
+              )}
               
               {mainView === 'templates' && (
                 <div className="text-center py-8">
@@ -783,23 +775,10 @@ export default function NoteTaking() {
                 onUseTemplate={useTemplate}
                 onCreateTemplate={createTemplate}
               />
-            ) : mainView === 'databases' ? (
-              databases.length > 0 ? (
-                <DatabaseView
-                  database={databases[0]}
-                  onUpdate={(updatedDb) => {
-                    setDatabases(databases.map(db => db.id === updatedDb.id ? updatedDb : db));
-                  }}
-                />
-              ) : (
-                <div className="flex-1 flex items-center justify-center">
-                  <div className="text-center">
-                    <DatabaseIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground mb-4">No databases yet</p>
-                    <Button onClick={createDatabase}>Create your first database</Button>
-                  </div>
-                </div>
-              )
+            ) : mainView === 'calendar' ? (
+              <div className="flex-1 h-full">
+                <AbleCalendar />
+              </div>
             ) : mainView === 'spreadsheets' ? (
               selectedSpreadsheet ? (
                 <div className="flex-1 flex flex-col">
@@ -977,7 +956,7 @@ export default function NoteTaking() {
 
                 <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
+                    <CalendarIcon className="h-4 w-4" />
                     Created: {selectedNote.createdAt.toLocaleDateString()}
                   </div>
                   <div className="flex items-center gap-1">
