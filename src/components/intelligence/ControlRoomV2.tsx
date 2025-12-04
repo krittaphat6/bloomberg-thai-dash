@@ -7,12 +7,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useIntelligenceStore } from '@/stores/IntelligenceStore';
 import { globalMarketDataService, MarketQuote } from '@/services/intelligence/GlobalMarketDataService';
 import { networkGraphService } from '@/services/intelligence/NetworkGraphService';
+import { aiAnalysisEngine } from '@/services/intelligence/AIAnalysisEngine';
+import { threatDetectionService } from '@/services/intelligence/ThreatDetectionService';
+import { alertManager } from '@/services/intelligence/AlertManager';
 import { NetworkVisualization } from './NetworkVisualization';
-import { Activity, Database, Brain, Satellite, Shield, TrendingUp, Search, Globe, RefreshCw } from 'lucide-react';
+import { ThreatPanel } from './ThreatPanel';
+import { AnalysisPanel } from './AnalysisPanel';
+import { Activity, Database, Brain, Satellite, Shield, TrendingUp, Search, Globe, RefreshCw, Bell } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export const ControlRoomV2 = () => {
-  const { systemStatus, analytics, updateSystemStatus, updateAnalytics, addAlert } = useIntelligenceStore();
+  const { 
+    systemStatus, 
+    analytics, 
+    alerts,
+    updateSystemStatus, 
+    updateAnalytics, 
+    addAlert,
+    addThreat,
+    addPrediction,
+    updateMarketData
+  } = useIntelligenceStore();
   const { toast } = useToast();
   
   const [marketData, setMarketData] = useState<MarketQuote[]>([]);
@@ -63,6 +78,70 @@ export const ControlRoomV2 = () => {
 
       setMarketData(quotes);
       updateSystemStatus('foundry', 'active');
+
+      // Update store with market data
+      quotes.forEach(quote => {
+        updateMarketData(quote.symbol, {
+          price: quote.price,
+          change: quote.change,
+          changePercent: quote.changePercent,
+          volume: quote.volume,
+          high: quote.high,
+          low: quote.low
+        });
+      });
+
+      // Run AI Analysis
+      updateSystemStatus('apollo', 'active');
+      quotes.forEach(quote => {
+        const prediction = aiAnalysisEngine.analyzePriceData({
+          symbol: quote.symbol,
+          price: quote.price,
+          volume: quote.volume,
+          high: quote.high,
+          low: quote.low,
+          open: quote.open,
+          close: quote.close,
+          changePercent: quote.changePercent
+        });
+        addPrediction(prediction);
+      });
+
+      // Detect Threats
+      updateSystemStatus('gotham', 'active');
+      const threats = threatDetectionService.detectThreats(
+        quotes.map(q => ({
+          symbol: q.symbol,
+          price: q.price,
+          changePercent: q.changePercent,
+          volume: q.volume,
+          avgVolume: q.volume / 1.5
+        }))
+      );
+      threats.forEach(threat => addThreat(threat));
+
+      // Check Alerts
+      quotes.forEach(quote => {
+        const alertsTriggered = alertManager.checkAlerts({
+          symbol: quote.symbol,
+          changePercent: quote.changePercent,
+          volumeRatio: 1.5
+        });
+        alertsTriggered.forEach(alert => {
+          addAlert({
+            title: alert.title,
+            message: alert.message,
+            type: alert.type,
+            severity: alert.severity,
+            symbol: alert.symbol
+          });
+          toast({
+            title: alert.title,
+            description: alert.message,
+            variant: alert.severity === 'critical' || alert.severity === 'error' ? 'destructive' : 'default'
+          });
+        });
+      });
 
       const connections = await globalMarketDataService.getMarketConnections(symbols);
       
@@ -245,9 +324,11 @@ export const ControlRoomV2 = () => {
       </div>
 
       <Tabs defaultValue="network" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 bg-background/50">
+        <TabsList className="grid w-full grid-cols-5 bg-background/50">
           <TabsTrigger value="network">Network Graph</TabsTrigger>
           <TabsTrigger value="data">Market Data</TabsTrigger>
+          <TabsTrigger value="threats">Threats</TabsTrigger>
+          <TabsTrigger value="analysis">AI Analysis</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
@@ -298,6 +379,14 @@ export const ControlRoomV2 = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="threats" className="space-y-4">
+          <ThreatPanel />
+        </TabsContent>
+
+        <TabsContent value="analysis" className="space-y-4">
+          <AnalysisPanel />
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-4">
