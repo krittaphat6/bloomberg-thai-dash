@@ -218,67 +218,84 @@ const LiveChatReal = () => {
     loadNicknames();
   }, [currentUser]);
 
-  // Subscribe to username and avatar changes
+  // Subscribe to username and avatar changes - Enhanced for realtime profile updates
   useEffect(() => {
     if (!currentUser) return;
 
     const usersChannel = supabase
-      .channel('users-updates')
+      .channel('users-profile-updates')
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
         table: 'users'
-      }, (payload) => {
-        console.log('👤 User updated:', payload.new);
+      }, async (payload) => {
+        console.log('👤 User profile updated:', payload.new);
         const updatedUser = payload.new as User;
         
-        // Update friends list with new avatar/username
+        // 1. Update friends list with new avatar/username/color
         setFriends(prev => prev.map(f => {
           if (f.friend?.id === updatedUser.id) {
             return {
               ...f,
-              friend: { ...f.friend, avatar_url: updatedUser.avatar_url, username: updatedUser.username }
+              friend: { 
+                ...f.friend, 
+                avatar_url: updatedUser.avatar_url, 
+                username: updatedUser.username,
+                color: updatedUser.color
+              }
+            };
+          }
+          // Handle case where friend_id matches
+          if (f.friend_id === updatedUser.id && f.friend) {
+            return {
+              ...f,
+              friend: { 
+                ...f.friend, 
+                avatar_url: updatedUser.avatar_url, 
+                username: updatedUser.username,
+                color: updatedUser.color
+              }
             };
           }
           return f;
         }));
         
-        // Update messages to show new avatar
+        // 2. Update ALL messages from this user to show new avatar/username/color
         setMessages(prev => prev.map(m => {
           if (m.user_id === updatedUser.id) {
-            return { ...m, avatar_url: updatedUser.avatar_url, username: updatedUser.username };
+            return { 
+              ...m, 
+              avatar_url: updatedUser.avatar_url, 
+              username: updatedUser.username,
+              color: updatedUser.color
+            };
           }
           return m;
         }));
         
-        // Reload friends and rooms to show new names
-        const loadFriendships = async () => {
-          const { data, error } = await supabase
-            .from('friendships')
-            .select('*, friend:users!friendships_friend_id_fkey(*)')
-            .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`);
+        // 3. Reload friends and rooms to show new names
+        const { data: friendData } = await supabase
+          .from('friendships')
+          .select('*, friend:users!friendships_friend_id_fkey(*)')
+          .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`);
 
-          if (!error) {
-            setFriends(data as any || []);
-          }
-        };
+        if (friendData) {
+          setFriends(friendData as any || []);
+        }
         
-        const loadRooms = async () => {
-          const { data: memberData, error } = await supabase
-            .from('room_members')
-            .select('room_id, chat_rooms(*)')
-            .eq('user_id', currentUser.id);
+        const { data: memberData } = await supabase
+          .from('room_members')
+          .select('room_id, chat_rooms(*)')
+          .eq('user_id', currentUser.id);
 
-          if (!error) {
-            const roomsData = memberData?.map(m => m.chat_rooms).filter(Boolean) || [];
-            setRooms(roomsData as any);
-          }
-        };
-
-        loadFriendships();
-        loadRooms();
+        if (memberData) {
+          const roomsData = memberData.map(m => m.chat_rooms).filter(Boolean);
+          setRooms(roomsData as any);
+        }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Users subscription status:', status);
+      });
 
     return () => {
       supabase.removeChannel(usersChannel);

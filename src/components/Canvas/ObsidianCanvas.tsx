@@ -58,6 +58,7 @@ function CanvasInner({ notes, onUpdateNote, onCreateNote }: ObsidianCanvasProps)
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
   const [clipboard, setClipboard] = useState<any[]>([]);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   
   const { 
     data, 
@@ -207,25 +208,43 @@ function CanvasInner({ notes, onUpdateNote, onCreateNote }: ObsidianCanvasProps)
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [selectedNodes, onDeleteSelected, clipboard, screenToFlowPosition, setNodes, addNode]);
 
-  // Auto-save effect
+  // Auto-save effect with debounce
+  const autoSaveRef = useRef<NodeJS.Timeout | null>(null);
+  
   useEffect(() => {
-    if (nodes.length === 0) return;
+    if (nodes.length === 0 && edges.length === 0) return;
     
-    const saveCanvas = () => {
+    // Clear previous timeout
+    if (autoSaveRef.current) {
+      clearTimeout(autoSaveRef.current);
+    }
+    
+    // Set new timeout - debounce 3 seconds
+    autoSaveRef.current = setTimeout(() => {
+      setIsSaving(true);
+      
       const canvasData = {
         nodes: nodes,
         edges: edges,
         savedAt: new Date().toISOString()
       };
       
-      localStorage.setItem('canvas-autosave', JSON.stringify(canvasData));
-      setLastSaved(new Date());
-      console.log('✅ Canvas auto-saved');
-    };
-
-    const interval = setInterval(saveCanvas, 5000);
+      try {
+        localStorage.setItem('canvas-autosave', JSON.stringify(canvasData));
+        setLastSaved(new Date());
+        console.log('✅ Canvas auto-saved');
+      } catch (error) {
+        console.error('❌ Failed to save canvas:', error);
+      } finally {
+        setIsSaving(false);
+      }
+    }, 3000);
     
-    return () => clearInterval(interval);
+    return () => {
+      if (autoSaveRef.current) {
+        clearTimeout(autoSaveRef.current);
+      }
+    };
   }, [nodes, edges]);
 
   // Load saved canvas on mount
@@ -374,28 +393,23 @@ function CanvasInner({ notes, onUpdateNote, onCreateNote }: ObsidianCanvasProps)
                 }}
               />
               
-              {/* Save indicator */}
-              <div className="flex items-center gap-2 bg-background/90 border border-terminal-green/30 rounded px-2 py-1">
-                {lastSaved && (
-                  <span className="text-xs text-muted-foreground">
+              {/* Auto-save status indicator */}
+              <div className="flex items-center gap-2 bg-background/90 border border-terminal-green/30 rounded px-3 py-1.5">
+                {isSaving ? (
+                  <span className="flex items-center gap-1.5 text-xs text-yellow-500">
+                    <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                    Saving...
+                  </span>
+                ) : lastSaved ? (
+                  <span className="flex items-center gap-1.5 text-xs text-green-500">
+                    <div className="w-2 h-2 bg-green-500 rounded-full" />
                     Saved: {lastSaved.toLocaleTimeString()}
                   </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    Auto-save enabled
+                  </span>
                 )}
-                <Button 
-                  size="sm" 
-                  variant="ghost"
-                  className="h-6 px-2"
-                  onClick={() => {
-                    localStorage.setItem('canvas-autosave', JSON.stringify({
-                      nodes, edges, savedAt: new Date().toISOString()
-                    }));
-                    setLastSaved(new Date());
-                    toast({ title: "Canvas saved!" });
-                  }}
-                >
-                  <Save className="h-3 w-3 mr-1" />
-                  Save
-                </Button>
               </div>
             </div>
           </Panel>
