@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,11 +6,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { User, Friendship, ChatRoom, Message, Webhook as WebhookType, FriendNickname } from '@/types/chat';
-import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2, Share2, Loader2, RefreshCw } from 'lucide-react';
+import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2, Share2, Loader2, RefreshCw, Volume2, VolumeX } from 'lucide-react';
 import { useCurrentTheme } from '@/hooks/useCurrentTheme';
 import { getThemeColors } from '@/utils/themeColors';
 import { VideoCall } from './VideoCall';
 import { useAuth } from '@/contexts/AuthContext';
+
+// Notification sound as base64 (short beep)
+const NOTIFICATION_SOUND = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7v/////////////////////////////////';
 
 const LiveChatReal = () => {
   // Auth
@@ -72,10 +75,39 @@ const LiveChatReal = () => {
   const [currentWebhookUrl, setCurrentWebhookUrl] = useState('');
   const [currentWebhookSecret, setCurrentWebhookSecret] = useState('');
   
+  // Sound notification
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const saved = localStorage.getItem('messenger-sound-enabled');
+    return saved !== 'false';
+  });
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize audio on mount
+  useEffect(() => {
+    audioRef.current = new Audio(NOTIFICATION_SOUND);
+    audioRef.current.volume = 0.5;
+    return () => {
+      audioRef.current = null;
+    };
+  }, []);
+
+  // Save sound preference
+  useEffect(() => {
+    localStorage.setItem('messenger-sound-enabled', String(soundEnabled));
+  }, [soundEnabled]);
+
+  // Play notification sound
+  const playNotificationSound = useCallback(() => {
+    if (soundEnabled && audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(e => console.log('Audio play failed:', e));
+    }
+  }, [soundEnabled]);
 
   // Helper functions
   const formatTime = (dateString: string) => {
@@ -424,7 +456,14 @@ const LiveChatReal = () => {
         filter: `room_id=eq.${currentRoomId}`
       }, (payload) => {
         console.log('📨 New message received:', payload.new);
-        setMessages(prev => [...prev, payload.new as Message]);
+        const newMessage = payload.new as Message;
+        setMessages(prev => [...prev, newMessage]);
+        
+        // Play sound if message is from someone else
+        if (newMessage.user_id !== currentUser?.id) {
+          playNotificationSound();
+        }
+        
         setTimeout(scrollToBottom, 100);
       })
       .on('postgres_changes', {
@@ -2039,6 +2078,40 @@ const LiveChatReal = () => {
                 <span className="text-sm">{currentUser?.color}</span>
               </div>
             </div>
+            
+            {/* Sound Settings */}
+            <div className="border-t border-terminal-green/20 pt-4">
+              <div className="text-sm text-terminal-green/60 mb-2">Notification Sound</div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Play sound for new messages</span>
+                <Button
+                  variant={soundEnabled ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  className={soundEnabled 
+                    ? "bg-terminal-green text-black hover:bg-terminal-green/80" 
+                    : "border-terminal-green/30"
+                  }
+                >
+                  {soundEnabled ? <Volume2 className="w-4 h-4 mr-1" /> : <VolumeX className="w-4 h-4 mr-1" />}
+                  {soundEnabled ? 'On' : 'Off'}
+                </Button>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 w-full border-terminal-green/30"
+                onClick={() => {
+                  if (audioRef.current) {
+                    audioRef.current.currentTime = 0;
+                    audioRef.current.play().catch(e => console.log('Test play failed:', e));
+                  }
+                }}
+              >
+                🔊 Test Sound
+              </Button>
+            </div>
+            
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="outline" onClick={() => setShowSettings(false)} className="border-terminal-green/30">
                 Cancel

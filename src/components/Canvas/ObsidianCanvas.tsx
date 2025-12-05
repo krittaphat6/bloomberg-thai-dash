@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useEffect, useState, Component, ErrorInfo } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -29,9 +29,65 @@ import { SmartEdge } from './edges/SmartEdge';
 import { LabeledEdge } from './edges/LabeledEdge';
 import { KeyboardShortcuts } from './utils/KeyboardShortcuts';
 import { TextNodeData, FileNodeData, GroupNodeData, ImageNodeData, EdgeData } from '@/types/canvas';
-import { FileText, Save } from 'lucide-react';
+import { FileText, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
+
+// Error Boundary for Canvas
+class CanvasErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Canvas Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex items-center justify-center h-full bg-background text-foreground">
+          <div className="text-center p-8 max-w-md">
+            <AlertTriangle className="h-16 w-16 mx-auto mb-4 text-terminal-amber" />
+            <h3 className="text-lg font-semibold mb-2 text-terminal-green">Canvas Error</h3>
+            <p className="text-muted-foreground mb-4">
+              Something went wrong loading the canvas. This might be due to corrupted saved data.
+            </p>
+            <div className="flex gap-2 justify-center">
+              <Button 
+                variant="outline"
+                onClick={() => window.location.reload()}
+                className="border-terminal-green/30"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Reload
+              </Button>
+              <Button 
+                onClick={() => {
+                  localStorage.removeItem('canvas-autosave');
+                  window.location.reload();
+                }}
+                className="bg-terminal-amber text-black hover:bg-terminal-amber/80"
+              >
+                Reset Canvas
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const nodeTypes: NodeTypes = {
   text: TextNode,
@@ -441,10 +497,12 @@ function CanvasInner({ notes, onUpdateNote, onCreateNote }: ObsidianCanvasProps)
 
 export default function ObsidianCanvas(props: ObsidianCanvasProps) {
   return (
-    <div className="w-full h-full">
-      <ReactFlowProvider>
-        <CanvasInner {...props} />
-      </ReactFlowProvider>
-    </div>
+    <CanvasErrorBoundary>
+      <div className="w-full h-full">
+        <ReactFlowProvider>
+          <CanvasInner {...props} />
+        </ReactFlowProvider>
+      </div>
+    </CanvasErrorBoundary>
   );
 }
