@@ -12,8 +12,14 @@ import { getThemeColors } from '@/utils/themeColors';
 import { VideoCall } from './VideoCall';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Notification sound as base64 (short beep)
-const NOTIFICATION_SOUND = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7v/////////////////////////////////';
+// Notification sounds - 5 options using Web Audio API
+const NOTIFICATION_SOUNDS = {
+  ding: { name: '🔔 Ding', frequency: 880, duration: 0.3, type: 'sine' as OscillatorType },
+  pop: { name: '💬 Pop', frequency: 600, duration: 0.15, type: 'sine' as OscillatorType },
+  chime: { name: '🎵 Chime', frequencies: [523, 659, 784], duration: 0.4, type: 'sine' as OscillatorType },
+  knock: { name: '🚪 Knock', frequency: 150, duration: 0.08, type: 'square' as OscillatorType, repeat: 2 },
+  alert: { name: '⚡ Alert', frequencies: [1000, 800, 1000], duration: 0.1, type: 'square' as OscillatorType }
+};
 
 const LiveChatReal = () => {
   // Auth
@@ -80,34 +86,73 @@ const LiveChatReal = () => {
     const saved = localStorage.getItem('messenger-sound-enabled');
     return saved !== 'false';
   });
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [selectedSound, setSelectedSound] = useState<keyof typeof NOTIFICATION_SOUNDS>(() => {
+    const saved = localStorage.getItem('messenger-sound-type');
+    return (saved as keyof typeof NOTIFICATION_SOUNDS) || 'ding';
+  });
+  const audioContextRef = useRef<AudioContext | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize audio on mount
-  useEffect(() => {
-    audioRef.current = new Audio(NOTIFICATION_SOUND);
-    audioRef.current.volume = 0.5;
-    return () => {
-      audioRef.current = null;
-    };
-  }, []);
-
-  // Save sound preference
+  // Save sound preferences
   useEffect(() => {
     localStorage.setItem('messenger-sound-enabled', String(soundEnabled));
   }, [soundEnabled]);
 
-  // Play notification sound
-  const playNotificationSound = useCallback(() => {
-    if (soundEnabled && audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(e => console.log('Audio play failed:', e));
+  useEffect(() => {
+    localStorage.setItem('messenger-sound-type', selectedSound);
+  }, [selectedSound]);
+
+  // Play notification sound using Web Audio API
+  const playNotificationSound = useCallback((soundKey?: keyof typeof NOTIFICATION_SOUNDS) => {
+    if (!soundEnabled) return;
+    
+    const sound = NOTIFICATION_SOUNDS[soundKey || selectedSound];
+    if (!sound) return;
+
+    try {
+      const audioCtx = new AudioContext();
+      const soundType = sound.type || 'sine';
+      
+      const playTone = (freq: number, startTime: number, duration: number) => {
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        oscillator.frequency.value = freq;
+        oscillator.type = soundType;
+        
+        gainNode.gain.setValueAtTime(0.3, startTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      };
+
+      if ('frequencies' in sound && Array.isArray(sound.frequencies)) {
+        // Multiple tones (chime, alert)
+        sound.frequencies.forEach((freq: number, i: number) => {
+          playTone(freq, audioCtx.currentTime + i * 0.1, sound.duration);
+        });
+      } else if ('repeat' in sound && typeof sound.repeat === 'number' && 'frequency' in sound) {
+        // Repeated tone (knock)
+        const freq = sound.frequency as number;
+        for (let i = 0; i < sound.repeat; i++) {
+          playTone(freq, audioCtx.currentTime + i * 0.15, sound.duration);
+        }
+      } else if ('frequency' in sound) {
+        // Single tone
+        playTone(sound.frequency as number, audioCtx.currentTime, sound.duration);
+      }
+    } catch (e) {
+      console.log('Audio play failed:', e);
     }
-  }, [soundEnabled]);
+  }, [soundEnabled, selectedSound]);
 
   // Helper functions
   const formatTime = (dateString: string) => {
@@ -2082,8 +2127,8 @@ const LiveChatReal = () => {
             {/* Sound Settings */}
             <div className="border-t border-terminal-green/20 pt-4">
               <div className="text-sm text-terminal-green/60 mb-2">Notification Sound</div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Play sound for new messages</span>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm">Enable notifications</span>
                 <Button
                   variant={soundEnabled ? "default" : "outline"}
                   size="sm"
@@ -2097,19 +2142,43 @@ const LiveChatReal = () => {
                   {soundEnabled ? 'On' : 'Off'}
                 </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2 w-full border-terminal-green/30"
-                onClick={() => {
-                  if (audioRef.current) {
-                    audioRef.current.currentTime = 0;
-                    audioRef.current.play().catch(e => console.log('Test play failed:', e));
-                  }
-                }}
-              >
-                🔊 Test Sound
-              </Button>
+              
+              {soundEnabled && (
+                <div className="space-y-2">
+                  <div className="text-xs text-terminal-green/60">Select sound:</div>
+                  {Object.entries(NOTIFICATION_SOUNDS).map(([key, sound]) => (
+                    <div 
+                      key={key}
+                      className={`
+                        flex items-center justify-between p-2 rounded border cursor-pointer transition-colors
+                        ${selectedSound === key 
+                          ? 'border-terminal-green bg-terminal-green/10' 
+                          : 'border-terminal-green/20 hover:border-terminal-green/50'
+                        }
+                      `}
+                      onClick={() => setSelectedSound(key as keyof typeof NOTIFICATION_SOUNDS)}
+                    >
+                      <span className="text-sm">{sound.name}</span>
+                      <div className="flex items-center gap-2">
+                        {selectedSound === key && (
+                          <Check className="w-4 h-4 text-terminal-green" />
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            playNotificationSound(key as keyof typeof NOTIFICATION_SOUNDS);
+                          }}
+                          className="h-7 px-2 hover:bg-terminal-green/20"
+                        >
+                          ▶️
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             
             <div className="flex gap-2 justify-end pt-2">
