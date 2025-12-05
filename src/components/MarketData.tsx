@@ -37,7 +37,6 @@ import PenguinSticker from './PenguinSticker';
 import ChessGame from './ChessGame';
 import { BloombergLiveTV } from './BloombergLiveTV';
 import { PythonCodeEditor } from './PythonCodeEditor';
-import ObsidianCanvas from './Canvas/ObsidianCanvas';
 import LiveChatReal from './LiveChatReal';
 
 interface PanelData {
@@ -180,8 +179,7 @@ const MarketData = () => {
     { id: 'debtclock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
     { id: 'notes', title: 'NOTES', component: <NoteTaking /> },
     { id: 'journal', title: 'TRADING JOURNAL', component: <TradingJournal /> },
-    { id: 'chess', title: 'CHESS PUZZLE', component: <ChessGame /> },
-    { id: 'canvas', title: 'CANVAS', component: <ObsidianCanvas notes={[]} onUpdateNote={() => {}} onCreateNote={() => {}} /> }
+    { id: 'chess', title: 'CHESS PUZZLE', component: <ChessGame /> }
   ];
 
   const handleTabAdd = () => {

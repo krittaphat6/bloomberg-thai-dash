@@ -6,6 +6,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -14,7 +17,10 @@ import {
   Clock,
   MapPin,
   Trash2,
-  Edit
+  Edit,
+  Mail,
+  Bell,
+  Loader2
 } from 'lucide-react';
 
 interface CalendarEvent {
@@ -27,6 +33,8 @@ interface CalendarEvent {
   location?: string;
   color: string;
   recurrence?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  reminder?: number; // minutes before
+  reminderSent?: boolean;
   status: 'confirmed' | 'tentative' | 'cancelled';
   createdAt: Date;
   updatedAt: Date;
@@ -46,6 +54,7 @@ const COLORS = [
 ];
 
 export default function AbleCalendar() {
+  const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -53,6 +62,7 @@ export default function AbleCalendar() {
   const [showEventDialog, setShowEventDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Partial<CalendarEvent>>({});
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
 
   // Load events from localStorage
   useEffect(() => {
@@ -166,6 +176,8 @@ export default function AbleCalendar() {
       location: editingEvent.location,
       color: editingEvent.color || '#22c55e',
       recurrence: editingEvent.recurrence || 'none',
+      reminder: editingEvent.reminder,
+      reminderSent: false,
       status: 'confirmed',
       createdAt: new Date(),
       updatedAt: new Date()
@@ -186,6 +198,53 @@ export default function AbleCalendar() {
   const deleteEvent = (eventId: string) => {
     setEvents(prev => prev.filter(e => e.id !== eventId));
     setSelectedEvent(null);
+  };
+
+  // Send email reminder
+  const sendEmailReminder = async (event: CalendarEvent) => {
+    if (!user?.email) {
+      toast({
+        title: "No email address",
+        description: "Please make sure you're logged in with an email account",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSendingReminder(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('send-calendar-reminder', {
+        body: {
+          eventTitle: event.title,
+          eventDate: event.startDate.toISOString(),
+          eventLocation: event.location,
+          eventDescription: event.description,
+          userEmail: user.email
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Reminder Sent!",
+        description: `Email reminder sent for "${event.title}"`
+      });
+
+      // Mark as sent
+      setEvents(prev => prev.map(e => 
+        e.id === event.id ? { ...e, reminderSent: true } : e
+      ));
+    } catch (error: any) {
+      console.error('Failed to send reminder:', error);
+      toast({
+        title: "Failed to send reminder",
+        description: error.message || "Please try again later",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSendingReminder(false);
+    }
   };
 
   const formatMonth = (date: Date) => {
@@ -384,6 +443,36 @@ export default function AbleCalendar() {
               </SelectContent>
             </Select>
 
+            {/* Email Reminder */}
+            <div>
+              <label className="text-sm text-muted-foreground flex items-center gap-2">
+                <Bell className="h-4 w-4" />
+                Email Reminder
+              </label>
+              <Select 
+                value={editingEvent.reminder?.toString() || 'none'}
+                onValueChange={(v) => setEditingEvent(prev => ({ 
+                  ...prev, 
+                  reminder: v === 'none' ? undefined : parseInt(v) 
+                }))}
+              >
+                <SelectTrigger className="bg-transparent border-terminal-green/30 mt-1">
+                  <SelectValue placeholder="No reminder" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No reminder</SelectItem>
+                  <SelectItem value="5">5 minutes before</SelectItem>
+                  <SelectItem value="15">15 minutes before</SelectItem>
+                  <SelectItem value="30">30 minutes before</SelectItem>
+                  <SelectItem value="60">1 hour before</SelectItem>
+                  <SelectItem value="1440">1 day before</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                You can also send reminders manually from the event details
+              </p>
+            </div>
+
             <div className="flex justify-end gap-2 pt-4">
               <Button 
                 variant="outline" 
@@ -448,7 +537,7 @@ export default function AbleCalendar() {
                   </p>
                 )}
 
-                <div className="flex gap-2 pt-4">
+                <div className="flex flex-wrap gap-2 pt-4">
                   <Button 
                     variant="outline" 
                     size="sm"
@@ -461,6 +550,20 @@ export default function AbleCalendar() {
                   >
                     <Edit className="h-4 w-4 mr-2" />
                     Edit
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => sendEmailReminder(selectedEvent)}
+                    disabled={isSendingReminder}
+                    className="border-terminal-green/30"
+                  >
+                    {isSendingReminder ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Mail className="h-4 w-4 mr-2" />
+                    )}
+                    Send Reminder
                   </Button>
                   <Button 
                     variant="destructive" 

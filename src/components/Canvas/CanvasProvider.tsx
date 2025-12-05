@@ -1,46 +1,52 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import { create } from 'zustand';
 import { temporal } from 'zundo';
-import * as Y from 'yjs';
-import { WebsocketProvider } from 'y-websocket';
-import { CanvasState, CanvasData, CanvasViewport, CanvasSelection } from '@/types/canvas';
+import { CanvasData, EdgeData } from '@/types/canvas';
 
-interface CanvasStore extends CanvasState {
-  updateViewport: (viewport: Partial<CanvasViewport>) => void;
-  updateSelection: (selection: Partial<CanvasSelection>) => void;
+// Canvas Store without WebSocket - uses localStorage only
+interface CanvasState {
+  data: CanvasData;
+  viewport: { x: number; y: number; zoom: number };
+  selection: { nodeIds: string[]; edgeIds: string[] };
+  tool: 'select' | 'text' | 'file' | 'group' | 'image' | 'draw' | 'pan' | 'note' | 'connect';
+  isDragging: boolean;
+  isConnecting: boolean;
+  collaborators: any[];
+  updateViewport: (viewport: Partial<{ x: number; y: number; zoom: number }>) => void;
+  updateSelection: (selection: Partial<{ nodeIds: string[]; edgeIds: string[] }>) => void;
   addNode: (node: any) => void;
   updateNode: (nodeId: string, updates: any) => void;
   deleteNode: (nodeId: string) => void;
-  addEdge: (edge: any) => void;
+  addEdge: (edge: EdgeData) => void;
   deleteEdge: (edgeId: string) => void;
-  setTool: (tool: CanvasState['tool']) => void;
-  undo: () => void;
-  redo: () => void;
-  canUndo: () => boolean;
-  canRedo: () => boolean;
+  setTool: (tool: 'select' | 'text' | 'file' | 'group' | 'image' | 'draw' | 'pan' | 'note' | 'connect') => void;
+  loadFromStorage: (roomId: string) => void;
+  saveToStorage: (roomId: string) => void;
 }
 
-export const useCanvasStore = create<CanvasStore>()(
+const initialCanvasData: CanvasData = {
+  nodes: [],
+  edges: [],
+  metadata: {
+    title: 'Untitled Canvas',
+    created: new Date(),
+    modified: new Date(),
+    author: 'User',
+    version: '1.0'
+  }
+};
+
+export const useCanvasStore = create<CanvasState>()(
   temporal(
     (set, get) => ({
-      data: {
-        nodes: [],
-        edges: [],
-        metadata: {
-          title: 'Untitled Canvas',
-          created: new Date(),
-          modified: new Date(),
-          author: 'User',
-          version: '1.0.0'
-        }
-      },
+      data: initialCanvasData,
       viewport: { x: 0, y: 0, zoom: 1 },
       selection: { nodeIds: [], edgeIds: [] },
       tool: 'select',
       isDragging: false,
       isConnecting: false,
       collaborators: [],
-
+      
       updateViewport: (viewport) => set(state => ({ 
         viewport: { ...state.viewport, ...viewport } 
       })),
@@ -104,15 +110,30 @@ export const useCanvasStore = create<CanvasStore>()(
       
       setTool: (tool) => set({ tool }),
       
-      undo: () => {},
-      redo: () => {},
-      canUndo: () => false,
-      canRedo: () => false
+      loadFromStorage: (roomId) => {
+        try {
+          const saved = localStorage.getItem(`canvas-${roomId}`);
+          if (saved) {
+            const data = JSON.parse(saved);
+            set({ data });
+            console.log('✅ Canvas loaded from storage');
+          }
+        } catch (e) {
+          console.error('Failed to load canvas:', e);
+        }
+      },
+      
+      saveToStorage: (roomId) => {
+        try {
+          const { data } = get();
+          localStorage.setItem(`canvas-${roomId}`, JSON.stringify(data));
+          console.log('✅ Canvas saved to storage');
+        } catch (e) {
+          console.error('Failed to save canvas:', e);
+        }
+      }
     }),
-    {
-      limit: 50,
-      handleSet: (handleSet) => (fn) => handleSet(fn),
-    }
+    { limit: 50 }
   )
 );
 
@@ -123,45 +144,21 @@ interface CanvasProviderProps {
 }
 
 export function CanvasProvider({ children, roomId, userId }: CanvasProviderProps) {
-  const [ydoc] = React.useState(() => new Y.Doc());
-  const [wsProvider] = React.useState(() => 
-    new WebsocketProvider('ws://localhost:1234', roomId, ydoc)
-  );
+  const { loadFromStorage, saveToStorage } = useCanvasStore();
 
+  // Load on mount
   useEffect(() => {
-    const canvasMap = ydoc.getMap('canvas');
-    const nodesArray = ydoc.getArray('nodes');
-    const edgesArray = ydoc.getArray('edges');
+    loadFromStorage(roomId);
+  }, [roomId, loadFromStorage]);
 
-    const handleNodesChange = () => {
-      const nodes = nodesArray.toArray();
-      useCanvasStore.getState().updateNode('sync', { nodes });
-    };
-
-    const handleEdgesChange = () => {
-      const edges = edgesArray.toArray();
-      useCanvasStore.getState().updateNode('sync', { edges });
-    };
-
-    nodesArray.observe(handleNodesChange);
-    edgesArray.observe(handleEdgesChange);
-
-    return () => {
-      nodesArray.unobserve(handleNodesChange);
-      edgesArray.unobserve(handleEdgesChange);
-      wsProvider.destroy();
-    };
-  }, [ydoc, wsProvider]);
-
-  // Auto-save to IndexedDB
+  // Auto-save every 3 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      const state = useCanvasStore.getState();
-      localStorage.setItem(`canvas-${roomId}`, JSON.stringify(state.data));
-    }, 2000);
-
+      saveToStorage(roomId);
+    }, 3000);
+    
     return () => clearInterval(interval);
-  }, [roomId]);
+  }, [roomId, saveToStorage]);
 
   return <>{children}</>;
 }
