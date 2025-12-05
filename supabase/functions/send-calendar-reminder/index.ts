@@ -56,7 +56,7 @@ serve(async (req) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'ABLE Terminal <noreply@resend.dev>',
+        from: 'ABLE Terminal <notifications@able.com>',
         to: userEmail,
         subject: `📅 Reminder: ${eventTitle}`,
         html: `
