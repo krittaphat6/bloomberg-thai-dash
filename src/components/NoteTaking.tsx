@@ -13,7 +13,7 @@ import { BlockEditor, Block } from './BlockEditor';
 import { Database, DatabaseProperty, DatabaseRow } from './DatabaseView';
 import { NotionTemplates, NotionTemplate } from './NotionTemplates';
 import { SpreadsheetEditor } from './SpreadsheetEditor';
-// Canvas removed - was causing WebSocket crashes
+import AbleCanvasV2 from './Canvas/AbleCanvasV2';
 import AdvancedSpreadsheet from './AdvancedSpreadsheet';
 import { ExcelClone } from './Excel/ExcelClone';
 import { SupplyChainViz } from './SupplyChainViz';
@@ -109,7 +109,7 @@ export default function NoteTaking() {
   const [spreadsheets, setSpreadsheets] = useState<Spreadsheet[]>([]);
   const [selectedSpreadsheet, setSelectedSpreadsheet] = useState<Spreadsheet | null>(null);
   const [spreadsheetView, setSpreadsheetView] = useState<'grid' | 'relationship'>('grid');
-  const [mainView, setMainView] = useState<'notes' | 'calendar' | 'templates' | 'spreadsheets'>('notes');
+  const [mainView, setMainView] = useState<'notes' | 'calendar' | 'templates' | 'spreadsheets' | 'canvas'>('notes');
   const [editorMode, setEditorMode] = useState<'simple' | 'rich' | 'blocks' | 'spreadsheet'>('simple');
   
   // Initialize with sample data on mount to avoid hydration issues
@@ -515,6 +515,15 @@ export default function NoteTaking() {
                 <Table className="h-3 w-3 mr-1" />
                 Tables
               </Button>
+              <Button
+                variant={mainView === 'canvas' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setMainView('canvas')}
+                className="text-xs col-span-2"
+              >
+                <Palette className="h-3 w-3 mr-1" />
+                Canvas V2
+              </Button>
             </div>
 
             {mainView === 'notes' && (
@@ -758,7 +767,15 @@ export default function NoteTaking() {
 
           {/* Main Content */}
           <div className="flex-1 flex flex-col">
-            {mainView === 'templates' ? (
+            {mainView === 'canvas' ? (
+              <div className="flex-1 h-full">
+                <AbleCanvasV2 
+                  notes={notes}
+                  onUpdateNote={updateNote}
+                  onCreateNote={(note) => setNotes(prev => [note, ...prev])}
+                />
+              </div>
+            ) : mainView === 'templates' ? (
               <NotionTemplates
                 templates={templates}
                 onUseTemplate={useTemplate}
