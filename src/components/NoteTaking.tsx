@@ -13,9 +13,7 @@ import { BlockEditor, Block } from './BlockEditor';
 import { Database, DatabaseProperty, DatabaseRow } from './DatabaseView';
 import { NotionTemplates, NotionTemplate } from './NotionTemplates';
 import { SpreadsheetEditor } from './SpreadsheetEditor';
-import ObsidianCanvas from './Canvas/ObsidianCanvas';
-import { CanvasProvider } from './Canvas/CanvasProvider';
-import AutoSaveCanvas from './AutoSaveCanvas';
+// Canvas removed - was causing WebSocket crashes
 import AdvancedSpreadsheet from './AdvancedSpreadsheet';
 import { ExcelClone } from './Excel/ExcelClone';
 import { SupplyChainViz } from './SupplyChainViz';
@@ -171,7 +169,7 @@ export default function NoteTaking() {
   const [selectedTag, setSelectedTag] = useState<string>('');
   const [isCreating, setIsCreating] = useState(false);
   const [editingNote, setEditingNote] = useState<Partial<Note>>({});
-  const [viewMode, setViewMode] = useState<'list' | 'graph' | 'canvas'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Load notes from localStorage
@@ -541,15 +539,6 @@ export default function NoteTaking() {
                     <Network className="h-4 w-4 mr-1" />
                     Graph
                   </Button>
-                  <Button
-                    variant={viewMode === 'canvas' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setViewMode('canvas')}
-                    className="flex-1"
-                  >
-                    <Layers className="h-4 w-4 mr-1" />
-                    Canvas
-                  </Button>
                 </div>
               </>
             )}
@@ -867,19 +856,6 @@ export default function NoteTaking() {
                   </div>
                 </div>
               )
-            ) : viewMode === 'canvas' ? (
-              <div className="flex-1 h-full">
-                <CanvasProvider roomId="default-canvas" userId="user-1">
-                  <ObsidianCanvas
-                    notes={notes}
-                    onUpdateNote={updateNote}
-                    onCreateNote={(note) => {
-                      setNotes([note, ...notes]);
-                      console.log('📝 Note created in canvas:', note.title);
-                    }}
-                  />
-                </CanvasProvider>
-              </div>
             ) : viewMode === 'graph' ? (
               <GraphView
                 notes={notes}
