@@ -38,6 +38,7 @@ import ChessGame from './ChessGame';
 import { BloombergLiveTV } from './BloombergLiveTV';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import LiveChatReal from './LiveChatReal';
+import { TradingChartMain } from './TradingChart';
 
 interface PanelData {
   id: string;
@@ -117,6 +118,7 @@ const MarketData = () => {
   };
 
   const availableComponents = [
+    { id: 'trading-chart', title: '📊 TRADING CHART', component: <TradingChartMain /> },
     { id: 'messenger', title: '💬 MESSENGER', component: <LiveChatReal /> },
     { 
       id: 'able-focus', 
@@ -127,7 +129,7 @@ const MarketData = () => {
         </div>
       )
     },
-    { 
+    {
       id: 'intelligence', 
       title: 'INTELLIGENCE PLATFORM', 
       component: (
