@@ -264,53 +264,178 @@ def show_plot():
     initPyodide();
   }, [editorMode, addTerminalOutput]);
 
-  // Register Pine Script language for Monaco
+  // Register Pine Script language for Monaco (v5/v6 complete definition)
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
 
-    // Register Pine Script language
+    // Register Pine Script language with complete v5/v6 syntax
     monaco.languages.register({ id: 'pinescript' });
     
     monaco.languages.setMonarchTokensProvider('pinescript', {
       keywords: [
-        'indicator', 'strategy', 'plot', 'hline', 'bgcolor', 'input', 'var', 'varip',
-        'if', 'else', 'for', 'while', 'true', 'false', 'na', 'and', 'or', 'not',
-        'series', 'float', 'int', 'bool', 'string', 'color', 'label', 'line', 'box',
-        'alert', 'alertcondition', 'barcolor', 'fill', 'plotshape', 'plotchar',
+        'indicator', 'strategy', 'library',
+        'if', 'else', 'for', 'while', 'switch',
+        'var', 'varip', 'const',
+        'true', 'false', 'na',
+        'and', 'or', 'not',
+        'import', 'export', 'as',
+        'type', 'method',
+        'break', 'continue'
       ],
-      builtins: [
-        'ta', 'math', 'str', 'array', 'matrix', 'map', 'request', 'ticker', 'syminfo',
-        'timeframe', 'time', 'close', 'open', 'high', 'low', 'volume', 'hl2', 'hlc3', 'ohlc4',
+      typeKeywords: [
+        'int', 'float', 'bool', 'string', 'color',
+        'line', 'linefill', 'label', 'box', 'table', 'polyline',
+        'array', 'matrix', 'map', 'series'
       ],
-      functions: [
-        'sma', 'ema', 'wma', 'rsi', 'macd', 'stoch', 'atr', 'bb', 'vwap', 'stdev',
-        'crossover', 'crossunder', 'highest', 'lowest', 'change', 'mom', 'roc',
+      builtinVariables: [
+        'open', 'high', 'low', 'close', 'volume',
+        'time', 'timeframe', 'bar_index',
+        'hl2', 'hlc3', 'ohlc4',
+        'barstate', 'session', 'syminfo', 'timenow'
       ],
+      namespaces: [
+        'ta', 'math', 'array', 'matrix', 'map',
+        'request', 'ticker', 'str', 'color',
+        'input', 'strategy', 'alert', 'log', 'runtime'
+      ],
+      plotFunctions: [
+        'plot', 'hline', 'bgcolor', 'fill',
+        'plotshape', 'plotchar', 'plotarrow', 'plotcandle', 'plotbar',
+        'barcolor', 'alertcondition'
+      ],
+      operators: [
+        '=', '>', '<', '!', '~', '?', ':',
+        '==', '<=', '>=', '!=', ':=',
+        '&&', '||', '++', '--',
+        '+', '-', '*', '/', '%',
+      ],
+      symbols: /[=><!~?:&|+\-*\/\^%]+/,
       tokenizer: {
         root: [
+          // Version directive - special highlight
+          [/\/\/@version=\d+/, 'annotation.pinescript'],
+          
+          // Comments
           [/\/\/.*$/, 'comment'],
-          [/\/\/@version=\d+/, 'annotation'],
-          [/"[^"]*"/, 'string'],
-          [/'[^']*'/, 'string'],
-          [/\b(ta|math|str|array|color)\.\w+/, 'function'],
-          [/\b\d+\.?\d*\b/, 'number'],
-          [/\b(indicator|strategy|plot|hline|bgcolor|input|var|varip|if|else|for|while|true|false|na)\b/, 'keyword'],
-          [/\b(close|open|high|low|volume|hl2|hlc3|ohlc4|time)\b/, 'variable.predefined'],
+          [/\/\*/, 'comment', '@comment'],
+          
+          // Namespace functions (ta.sma, math.abs, etc.)
+          [/\b(ta|math|array|matrix|map|request|ticker|str|color|input|strategy|alert|log|runtime)\.[a-zA-Z_]\w*/, 'function.builtin'],
+          
+          // Plot functions
+          [/\b(plot|hline|bgcolor|fill|plotshape|plotchar|plotarrow|plotcandle|plotbar|barcolor|alertcondition)\b/, 'function.plot'],
+          
+          // Keywords
+          [/\b(indicator|strategy|library|if|else|for|while|switch|var|varip|const|true|false|na|and|or|not|import|export|as|type|method|break|continue)\b/, 'keyword'],
+          
+          // Type keywords
+          [/\b(int|float|bool|string|color|line|linefill|label|box|table|polyline|array|matrix|map|series)\b/, 'type'],
+          
+          // Built-in variables
+          [/\b(open|high|low|close|volume|time|timeframe|bar_index|hl2|hlc3|ohlc4|barstate|session|syminfo|timenow)\b/, 'variable.predefined'],
+          
+          // Color constants
+          [/color\.(red|green|blue|yellow|orange|purple|white|black|gray|teal|aqua|lime|fuchsia|silver|maroon|navy|olive|new|rgb)/, 'constant.color'],
+          
+          // Strings
+          [/"([^"\\]|\\.)*$/, 'string.invalid'],
+          [/"/, 'string', '@string_double'],
+          [/'([^'\\]|\\.)*$/, 'string.invalid'],
+          [/'/, 'string', '@string_single'],
+          
+          // Numbers
+          [/\d*\.\d+([eE][\-+]?\d+)?/, 'number.float'],
+          [/0[xX][0-9a-fA-F]+/, 'number.hex'],
+          [/\d+/, 'number'],
+          
+          // Identifiers and function calls
+          [/[a-zA-Z_]\w*(?=\()/, 'function'],
+          [/[a-zA-Z_]\w*/, 'identifier'],
+          
+          // Delimiters
+          [/[{}()\[\]]/, '@brackets'],
+          [/[<>](?!@symbols)/, '@brackets'],
+          [/@symbols/, {
+            cases: {
+              '@operators': 'operator',
+              '@default': ''
+            }
+          }],
+          
+          // Whitespace
+          { include: '@whitespace' }
+        ],
+        
+        comment: [
+          [/[^\/*]+/, 'comment'],
+          [/\*\//, 'comment', '@pop'],
+          [/[\/*]/, 'comment']
+        ],
+        
+        string_double: [
+          [/[^\\"]+/, 'string'],
+          [/"/, 'string', '@pop'],
+          [/\\./, 'string.escape']
+        ],
+        
+        string_single: [
+          [/[^\\']+/, 'string'],
+          [/'/, 'string', '@pop'],
+          [/\\./, 'string.escape']
+        ],
+        
+        whitespace: [
+          [/[ \t\r\n]+/, '']
         ]
       }
     });
 
-    monaco.languages.setLanguageConfiguration('pinescript', {
-      comments: { lineComment: '//' },
-      brackets: [['(', ')'], ['[', ']'], ['{', '}']],
-      autoClosingPairs: [
-        { open: '(', close: ')' },
-        { open: '[', close: ']' },
-        { open: '{', close: '}' },
-        { open: '"', close: '"' },
-        { open: "'", close: "'" },
+    // Define custom theme for Pine Script
+    monaco.editor.defineTheme('pinescript-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'annotation.pinescript', foreground: '4EC9B0', fontStyle: 'bold' },
+        { token: 'function.builtin', foreground: 'DCDCAA' },
+        { token: 'function.plot', foreground: 'C586C0' },
+        { token: 'variable.predefined', foreground: '9CDCFE' },
+        { token: 'constant.color', foreground: 'CE9178' },
+        { token: 'type', foreground: '4EC9B0' },
       ],
+      colors: {}
+    });
+
+    monaco.languages.setLanguageConfiguration('pinescript', {
+      comments: {
+        lineComment: '//',
+        blockComment: ['/*', '*/']
+      },
+      brackets: [
+        ['{', '}'],
+        ['[', ']'],
+        ['(', ')']
+      ],
+      autoClosingPairs: [
+        { open: '{', close: '}' },
+        { open: '[', close: ']' },
+        { open: '(', close: ')' },
+        { open: '"', close: '"' },
+        { open: "'", close: "'" }
+      ],
+      surroundingPairs: [
+        { open: '{', close: '}' },
+        { open: '[', close: ']' },
+        { open: '(', close: ')' },
+        { open: '"', close: '"' },
+        { open: "'", close: "'" }
+      ],
+      folding: {
+        markers: {
+          start: new RegExp("^\\s*//\\s*#?region\\b"),
+          end: new RegExp("^\\s*//\\s*#?endregion\\b")
+        }
+      }
     });
 
     // Keyboard shortcuts
@@ -344,27 +469,57 @@ def show_plot():
     setIsRunning(false);
   }, [activeTabId, openTabs, editorMode]);
 
-  // Run Pine Script
+  // Run Pine Script with enhanced error reporting
   const runPineScript = async (code: string) => {
-    addTerminalOutput('info', '▶ Running Pine Script...');
+    // Detect version
+    const versionMatch = code.match(/\/\/@version=(\d+)/);
+    const version = versionMatch ? versionMatch[1] : '6';
+    
+    addTerminalOutput('info', `▶ Running Pine Script v${version}...`);
     
     try {
+      // Validate first and show any warnings
+      const errors = PineScriptRunner.validateScript(code);
+      const warnings = errors.filter(e => e.severity === 'warning');
+      const criticalErrors = errors.filter(e => e.severity === 'error');
+      
+      // Show warnings
+      warnings.forEach(warn => {
+        addTerminalOutput('info', `⚠️ Line ${warn.line}: ${warn.message}`);
+        if (warn.suggestion) {
+          addTerminalOutput('info', `   💡 ${warn.suggestion}`);
+        }
+      });
+      
+      // Stop if there are critical errors
+      if (criticalErrors.length > 0) {
+        criticalErrors.forEach(err => {
+          addTerminalOutput('error', `❌ Line ${err.line}: ${err.message}`);
+          if (err.suggestion) {
+            addTerminalOutput('info', `   💡 ${err.suggestion}`);
+          }
+        });
+        return;
+      }
+      
       // Generate mock data for testing
       const mockData = PineScriptRunner.generateMockOHLC(200);
+      addTerminalOutput('info', `📊 Using ${mockData.length} bars of mock data`);
       
-      // Enable debug mode
-      PineScriptRunner.setDebugMode(true);
+      // Enable debug mode for development
+      PineScriptRunner.setDebugMode(false);
       
       const results = await PineScriptRunner.runPineScript(code, mockData);
       
       const metrics = PineScriptRunner.getLastMetrics();
       
       addTerminalOutput('info', `✅ Execution completed in ${metrics?.executionMs.toFixed(2)}ms`);
-      addTerminalOutput('info', `📊 Generated ${results.length} indicator(s):`);
+      addTerminalOutput('info', `📈 Generated ${results.length} indicator(s):`);
       
       results.forEach(result => {
         const validValues = result.values.filter(v => !isNaN(v));
-        addTerminalOutput('output', `  - ${result.name}: ${validValues.length} data points (${result.type})`);
+        const lastValue = validValues.length > 0 ? validValues[validValues.length - 1].toFixed(4) : 'N/A';
+        addTerminalOutput('output', `   • ${result.name}: ${validValues.length} points, last value: ${lastValue}`);
       });
       
       // Store results for Trading Chart
@@ -374,11 +529,14 @@ def show_plot():
         timestamp: Date.now()
       }));
       
-      addTerminalOutput('info', '💡 Results saved. Open Trading Chart to visualize.');
+      addTerminalOutput('info', '💾 Results saved. Open Trading Chart → Custom Indicators to visualize.');
       
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      addTerminalOutput('error', `❌ ${message}`);
+      // Format multi-line error messages
+      message.split('\n').forEach((line, i) => {
+        addTerminalOutput(i === 0 ? 'error' : 'info', line);
+      });
     }
   };
 

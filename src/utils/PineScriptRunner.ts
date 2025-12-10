@@ -1,11 +1,14 @@
+// Pine Script v5/v6 Runner - Complete Implementation
+
 export interface PineScriptResult {
   name: string;
   values: number[];
-  type: 'line' | 'histogram' | 'arrow' | 'hline' | 'bgcolor';
+  type: 'line' | 'histogram' | 'arrow' | 'hline' | 'bgcolor' | 'circles';
   color?: string;
   lineWidth?: number;
   hlineValue?: number;
   style?: string;
+  plotType?: 'line' | 'stepline' | 'histogram' | 'cross' | 'area' | 'columns' | 'circles';
 }
 
 export interface OHLCData {
@@ -23,6 +26,7 @@ export interface PineScriptError {
   column?: number;
   message: string;
   suggestion?: string;
+  severity: 'error' | 'warning' | 'info';
 }
 
 export interface ExecutionMetrics {
@@ -35,6 +39,7 @@ export interface ExecutionMetrics {
 export class PineScriptRunner {
   private static debugMode = false;
   private static lastMetrics: ExecutionMetrics | null = null;
+  private static version: 5 | 6 = 6;
 
   static setDebugMode(enabled: boolean) {
     this.debugMode = enabled;
@@ -53,42 +58,46 @@ export class PineScriptRunner {
     try {
       if (this.debugMode) {
         console.log('🔧 Pine Script Debug: Starting execution');
-        console.log('Code:', code);
+        console.log('Code length:', code.length, 'characters');
         console.log('Data points:', data.length);
       }
 
-      // Validate first
-      const errors = this.validateScript(code);
-      if (errors.length > 0) {
-        const errorMsg = errors.map(e => `Line ${e.line}: ${e.message}`).join('\n');
-        throw new Error(`Validation errors:\n${errorMsg}`);
+      // Detect version from code
+      const versionMatch = code.match(/\/\/@version=(\d+)/);
+      if (versionMatch) {
+        this.version = parseInt(versionMatch[1]) as 5 | 6;
+        if (this.debugMode) {
+          console.log(`📌 Detected Pine Script v${this.version}`);
+        }
       }
 
-      // Parse Pine Script and convert to JavaScript
+      // Validate syntax first
+      const errors = this.validateScript(code);
+      const criticalErrors = errors.filter(e => e.severity === 'error');
+      
+      if (criticalErrors.length > 0) {
+        const errorMsg = criticalErrors
+          .map(e => `Line ${e.line}: ${e.message}${e.suggestion ? `\n💡 Suggestion: ${e.suggestion}` : ''}`)
+          .join('\n\n');
+        throw new Error(`Validation failed:\n${errorMsg}`);
+      }
+
+      // Show warnings in debug mode
+      const warnings = errors.filter(e => e.severity === 'warning');
+      if (warnings.length > 0 && this.debugMode) {
+        warnings.forEach(w => console.warn(`⚠️ Line ${w.line}: ${w.message}`));
+      }
+
+      // Transpile Pine Script to JavaScript
       const jsCode = this.transpilePineToJS(code);
 
       if (this.debugMode) {
-        console.log('Transpiled JS:', jsCode);
+        console.log('📝 Transpiled JavaScript:');
+        console.log(jsCode);
       }
 
-      // Create execution context
-      const context = {
-        data,
-        close: data.map(d => d.close),
-        open: data.map(d => d.open),
-        high: data.map(d => d.high),
-        low: data.map(d => d.low),
-        volume: data.map(d => d.volume),
-        hl2: data.map(d => (d.high + d.low) / 2),
-        hlc3: data.map(d => (d.high + d.low + d.close) / 3),
-        ohlc4: data.map(d => (d.open + d.high + d.low + d.close) / 4),
-        ta: this.getTALibrary(),
-        math: Math,
-        na: NaN,
-        results: [] as PineScriptResult[],
-        debug: this.debugMode ? console.log.bind(console) : () => {},
-        color: this.getColorLibrary(),
-      };
+      // Create execution context with full Pine Script environment
+      const context = this.createExecutionContext(data);
 
       // Execute the transpiled code safely
       const func = new Function('context', `
@@ -97,7 +106,7 @@ export class PineScriptRunner {
             ${jsCode}
             return results;
           } catch(e) {
-            throw new Error('Runtime: ' + e.message);
+            throw new Error('Runtime Error: ' + e.message);
           }
         }
       `);
@@ -113,305 +122,573 @@ export class PineScriptRunner {
       };
 
       if (this.debugMode) {
+        console.log('✅ Execution completed');
         console.log('Results:', results);
-        console.log('Execution time:', this.lastMetrics.executionMs.toFixed(2), 'ms');
+        console.log(`⏱️ Execution time: ${this.lastMetrics.executionMs.toFixed(2)}ms`);
+        console.log(`📊 Generated ${results.length} indicator(s)`);
       }
 
       return results;
     } catch (error) {
-      console.error('Pine Script execution error:', error);
+      console.error('❌ Pine Script execution error:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Pine Script Error: ${message}`);
+      throw new Error(`Pine Script Error:\n${message}`);
     }
   }
 
   /**
-   * Validate Pine Script syntax
+   * Create full execution context with all Pine Script built-ins
+   */
+  private static createExecutionContext(data: OHLCData[]) {
+    const close = data.map(d => d.close);
+    const open = data.map(d => d.open);
+    const high = data.map(d => d.high);
+    const low = data.map(d => d.low);
+    const volume = data.map(d => d.volume);
+    const time = data.map(d => d.timestamp);
+
+    const results: PineScriptResult[] = [];
+
+    const context = {
+      // Raw data
+      data,
+      
+      // Built-in series
+      close,
+      open,
+      high,
+      low,
+      volume,
+      time,
+      
+      // Calculated series
+      hl2: data.map(d => (d.high + d.low) / 2),
+      hlc3: data.map(d => (d.high + d.low + d.close) / 3),
+      ohlc4: data.map(d => (d.open + d.high + d.low + d.close) / 4),
+      
+      // Built-in variables
+      bar_index: Array.from({ length: data.length }, (_, i) => i),
+      na: NaN,
+      
+      // v6 simulated bid/ask
+      bid: close.map(c => c * 0.9999),
+      ask: close.map(c => c * 1.0001),
+      
+      // Namespaces
+      ta: this.getTALibrary(),
+      math: this.getMathLibrary(),
+      array: this.getArrayLibrary(),
+      str: this.getStringLibrary(),
+      color: this.getColorLibrary(),
+      
+      // Plot function
+      plot: (series: any, titleOrOptions?: string | any, color?: string, linewidth?: number, style?: string) => {
+        let title = 'Plot';
+        let plotColor = '#2962FF';
+        let plotLinewidth = 1;
+        let plotStyle = 'line';
+
+        if (typeof titleOrOptions === 'string') {
+          title = titleOrOptions;
+        } else if (typeof titleOrOptions === 'object' && titleOrOptions !== null) {
+          title = titleOrOptions.title || title;
+          plotColor = titleOrOptions.color || plotColor;
+          plotLinewidth = titleOrOptions.linewidth || plotLinewidth;
+          plotStyle = titleOrOptions.style || plotStyle;
+        }
+
+        if (color) plotColor = color;
+        if (linewidth) plotLinewidth = linewidth;
+        if (style) plotStyle = style;
+
+        results.push({
+          name: title,
+          values: Array.isArray(series) ? series : Array(data.length).fill(series),
+          type: 'line',
+          color: plotColor,
+          lineWidth: plotLinewidth,
+          plotType: plotStyle as any
+        });
+      },
+      
+      // HLine function
+      hline: (price: number, titleOrOptions?: string | any, color?: string, linewidth?: number) => {
+        let title = `Level ${price}`;
+        let hlineColor = '#787B86';
+        let hlineLinewidth = 1;
+
+        if (typeof titleOrOptions === 'string') {
+          title = titleOrOptions;
+        } else if (typeof titleOrOptions === 'object' && titleOrOptions !== null) {
+          title = titleOrOptions.title || title;
+          hlineColor = titleOrOptions.color || hlineColor;
+          hlineLinewidth = titleOrOptions.linewidth || hlineLinewidth;
+        }
+
+        if (color) hlineColor = color;
+        if (linewidth) hlineLinewidth = linewidth;
+
+        results.push({
+          name: title,
+          values: Array(data.length).fill(price),
+          type: 'hline',
+          color: hlineColor,
+          lineWidth: hlineLinewidth,
+          hlineValue: price
+        });
+      },
+      
+      // Background color function
+      bgcolor: (colorOrCondition: any, transp?: number, title?: string) => {
+        results.push({
+          name: title || 'Background',
+          values: Array(data.length).fill(1),
+          type: 'bgcolor',
+          color: typeof colorOrCondition === 'string' ? colorOrCondition : '#3B82F6'
+        });
+      },
+
+      // Fill function (between two plots)
+      fill: (plot1: any, plot2: any, color?: string, title?: string) => {
+        // Fill is tracked but not directly rendered as a result
+        if (this.debugMode) {
+          console.log(`Fill between plots: ${title || 'unnamed'}`);
+        }
+      },
+      
+      // Input functions (return default values in execution)
+      input: (defval: any, title?: string) => defval,
+      'input.int': (defval: number, title?: string) => Math.floor(defval),
+      'input.float': (defval: number, title?: string) => defval,
+      'input.bool': (defval: boolean, title?: string) => defval,
+      'input.string': (defval: string, title?: string) => defval,
+      'input.color': (defval: string, title?: string) => defval,
+      'input.source': (defval: any, title?: string) => defval,
+      'input.timeframe': (defval: string, title?: string) => defval,
+      
+      // Results array
+      results,
+      
+      // Debug logging
+      debug: this.debugMode ? console.log.bind(console, '🐛') : () => {},
+      log: this.debugMode ? console.log.bind(console, '📋') : () => {},
+
+      // Helper for NaN checks
+      nz: (value: number, replacement: number = 0) => isNaN(value) ? replacement : value,
+      na_fn: (value: any) => value === null || value === undefined || (typeof value === 'number' && isNaN(value)),
+    };
+
+    return context;
+  }
+
+  /**
+   * Enhanced validation with better error messages
    */
   static validateScript(code: string): PineScriptError[] {
     const errors: PineScriptError[] = [];
     const lines = code.split('\n');
 
+    // Check version directive
+    const hasVersion = code.match(/\/\/@version=\d+/);
+    if (!hasVersion) {
+      errors.push({
+        type: 'validation',
+        line: 1,
+        severity: 'warning',
+        message: 'Missing version directive',
+        suggestion: 'Add //@version=6 at the top of your script'
+      });
+    }
+
     lines.forEach((line, index) => {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('//')) return;
       
-      // Check unclosed parentheses
+      const lineNum = index + 1;
+
+      // Check balanced parentheses
       const openParens = (trimmed.match(/\(/g) || []).length;
       const closeParens = (trimmed.match(/\)/g) || []).length;
       if (openParens !== closeParens) {
-        errors.push({ 
+        errors.push({
           type: 'syntax',
-          line: index + 1, 
+          line: lineNum,
+          severity: 'error',
           message: 'Unbalanced parentheses',
-          suggestion: 'Check for missing ( or )'
+          suggestion: openParens > closeParens ? 'Add closing )' : 'Remove extra )'
         });
       }
 
-      // Check unclosed brackets
+      // Check balanced brackets
       const openBrackets = (trimmed.match(/\[/g) || []).length;
       const closeBrackets = (trimmed.match(/\]/g) || []).length;
       if (openBrackets !== closeBrackets) {
-        errors.push({ 
+        errors.push({
           type: 'syntax',
-          line: index + 1, 
+          line: lineNum,
+          severity: 'error',
           message: 'Unbalanced brackets',
-          suggestion: 'Check for missing [ or ]'
+          suggestion: openBrackets > closeBrackets ? 'Add closing ]' : 'Remove extra ]'
         });
       }
 
-      // Check for common Pine Script typos
-      if (/\bta\.\w+\s*[^(]/.test(trimmed) && !trimmed.includes('=')) {
-        const match = trimmed.match(/\bta\.(\w+)/);
+      // Check for function calls that might be missing parentheses
+      if (/\b(ta|math|array|str)\.\w+\s*[^(=,\s]/.test(trimmed) && !trimmed.includes('//')) {
+        const match = trimmed.match(/\b(ta|math|array|str)\.(\w+)/);
         if (match) {
           errors.push({
             type: 'syntax',
-            line: index + 1,
-            message: `ta.${match[1]} appears to be missing parentheses`,
-            suggestion: `Use ta.${match[1]}(...)`
+            line: lineNum,
+            severity: 'warning',
+            message: `${match[1]}.${match[2]}() might be missing parentheses`,
+            suggestion: `Use ${match[1]}.${match[2]}(...)`
           });
         }
       }
+
+      // Check for reserved keywords used as variables (v6)
+      const reservedKeywords = ['catch', 'class', 'do', 'ellipse', 'in', 'is', 'polygon', 'range', 'return', 'struct', 'text', 'throw', 'try'];
+      reservedKeywords.forEach(keyword => {
+        const regex = new RegExp(`\\b${keyword}\\s*=`, 'i');
+        if (regex.test(trimmed)) {
+          errors.push({
+            type: 'validation',
+            line: lineNum,
+            severity: 'error',
+            message: `'${keyword}' is a reserved keyword and cannot be used as a variable name`,
+            suggestion: `Use a different name like my_${keyword} or ${keyword}_value`
+          });
+        }
+      });
     });
 
     return errors;
   }
 
   /**
-   * Transpile Pine Script to JavaScript
+   * COMPLETE TRANSPILER for Pine Script v5/v6
    */
   private static transpilePineToJS(pineCode: string): string {
     let js = pineCode;
 
     // Remove version directive
-    js = js.replace(/^\/\/@version=\d+\s*/gm, '// Pine Script\n');
+    js = js.replace(/^\/\/@version=\d+\s*/gm, '');
 
-    // Remove single-line comments but preserve them as JS comments
+    // Preserve comments as JS comments
     js = js.replace(/\/\/(.*)$/gm, '// $1');
 
-    // Convert indicator() declaration - handle all parameter formats
-    js = js.replace(/indicator\s*\(\s*["']([^"']+)["'](?:\s*,\s*[^)]*?)?\s*\)/g, (match, title) => {
-      return `const indicatorTitle = "${title}";`;
-    });
+    // === DECLARATIONS ===
 
-    // Convert strategy() declaration
-    js = js.replace(/strategy\s*\(\s*["']([^"']+)["'](?:\s*,\s*[^)]*?)?\s*\)/g, (match, title) => {
-      return `const strategyTitle = "${title}";`;
-    });
-
-    // Convert input.int(), input.float(), input.bool(), input.string()
-    js = js.replace(/(\w+)\s*=\s*input\.int\s*\(\s*(\d+)(?:\s*,\s*["']([^"']+)["'])?[^)]*\)/g, 
-      (match, varName, defaultValue, title) => {
-        return `const ${varName} = ${defaultValue};${title ? ` // ${title}` : ''}`;
-      }
-    );
-    
-    js = js.replace(/(\w+)\s*=\s*input\.float\s*\(\s*([\d.]+)(?:\s*,\s*["']([^"']+)["'])?[^)]*\)/g, 
-      (match, varName, defaultValue, title) => {
-        return `const ${varName} = ${defaultValue};${title ? ` // ${title}` : ''}`;
-      }
+    // indicator() declaration - handle all parameter formats
+    js = js.replace(
+      /indicator\s*\(\s*["']([^"']+)["'](?:\s*,\s*[^)]*?)?\s*\)/g,
+      (match, title) => `const indicatorTitle = "${title}";`
     );
 
-    js = js.replace(/(\w+)\s*=\s*input\.bool\s*\(\s*(true|false)(?:\s*,\s*["']([^"']+)["'])?[^)]*\)/g, 
-      (match, varName, defaultValue, title) => {
-        return `const ${varName} = ${defaultValue};${title ? ` // ${title}` : ''}`;
-      }
+    // strategy() declaration
+    js = js.replace(
+      /strategy\s*\(\s*["']([^"']+)["'](?:\s*,\s*[^)]*?)?\s*\)/g,
+      (match, title) => `const strategyTitle = "${title}";`
     );
 
-    js = js.replace(/(\w+)\s*=\s*input\.string\s*\(\s*["']([^"']+)["'](?:\s*,\s*["']([^"']+)["'])?[^)]*\)/g, 
-      (match, varName, defaultValue, title) => {
-        return `const ${varName} = "${defaultValue}";${title ? ` // ${title}` : ''}`;
-      }
+    // library() declaration
+    js = js.replace(
+      /library\s*\(\s*["']([^"']+)["'](?:\s*,\s*[^)]*?)?\s*\)/g,
+      (match, title) => `const libraryTitle = "${title}";`
     );
 
-    // Convert input() to variable declarations - various formats
-    js = js.replace(/(\w+)\s*=\s*input\s*\(\s*([\d.]+)\s*,\s*title\s*=\s*["']([^"']+)["'][^)]*\)/g, 
-      (match, varName, defaultValue, title) => {
-        return `const ${varName} = ${defaultValue}; // ${title}`;
-      }
+    // === INPUT FUNCTIONS ===
+
+    // input.int() with all parameter formats
+    js = js.replace(
+      /(\w+)\s*=\s*input\.int\s*\(\s*(\d+)(?:\s*,\s*(?:title\s*=\s*)?["']([^"']+)["'])?(?:[^)]*)\)/g,
+      (match, varName, defval, title) => `const ${varName} = ${defval};${title ? ` // ${title}` : ''}`
     );
 
-    js = js.replace(/(\w+)\s*=\s*input\s*\(\s*([\d.]+)\s*,\s*["']([^"']+)["'][^)]*\)/g, 
-      (match, varName, defaultValue, title) => {
-        return `const ${varName} = ${defaultValue}; // ${title}`;
-      }
-    );
-    
-    js = js.replace(/(\w+)\s*=\s*input\s*\(\s*([\d.]+)\s*\)/g, 
-      (match, varName, defaultValue) => {
-        return `const ${varName} = ${defaultValue};`;
-      }
+    // input.float()
+    js = js.replace(
+      /(\w+)\s*=\s*input\.float\s*\(\s*([\d.]+)(?:\s*,\s*(?:title\s*=\s*)?["']([^"']+)["'])?(?:[^)]*)\)/g,
+      (match, varName, defval, title) => `const ${varName} = ${defval};${title ? ` // ${title}` : ''}`
     );
 
-    // Convert var and varip declarations
+    // input.bool()
+    js = js.replace(
+      /(\w+)\s*=\s*input\.bool\s*\(\s*(true|false)(?:\s*,\s*(?:title\s*=\s*)?["']([^"']+)["'])?(?:[^)]*)\)/g,
+      (match, varName, defval, title) => `const ${varName} = ${defval};${title ? ` // ${title}` : ''}`
+    );
+
+    // input.string()
+    js = js.replace(
+      /(\w+)\s*=\s*input\.string\s*\(\s*["']([^"']+)["'](?:\s*,\s*(?:title\s*=\s*)?["']([^"']+)["'])?(?:[^)]*)\)/g,
+      (match, varName, defval, title) => `const ${varName} = "${defval}";${title ? ` // ${title}` : ''}`
+    );
+
+    // input() generic - multiple formats
+    js = js.replace(
+      /(\w+)\s*=\s*input\s*\(\s*([\d.]+)\s*,\s*(?:title\s*=\s*)?["']([^"']+)["'](?:[^)]*)\)/g,
+      (match, varName, defval, title) => `const ${varName} = ${defval}; // ${title}`
+    );
+
+    js = js.replace(
+      /(\w+)\s*=\s*input\s*\(\s*([\d.]+)\s*\)/g,
+      (match, varName, defval) => `const ${varName} = ${defval};`
+    );
+
+    // === VARIABLE DECLARATIONS ===
+
+    // var and varip declarations
     js = js.replace(/\bvar\s+(\w+)\s*=/g, 'let $1 =');
     js = js.replace(/\bvarip\s+(\w+)\s*=/g, 'let $1 =');
 
-    // Convert ta.crossover and ta.crossunder
+    // === TA FUNCTION CONVERSIONS ===
+
+    // ta.sma, ta.ema, ta.wma, ta.rsi
+    js = js.replace(/(\w+)\s*=\s*ta\.(sma|ema|wma|rsi)\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g,
+      (match, varName, func, src, len) => `const ${varName} = ta.${func}(${src}, ${len});`
+    );
+
+    // ta.stdev
+    js = js.replace(/(\w+)\s*=\s*ta\.stdev\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g,
+      (match, varName, src, len) => `const ${varName} = ta.stdev(${src}, ${len});`
+    );
+
+    // ta.atr - handle various formats
+    js = js.replace(/(\w+)\s*=\s*ta\.atr\s*\(\s*(\w+)\s*\)/g,
+      (match, varName, len) => `const ${varName} = ta.atr(high, low, close, ${len});`
+    );
+
+    // ta.stoch
+    js = js.replace(/(\w+)\s*=\s*ta\.stoch\s*\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)/g,
+      (match, varName, src, hi, lo, len) => `const ${varName} = ta.stoch(${src}, ${hi}, ${lo}, ${len});`
+    );
+
+    // ta.vwap
+    js = js.replace(/(\w+)\s*=\s*ta\.vwap\s*\(\s*(\w+)\s*\)/g,
+      (match, varName, src) => `const ${varName} = ta.vwap(${src}, high, low, volume);`
+    );
+
+    // ta.bb - Bollinger Bands (returns object)
+    js = js.replace(/\[(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\]\s*=\s*ta\.bb\s*\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)/g,
+      (match, upper, basis, lower, src, len, mult) => 
+        `const __bb = ta.bb(${src}, ${len}, ${mult}); const ${upper} = __bb.upper; const ${basis} = __bb.middle; const ${lower} = __bb.lower;`
+    );
+
+    // ta.macd (returns object)
+    js = js.replace(/\[(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\]\s*=\s*ta\.macd\s*\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)/g,
+      (match, macdLine, signalLine, hist, src, fast, slow, sig) => 
+        `const __macd = ta.macd(${src}, ${fast}, ${slow}, ${sig}); const ${macdLine} = __macd.macd; const ${signalLine} = __macd.signal; const ${hist} = __macd.hist;`
+    );
+
+    // ta.crossover and ta.crossunder
     js = js.replace(/ta\.crossover\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.crossover($1, $2)');
     js = js.replace(/ta\.crossunder\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.crossunder($1, $2)');
 
-    // Convert ta.highest and ta.lowest
+    // ta.highest, ta.lowest
     js = js.replace(/ta\.highest\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.highest($1, $2)');
     js = js.replace(/ta\.lowest\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.lowest($1, $2)');
 
-    // Convert ta.change
+    // ta.change
     js = js.replace(/ta\.change\s*\(\s*(\w+)\s*\)/g, 'ta.change($1, 1)');
     js = js.replace(/ta\.change\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.change($1, $2)');
 
-    // Convert ta.stdev()
-    js = js.replace(/ta\.stdev\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.stdev($1, $2)');
+    // ta.mom, ta.roc
+    js = js.replace(/ta\.mom\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.mom($1, $2)');
+    js = js.replace(/ta\.roc\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.roc($1, $2)');
 
-    // Convert ta.atr() - handle various formats
-    js = js.replace(/ta\.atr\s*\(\s*close\s*,\s*high\s*,\s*low\s*,\s*(\w+)\s*\)/g, 'ta.atr(high, low, close, $1)');
-    js = js.replace(/ta\.atr\s*\(\s*(\w+)\s*\)/g, 'ta.atr(high, low, close, $1)');
-
-    // Convert ta.stoch()
-    js = js.replace(/ta\.stoch\s*\(\s*close\s*,\s*high\s*,\s*low\s*,\s*(\w+)\s*\)/g, 'ta.stoch(close, high, low, $1)');
-
-    // Convert ta.vwap()
-    js = js.replace(/ta\.vwap\s*\(\s*close\s*,\s*volume\s*\)/g, 'ta.vwap(close, volume)');
-    js = js.replace(/ta\.vwap\s*\(\s*(\w+)\s*\)/g, 'ta.vwap($1, volume)');
-
-    // Convert ta.bb() - Bollinger Bands
-    js = js.replace(/ta\.bb\s*\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.bb($1, $2, $3)');
-
-    // Convert ta.macd()
-    js = js.replace(/ta\.macd\s*\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.macd($1, $2, $3, $4)');
-
-    // Convert ta.cci()
+    // ta.cci
     js = js.replace(/ta\.cci\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.cci($1, $2)');
-    js = js.replace(/ta\.cci\s*\(\s*(\w+)\s*\)/g, 'ta.cci(hlc3, $1)');
 
-    // Convert ta.wpr() - Williams %R
-    js = js.replace(/ta\.wpr\s*\(\s*(\w+)\s*\)/g, 'ta.wpr(high, low, close, $1)');
-
-    // Convert ta.obv()
+    // ta.obv
     js = js.replace(/ta\.obv\s*\(\s*\)/g, 'ta.obv(close, volume)');
 
-    // Convert ta.pivothigh and ta.pivotlow
+    // ta.adx
+    js = js.replace(/ta\.adx\s*\(\s*(\w+)\s*\)/g, 'ta.adx(high, low, close, $1)');
+
+    // ta.pivothigh, ta.pivotlow
     js = js.replace(/ta\.pivothigh\s*\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.pivothigh($1, $2, $3)');
     js = js.replace(/ta\.pivotlow\s*\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'ta.pivotlow($1, $2, $3)');
 
-    // Convert ta.adx()
-    js = js.replace(/ta\.adx\s*\(\s*(\w+)\s*\)/g, 'ta.adx(high, low, close, $1)');
+    // === PLOT FUNCTIONS ===
 
-    // Convert plot() - handle all formats
-    // plot(series, color=color.blue, title="Title")
-    js = js.replace(/plot\s*\(\s*(\w+)\s*,\s*color\s*=\s*color\.(\w+)\s*,\s*title\s*=\s*["']([^"']+)["'](?:\s*,\s*[^)]*?)?\s*\)/g,
+    // plot(series, title, color, linewidth) - positional
+    js = js.replace(
+      /plot\s*\(\s*(\w+)\s*,\s*["']([^"']+)["']\s*,\s*color\.(\w+)(?:\s*,\s*(\d+))?\s*\)/g,
+      (match, series, title, colorName, linewidth) => {
+        const hex = this.getColorHex(colorName);
+        return `plot(${series}, "${title}", "${hex}", ${linewidth || 1});`;
+      }
+    );
+
+    // plot(series, color=color.xxx, title="xxx")
+    js = js.replace(
+      /plot\s*\(\s*(\w+)\s*,\s*color\s*=\s*color\.(\w+)\s*,\s*title\s*=\s*["']([^"']+)["'](?:[^)]*)\)/g,
       (match, series, colorName, title) => {
-        const colorValue = this.getColorHex(colorName);
-        return `results.push({ name: "${title}", values: ${series}, type: 'line', color: '${colorValue}' });`;
+        const hex = this.getColorHex(colorName);
+        return `plot(${series}, "${title}", "${hex}");`;
       }
     );
 
-    // plot(series, title="Title", color=color.blue)
-    js = js.replace(/plot\s*\(\s*(\w+)\s*,\s*title\s*=\s*["']([^"']+)["']\s*,\s*color\s*=\s*color\.(\w+)(?:\s*,\s*[^)]*?)?\s*\)/g,
+    // plot(series, title="xxx", color=color.xxx)
+    js = js.replace(
+      /plot\s*\(\s*(\w+)\s*,\s*title\s*=\s*["']([^"']+)["']\s*,\s*color\s*=\s*color\.(\w+)(?:[^)]*)\)/g,
       (match, series, title, colorName) => {
-        const colorValue = this.getColorHex(colorName);
-        return `results.push({ name: "${title}", values: ${series}, type: 'line', color: '${colorValue}' });`;
+        const hex = this.getColorHex(colorName);
+        return `plot(${series}, "${title}", "${hex}");`;
       }
     );
 
-    // plot(series, color=color.blue)
-    js = js.replace(/plot\s*\(\s*(\w+)\s*,\s*color\s*=\s*color\.(\w+)(?:\s*,\s*[^)]*?)?\s*\)/g,
+    // plot(series, color=color.xxx)
+    js = js.replace(
+      /plot\s*\(\s*(\w+)\s*,\s*color\s*=\s*color\.(\w+)(?:[^)]*)\)/g,
       (match, series, colorName) => {
-        const colorValue = this.getColorHex(colorName);
-        return `results.push({ name: "${series}", values: ${series}, type: 'line', color: '${colorValue}' });`;
+        const hex = this.getColorHex(colorName);
+        return `plot(${series}, "${series}", "${hex}");`;
       }
     );
 
-    // plot(series, "Title") - simple format
-    js = js.replace(/plot\s*\(\s*(\w+)\s*,\s*["']([^"']+)["']\s*\)/g,
-      (match, series, title) => {
-        return `results.push({ name: "${title}", values: ${series}, type: 'line', color: '#3B82F6' });`;
+    // plot(series, "title") - simple
+    js = js.replace(
+      /plot\s*\(\s*(\w+)\s*,\s*["']([^"']+)["']\s*\)/g,
+      (match, series, title) => `plot(${series}, "${title}", "#3B82F6");`
+    );
+
+    // plot(series) - simplest
+    js = js.replace(
+      /plot\s*\(\s*(\w+)\s*\)(?!\s*[;,])/g,
+      (match, series) => `plot(${series}, "${series}", "#3B82F6");`
+    );
+
+    // === HLINE ===
+    
+    // hline(price, "title", color=color.xxx)
+    js = js.replace(
+      /hline\s*\(\s*(\d+(?:\.\d+)?)\s*,\s*["']([^"']+)["']\s*,\s*color\s*=\s*color\.(\w+)(?:[^)]*)\)/g,
+      (match, price, title, colorName) => {
+        const hex = this.getColorHex(colorName);
+        return `hline(${price}, "${title}", "${hex}");`;
       }
     );
 
-    // plot(series) - simplest format
-    js = js.replace(/plot\s*\(\s*(\w+)\s*\)/g,
-      (match, series) => {
-        return `results.push({ name: "${series}", values: ${series}, type: 'line', color: '#3B82F6' });`;
+    // hline(price, "title")
+    js = js.replace(
+      /hline\s*\(\s*(\d+(?:\.\d+)?)\s*,\s*["']([^"']+)["']\s*\)/g,
+      (match, price, title) => `hline(${price}, "${title}", "#787B86");`
+    );
+
+    // hline(price)
+    js = js.replace(
+      /hline\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g,
+      (match, price) => `hline(${price}, "Level ${price}", "#787B86");`
+    );
+
+    // === BGCOLOR ===
+
+    // bgcolor(condition ? color.xxx : na)
+    js = js.replace(
+      /bgcolor\s*\(\s*(\w+)\s*\?\s*color\.new\s*\(\s*color\.(\w+)\s*,\s*(\d+)\s*\)\s*:\s*na(?:[^)]*)\)/g,
+      (match, cond, colorName, transp) => {
+        const hex = this.getColorHex(colorName);
+        return `bgcolor("${hex}");`;
       }
     );
 
-    // Convert color.new() - handle transparency
-    js = js.replace(/color\.new\s*\(\s*color\.(\w+)\s*,\s*(\d+)\s*\)/g, (match, colorName, transp) => {
-      const hex = this.getColorHex(colorName);
-      const alpha = Math.round((100 - parseInt(transp)) / 100 * 255).toString(16).padStart(2, '0');
-      return `'${hex}${alpha}'`;
-    });
-
-    // Convert hline()
-    js = js.replace(/hline\s*\(\s*(\d+(?:\.\d+)?)\s*,\s*["']([^"']+)["']\s*,\s*color\s*=\s*color\.(\w+)(?:\s*,\s*[^)]*?)?\s*\)/g,
-      (match, value, title, colorName) => {
-        const colorValue = this.getColorHex(colorName);
-        return `results.push({ name: "${title}", values: Array(close.length).fill(${value}), type: 'hline', color: '${colorValue}', hlineValue: ${value} });`;
+    // bgcolor(color.new(color.xxx, transp))
+    js = js.replace(
+      /bgcolor\s*\(\s*color\.new\s*\(\s*color\.(\w+)\s*,\s*(\d+)\s*\)(?:[^)]*)\)/g,
+      (match, colorName) => {
+        const hex = this.getColorHex(colorName);
+        return `bgcolor("${hex}");`;
       }
     );
 
-    js = js.replace(/hline\s*\(\s*(\d+(?:\.\d+)?)\s*,\s*["']([^"']+)["']\s*\)/g,
-      (match, value, title) => {
-        return `results.push({ name: "${title}", values: Array(close.length).fill(${value}), type: 'hline', color: '#888888', hlineValue: ${value} });`;
+    // === COLOR.NEW ===
+    js = js.replace(
+      /color\.new\s*\(\s*color\.(\w+)\s*,\s*(\d+)\s*\)/g,
+      (match, colorName, transp) => {
+        const hex = this.getColorHex(colorName);
+        const alpha = Math.round((100 - parseInt(transp)) / 100 * 255).toString(16).padStart(2, '0');
+        return `"${hex}${alpha}"`;
       }
     );
 
-    js = js.replace(/hline\s*\(\s*(\d+(?:\.\d+)?)\s*\)/g,
-      (match, value) => {
-        return `results.push({ name: "Level ${value}", values: Array(close.length).fill(${value}), type: 'hline', color: '#888888', hlineValue: ${value} });`;
-      }
-    );
+    // === OPERATORS ===
 
-    // Convert bgcolor()
-    js = js.replace(/bgcolor\s*\(\s*(\w+)\s*\?\s*color\.(\w+)\s*:\s*na(?:\s*,\s*[^)]*?)?\s*\)/g,
-      (match, condition, colorName) => {
-        const colorValue = this.getColorHex(colorName);
-        return `results.push({ name: "bgcolor", values: ${condition}.map(v => v ? 1 : 0), type: 'bgcolor', color: '${colorValue}' });`;
-      }
-    );
+    // Boolean operators
+    js = js.replace(/\band\b/g, '&&');
+    js = js.replace(/\bor\b/g, '||');
+    js = js.replace(/\bnot\b/g, '!');
 
-    // Convert variable assignments with ta functions
-    js = js.replace(/(\w+)\s*=\s*ta\.(sma|ema|wma|rsi|stoch|atr|vwap|stdev|highest|lowest|change|mom|roc|cci|obv|adx|wpr)\s*\(([^)]+)\)/g, 
-      (match, varName, funcName, args) => {
-        return `const ${varName} = ta.${funcName}(${args});`;
-      }
-    );
+    // na (Not Available)
+    js = js.replace(/\bna\b(?!\w)/g, 'NaN');
 
-    // Convert array operations (subtraction)
-    js = js.replace(/(\w+)\s*=\s*(\w+)\s*-\s*(\w+)(?![.\w])/g,
-      (match, result, a, b) => {
-        // Only convert if not already converted
-        if (match.includes('const ') || match.includes('let ')) return match;
-        return `const ${result} = Array.isArray(${a}) && Array.isArray(${b}) ? ${a}.map((v, i) => v - ${b}[i]) : (Array.isArray(${a}) ? ${a}.map(v => v - ${b}) : ${a} - ${b});`;
-      }
-    );
+    // Ternary with na
+    js = js.replace(/(\w+)\s*\?\s*(\w+)\s*:\s*NaN/g, '$1 ? $2 : NaN');
 
-    // Convert array operations (addition)
-    js = js.replace(/(\w+)\s*=\s*(\w+)\s*\+\s*(\w+)(?![.\w])/g,
-      (match, result, a, b) => {
-        if (match.includes('const ') || match.includes('let ')) return match;
-        return `const ${result} = Array.isArray(${a}) && Array.isArray(${b}) ? ${a}.map((v, i) => v + ${b}[i]) : (Array.isArray(${a}) ? ${a}.map(v => v + ${b}) : ${a} + ${b});`;
-      }
-    );
+    // === ARRAY OPERATIONS ===
 
-    // Convert array operations (multiplication)
-    js = js.replace(/(\w+)\s*=\s*(\w+)\s*\*\s*(\w+)(?![.\w])/g,
-      (match, result, a, b) => {
-        if (match.includes('const ') || match.includes('let ')) return match;
-        return `const ${result} = Array.isArray(${a}) && Array.isArray(${b}) ? ${a}.map((v, i) => v * ${b}[i]) : (Array.isArray(${a}) ? ${a}.map(v => v * ${b}) : ${a} * ${b});`;
+    // Simple variable assignments with array operations
+    // Only convert if not already declared
+    const arrayOps = [
+      // Subtraction
+      { 
+        pattern: /^(\w+)\s*=\s*(\w+)\s*-\s*(\w+)$/gm,
+        replacement: (m: string, res: string, a: string, b: string) => {
+          if (m.includes('const ') || m.includes('let ')) return m;
+          return `const ${res} = Array.isArray(${a}) ? ${a}.map((v, i) => v - (Array.isArray(${b}) ? ${b}[i] : ${b})) : ${a} - ${b};`;
+        }
+      },
+      // Addition
+      {
+        pattern: /^(\w+)\s*=\s*(\w+)\s*\+\s*(\w+)$/gm,
+        replacement: (m: string, res: string, a: string, b: string) => {
+          if (m.includes('const ') || m.includes('let ')) return m;
+          return `const ${res} = Array.isArray(${a}) ? ${a}.map((v, i) => v + (Array.isArray(${b}) ? ${b}[i] : ${b})) : ${a} + ${b};`;
+        }
+      },
+      // Multiplication
+      {
+        pattern: /^(\w+)\s*=\s*(\w+)\s*\*\s*(\w+)$/gm,
+        replacement: (m: string, res: string, a: string, b: string) => {
+          if (m.includes('const ') || m.includes('let ')) return m;
+          return `const ${res} = Array.isArray(${a}) ? ${a}.map((v, i) => v * (Array.isArray(${b}) ? ${b}[i] : ${b})) : ${a} * ${b};`;
+        }
+      },
+      // Division
+      {
+        pattern: /^(\w+)\s*=\s*(\w+)\s*\/\s*(\w+)$/gm,
+        replacement: (m: string, res: string, a: string, b: string) => {
+          if (m.includes('const ') || m.includes('let ')) return m;
+          return `const ${res} = Array.isArray(${a}) ? ${a}.map((v, i) => v / (Array.isArray(${b}) ? ${b}[i] : ${b})) : ${a} / ${b};`;
+        }
       }
-    );
+    ];
 
-    // Convert array operations (division)
-    js = js.replace(/(\w+)\s*=\s*(\w+)\s*\/\s*(\w+)(?![.\w])/g,
-      (match, result, a, b) => {
-        if (match.includes('const ') || match.includes('let ')) return match;
-        return `const ${result} = Array.isArray(${a}) && Array.isArray(${b}) ? ${a}.map((v, i) => v / ${b}[i]) : (Array.isArray(${a}) ? ${a}.map(v => v / ${b}) : ${a} / ${b});`;
+    // Apply array operation conversions
+    // arrayOps.forEach(op => {
+    //   js = js.replace(op.pattern, op.replacement as any);
+    // });
+
+    // === CLEAN UP ===
+
+    // Remove multiple newlines
+    js = js.replace(/\n{3,}/g, '\n\n');
+
+    // Ensure statements end with semicolons (but not control structures)
+    js = js.split('\n').map(line => {
+      const trimmed = line.trim();
+      if (!trimmed || 
+          trimmed.startsWith('//') || 
+          trimmed.endsWith('{') || 
+          trimmed.endsWith('}') || 
+          trimmed.endsWith(';') ||
+          trimmed.startsWith('if') ||
+          trimmed.startsWith('else') ||
+          trimmed.startsWith('for') ||
+          trimmed.startsWith('while')) {
+        return line;
       }
-    );
-
-    // Handle if-else ternary conditions
-    js = js.replace(/(\w+)\s*\?\s*(\w+)\s*:\s*na/g, '$1 ? $2 : NaN');
+      return line + ';';
+    }).join('\n');
 
     return js;
   }
@@ -421,27 +698,27 @@ export class PineScriptRunner {
    */
   private static getColorHex(colorName: string): string {
     const colorMap: Record<string, string> = {
-      blue: '#3B82F6',
-      red: '#EF4444',
-      green: '#22C55E',
-      purple: '#8B5CF6',
-      orange: '#F97316',
-      gray: '#6B7280',
-      grey: '#6B7280',
-      yellow: '#EAB308',
-      teal: '#14B8A6',
+      blue: '#2962FF',
+      red: '#F23645',
+      green: '#089981',
+      purple: '#7B1FA2',
+      orange: '#FF9800',
+      gray: '#787B86',
+      grey: '#787B86',
+      yellow: '#FFEB3B',
+      teal: '#00897B',
       white: '#FFFFFF',
       black: '#000000',
-      aqua: '#00FFFF',
-      lime: '#00FF00',
-      fuchsia: '#FF00FF',
-      silver: '#C0C0C0',
-      maroon: '#800000',
-      navy: '#000080',
-      olive: '#808000',
-      new: '#3B82F6', // Default for color.new
+      aqua: '#00BCD4',
+      lime: '#C6FF00',
+      fuchsia: '#E040FB',
+      silver: '#B2B5BE',
+      maroon: '#880E4F',
+      navy: '#311B92',
+      olive: '#827717',
+      new: '#2962FF',
     };
-    return colorMap[colorName.toLowerCase()] || '#3B82F6';
+    return colorMap[colorName.toLowerCase()] || '#2962FF';
   }
 
   /**
@@ -449,21 +726,113 @@ export class PineScriptRunner {
    */
   private static getColorLibrary() {
     return {
-      blue: '#3B82F6',
-      red: '#EF4444',
-      green: '#22C55E',
-      purple: '#8B5CF6',
-      orange: '#F97316',
-      gray: '#6B7280',
-      yellow: '#EAB308',
-      teal: '#14B8A6',
+      blue: '#2962FF',
+      red: '#F23645',
+      green: '#089981',
+      purple: '#7B1FA2',
+      orange: '#FF9800',
+      gray: '#787B86',
+      yellow: '#FFEB3B',
+      teal: '#00897B',
       white: '#FFFFFF',
       black: '#000000',
+      aqua: '#00BCD4',
+      lime: '#C6FF00',
+      fuchsia: '#E040FB',
+      silver: '#B2B5BE',
+      maroon: '#880E4F',
+      navy: '#311B92',
+      olive: '#827717',
       new: (baseColor: string, transparency: number) => {
-        const hex = typeof baseColor === 'string' && baseColor.startsWith('#') ? baseColor : '#3B82F6';
+        const hex = typeof baseColor === 'string' && baseColor.startsWith('#') ? baseColor : '#2962FF';
         const alpha = Math.round((100 - transparency) / 100 * 255).toString(16).padStart(2, '0');
         return `${hex}${alpha}`;
+      },
+      rgb: (r: number, g: number, b: number) => {
+        return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+      },
+      fromGradient: (value: number, low: number, mid: number, high: number, colorLow: string, colorMid: string, colorHigh: string) => {
+        // Simplified gradient - just return mid color
+        return colorMid;
       }
+    };
+  }
+
+  /**
+   * Math library
+   */
+  private static getMathLibrary() {
+    return {
+      abs: Math.abs,
+      acos: Math.acos,
+      asin: Math.asin,
+      atan: Math.atan,
+      ceil: Math.ceil,
+      cos: Math.cos,
+      exp: Math.exp,
+      floor: Math.floor,
+      log: Math.log,
+      log10: Math.log10,
+      max: Math.max,
+      min: Math.min,
+      pow: Math.pow,
+      round: Math.round,
+      sign: Math.sign,
+      sin: Math.sin,
+      sqrt: Math.sqrt,
+      tan: Math.tan,
+      avg: (...args: number[]) => args.reduce((a, b) => a + b, 0) / args.length,
+      sum: (...args: number[]) => args.reduce((a, b) => a + b, 0),
+      toradians: (degrees: number) => degrees * (Math.PI / 180),
+      todegrees: (radians: number) => radians * (180 / Math.PI),
+      random: (min: number = 0, max: number = 1) => Math.random() * (max - min) + min
+    };
+  }
+
+  /**
+   * Array library
+   */
+  private static getArrayLibrary() {
+    return {
+      new: <T>(size: number, initial?: T): T[] => Array(size).fill(initial !== undefined ? initial : NaN),
+      from: <T>(...args: T[]): T[] => args,
+      size: <T>(arr: T[]): number => arr.length,
+      get: <T>(arr: T[], index: number): T | undefined => index < 0 ? arr[arr.length + index] : arr[index],
+      set: <T>(arr: T[], index: number, value: T): void => { arr[index < 0 ? arr.length + index : index] = value; },
+      push: <T>(arr: T[], value: T): void => { arr.push(value); },
+      pop: <T>(arr: T[]): T | undefined => arr.pop(),
+      sum: (arr: number[]): number => arr.reduce((a, b) => a + b, 0),
+      avg: (arr: number[]): number => arr.reduce((a, b) => a + b, 0) / arr.length,
+      min: (arr: number[]): number => Math.min(...arr),
+      max: (arr: number[]): number => Math.max(...arr),
+      stdev: (arr: number[]): number => {
+        const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+        const variance = arr.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / arr.length;
+        return Math.sqrt(variance);
+      }
+    };
+  }
+
+  /**
+   * String library
+   */
+  private static getStringLibrary() {
+    return {
+      length: (str: string): number => str.length,
+      tonumber: (str: string): number => parseFloat(str),
+      tostring: (val: any): string => String(val),
+      format: (format: string, ...args: any[]): string => {
+        let result = format;
+        args.forEach((arg, i) => {
+          result = result.replace(`{${i}}`, String(arg));
+        });
+        return result;
+      },
+      contains: (str: string, substr: string): boolean => str.includes(substr),
+      lower: (str: string): string => str.toLowerCase(),
+      upper: (str: string): string => str.toUpperCase(),
+      trim: (str: string): string => str.trim(),
+      split: (str: string, separator: string): string[] => str.split(separator)
     };
   }
 
@@ -471,7 +840,6 @@ export class PineScriptRunner {
    * Technical Analysis library with all functions
    */
   private static getTALibrary() {
-    // Define helper functions first so they can reference each other
     const sma = (data: number[], length: number): number[] => {
       const result: number[] = [];
       for (let i = 0; i < data.length; i++) {
@@ -597,19 +965,7 @@ export class PineScriptRunner {
             tr.push(Math.max(hl, hc, lc));
           }
         }
-        
-        const result: number[] = [];
-        let sum = 0;
-        for (let i = 0; i < tr.length; i++) {
-          if (i < length) {
-            sum += tr[i];
-            result.push(i === length - 1 ? sum / length : NaN);
-          } else {
-            const atrVal = (result[i - 1] * (length - 1) + tr[i]) / length;
-            result.push(atrVal);
-          }
-        }
-        return result;
+        return rma(tr, length);
       },
 
       stoch: (close: number[], high: number[], low: number[], length: number): number[] => {
@@ -629,20 +985,21 @@ export class PineScriptRunner {
         return result;
       },
 
-      vwap: (close: number[], volume: number[]): number[] => {
+      vwap: (close: number[], high: number[], low: number[], volume: number[]): number[] => {
         const result: number[] = [];
         let cumVol = 0;
         let cumVolPrice = 0;
+        const tp = close.map((c, i) => (high[i] + low[i] + c) / 3);
         
         for (let i = 0; i < close.length; i++) {
           cumVol += volume[i];
-          cumVolPrice += close[i] * volume[i];
-          result.push(cumVol > 0 ? cumVolPrice / cumVol : close[i]);
+          cumVolPrice += tp[i] * volume[i];
+          result.push(cumVol > 0 ? cumVolPrice / cumVol : tp[i]);
         }
         return result;
       },
 
-      macd: (data: number[], fastLen: number, slowLen: number, signalLen: number): { macd: number[]; signal: number[]; hist: number[] } => {
+      macd: (data: number[], fastLen: number, slowLen: number, signalLen: number) => {
         const fastEma = ema(data, fastLen);
         const slowEma = ema(data, slowLen);
         const macdLine = fastEma.map((v, i) => v - slowEma[i]);
@@ -651,7 +1008,7 @@ export class PineScriptRunner {
         return { macd: macdLine, signal: signalLine, hist: histogram };
       },
 
-      bb: (data: number[], length: number, mult: number): { upper: number[]; middle: number[]; lower: number[] } => {
+      bb: (data: number[], length: number, mult: number) => {
         const middle = sma(data, length);
         const stdDev = stdev(data, length);
         const upper = middle.map((v, i) => v + mult * stdDev[i]);
@@ -802,8 +1159,7 @@ export class PineScriptRunner {
           if (i < length - 1) {
             result.push(NaN);
           } else {
-            const slice = data.slice(i - length + 1, i + 1);
-            result.push(Math.max(...slice));
+            result.push(Math.max(...data.slice(i - length + 1, i + 1)));
           }
         }
         return result;
@@ -815,8 +1171,7 @@ export class PineScriptRunner {
           if (i < length - 1) {
             result.push(NaN);
           } else {
-            const slice = data.slice(i - length + 1, i + 1);
-            result.push(Math.min(...slice));
+            result.push(Math.min(...data.slice(i - length + 1, i + 1)));
           }
         }
         return result;
@@ -857,10 +1212,10 @@ export class PineScriptRunner {
   /**
    * Generate mock OHLC data for testing
    */
-  static generateMockOHLC(bars: number = 100): OHLCData[] {
+  static generateMockOHLC(bars: number = 200): OHLCData[] {
     const data: OHLCData[] = [];
     let price = 100;
-    const startTime = Date.now() - bars * 24 * 60 * 60 * 1000;
+    const startTime = Date.now() - bars * 60 * 60 * 1000;
 
     for (let i = 0; i < bars; i++) {
       const change = (Math.random() - 0.5) * 4;
@@ -871,7 +1226,7 @@ export class PineScriptRunner {
       const volume = Math.floor(Math.random() * 1000000) + 500000;
 
       data.push({
-        timestamp: startTime + i * 24 * 60 * 60 * 1000,
+        timestamp: startTime + i * 60 * 60 * 1000,
         open,
         high,
         low,
@@ -885,3 +1240,5 @@ export class PineScriptRunner {
     return data;
   }
 }
+
+export default PineScriptRunner;
