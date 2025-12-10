@@ -1,6 +1,5 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,19 +17,19 @@ import {
   Type,
   Trash2,
   BarChart2,
-  Settings,
   Maximize,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
   ChevronDown,
   Code,
   Bell,
   Layout,
   Save,
   Camera,
+  Palette,
+  Puzzle,
+  Keyboard,
 } from 'lucide-react';
 import { Timeframe } from '@/services/ChartDataService';
+import ZoomControls from './ZoomControls';
 
 interface ChartToolbarProps {
   selectedDrawingTool: string | null;
@@ -41,9 +40,14 @@ interface ChartToolbarProps {
   onTogglePineScript: () => void;
   onToggleAlerts: () => void;
   onToggleMultiChart: () => void;
-  onResetZoom: () => void;
+  onToggleTheme: () => void;
+  onToggleCustomIndicators: () => void;
+  onToggleKeyboardHelp: () => void;
+  zoomLevel: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  onZoomReset: () => void;
+  onZoomChange: (level: number) => void;
   onFullscreen: () => void;
   onClearDrawings: () => void;
   onSaveChart: () => void;
@@ -71,16 +75,21 @@ const ChartToolbar: React.FC<ChartToolbarProps> = ({
   onTogglePineScript,
   onToggleAlerts,
   onToggleMultiChart,
-  onResetZoom,
+  onToggleTheme,
+  onToggleCustomIndicators,
+  onToggleKeyboardHelp,
+  zoomLevel,
   onZoomIn,
   onZoomOut,
+  onZoomReset,
+  onZoomChange,
   onFullscreen,
   onClearDrawings,
   onSaveChart,
   onScreenshot,
 }) => {
   return (
-    <div className="flex items-center gap-1 p-2 bg-card/50 border-b border-terminal-green/20">
+    <div className="flex items-center gap-1 p-2 bg-card/50 border-b border-terminal-green/20 flex-wrap">
       {/* Timeframe selector */}
       <div className="flex items-center gap-0.5 mr-2">
         {TIMEFRAMES.map(tf => (
@@ -110,12 +119,12 @@ const ChartToolbar: React.FC<ChartToolbarProps> = ({
               <>
                 {DRAWING_TOOLS.find(t => t.id === selectedDrawingTool)?.icon && 
                   React.createElement(DRAWING_TOOLS.find(t => t.id === selectedDrawingTool)!.icon, { className: 'w-4 h-4' })}
-                <span className="text-xs">{DRAWING_TOOLS.find(t => t.id === selectedDrawingTool)?.label}</span>
+                <span className="text-xs hidden sm:inline">{DRAWING_TOOLS.find(t => t.id === selectedDrawingTool)?.label}</span>
               </>
             ) : (
               <>
                 <TrendingUp className="w-4 h-4" />
-                <span className="text-xs">Draw</span>
+                <span className="text-xs hidden sm:inline">Draw</span>
               </>
             )}
             <ChevronDown className="w-3 h-3" />
@@ -146,7 +155,13 @@ const ChartToolbar: React.FC<ChartToolbarProps> = ({
         <span className="text-xs hidden sm:inline">Indicators</span>
       </Button>
 
-      {/* Pine Script */}
+      {/* Custom Indicators (Pine Scripts) */}
+      <Button variant="ghost" size="sm" className="h-7 gap-1 text-terminal-amber" onClick={onToggleCustomIndicators}>
+        <Puzzle className="w-4 h-4" />
+        <span className="text-xs hidden sm:inline">Custom</span>
+      </Button>
+
+      {/* Pine Script Editor */}
       <Button variant="ghost" size="sm" className="h-7 gap-1 text-terminal-cyan" onClick={onTogglePineScript}>
         <Code className="w-4 h-4" />
         <span className="text-xs hidden sm:inline">Pine</span>
@@ -158,6 +173,12 @@ const ChartToolbar: React.FC<ChartToolbarProps> = ({
         <span className="text-xs hidden sm:inline">Alerts</span>
       </Button>
 
+      {/* Theme */}
+      <Button variant="ghost" size="sm" className="h-7 gap-1 text-purple-400" onClick={onToggleTheme}>
+        <Palette className="w-4 h-4" />
+        <span className="text-xs hidden sm:inline">Theme</span>
+      </Button>
+
       {/* Multi-chart */}
       <Button variant="ghost" size="sm" className="h-7 gap-1 text-terminal-green" onClick={onToggleMultiChart}>
         <Layout className="w-4 h-4" />
@@ -167,28 +188,53 @@ const ChartToolbar: React.FC<ChartToolbarProps> = ({
       <div className="flex-1" />
 
       {/* Zoom controls */}
-      <div className="flex items-center gap-0.5">
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-terminal-green" onClick={onZoomOut}>
-          <ZoomOut className="w-4 h-4" />
-        </Button>
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-terminal-green" onClick={onZoomIn}>
-          <ZoomIn className="w-4 h-4" />
-        </Button>
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-terminal-green" onClick={onResetZoom}>
-          <RotateCcw className="w-4 h-4" />
-        </Button>
-      </div>
+      <ZoomControls
+        zoomLevel={zoomLevel}
+        onZoomIn={onZoomIn}
+        onZoomOut={onZoomOut}
+        onZoomReset={onZoomReset}
+        onZoomChange={onZoomChange}
+      />
 
       <div className="w-px h-6 bg-terminal-green/20" />
 
+      {/* Keyboard help */}
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        className="h-7 w-7 p-0 text-muted-foreground hover:text-terminal-green" 
+        onClick={onToggleKeyboardHelp}
+        title="Keyboard Shortcuts"
+      >
+        <Keyboard className="w-4 h-4" />
+      </Button>
+
       {/* Actions */}
-      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-terminal-green" onClick={onScreenshot}>
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        className="h-7 w-7 p-0 text-terminal-green" 
+        onClick={onScreenshot}
+        title="Screenshot"
+      >
         <Camera className="w-4 h-4" />
       </Button>
-      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-terminal-green" onClick={onSaveChart}>
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        className="h-7 w-7 p-0 text-terminal-green" 
+        onClick={onSaveChart}
+        title="Save Chart (Ctrl+S)"
+      >
         <Save className="w-4 h-4" />
       </Button>
-      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-terminal-green" onClick={onFullscreen}>
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        className="h-7 w-7 p-0 text-terminal-green" 
+        onClick={onFullscreen}
+        title="Fullscreen"
+      >
         <Maximize className="w-4 h-4" />
       </Button>
     </div>
