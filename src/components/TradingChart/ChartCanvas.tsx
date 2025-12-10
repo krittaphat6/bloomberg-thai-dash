@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { OHLCVData } from '@/services/ChartDataService';
-import { DrawingTool, ChartIndicator, CrosshairData, CHART_COLORS } from './types';
+import { DrawingTool, ChartIndicator, CrosshairData } from './types';
+import { ChartTheme } from './ChartThemes';
+import { PineScriptResult } from '@/utils/PineScriptRunner';
 
 interface ChartCanvasProps {
   data: OHLCVData[];
@@ -15,6 +17,8 @@ interface ChartCanvasProps {
   visibleRange: { start: number; end: number };
   onZoom: (delta: number, center: number) => void;
   onPan: (delta: number) => void;
+  theme: ChartTheme;
+  customIndicators?: { results: PineScriptResult[]; visible: boolean }[];
 }
 
 const ChartCanvas: React.FC<ChartCanvasProps> = ({
@@ -30,16 +34,20 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   visibleRange,
   onZoom,
   onPan,
+  theme,
+  customIndicators = [],
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanX, setLastPanX] = useState(0);
   const [pendingDrawing, setPendingDrawing] = useState<DrawingTool | null>(null);
+  
+  // Touch state for gestures
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number; dist?: number } | null>(null);
 
   // Chart dimensions
   const chartHeight = height * 0.7;
   const volumeHeight = height * 0.15;
-  const oscillatorHeight = height * 0.15;
   const padding = { top: 20, right: 80, bottom: 30, left: 10 };
 
   // Calculate visible data
@@ -75,8 +83,8 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas
-    ctx.fillStyle = CHART_COLORS.background;
+    // Clear canvas with theme background
+    ctx.fillStyle = theme.colors.background;
     ctx.fillRect(0, 0, width, height);
 
     // Draw grid
@@ -90,6 +98,9 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
 
     // Draw indicators
     drawIndicators(ctx);
+
+    // Draw custom Pine Script indicators
+    drawCustomIndicators(ctx);
 
     // Draw drawings
     drawDrawings(ctx);
@@ -105,10 +116,10 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
     // Draw time axis
     drawTimeAxis(ctx);
 
-  }, [visibleData, width, height, indicators, drawings, crosshair, priceRange]);
+  }, [visibleData, width, height, indicators, drawings, crosshair, priceRange, theme, customIndicators]);
 
   const drawGrid = (ctx: CanvasRenderingContext2D) => {
-    ctx.strokeStyle = CHART_COLORS.grid;
+    ctx.strokeStyle = theme.colors.grid;
     ctx.lineWidth = 0.5;
 
     // Horizontal lines
@@ -142,8 +153,10 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
       const lowY = priceToY(candle.low);
 
       const isBullish = candle.close >= candle.open;
-      ctx.strokeStyle = isBullish ? CHART_COLORS.bullish : CHART_COLORS.bearish;
-      ctx.fillStyle = isBullish ? CHART_COLORS.bullish : CHART_COLORS.bearish;
+      const candleColors = isBullish ? theme.colors.bullCandle : theme.colors.bearCandle;
+      
+      ctx.strokeStyle = candleColors.border;
+      ctx.fillStyle = candleColors.fill;
 
       // Wick
       ctx.beginPath();
@@ -157,11 +170,7 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
       const bodyTop = Math.min(openY, closeY);
       const bodyHeight = Math.max(Math.abs(closeY - openY), 1);
       
-      if (isBullish) {
-        ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
-      } else {
-        ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
-      }
+      ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
     });
   };
 
@@ -178,7 +187,7 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
       const barHeight = (candle.volume / maxVolume) * volumeChartHeight;
       const isBullish = candle.close >= candle.open;
 
-      ctx.fillStyle = isBullish ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+      ctx.fillStyle = isBullish ? theme.colors.volumeUp : theme.colors.volumeDown;
       const barWidth = Math.max(candleWidth * 0.8, 1);
       ctx.fillRect(x - barWidth / 2, volumeTop + volumeChartHeight - barHeight, barWidth, barHeight);
     });
@@ -195,6 +204,44 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
       } else if (indicator.name === 'Bollinger Bands') {
         drawBollingerBands(ctx, indicator.settings.length as number, indicator.settings.mult as number);
       }
+    });
+  };
+
+  const drawCustomIndicators = (ctx: CanvasRenderingContext2D) => {
+    customIndicators.filter(ci => ci.visible).forEach(customInd => {
+      customInd.results.forEach(result => {
+        if (result.type === 'line' && result.values) {
+          ctx.strokeStyle = result.color || '#f97316';
+          ctx.lineWidth = result.lineWidth || 1.5;
+          ctx.beginPath();
+
+          let started = false;
+          result.values.forEach((value, i) => {
+            if (isNaN(value) || i < visibleRange.start || i >= visibleRange.end) return;
+            
+            const x = indexToX(i);
+            const y = priceToY(value);
+
+            if (!started) {
+              ctx.moveTo(x, y);
+              started = true;
+            } else {
+              ctx.lineTo(x, y);
+            }
+          });
+          ctx.stroke();
+        } else if (result.type === 'hline' && result.hlineValue !== undefined) {
+          ctx.strokeStyle = result.color || '#888888';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([5, 5]);
+          const y = priceToY(result.hlineValue);
+          ctx.beginPath();
+          ctx.moveTo(padding.left, y);
+          ctx.lineTo(width - padding.right, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      });
     });
   };
 
@@ -267,7 +314,7 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
       lowerBand.push(sma - mult * stdDev);
     }
 
-    // Draw bands
+    // Draw bands fill
     ctx.globalAlpha = 0.1;
     ctx.fillStyle = '#8b5cf6';
     ctx.beginPath();
@@ -329,7 +376,6 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
         ctx.stroke();
         ctx.setLineDash([]);
         
-        // Price label
         ctx.fillStyle = drawing.color;
         ctx.font = '11px monospace';
         ctx.fillText(drawing.points[0].price?.toFixed(2) || '', width - padding.right + 5, y + 4);
@@ -340,7 +386,7 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
         const price1 = drawing.points[0].price || 0;
         const price2 = drawing.points[1].price || 0;
 
-        levels.forEach((level, i) => {
+        levels.forEach((level) => {
           const y = y1 + (y2 - y1) * level;
           const price = price1 + (price2 - price1) * level;
           ctx.globalAlpha = 0.5 + (1 - level) * 0.5;
@@ -371,7 +417,7 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   };
 
   const drawCrosshair = (ctx: CanvasRenderingContext2D) => {
-    ctx.strokeStyle = CHART_COLORS.crosshair;
+    ctx.strokeStyle = theme.colors.crosshair;
     ctx.lineWidth = 0.5;
     ctx.setLineDash([3, 3]);
 
@@ -390,15 +436,15 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
     ctx.setLineDash([]);
 
     // Price label
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = theme.colors.grid;
     ctx.fillRect(width - padding.right, crosshair.y - 10, padding.right, 20);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = theme.colors.text;
     ctx.font = '11px monospace';
     ctx.fillText(crosshair.price.toFixed(2), width - padding.right + 5, crosshair.y + 4);
   };
 
   const drawPriceAxis = (ctx: CanvasRenderingContext2D) => {
-    ctx.fillStyle = CHART_COLORS.text;
+    ctx.fillStyle = theme.colors.text;
     ctx.font = '10px monospace';
 
     const priceStep = (priceRange.max - priceRange.min) / 8;
@@ -410,7 +456,7 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   };
 
   const drawTimeAxis = (ctx: CanvasRenderingContext2D) => {
-    ctx.fillStyle = CHART_COLORS.text;
+    ctx.fillStyle = theme.colors.text;
     ctx.font = '10px monospace';
 
     const step = Math.ceil(visibleData.length / 8);
@@ -489,6 +535,12 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
     setIsPanning(false);
   };
 
+  const handleMouseLeave = () => {
+    setIsPanning(false);
+    onCrosshairMove({ x: 0, y: 0, price: 0, time: 0, visible: false });
+  };
+
+  // Enhanced wheel zoom with smooth animation
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -498,17 +550,59 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
     onZoom(e.deltaY > 0 ? 1 : -1, x);
   };
 
+  // Touch handlers for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    } else if (e.touches.length === 2) {
+      // Pinch gesture
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      setTouchStart({ x: (e.touches[0].clientX + e.touches[1].clientX) / 2, y: 0, dist });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart) return;
+
+    if (e.touches.length === 1) {
+      // Pan
+      const delta = e.touches[0].clientX - touchStart.x;
+      onPan(delta);
+      setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    } else if (e.touches.length === 2 && touchStart.dist) {
+      // Pinch zoom
+      const newDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const delta = newDist > touchStart.dist ? -1 : 1;
+      onZoom(delta, centerX);
+      setTouchStart({ x: centerX, y: 0, dist: newDist });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setTouchStart(null);
+  };
+
   return (
     <canvas
       ref={canvasRef}
       width={width}
       height={height}
+      className="cursor-crosshair touch-none"
       onMouseMove={handleMouseMove}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
       onWheel={handleWheel}
-      className="cursor-crosshair"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     />
   );
 };

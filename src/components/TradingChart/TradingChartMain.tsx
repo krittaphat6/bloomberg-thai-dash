@@ -6,16 +6,29 @@ import { Search, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 import { chartDataService, ChartSymbol, Timeframe, OHLCVData } from '@/services/ChartDataService';
 import { ChartIndicator, ChartAlert, DrawingTool, CrosshairData, DEFAULT_INDICATORS } from './types';
 import { PineScriptResult, OHLCData } from '@/utils/PineScriptRunner';
+import { ChartTheme, loadTheme, saveTheme, PRESET_THEMES } from './ChartThemes';
 import ChartCanvas from './ChartCanvas';
 import ChartToolbar from './ChartToolbar';
 import SymbolSearch from './SymbolSearch';
 import IndicatorsPanel from './IndicatorsPanel';
 import PineScriptEditor from './PineScriptEditor';
 import AlertsPanel from './AlertsPanel';
+import ThemePanel from './ThemePanel';
+import CustomIndicatorsPanel from './CustomIndicatorsPanel';
+import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
 
 interface TradingChartMainProps {
   className?: string;
   defaultSymbol?: string;
+}
+
+interface ActiveCustomIndicator {
+  id: string;
+  name: string;
+  scriptId: string;
+  visible: boolean;
+  color: string;
+  results: PineScriptResult[];
 }
 
 const TradingChartMain: React.FC<TradingChartMainProps> = ({
@@ -37,6 +50,12 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
   const [showIndicators, setShowIndicators] = useState(false);
   const [showPineScript, setShowPineScript] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
+  const [showCustomIndicators, setShowCustomIndicators] = useState(false);
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+
+  // Theme
+  const [theme, setTheme] = useState<ChartTheme>(loadTheme);
 
   // Chart state
   const [indicators, setIndicators] = useState<ChartIndicator[]>(() => 
@@ -49,9 +68,11 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
     const saved = localStorage.getItem('chart-favorites');
     return saved ? JSON.parse(saved) : ['BTCUSDT', 'ETHUSDT', 'AAPL'];
   });
+  const [customIndicators, setCustomIndicators] = useState<ActiveCustomIndicator[]>([]);
 
-  // Zoom/Pan state
+  // Zoom state
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 200 });
+  const [zoomLevel, setZoomLevel] = useState(100);
   const [crosshair, setCrosshair] = useState<CrosshairData>({
     x: 0, y: 0, price: 0, time: 0, visible: false,
   });
@@ -66,7 +87,7 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
       for (const entry of entries) {
         setDimensions({
           width: entry.contentRect.width,
-          height: entry.contentRect.height - 50, // Minus toolbar height
+          height: entry.contentRect.height - 50,
         });
       }
     });
@@ -77,6 +98,54 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
 
     return () => observer.disconnect();
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Zoom shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          handleZoom(-1, dimensions.width / 2);
+        } else if (e.key === '-') {
+          e.preventDefault();
+          handleZoom(1, dimensions.width / 2);
+        } else if (e.key === '0') {
+          e.preventDefault();
+          handleZoomReset();
+        } else if (e.key === 's') {
+          e.preventDefault();
+          handleSaveChart();
+        }
+        return;
+      }
+
+      // Navigation
+      if (e.key === 'ArrowLeft') {
+        handlePan(50);
+      } else if (e.key === 'ArrowRight') {
+        handlePan(-50);
+      } else if (e.key === 'Home') {
+        setVisibleRange({ start: 0, end: 200 });
+      } else if (e.key === 'End') {
+        setVisibleRange({ start: Math.max(0, data.length - 200), end: data.length });
+      }
+
+      // Panel toggles
+      if (e.key === 'i' || e.key === 'I') {
+        setShowIndicators(prev => !prev);
+      } else if (e.key === 'p' || e.key === 'P') {
+        setShowPineScript(prev => !prev);
+      } else if (e.key === 't' || e.key === 'T') {
+        setShowTheme(prev => !prev);
+      } else if (e.key === 'Escape') {
+        setSelectedDrawingTool(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dimensions, data.length]);
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -105,7 +174,7 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
 
   // Auto refresh
   useEffect(() => {
-    const interval = setInterval(fetchData, 60000); // Refresh every minute
+    const interval = setInterval(fetchData, 60000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -144,7 +213,6 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
           title: '🔔 Alert Triggered!',
           description: alert.message,
         });
-        // Play sound
         const audio = new AudioContext();
         const oscillator = audio.createOscillator();
         const gain = audio.createGain();
@@ -168,6 +236,24 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
     const newStart = Math.max(0, Math.round(centerIndex - newRange * centerRatio));
     const newEnd = Math.min(data.length, newStart + newRange);
     setVisibleRange({ start: newStart, end: newEnd });
+    
+    // Update zoom level indicator
+    const newZoom = Math.round((200 / (newEnd - newStart)) * 100);
+    setZoomLevel(Math.max(10, Math.min(500, newZoom)));
+  };
+
+  const handleZoomReset = () => {
+    setVisibleRange({ start: Math.max(0, data.length - 200), end: data.length });
+    setZoomLevel(100);
+  };
+
+  const handleZoomChange = (level: number) => {
+    const targetRange = Math.round(200 * (100 / level));
+    const currentCenter = (visibleRange.start + visibleRange.end) / 2;
+    const newStart = Math.max(0, Math.round(currentCenter - targetRange / 2));
+    const newEnd = Math.min(data.length, newStart + targetRange);
+    setVisibleRange({ start: newStart, end: newEnd });
+    setZoomLevel(level);
   };
 
   const handlePan = (delta: number) => {
@@ -217,6 +303,41 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
     });
   };
 
+  const handleThemeChange = (newTheme: ChartTheme) => {
+    setTheme(newTheme);
+    saveTheme(newTheme);
+  };
+
+  const handleAddCustomIndicator = (indicator: ActiveCustomIndicator) => {
+    setCustomIndicators(prev => [...prev, indicator]);
+  };
+
+  const handleRemoveCustomIndicator = (id: string) => {
+    setCustomIndicators(prev => prev.filter(i => i.id !== id));
+  };
+
+  const handleToggleCustomIndicator = (id: string) => {
+    setCustomIndicators(prev =>
+      prev.map(i => (i.id === id ? { ...i, visible: !i.visible } : i))
+    );
+  };
+
+  const handleSaveChart = () => {
+    localStorage.setItem(`chart-${symbol.symbol}`, JSON.stringify({ drawings, indicators }));
+    toast({ title: 'Chart Saved' });
+  };
+
+  const handleScreenshot = () => {
+    const canvas = containerRef.current?.querySelector('canvas');
+    if (canvas) {
+      const link = document.createElement('a');
+      link.download = `${symbol.symbol}-${timeframe}-chart.png`;
+      link.href = canvas.toDataURL();
+      link.click();
+      toast({ title: 'Screenshot saved' });
+    }
+  };
+
   // Current price
   const currentPrice = data[data.length - 1]?.close || 0;
   const prevPrice = data[data.length - 2]?.close || currentPrice;
@@ -235,11 +356,10 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
   }));
 
   return (
-    <div ref={containerRef} className={`flex flex-col h-full bg-[#0f172a] ${className}`}>
+    <div ref={containerRef} className={`flex flex-col h-full ${className}`} style={{ backgroundColor: theme.colors.background }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-card/50 border-b border-terminal-green/20">
         <div className="flex items-center gap-4">
-          {/* Symbol selector */}
           <button
             onClick={() => setShowSymbolSearch(true)}
             className="flex items-center gap-2 px-3 py-1.5 rounded bg-muted/30 hover:bg-muted/50 transition-colors"
@@ -253,12 +373,11 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
             </Badge>
           </button>
 
-          {/* Price display */}
           <div className="flex items-center gap-2">
             <span className="font-mono text-2xl font-bold text-foreground">
               {currentPrice.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
-                maximumFractionDigits: symbol.type === 'crypto' ? 2 : 2,
+                maximumFractionDigits: 2,
               })}
             </span>
             <div className={`flex items-center gap-1 ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
@@ -270,7 +389,6 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
           </div>
         </div>
 
-        {/* Refresh */}
         <Button
           variant="ghost"
           size="sm"
@@ -292,16 +410,18 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
         onTogglePineScript={() => setShowPineScript(true)}
         onToggleAlerts={() => setShowAlerts(true)}
         onToggleMultiChart={() => toast({ title: 'Coming Soon', description: 'Multi-chart layout' })}
-        onResetZoom={() => setVisibleRange({ start: Math.max(0, data.length - 200), end: data.length })}
+        onToggleTheme={() => setShowTheme(true)}
+        onToggleCustomIndicators={() => setShowCustomIndicators(true)}
+        onToggleKeyboardHelp={() => setShowKeyboardHelp(true)}
+        zoomLevel={zoomLevel}
         onZoomIn={() => handleZoom(-1, dimensions.width / 2)}
         onZoomOut={() => handleZoom(1, dimensions.width / 2)}
+        onZoomReset={handleZoomReset}
+        onZoomChange={handleZoomChange}
         onFullscreen={() => containerRef.current?.requestFullscreen?.()}
         onClearDrawings={() => setDrawings([])}
-        onSaveChart={() => {
-          localStorage.setItem(`chart-${symbol.symbol}`, JSON.stringify({ drawings, indicators }));
-          toast({ title: 'Chart Saved' });
-        }}
-        onScreenshot={() => toast({ title: 'Screenshot', description: 'Feature coming soon' })}
+        onSaveChart={handleSaveChart}
+        onScreenshot={handleScreenshot}
       />
 
       {/* Chart Canvas */}
@@ -328,6 +448,8 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
             visibleRange={visibleRange}
             onZoom={handleZoom}
             onPan={handlePan}
+            theme={theme}
+            customIndicators={customIndicators}
           />
         )}
 
@@ -344,6 +466,22 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
                 </span>
               </>
             )}
+          </div>
+        )}
+
+        {/* Custom indicators badge */}
+        {customIndicators.length > 0 && (
+          <div className="absolute top-2 right-2 flex gap-1">
+            {customIndicators.filter(i => i.visible).map(ind => (
+              <Badge 
+                key={ind.id} 
+                variant="outline" 
+                className="text-[10px]"
+                style={{ borderColor: ind.color, color: ind.color }}
+              >
+                {ind.name}
+              </Badge>
+            ))}
           </div>
         )}
       </div>
@@ -386,6 +524,32 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
         )}
         currentSymbol={symbol.symbol}
         currentPrice={currentPrice}
+      />
+
+      <ThemePanel
+        isOpen={showTheme}
+        onClose={() => setShowTheme(false)}
+        currentTheme={theme}
+        onThemeChange={handleThemeChange}
+      />
+
+      <CustomIndicatorsPanel
+        isOpen={showCustomIndicators}
+        onClose={() => setShowCustomIndicators(false)}
+        chartData={ohlcData}
+        activeIndicators={customIndicators}
+        onAddIndicator={handleAddCustomIndicator}
+        onRemoveIndicator={handleRemoveCustomIndicator}
+        onToggleIndicator={handleToggleCustomIndicator}
+        onOpenPineEditor={() => {
+          setShowCustomIndicators(false);
+          setShowPineScript(true);
+        }}
+      />
+
+      <KeyboardShortcutsHelp
+        isOpen={showKeyboardHelp}
+        onClose={() => setShowKeyboardHelp(false)}
       />
     </div>
   );
