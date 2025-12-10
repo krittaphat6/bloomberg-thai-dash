@@ -652,6 +652,9 @@ sys.stderr = old_stderr
     const activeTab = openTabs.find(t => t.id === activeTabId);
     if (!activeTab) return;
 
+    const versionMatch = activeTab.content.match(/\/\/@version=(\d+)/);
+    const detectedVersion = versionMatch ? (parseInt(versionMatch[1]) as 5 | 6) : 6;
+
     const script: SavedScript = {
       id: activeTab.scriptId || generateScriptId(),
       name: saveFormData.name || activeTab.name.replace('.pine', ''),
@@ -659,6 +662,7 @@ sys.stderr = old_stderr
       code: activeTab.content,
       category: saveFormData.category,
       tags: saveFormData.tags,
+      version: detectedVersion,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
