@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TabManager from './TabManager';
-import EnhancedTabSelector from './EnhancedTabSelector';
+import TabSelector from './TabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
@@ -550,7 +550,7 @@ const MarketData = () => {
       />
 
       {showTabSelector && (
-        <EnhancedTabSelector
+        <TabSelector
           onSelect={handleTabSelect}
           onClose={() => setShowTabSelector(false)}
           availableComponents={availableComponents}
