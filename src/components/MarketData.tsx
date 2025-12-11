@@ -39,6 +39,7 @@ import { BloombergLiveTV } from './BloombergLiveTV';
 import { PythonCodeEditor } from './PythonCodeEditor';
 import LiveChatReal from './LiveChatReal';
 import { TradingChartMain } from './TradingChart';
+import WorldStockMarkets from './WorldStockMarkets';
 
 interface PanelData {
   id: string;
@@ -181,7 +182,8 @@ const MarketData = () => {
     { id: 'debtclock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
     { id: 'notes', title: 'NOTES', component: <NoteTaking /> },
     { id: 'journal', title: 'TRADING JOURNAL', component: <TradingJournal /> },
-    { id: 'chess', title: 'CHESS PUZZLE', component: <ChessGame /> }
+    { id: 'chess', title: 'CHESS PUZZLE', component: <ChessGame /> },
+    { id: 'wol', title: '🌍 WORLD MARKETS', component: <WorldStockMarkets /> }
   ];
 
   const handleTabAdd = () => {
