@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TabManager from './TabManager';
-import TabSelector from './TabSelector';
+import EnhancedTabSelector from './EnhancedTabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
-import { Expand, Minimize, LogOut } from 'lucide-react';
+import { Expand, Minimize, LogOut, TrendingUp, BarChart3, Brain, Wrench, MessageSquare, Gamepad2, Globe } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useResponsiveContext } from '@/contexts/ResponsiveContext';
 import { MobileLayout } from './mobile/MobileLayout';
@@ -40,11 +40,24 @@ import { PythonCodeEditor } from './PythonCodeEditor';
 import LiveChatReal from './LiveChatReal';
 import { TradingChartMain } from './TradingChart';
 import WorldStockMarkets from './WorldStockMarkets';
+import CryptoMarketMap from './CryptoMarketMap';
+import ScatterPointChart from './ScatterPointChart';
+import CorrelationMatrixTable from './CorrelationMatrixTable';
 
 interface PanelData {
   id: string;
   title: string;
   component: React.ReactNode;
+}
+
+interface TabOption {
+  id: string;
+  title: string;
+  component: React.ReactNode;
+  category: string;
+  icon?: React.ReactNode;
+  description?: string;
+  tags?: string[];
 }
 
 const MarketData = () => {
@@ -118,79 +131,321 @@ const MarketData = () => {
     setPanels(newPanels);
   };
 
-  const availableComponents = [
-    { id: 'trading-chart', title: '📊 TRADING CHART', component: <TradingChartMain /> },
-    { id: 'messenger', title: '💬 MESSENGER', component: <LiveChatReal /> },
+  const availableComponents: TabOption[] = [
+    // Trading Tools
     { 
-      id: 'able-focus', 
-      title: 'ABLE-FOCUS', 
-      component: (
-        <div className="h-full w-full overflow-auto">
-          <iframe src="/relationship-dashboard" className="w-full h-[800px] border-0" title="ABLE Focus" />
-        </div>
-      )
-    },
-    {
-      id: 'intelligence', 
-      title: 'INTELLIGENCE PLATFORM', 
-      component: (
-        <div className="h-full w-full overflow-auto">
-          <iframe src="/intelligence" className="w-full h-[800px] border-0" title="Intelligence Platform" />
-        </div>
-      )
+      id: 'trading-chart', 
+      title: '📊 TRADING CHART', 
+      component: <TradingChartMain />,
+      category: 'trading',
+      icon: <TrendingUp className="w-5 h-5" />,
+      description: 'Advanced charting with Pine Script support and real-time data',
+      tags: ['chart', 'technical', 'indicators', 'pine-script']
     },
     { 
       id: 'options-3d', 
-      title: 'OPTIONS-3D', 
-      component: (
-        <div className="h-full w-full overflow-auto">
-          <iframe src="/options" className="w-full h-[800px] border-0" title="Options 3D" />
-        </div>
-      )
+      title: '📈 OPTIONS-3D', 
+      component: <div className="h-full w-full overflow-auto"><iframe src="/options" className="w-full h-[800px] border-0" title="Options 3D" /></div>,
+      category: 'trading',
+      description: '3D options visualization and analysis',
+      tags: ['options', '3d', 'visualization', 'greeks']
     },
+    { 
+      id: 'stockdio', 
+      title: 'STOCKDIO CHARTS', 
+      component: <StockdioCharts />,
+      category: 'trading',
+      description: 'Professional stock charts with real-time updates',
+      tags: ['stocks', 'charts', 'real-time']
+    },
+    { 
+      id: 'forex', 
+      title: '💱 FOREX & ECONOMICS', 
+      component: <ForexEconomicData />,
+      category: 'trading',
+      description: 'Forex pairs and economic indicators',
+      tags: ['forex', 'economics', 'currencies', 'fx']
+    },
+    { 
+      id: 'fedwatch', 
+      title: '🏦 FED WATCH', 
+      component: <FedWatch />,
+      category: 'trading',
+      description: 'Federal Reserve policy monitoring',
+      tags: ['fed', 'interest-rates', 'monetary-policy']
+    },
+    
+    // Market Analysis
+    { 
+      id: 'crypto', 
+      title: '₿ CRYPTO LIVE', 
+      component: <CryptoLiveCharts />,
+      category: 'analysis',
+      description: 'Live cryptocurrency prices and charts',
+      tags: ['crypto', 'bitcoin', 'ethereum', 'live']
+    },
+    { 
+      id: 'crypto-map', 
+      title: '🗺️ CRYPTO MARKET MAP', 
+      component: <CryptoMarketMap />,
+      category: 'analysis',
+      description: 'Visual heatmap of cryptocurrency market by market cap',
+      tags: ['crypto', 'heatmap', 'market-cap', 'visualization']
+    },
+    { 
+      id: 'scatter', 
+      title: 'SCATTER ANALYSIS', 
+      component: <ScatterAnalysis />,
+      category: 'analysis',
+      description: 'RS-Ratio vs RS-Momentum scatter plot',
+      tags: ['scatter', 'correlation', 'relative-strength']
+    },
+    { 
+      id: 'scatter-point', 
+      title: '📍 SCATTER POINT', 
+      component: <ScatterPointChart />,
+      category: 'analysis',
+      description: 'Advanced scatter plot with quadrant analysis (Leading/Lagging)',
+      tags: ['scatter', 'rs-ratio', 'momentum', 'quadrants', 'rrg']
+    },
+    { 
+      id: 'correlation-matrix', 
+      title: '🔢 CORRELATION MATRIX', 
+      component: <CorrelationMatrixTable />,
+      category: 'analysis',
+      description: 'Multi-asset correlation analysis (Pearson/Spearman/Kendall)',
+      tags: ['correlation', 'matrix', 'pearson', 'spearman', 'portfolio']
+    },
+    { 
+      id: 'pie', 
+      title: '🥧 MARKET PIE', 
+      component: <MarketPieChart />,
+      category: 'analysis',
+      description: 'Market sector allocation pie chart',
+      tags: ['pie-chart', 'sectors', 'allocation']
+    },
+    { 
+      id: 'heatmap', 
+      title: '🔥 HEAT MAP', 
+      component: <HeatMap />,
+      category: 'analysis',
+      description: 'Market performance heatmap',
+      tags: ['heatmap', 'performance', 'sectors']
+    },
+    { 
+      id: 'depth', 
+      title: '📊 MARKET DEPTH', 
+      component: <MarketDepth />,
+      category: 'analysis',
+      description: 'Order book depth visualization',
+      tags: ['depth', 'order-book', 'liquidity']
+    },
+    { 
+      id: 'volume', 
+      title: '📉 TRADING VOLUME', 
+      component: <TradingVolume />,
+      category: 'analysis',
+      description: 'Volume analysis and profile',
+      tags: ['volume', 'trading', 'liquidity']
+    },
+    { 
+      id: 'currency', 
+      title: '💵 CURRENCY TABLE', 
+      component: <CurrencyTable />,
+      category: 'analysis',
+      description: 'Currency exchange rates table',
+      tags: ['currency', 'forex', 'exchange-rates']
+    },
+    { 
+      id: 'indicators', 
+      title: '📈 ECONOMIC INDICATORS', 
+      component: <EconomicIndicators />,
+      category: 'analysis',
+      description: 'Key economic indicators dashboard',
+      tags: ['economics', 'gdp', 'inflation', 'indicators']
+    },
+    { 
+      id: 'cot', 
+      title: '📋 COT DATA', 
+      component: <COTData />,
+      category: 'analysis',
+      description: 'Commitment of Traders report data',
+      tags: ['cot', 'futures', 'positioning']
+    },
+    { 
+      id: 'gold', 
+      title: '🥇 SPDR GOLD DATA', 
+      component: <SPDRGoldData />,
+      category: 'analysis',
+      description: 'SPDR Gold Trust ETF data',
+      tags: ['gold', 'gld', 'commodities', 'precious-metals']
+    },
+    { 
+      id: 'realmarket', 
+      title: '📡 REAL MARKET DATA', 
+      component: <RealMarketData />,
+      category: 'analysis',
+      description: 'Real-time market data feed',
+      tags: ['real-time', 'market-data', 'live']
+    },
+    { 
+      id: 'bitcoin', 
+      title: '⛏️ BITCOIN MEMPOOL', 
+      component: <BitcoinMempool />,
+      category: 'analysis',
+      description: 'Bitcoin mempool and transaction data',
+      tags: ['bitcoin', 'mempool', 'blockchain', 'transactions']
+    },
+    
+    // Intelligence & AI
+    { 
+      id: 'able-focus', 
+      title: '🔍 ABLE-FOCUS', 
+      component: <div className="h-full w-full overflow-auto"><iframe src="/relationship-dashboard" className="w-full h-[800px] border-0" title="ABLE Focus" /></div>,
+      category: 'intelligence',
+      icon: <Brain className="w-5 h-5" />,
+      description: 'AI-powered relationship and network analysis',
+      tags: ['ai', 'analysis', 'relationships', 'network']
+    },
+    { 
+      id: 'intelligence', 
+      title: '🧠 INTELLIGENCE PLATFORM', 
+      component: <div className="h-full w-full overflow-auto"><iframe src="/intelligence" className="w-full h-[800px] border-0" title="Intelligence Platform" /></div>,
+      category: 'intelligence',
+      description: 'Comprehensive intelligence dashboard (Palantir-style)',
+      tags: ['intelligence', 'dashboard', 'analytics', 'palantir']
+    },
+    { 
+      id: 'able3ai', 
+      title: '🤖 ABLE3 AI', 
+      component: <ABLE3AI />,
+      category: 'intelligence',
+      description: 'Advanced AI assistant for trading',
+      tags: ['ai', 'assistant', 'trading', 'chatbot']
+    },
+    
+    // Utilities
+    { 
+      id: 'code', 
+      title: '💻 PYTHON CODE EDITOR', 
+      component: <PythonCodeEditor />,
+      category: 'utilities',
+      icon: <Wrench className="w-5 h-5" />,
+      description: 'Integrated Python and Pine Script editor with live execution',
+      tags: ['python', 'code', 'editor', 'pine-script', 'programming']
+    },
+    { 
+      id: 'notes', 
+      title: '📝 NOTES', 
+      component: <NoteTaking />,
+      category: 'utilities',
+      description: 'Quick note-taking and canvas tool',
+      tags: ['notes', 'memo', 'text', 'canvas']
+    },
+    { 
+      id: 'journal', 
+      title: '📔 TRADING JOURNAL', 
+      component: <TradingJournal />,
+      category: 'utilities',
+      description: 'Track and analyze your trades',
+      tags: ['journal', 'trades', 'tracking', 'analytics', 'performance']
+    },
+    { 
+      id: 'calendar', 
+      title: '📅 ECONOMIC CALENDAR', 
+      component: <EconomicCalendar />,
+      category: 'utilities',
+      description: 'Economic events and releases calendar',
+      tags: ['calendar', 'events', 'economics', 'schedule']
+    },
+    { 
+      id: 'investing', 
+      title: '📰 INVESTING.COM', 
+      component: <InvestingCharts />,
+      category: 'utilities',
+      description: 'Investing.com charts and data',
+      tags: ['investing', 'charts', 'news']
+    },
+    
+    // Communication
+    { 
+      id: 'messenger', 
+      title: '💬 MESSENGER', 
+      component: <LiveChatReal />,
+      category: 'communication',
+      icon: <MessageSquare className="w-5 h-5" />,
+      description: 'Real-time chat with video calls and TradingView webhooks',
+      tags: ['chat', 'messenger', 'video-call', 'webhooks']
+    },
+    { 
+      id: 'news', 
+      title: '📰 BLOOMBERG NEWS', 
+      component: <BloombergNews />,
+      category: 'communication',
+      description: 'Latest financial news from Bloomberg',
+      tags: ['news', 'bloomberg', 'financial', 'headlines']
+    },
+    { 
+      id: 'tv', 
+      title: '📺 BLOOMBERG LIVE TV', 
+      component: <BloombergLiveTV />,
+      category: 'communication',
+      description: 'Live Bloomberg TV stream',
+      tags: ['tv', 'live', 'bloomberg', 'streaming']
+    },
+    
+    // Global Markets
+    { 
+      id: 'wol', 
+      title: '🌍 WORLD MARKETS', 
+      component: <WorldStockMarkets />,
+      category: 'global',
+      icon: <Globe className="w-5 h-5" />,
+      description: '3D globe visualization of world stock markets status',
+      tags: ['world', 'markets', 'global', 'exchanges', 'timezones']
+    },
+    { 
+      id: 'uamap', 
+      title: '🗺️ LIVE UA MAP', 
+      component: <LiveUAMap />,
+      category: 'global',
+      description: 'Live geopolitical situation map',
+      tags: ['map', 'geopolitics', 'live', 'situation']
+    },
+    { 
+      id: 'debtclock', 
+      title: '💸 US DEBT CLOCK', 
+      component: <USDebtClock />,
+      category: 'global',
+      description: 'Real-time US national debt tracker',
+      tags: ['debt', 'us', 'government', 'fiscal']
+    },
+    
+    // Entertainment
     { 
       id: 'pacman', 
       title: '🎮 PAC-MAN', 
-      component: (
-        <div className="h-full w-full overflow-auto">
-          <iframe src="/pacman" className="w-full h-[800px] border-0" title="Pac-Man Game" />
-        </div>
-      )
+      component: <div className="h-full w-full overflow-auto"><iframe src="/pacman" className="w-full h-[800px] border-0" title="Pac-Man Game" /></div>,
+      category: 'entertainment',
+      icon: <Gamepad2 className="w-5 h-5" />,
+      description: 'Classic Pac-Man arcade game',
+      tags: ['game', 'arcade', 'fun', 'break']
     },
-    { id: 'stockdio', title: 'STOCKDIO CHARTS', component: <StockdioCharts /> },
-    { id: 'investing', title: 'INVESTING.COM', component: <InvestingCharts /> },
-    { id: 'crypto', title: 'CRYPTO LIVE', component: <CryptoLiveCharts /> },
-    { id: 'forex', title: 'FOREX & ECONOMICS', component: <ForexEconomicData /> },
-    { id: 'fedwatch', title: 'FED WATCH', component: <FedWatch /> },
-    { id: 'calendar', title: 'ECONOMIC CALENDAR', component: <EconomicCalendar /> },
-    { id: 'scatter', title: 'SCATTER ANALYSIS', component: <ScatterAnalysis /> },
-    { id: 'pie', title: 'MARKET PIE', component: <MarketPieChart /> },
-    { id: 'news', title: 'BLOOMBERG NEWS', component: <BloombergNews /> },
-    { id: 'tv', title: 'BLOOMBERG LIVE TV', component: <BloombergLiveTV /> },
-    { id: 'code', title: 'PYTHON CODE EDITOR', component: <PythonCodeEditor /> },
-    { id: 'depth', title: 'MARKET DEPTH', component: <MarketDepth /> },
-    { id: 'volume', title: 'TRADING VOLUME', component: <TradingVolume /> },
-    { id: 'heatmap', title: 'HEAT MAP', component: <HeatMap /> },
-    { id: 'currency', title: 'CURRENCY TABLE', component: <CurrencyTable /> },
-    { id: 'indicators', title: 'ECONOMIC INDICATORS', component: <EconomicIndicators /> },
-    { id: 'cot', title: 'COT DATA', component: <COTData /> },
-    { id: 'gold', title: 'SPDR GOLD DATA', component: <SPDRGoldData /> },
-    { id: 'realmarket', title: 'REAL MARKET DATA', component: <RealMarketData /> },
-    { id: 'able3ai', title: 'ABLE3 AI', component: <ABLE3AI /> },
-    { id: 'bitcoin', title: 'BITCOIN MEMPOOL', component: <BitcoinMempool /> },
-    { id: 'uamap', title: 'LIVE UA MAP', component: <LiveUAMap /> },
-    { id: 'debtclock', title: 'US DEBT CLOCK', component: <USDebtClock /> },
-    { id: 'notes', title: 'NOTES', component: <NoteTaking /> },
-    { id: 'journal', title: 'TRADING JOURNAL', component: <TradingJournal /> },
-    { id: 'chess', title: 'CHESS PUZZLE', component: <ChessGame /> },
-    { id: 'wol', title: '🌍 WORLD MARKETS', component: <WorldStockMarkets /> }
+    { 
+      id: 'chess', 
+      title: '♟️ CHESS PUZZLE', 
+      component: <ChessGame />,
+      category: 'entertainment',
+      description: 'Chess puzzles and challenges',
+      tags: ['chess', 'puzzle', 'game', 'strategy']
+    },
   ];
 
   const handleTabAdd = () => {
     setShowTabSelector(true);
   };
 
-  const handleTabSelect = (selectedComponent: any) => {
+  const handleTabSelect = (selectedComponent: TabOption) => {
     const newPanel: PanelData = {
       id: `${selectedComponent.id}-${nextPanelId}`,
       title: selectedComponent.title,
@@ -277,7 +532,7 @@ const MarketData = () => {
       />
 
       {showTabSelector && (
-        <TabSelector
+        <EnhancedTabSelector
           onSelect={handleTabSelect}
           onClose={() => setShowTabSelector(false)}
           availableComponents={availableComponents}
