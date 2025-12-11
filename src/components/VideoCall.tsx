@@ -73,25 +73,32 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         console.log('🎬 Starting video call...');
         setIsInitializing(true);
 
-        // 1. Request permissions
+        // 1. Request permissions with HIGH QUALITY settings
         let stream: MediaStream;
         
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { 
-              width: { min: 320, ideal: 640, max: 1280 }, 
-              height: { min: 240, ideal: 480, max: 720 }, 
-              frameRate: { ideal: 15, max: 30 },
-              facingMode: 'user' 
+              width: { ideal: 1280, max: 1920 }, 
+              height: { ideal: 720, max: 1080 }, 
+              frameRate: { ideal: 30, max: 30 },
+              facingMode: 'user',
+              aspectRatio: 16/9
             },
             audio: { 
               echoCancellation: true, 
               noiseSuppression: true, 
               autoGainControl: true,
               sampleRate: 48000,
+              sampleSize: 16,
               channelCount: 1
             }
           });
+          
+          console.log('✅ Got high-quality media stream');
+          console.log('Video track settings:', stream.getVideoTracks()[0]?.getSettings());
+          console.log('Audio track settings:', stream.getAudioTracks()[0]?.getSettings());
+          
         } catch (permError: any) {
           console.error('❌ Permission error:', permError);
           
@@ -122,14 +129,14 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         // Setup audio level detection
         setupAudioLevelDetection(stream);
 
-        // 2. Create Peer
+        // 2. Create Peer with improved ICE servers
         const peerIdString = `${roomId.slice(0, 8)}_${currentUser.id.slice(0, 8)}_${Date.now()}`;
         
         const peerInstance = new Peer(peerIdString, {
           host: '0.peerjs.com',
           secure: true,
           port: 443,
-          debug: 1,
+          debug: 0,
           config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
@@ -137,17 +144,17 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
               { urls: 'stun:stun2.l.google.com:19302' },
               { urls: 'stun:stun.relay.metered.ca:80' },
               {
-                urls: 'turn:global.relay.metered.ca:80',
+                urls: 'turn:openrelay.metered.ca:80',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
               },
               {
-                urls: 'turn:global.relay.metered.ca:443',
+                urls: 'turn:openrelay.metered.ca:443',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
               },
               {
-                urls: 'turn:global.relay.metered.ca:443?transport=tcp',
+                urls: 'turn:openrelay.metered.ca:443?transport=tcp',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
               }
@@ -155,7 +162,8 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
             sdpSemantics: 'unified-plan',
             iceTransportPolicy: 'all',
             bundlePolicy: 'max-bundle',
-            rtcpMuxPolicy: 'require'
+            rtcpMuxPolicy: 'require',
+            iceCandidatePoolSize: 10
           }
         });
 
@@ -211,14 +219,14 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
 
           call.answer(stream);
 
-          // Set receiver parameters
+          // Set receiver parameters for high quality
           if (call.peerConnection) {
             call.peerConnection.getReceivers().forEach((receiver) => {
               if (receiver.track && receiver.track.kind === 'video') {
                 receiver.track.applyConstraints({
-                  frameRate: { max: 15 },
-                  width: { max: 640 },
-                  height: { max: 480 }
+                  frameRate: { max: 30 },
+                  width: { max: 1280 },
+                  height: { max: 720 }
                 }).catch((err) => console.error('Receiver constraint error:', err));
               }
             });
@@ -283,8 +291,9 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         analyserRef.current.getByteFrequencyData(dataArray);
         
         const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        setMyAudioLevel(average);
-        setIsSpeaking(average > 20 && isAudioOn);
+        const normalizedLevel = Math.min(100, average * 2);
+        setMyAudioLevel(normalizedLevel);
+        setIsSpeaking(average > 15 && isAudioOn);
 
         animationFrameRef.current = requestAnimationFrame(detectAudioLevel);
       };
@@ -295,9 +304,12 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
     }
   };
 
-  // Audio detection for remote peers
+  // Audio detection for remote peers with requestAnimationFrame
   const setupRemoteAudioDetection = (peerId: string, stream: MediaStream) => {
     try {
+      const audioTrack = stream.getAudioTracks()[0];
+      if (!audioTrack) return;
+
       const audioContext = new AudioContext();
       const analyser = audioContext.createAnalyser();
       const source = audioContext.createMediaStreamSource(stream);
@@ -305,23 +317,26 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
       analyser.fftSize = 256;
       source.connect(analyser);
 
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
       const detectRemoteAudio = () => {
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
         analyser.getByteFrequencyData(dataArray);
-        
-        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+        const audioLevel = Math.min(100, average * 2);
         
         setRemotePeers(prev => {
           const newMap = new Map(prev);
           const peer = newMap.get(peerId);
           if (peer) {
-            peer.isSpeaking = average > 20;
-            peer.audioLevel = average;
+            peer.isSpeaking = audioLevel > 15;
+            peer.audioLevel = audioLevel;
+            newMap.set(peerId, peer);
           }
           return newMap;
         });
 
-        setTimeout(detectRemoteAudio, 100);
+        requestAnimationFrame(detectRemoteAudio);
       };
 
       detectRemoteAudio();
@@ -363,17 +378,26 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
       return;
     }
 
-    const call = peerInstance.call(remotePeerId, stream, {
-      sdpTransform: (sdp: string) => {
-        // Add bandwidth limits to prevent choppy audio
-        sdp = sdp.replace(/a=mid:(\d+)\r\n/g, (match) => {
-          return match + 'b=AS:300\r\n';  // 300 kbps max
-        });
-        return sdp;
+    // SDP Transform for high quality video/audio
+    const sdpTransform = (sdp: string) => {
+      // Add higher bandwidth limits
+      sdp = sdp.replace(/a=mid:0\r\n/g, 'a=mid:0\r\nb=AS:2000\r\n'); // 2 Mbps for video
+      sdp = sdp.replace(/a=mid:1\r\n/g, 'a=mid:1\r\nb=AS:128\r\n');  // 128 kbps for audio
+      
+      // Set Opus parameters for high quality audio
+      if (sdp.includes('a=rtpmap:111 opus/48000/2')) {
+        sdp = sdp.replace(
+          /a=rtpmap:111 opus\/48000\/2\r\n/,
+          'a=rtpmap:111 opus/48000/2\r\na=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=128000;stereo=1\r\n'
+        );
       }
-    });
+      
+      return sdp;
+    };
 
-    // Set sender parameters for better quality
+    const call = peerInstance.call(remotePeerId, stream, { sdpTransform });
+
+    // Set sender parameters for high quality
     if (call.peerConnection) {
       call.peerConnection.getSenders().forEach((sender) => {
         if (sender.track && sender.track.kind === 'video') {
@@ -382,8 +406,10 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
             params.encodings = [{}];
           }
           
-          params.encodings[0].maxBitrate = 300000; // 300 kbps
-          params.encodings[0].maxFramerate = 15;
+          // High quality video settings
+          params.encodings[0].maxBitrate = 2000000; // 2 Mbps
+          params.encodings[0].maxFramerate = 30;
+          params.encodings[0].scaleResolutionDownBy = 1; // No downscaling
           
           sender.setParameters(params).catch((err) => {
             console.error('Error setting video parameters:', err);
@@ -396,7 +422,8 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
             params.encodings = [{}];
           }
           
-          params.encodings[0].maxBitrate = 48000; // 48 kbps for audio
+          // High quality audio settings
+          params.encodings[0].maxBitrate = 128000; // 128 kbps
           
           sender.setParameters(params).catch((err) => {
             console.error('Error setting audio parameters:', err);
@@ -404,10 +431,31 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
         }
       });
 
-      // Monitor connection state
+      // Monitor ICE connection state
+      call.peerConnection.oniceconnectionstatechange = () => {
+        const state = call.peerConnection.iceConnectionState;
+        console.log(`ICE Connection ${remotePeerId}:`, state);
+      };
+
+      // Monitor connection state with auto-reconnect
       call.peerConnection.onconnectionstatechange = () => {
         const state = call.peerConnection.connectionState;
         console.log(`Connection ${remotePeerId}:`, state);
+        
+        if (state === 'connected') {
+          // Log stats for quality monitoring
+          call.peerConnection.getStats().then((stats: RTCStatsReport) => {
+            stats.forEach((report) => {
+              if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+                console.log('Video quality:', {
+                  fps: report.framesPerSecond,
+                  width: report.frameWidth,
+                  height: report.frameHeight
+                });
+              }
+            });
+          });
+        }
         
         if (state === 'failed' || state === 'disconnected') {
           console.log('Connection failed, attempting reconnection...');
@@ -434,7 +482,17 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
 
     call.on('error', (err) => {
       console.error('❌ Call error:', err);
-      removeRemotePeer(remotePeerId);
+      toast({
+        title: 'Connection Error',
+        description: `Failed to connect with ${username}. Retrying...`,
+        variant: 'destructive'
+      });
+      setTimeout(() => {
+        if (peerInstance && peerInstance.open) {
+          removeRemotePeer(remotePeerId);
+          callPeer(peerInstance, remotePeerId, userId, username, stream);
+        }
+      }, 3000);
     });
   };
 
@@ -544,7 +602,11 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
     } else {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 }
+          },
           audio: false
         });
 
@@ -738,19 +800,35 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
               preload="auto"
               disablePictureInPicture
               className="w-full h-full object-cover"
+              style={{ transform: 'scaleX(-1)', backgroundColor: '#000' }}
             />
             {/* Speaking Indicator */}
             {isSpeaking && (
               <div className="absolute inset-0 border-4 border-green-500 rounded-lg animate-pulse pointer-events-none"></div>
             )}
             <div 
-              className="absolute bottom-3 left-3 px-3 py-1.5 rounded text-sm font-bold flex items-center gap-2"
+              className="absolute bottom-3 left-3 px-3 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 backdrop-blur-sm"
               style={{ backgroundColor: 'rgba(0,0,0,0.7)', color: '#ffffff' }}
             >
               <div className={`w-2 h-2 rounded-full ${isSpeaking ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
               You ({currentUser.username})
               {isScreenSharing && <span className="text-xs">🖥️</span>}
             </div>
+            
+            {/* Audio Level Indicator */}
+            <div className="absolute bottom-3 right-3 flex gap-0.5">
+              {[...Array(5)].map((_, i) => (
+                <div
+                  key={i}
+                  className="w-1 bg-green-500 rounded-full transition-all duration-75"
+                  style={{
+                    height: myAudioLevel > i * 20 ? `${8 + i * 2}px` : '4px',
+                    opacity: myAudioLevel > i * 20 ? 1 : 0.3
+                  }}
+                />
+              ))}
+            </div>
+            
             {!isVideoOn && (
               <div className="absolute inset-0 flex items-center justify-center" 
                    style={{ backgroundColor: colors.panel }}>
@@ -771,7 +849,6 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
                   if (el && remotePeer.stream) {
                     remoteVideosRef.current.set(remotePeer.peerId, el);
                     el.srcObject = remotePeer.stream;
-                    // Force play
                     el.play().catch(err => console.log('Play error:', err));
                   }
                 }}
@@ -781,17 +858,32 @@ export const VideoCall = ({ roomId, currentUser, onClose }: VideoCallProps) => {
                 preload="auto"
                 disablePictureInPicture
                 className="w-full h-full object-cover"
+                style={{ backgroundColor: '#000' }}
               />
               {/* Speaking Indicator */}
               {remotePeer.isSpeaking && !isDeafened && (
                 <div className="absolute inset-0 border-4 border-green-500 rounded-lg animate-pulse pointer-events-none"></div>
               )}
               <div 
-                className="absolute bottom-3 left-3 px-3 py-1.5 rounded text-sm font-bold flex items-center gap-2"
+                className="absolute bottom-3 left-3 px-3 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 backdrop-blur-sm"
                 style={{ backgroundColor: 'rgba(0,0,0,0.7)', color: '#ffffff' }}
               >
                 <div className={`w-2 h-2 rounded-full ${remotePeer.isSpeaking ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
                 {remotePeer.username}
+              </div>
+              
+              {/* Audio Level Indicator */}
+              <div className="absolute bottom-3 right-3 flex gap-0.5">
+                {[...Array(5)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="w-1 bg-green-500 rounded-full transition-all duration-75"
+                    style={{
+                      height: (remotePeer.audioLevel || 0) > i * 20 ? `${8 + i * 2}px` : '4px',
+                      opacity: (remotePeer.audioLevel || 0) > i * 20 ? 1 : 0.3
+                    }}
+                  />
+                ))}
               </div>
             </div>
           ))}
