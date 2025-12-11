@@ -43,6 +43,8 @@ import WorldStockMarkets from './WorldStockMarkets';
 import CryptoMarketMap from './CryptoMarketMap';
 import ScatterPointChart from './ScatterPointChart';
 import CorrelationMatrixTable from './CorrelationMatrixTable';
+import CVDChart from './CVDChart';
+import TopNews from './TopNews';
 
 interface PanelData {
   id: string;
@@ -215,6 +217,22 @@ const MarketData = () => {
       category: 'analysis',
       description: 'Multi-asset correlation analysis (Pearson/Spearman/Kendall)',
       tags: ['correlation', 'matrix', 'pearson', 'spearman', 'portfolio']
+    },
+    { 
+      id: 'cvd', 
+      title: '📊 CVD CHART', 
+      component: <CVDChart />,
+      category: 'analysis',
+      description: 'Cumulative Volume Delta with multi-exchange weighted average',
+      tags: ['cvd', 'volume', 'delta', 'orderflow']
+    },
+    { 
+      id: 'topnews', 
+      title: '🔥 TOP NEWS', 
+      component: <TopNews />,
+      category: 'communication',
+      description: 'Multi-source news aggregator with sentiment analysis',
+      tags: ['news', 'reddit', 'twitter', 'sentiment']
     },
     { 
       id: 'pie', 
