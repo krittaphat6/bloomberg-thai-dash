@@ -11,6 +11,20 @@ const RealMarketData = () => {
   const [isRealtime, setIsRealtime] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchData = async () => {
+    try {
+      setError(null);
+      const data = await dataPipelineService.fetchMarketData(DEFAULT_SYMBOLS);
+      setMarketData(data);
+      setLastUpdate(new Date());
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to fetch market data:', err);
+      setError('Failed to fetch data. Using cached data.');
+      setLoading(false);
+    }
+  };
+
   // Initial fetch
   useEffect(() => {
     fetchData();
@@ -59,20 +73,6 @@ const RealMarketData = () => {
     };
   }, []);
 
-  const fetchData = async () => {
-    try {
-      setError(null);
-      const data = await dataPipelineService.fetchMarketData(DEFAULT_SYMBOLS);
-      setMarketData(data);
-      setLastUpdate(new Date());
-      setLoading(false);
-    } catch (err) {
-      console.error('Failed to fetch market data:', err);
-      setError('Failed to fetch data. Using cached data.');
-      setLoading(false);
-    }
-  };
-
   const formatPrice = (price: number) => price.toFixed(2);
   const formatChange = (change: number) => (change > 0 ? '+' : '') + change.toFixed(2);
   const formatPercent = (percent: number) => {
@@ -87,7 +87,10 @@ const RealMarketData = () => {
       <div className="terminal-panel h-full">
         <div className="panel-header">REAL-TIME MARKET DATA</div>
         <div className="panel-content flex items-center justify-center">
-          <div className="text-terminal-amber">Loading market data...</div>
+          <div className="flex items-center text-terminal-amber">
+            <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+            Loading market data...
+          </div>
         </div>
       </div>
     );
@@ -105,7 +108,7 @@ const RealMarketData = () => {
           )}
           <button 
             onClick={fetchData}
-            className="hover:text-terminal-green transition-colors"
+            className="hover:text-terminal-green transition-colors p-1 rounded hover:bg-background/50"
             title="Refresh data"
           >
             <RefreshCw className="w-3 h-3" />
@@ -147,9 +150,9 @@ const RealMarketData = () => {
               <div className="text-terminal-white font-semibold flex items-center gap-1">
                 {quote.change > 0 ? (
                   <TrendingUp className="w-3 h-3 text-terminal-green" />
-                ) : (
+                ) : quote.change < 0 ? (
                   <TrendingDown className="w-3 h-3 text-terminal-red" />
-                )}
+                ) : null}
                 {quote.symbol}
               </div>
               <div className="text-right text-terminal-cyan">${formatPrice(quote.price)}</div>
