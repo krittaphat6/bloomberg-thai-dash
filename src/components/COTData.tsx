@@ -1,62 +1,34 @@
 import { useState, useEffect } from 'react';
-
-interface COTPosition {
-  asset: string;
-  commercialLong: number;
-  commercialShort: number;
-  nonCommercialLong: number;
-  nonCommercialShort: number;
-  nonReportableLong: number;
-  nonReportableShort: number;
-  openInterest: number;
-  change: number;
-  date: string;
-}
+import { COTDataService, COTPosition } from '@/services/COTDataService';
+import { RefreshCw } from 'lucide-react';
 
 const COTData = () => {
   const [cotData, setCOTData] = useState<COTPosition[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('futures');
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<string>('');
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const data = selectedCategory === 'disaggregated' 
+        ? await COTDataService.fetchDisaggregatedReport()
+        : await COTDataService.fetchFuturesReport();
+      
+      setCOTData(data);
+      setLastUpdate(new Date().toLocaleString());
+    } catch (error) {
+      console.error('COT fetch error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const generateCOTData = (): COTPosition[] => {
-      const assets = [
-        'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'MXN',
-        'GOLD', 'SILVER', 'COPPER', 'CRUDE OIL', 'NATURAL GAS',
-        'S&P 500', 'NASDAQ', 'DOW JONES', 'RUSSELL 2000',
-        'WHEAT', 'CORN', 'SOYBEANS', 'COTTON', 'SUGAR'
-      ];
-
-      return assets.map(asset => ({
-        asset,
-        commercialLong: Math.floor(20000 + Math.random() * 100000),
-        commercialShort: Math.floor(25000 + Math.random() * 90000),
-        nonCommercialLong: Math.floor(15000 + Math.random() * 80000),
-        nonCommercialShort: Math.floor(18000 + Math.random() * 75000),
-        nonReportableLong: Math.floor(5000 + Math.random() * 20000),
-        nonReportableShort: Math.floor(5500 + Math.random() * 18000),
-        openInterest: Math.floor(100000 + Math.random() * 500000),
-        change: -15 + Math.random() * 30,
-        date: 'Dec 03, 2024'
-      }));
-    };
-
-    setCOTData(generateCOTData());
-
-    const interval = setInterval(() => {
-      setCOTData(prevData =>
-        prevData.map(item => ({
-          ...item,
-          commercialLong: Math.max(0, item.commercialLong + Math.floor(-1000 + Math.random() * 2000)),
-          commercialShort: Math.max(0, item.commercialShort + Math.floor(-1000 + Math.random() * 2000)),
-          nonCommercialLong: Math.max(0, item.nonCommercialLong + Math.floor(-800 + Math.random() * 1600)),
-          nonCommercialShort: Math.max(0, item.nonCommercialShort + Math.floor(-800 + Math.random() * 1600)),
-          change: -15 + Math.random() * 30
-        }))
-      );
-    }, 5000);
-
+    fetchData();
+    const interval = setInterval(fetchData, 5 * 60 * 1000); // 5 minutes
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedCategory]);
 
   const getChangeColor = (change: number) => {
     if (change > 0) return 'text-terminal-green';
@@ -80,8 +52,11 @@ const COTData = () => {
   return (
     <div className="terminal-panel h-full text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm xl:text-base">
       <div className="panel-header flex items-center justify-between">
-        <span className="text-[0.5rem] xs:text-[0.6rem] sm:text-[0.7rem] md:text-sm lg:text-base xl:text-lg">COT REPORT - COMMITMENT OF TRADERS</span>
+        <span className="text-[0.5rem] xs:text-[0.6rem] sm:text-[0.7rem] md:text-sm lg:text-base xl:text-lg">COT REPORT - CFTC DATA</span>
         <div className="flex items-center gap-1 sm:gap-2">
+          <button onClick={fetchData} className="hover:text-terminal-green transition-colors" disabled={loading}>
+            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+          </button>
           <select 
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
@@ -91,7 +66,7 @@ const COTData = () => {
             <option value="combined">Futures & Options</option>
             <option value="disaggregated">Disaggregated</option>
           </select>
-          <span className="text-[0.6rem] sm:text-xs text-terminal-gray">Updated: Dec 03, 2024</span>
+          <span className="text-[0.6rem] sm:text-xs text-terminal-gray">{lastUpdate || 'Loading...'}</span>
         </div>
       </div>
       
