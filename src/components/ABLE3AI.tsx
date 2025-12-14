@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Settings, Loader2, Sparkles, Zap } from 'lucide-react';
+import { Send, Bot, User, Settings, Loader2, Sparkles, Zap, Key } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { AIFunctionRegistry } from '@/utils/AIFunctionRegistry';
 import { registerAllFunctions } from '@/utils/RegisterAIFunctions';
+import mcp from '@/services/MCPFunctions';
 
 interface Message {
   id: string;
@@ -91,19 +92,121 @@ const ABLE3AI = () => {
     setIsLoading(true);
 
     try {
-      let aiResponse;
+      let aiResponse: string;
       const systemMessage = 'You are ABLE 3.0 AI, a professional financial market analysis assistant. You specialize in trading, market analysis, economic indicators, and financial advice. Respond in Thai language when the user speaks Thai, and English when they speak English. Be concise, professional, and helpful.';
+      const lowerMsg = inputMessage.toLowerCase();
       
-      if (selectedModel === 'free') {
-        // Use a simple rule-based response for free model
-        const responses = [
-          'ขอบคุณสำหรับคำถาม! ในฐานะ ABLE 3.0 AI แบบฟรี ผมแนะนำให้วิเคราะห์ข้อมูลตลาดอย่างรอบครอบก่อนตัดสินใจลงทุน',
-          'สวัสดี! สำหรับการวิเคราะห์ตลาดการเงิน แนะนำให้ดูที่ปัจจัยพื้นฐานและเทคนิคร่วมกัน',
-          'ขอบคุณที่ใช้บริการ ABLE 3.0 AI! การลงทุนควรมีการกระจายความเสี่ยงเสมอ',
-          'Hello! As ABLE 3.0 AI, I recommend always analyzing market trends before making investment decisions.',
-          'Thank you for your question! For financial market analysis, consider both fundamental and technical factors.'
-        ];
-        aiResponse = responses[Math.floor(Math.random() * responses.length)];
+      // Check for MCP commands first
+      if (lowerMsg.includes('cot') && (lowerMsg.includes('gold') || lowerMsg.includes('ทอง'))) {
+        const result = await mcp.execute('analyze_cot', { asset: 'GOLD - COMMODITY EXCHANGE INC.' });
+        if (result.success) {
+          aiResponse = `📊 **COT Analysis สำหรับ GOLD**\n\n` +
+            `📅 Date: ${result.date}\n` +
+            `📈 Commercial Net: ${result.analysis.commercialNet.toLocaleString()} (${result.analysis.commercialDirection})\n` +
+            `📊 Large Trader Net: ${result.analysis.largeTraderNet.toLocaleString()} (${result.analysis.largeTraderDirection})\n` +
+            `📦 Open Interest: ${result.analysis.openInterest.toLocaleString()}\n\n` +
+            `💡 **Interpretation**: ${result.analysis.interpretation}`;
+        } else {
+          aiResponse = `❌ ไม่สามารถดึงข้อมูล COT ได้: ${result.error}`;
+        }
+      } else if (lowerMsg.includes('cot') && (lowerMsg.includes('silver') || lowerMsg.includes('เงิน'))) {
+        const result = await mcp.execute('analyze_cot', { asset: 'SILVER - COMMODITY EXCHANGE INC.' });
+        if (result.success) {
+          aiResponse = `📊 **COT Analysis สำหรับ SILVER**\n\n` +
+            `📅 Date: ${result.date}\n` +
+            `📈 Commercial Net: ${result.analysis.commercialNet.toLocaleString()} (${result.analysis.commercialDirection})\n` +
+            `📊 Large Trader Net: ${result.analysis.largeTraderNet.toLocaleString()} (${result.analysis.largeTraderDirection})\n` +
+            `📦 Open Interest: ${result.analysis.openInterest.toLocaleString()}\n\n` +
+            `💡 **Interpretation**: ${result.analysis.interpretation}`;
+        } else {
+          aiResponse = `❌ ไม่สามารถดึงข้อมูล COT ได้: ${result.error}`;
+        }
+      } else if (lowerMsg.includes('trade') && (lowerMsg.includes('performance') || lowerMsg.includes('ผล'))) {
+        const result = await mcp.execute('analyze_performance', {});
+        if (!result.success) {
+          aiResponse = `❌ ${result.message || 'ไม่พบข้อมูลการเทรด'}`;
+        } else {
+          const m = result.metrics;
+          aiResponse = `📈 **ผลการเทรดของคุณ**\n\n` +
+            `📊 Total Trades: ${m.totalTrades}\n` +
+            `✅ Winning Trades: ${m.winningTrades}\n` +
+            `❌ Losing Trades: ${m.losingTrades}\n` +
+            `🎯 Win Rate: ${m.winRate}\n` +
+            `💰 Total P&L: $${m.totalPnL}\n` +
+            `📈 Avg Win: $${m.avgWin}\n` +
+            `📉 Avg Loss: $${m.avgLoss}`;
+        }
+      } else if (lowerMsg.includes('price') || lowerMsg.includes('ราคา')) {
+        // Extract symbol from message
+        const symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'AAPL', 'TSLA', 'GOOGL', 'MSFT'];
+        let symbol = symbols.find(s => lowerMsg.includes(s.toLowerCase()));
+        
+        if (!symbol) {
+          if (lowerMsg.includes('bitcoin') || lowerMsg.includes('btc')) symbol = 'BTCUSDT';
+          else if (lowerMsg.includes('ethereum') || lowerMsg.includes('eth')) symbol = 'ETHUSDT';
+          else symbol = 'BTCUSDT';
+        }
+        
+        const result = await mcp.execute('get_market_price', { symbol });
+        if (result.success) {
+          aiResponse = `💹 **${result.symbol}**\n\n` +
+            `💵 Price: $${typeof result.price === 'number' ? result.price.toLocaleString() : result.price}\n` +
+            `📊 24h Change: ${result.change24h}%\n` +
+            `📦 Volume: ${typeof result.volume === 'number' ? result.volume.toLocaleString() : result.volume}\n` +
+            `🔗 Source: ${result.source}`;
+        } else {
+          aiResponse = `❌ ไม่สามารถดึงราคา ${symbol} ได้`;
+        }
+      } else if (lowerMsg.includes('note') || lowerMsg.includes('โน้ต')) {
+        const result = await mcp.execute('search_notes', { query: '' });
+        aiResponse = `📝 **Notes ของคุณ**\n\n` +
+          `พบ ${result.total} โน้ต\n\n` +
+          (result.notes.length > 0 
+            ? result.notes.slice(0, 5).map((n: any) => `• ${n.title}`).join('\n')
+            : 'ยังไม่มีโน้ต');
+      } else if (lowerMsg.includes('mcp') || lowerMsg.includes('function') || lowerMsg.includes('tools')) {
+        const functions = mcp.list();
+        aiResponse = `🔧 **MCP Functions พร้อมใช้งาน (${functions.length})**\n\n` +
+          functions.map(f => `• **${f.name}**: ${f.description}`).join('\n');
+      } else if (selectedModel === 'free') {
+        // Try Gemini API if key exists
+        const geminiKey = localStorage.getItem('gemini_api_key');
+        
+        if (geminiKey) {
+          try {
+            const response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{
+                    role: 'user',
+                    parts: [{ text: `${systemMessage}\n\nUser: ${inputMessage}` }]
+                  }],
+                  generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 1000
+                  }
+                })
+              }
+            );
+            
+            if (response.ok) {
+              const data = await response.json();
+              aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from Gemini';
+            } else {
+              throw new Error('Gemini API error');
+            }
+          } catch (error) {
+            console.error('Gemini error:', error);
+            // Fallback to local AI
+            aiResponse = getLocalAIResponse(inputMessage);
+          }
+        } else {
+          // Local AI response
+          aiResponse = getLocalAIResponse(inputMessage);
+        }
       } else if (selectedModel === 'openai') {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
@@ -126,10 +229,7 @@ const ABLE3AI = () => {
           }),
         });
 
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
         const data = await response.json();
         aiResponse = data.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
       } else {
@@ -155,13 +255,9 @@ const ABLE3AI = () => {
           }),
         });
 
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
         const data = await response.json();
         
-        // Handle function calls
         if (data.stop_reason === 'tool_use') {
           const toolUse = data.content.find((c: any) => c.type === 'tool_use');
           if (toolUse) {
@@ -171,6 +267,8 @@ const ABLE3AI = () => {
             } catch (error) {
               aiResponse = `❌ Error executing ${toolUse.name}: ${error instanceof Error ? error.message : 'Unknown error'}`;
             }
+          } else {
+            aiResponse = data.content[0]?.text || 'Sorry, I could not generate a response.';
           }
         } else {
           aiResponse = data.content[0]?.text || 'Sorry, I could not generate a response.';
@@ -186,7 +284,7 @@ const ABLE3AI = () => {
 
       setMessages(prev => [...prev, aiMessage]);
     } catch (error) {
-      console.error('Error calling OpenAI API:', error);
+      console.error('Error calling AI API:', error);
       toast({
         title: "Error",
         description: "Failed to get response from AI. Please check your API key.",
@@ -195,6 +293,29 @@ const ABLE3AI = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Local AI responses
+  const getLocalAIResponse = (message: string): string => {
+    const lowerMsg = message.toLowerCase();
+    
+    if (lowerMsg.includes('cot') || lowerMsg.includes('commitment')) {
+      return `📊 **COT Data Analysis**\n\nสำหรับข้อมูล COT คุณสามารถ:\n• พิมพ์ "COT gold" เพื่อดู Gold positioning\n• พิมพ์ "COT silver" เพื่อดู Silver positioning\n\nหรือเปิด COT Data panel เพื่อดูข้อมูลแบบ interactive`;
+    }
+    
+    if (lowerMsg.includes('trade') || lowerMsg.includes('position') || lowerMsg.includes('เทรด')) {
+      return `📈 **Trading Tips**\n\n1. วิเคราะห์ปัจจัยพื้นฐานและเทคนิค\n2. ดู COT data เพื่อดู positioning\n3. บริหารความเสี่ง (Risk 1-2% per trade)\n4. Set stop loss ทุกครั้ง\n\nพิมพ์ "trade performance" เพื่อดูผลการเทรด`;
+    }
+    
+    if (lowerMsg.includes('market') || lowerMsg.includes('ตลาด')) {
+      return `🌍 **Market Analysis**\n\nแนะนำให้ดู:\n• Economic Indicators\n• COT positioning\n• Real Market Data\n• Currency correlations\n\nพิมพ์ "price BTCUSDT" เพื่อดูราคา`;
+    }
+    
+    if (lowerMsg.includes('help') || lowerMsg.includes('ช่วย') || lowerMsg.includes('คำสั่ง')) {
+      return `🤖 **ABLE 3.0 AI Commands**\n\n📊 **COT Analysis:**\n• "COT gold" - ดู Gold positioning\n• "COT silver" - ดู Silver positioning\n\n📈 **Trading:**\n• "trade performance" - ดูผลการเทรด\n\n💰 **Market:**\n• "price BTCUSDT" - ราคา Bitcoin\n• "price ETHUSDT" - ราคา Ethereum\n\n📝 **Notes:**\n• "notes" - ดูโน้ตทั้งหมด\n\n🔧 **System:**\n• "mcp functions" - ดู tools ทั้งหมด`;
+    }
+    
+    return `สวัสดีครับ! ผมคือ ABLE 3.0 AI 🤖\n\nพิมพ์ "help" เพื่อดูคำสั่งทั้งหมด\n\nหรือตั้งค่า Gemini API key (ฟรี) ที่ ai.google.dev เพื่อใช้ AI ที่ฉลาดขึ้น`;
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
