@@ -1,7 +1,5 @@
 // MCP (Model Context Protocol) Server - Central hub for AI tool access
 
-import { COTHistoricalService } from '@/services/COTHistoricalService';
-
 export interface MCPTool {
   name: string;
   description: string;
@@ -52,6 +50,41 @@ export class MCPServer {
     }));
   }
 
+  private async fetchCOTData(asset: string, startDate: Date, endDate: Date) {
+    const start = startDate.toISOString().split('T')[0];
+    const end = endDate.toISOString().split('T')[0];
+    
+    const apiUrl = `https://publicreporting.cftc.gov/resource/jun7-fc8e.json?` +
+      `$where=market_and_exchange_names like '%25${encodeURIComponent(asset)}%25' AND ` +
+      `report_date_as_yyyy_mm_dd between '${start}' and '${end}'&` +
+      `$order=report_date_as_yyyy_mm_dd ASC&$limit=500`;
+
+    try {
+      const response = await fetch(apiUrl);
+      if (!response.ok) throw new Error('CFTC API error');
+      const data = await response.json();
+
+      return data.map((item: any) => ({
+        date: item.report_date_as_yyyy_mm_dd,
+        asset: item.market_and_exchange_names,
+        commercialLong: parseInt(item.comm_positions_long_all || 0),
+        commercialShort: parseInt(item.comm_positions_short_all || 0),
+        commercialNet: parseInt(item.comm_positions_long_all || 0) - parseInt(item.comm_positions_short_all || 0),
+        nonCommercialLong: parseInt(item.noncomm_positions_long_all || 0),
+        nonCommercialShort: parseInt(item.noncomm_positions_short_all || 0),
+        nonCommercialNet: parseInt(item.noncomm_positions_long_all || 0) - parseInt(item.noncomm_positions_short_all || 0),
+        nonReportableLong: parseInt(item.nonrept_positions_long_all || 0),
+        nonReportableShort: parseInt(item.nonrept_positions_short_all || 0),
+        nonReportableNet: parseInt(item.nonrept_positions_long_all || 0) - parseInt(item.nonrept_positions_short_all || 0),
+        openInterest: parseInt(item.open_interest_all || 0),
+        change: parseFloat(item.change_in_open_interest_all || 0)
+      }));
+    } catch (error) {
+      console.error('COT fetch error:', error);
+      return [];
+    }
+  }
+
   private registerCOTTools(): void {
     this.registerTool({
       name: 'get_cot_data',
@@ -70,7 +103,7 @@ export class MCPServer {
         const start = startDate ? new Date(startDate) : new Date(new Date().setFullYear(new Date().getFullYear() - 1));
         const end = endDate ? new Date(endDate) : new Date();
 
-        const data = await COTHistoricalService.fetchHistoricalData(asset, start, end);
+        const data = await this.fetchCOTData(asset, start, end);
 
         return {
           success: true,
@@ -93,18 +126,21 @@ export class MCPServer {
       },
       handler: async (params) => {
         const { asset } = params;
-        const data = await COTHistoricalService.fetchHistoricalData(
+        const data = await this.fetchCOTData(
           asset,
           new Date(new Date().setFullYear(new Date().getFullYear() - 1)),
           new Date()
         );
 
-        const cotIndex = COTHistoricalService.calculateCOTIndex(data);
-        const latest = data[data.length - 1];
-
-        if (!latest) {
+        if (!data || data.length === 0) {
           return { success: false, error: 'No data available' };
         }
+
+        const latest = data[data.length - 1];
+        const nets = data.map((d: any) => d.nonCommercialNet);
+        const min = Math.min(...nets);
+        const max = Math.max(...nets);
+        const cotIndex = max === min ? 50 : ((latest.nonCommercialNet - min) / (max - min)) * 100;
 
         return {
           success: true,
@@ -137,8 +173,17 @@ export class MCPServer {
         required: []
       },
       handler: async () => {
-        const assets = await COTHistoricalService.getAvailableAssets();
-        return { success: true, assets };
+        const defaultAssets = [
+          'GOLD - COMMODITY EXCHANGE INC.',
+          'SILVER - COMMODITY EXCHANGE INC.',
+          'CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE',
+          'EURO FX - CHICAGO MERCANTILE EXCHANGE',
+          'JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE',
+          'BRITISH POUND - CHICAGO MERCANTILE EXCHANGE',
+          'E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE',
+          'BITCOIN - CHICAGO MERCANTILE EXCHANGE'
+        ];
+        return { success: true, assets: defaultAssets };
       }
     });
   }
@@ -285,7 +330,6 @@ export class MCPServer {
         required: []
       },
       handler: async () => {
-        // Return cached market data if available
         const cachedData = localStorage.getItem('market_data_cache');
         if (cachedData) {
           try {
