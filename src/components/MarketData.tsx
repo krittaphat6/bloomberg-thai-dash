@@ -24,7 +24,6 @@ import HeatMap from './HeatMap';
 import CurrencyTable from './CurrencyTable';
 import EconomicIndicators from './EconomicIndicators';
 import COTData from './COTData';
-import COTDataEnhanced from './COTDataEnhanced';
 import SPDRGoldData from './SPDRGoldData';
 import RealMarketData from './RealMarketData';
 import ABLE3AI from './ABLE3AI';
@@ -291,15 +290,6 @@ const MarketData = () => {
       category: 'analysis',
       description: 'Commitment of Traders report data',
       tags: ['cot', 'futures', 'positioning']
-    },
-    { 
-      id: 'cot-enhanced', 
-      title: '📊 COT HISTORICAL', 
-      component: <COTDataEnhanced />,
-      category: 'analysis',
-      icon: <BarChart3 className="w-5 h-5" />,
-      description: 'COT historical data with 5-year charts and CSV export',
-      tags: ['cot', 'historical', 'charts', 'export', 'analysis']
     },
     { 
       id: 'gold', 
