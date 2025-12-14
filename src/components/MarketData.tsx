@@ -24,9 +24,11 @@ import HeatMap from './HeatMap';
 import CurrencyTable from './CurrencyTable';
 import EconomicIndicators from './EconomicIndicators';
 import COTData from './COTData';
+import COTDataEnhanced from './COTDataEnhanced';
 import SPDRGoldData from './SPDRGoldData';
 import RealMarketData from './RealMarketData';
 import ABLE3AI from './ABLE3AI';
+import ABLE3AIEnhanced from './ABLE3AIEnhanced';
 import BitcoinMempool from './BitcoinMempool';
 import LiveUAMap from './LiveUAMap';
 import USDebtClock from './USDebtClock';
@@ -291,6 +293,15 @@ const MarketData = () => {
       tags: ['cot', 'futures', 'positioning']
     },
     { 
+      id: 'cot-enhanced', 
+      title: '📊 COT HISTORICAL', 
+      component: <COTDataEnhanced />,
+      category: 'analysis',
+      icon: <BarChart3 className="w-5 h-5" />,
+      description: 'COT historical data with 5-year charts and CSV export',
+      tags: ['cot', 'historical', 'charts', 'export', 'analysis']
+    },
+    { 
       id: 'gold', 
       title: '🥇 SPDR GOLD DATA', 
       component: <SPDRGoldData />,
@@ -340,6 +351,15 @@ const MarketData = () => {
       category: 'intelligence',
       description: 'Advanced AI assistant for trading',
       tags: ['ai', 'assistant', 'trading', 'chatbot']
+    },
+    { 
+      id: 'able3ai-enhanced', 
+      title: '🧠 ABLE3 AI PRO', 
+      component: <ABLE3AIEnhanced />,
+      category: 'intelligence',
+      icon: <Brain className="w-5 h-5" />,
+      description: 'Enhanced AI with MCP tools (Free, No API key required)',
+      tags: ['ai', 'mcp', 'free', 'assistant', 'tools']
     },
     
     // Utilities
