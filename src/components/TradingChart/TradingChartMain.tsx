@@ -172,11 +172,12 @@ const TradingChartMain: React.FC<TradingChartMainProps> = ({
     fetchData();
   }, [fetchData]);
 
-  // Auto refresh
+  // Auto refresh - 1s for crypto, 60s for others
   useEffect(() => {
-    const interval = setInterval(fetchData, 60000);
+    const isCrypto = symbol.type === 'crypto';
+    const interval = setInterval(fetchData, isCrypto ? 1000 : 60000);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [fetchData, symbol.type]);
 
   // Check alerts
   useEffect(() => {

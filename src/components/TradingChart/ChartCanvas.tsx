@@ -54,10 +54,17 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   const visibleData = data.slice(visibleRange.start, visibleRange.end);
   const candleWidth = (width - padding.left - padding.right) / visibleData.length;
 
-  // Price range
-  const priceRange = {
+  // Price range with offset for free vertical panning
+  const [priceOffset, setPriceOffset] = useState(0);
+  
+  const basePriceRange = {
     min: Math.min(...visibleData.map(d => d.low)) * 0.999,
     max: Math.max(...visibleData.map(d => d.high)) * 1.001,
+  };
+  
+  const priceRange = {
+    min: basePriceRange.min - priceOffset,
+    max: basePriceRange.max - priceOffset,
   };
 
   // Convert price to Y coordinate
@@ -193,6 +200,87 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
     });
   };
 
+  // Draw CVD (Cumulative Volume Delta) indicator
+  const drawCVD = (ctx: CanvasRenderingContext2D, color: string, cumulative: boolean) => {
+    const cvdTop = chartHeight + 5;
+    const cvdChartHeight = volumeHeight - 10;
+    
+    // Calculate CVD values
+    let cvd = 0;
+    const cvdValues: number[] = [];
+    const deltaValues: number[] = [];
+    
+    visibleData.forEach((candle) => {
+      // Estimate buy/sell volume based on price movement
+      const range = candle.high - candle.low;
+      const closeRatio = range > 0 ? (candle.close - candle.low) / range : 0.5;
+      const buyVolume = candle.volume * closeRatio;
+      const sellVolume = candle.volume * (1 - closeRatio);
+      const delta = buyVolume - sellVolume;
+      
+      deltaValues.push(delta);
+      if (cumulative) {
+        cvd += delta;
+        cvdValues.push(cvd);
+      } else {
+        cvdValues.push(delta);
+      }
+    });
+    
+    if (cvdValues.length === 0) return;
+    
+    const maxCVD = Math.max(...cvdValues.map(v => Math.abs(v)));
+    const minCVD = Math.min(...cvdValues);
+    const cvdRange = Math.max(maxCVD, Math.abs(minCVD));
+    
+    // Draw CVD as bars or line
+    const zeroY = cvdTop + cvdChartHeight / 2;
+    
+    // Draw zero line
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(padding.left, zeroY);
+    ctx.lineTo(width - padding.right, zeroY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // Draw CVD bars
+    visibleData.forEach((candle, i) => {
+      const x = indexToX(visibleRange.start + i);
+      const value = cvdValues[i];
+      const barHeight = (Math.abs(value) / cvdRange) * (cvdChartHeight / 2);
+      const isPositive = value >= 0;
+      
+      ctx.fillStyle = isPositive ? '#00ff00' : '#ff4444';
+      const barWidth = Math.max(candleWidth * 0.6, 1);
+      
+      if (isPositive) {
+        ctx.fillRect(x - barWidth / 2, zeroY - barHeight, barWidth, barHeight);
+      } else {
+        ctx.fillRect(x - barWidth / 2, zeroY, barWidth, barHeight);
+      }
+    });
+    
+    // Draw CVD line overlay
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    let started = false;
+    cvdValues.forEach((value, i) => {
+      const x = indexToX(visibleRange.start + i);
+      const y = zeroY - (value / cvdRange) * (cvdChartHeight / 2);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.stroke();
+  };
+
   const drawIndicators = (ctx: CanvasRenderingContext2D) => {
     indicators.filter(ind => ind.visible && ind.type === 'overlay').forEach(indicator => {
       if (indicator.name.startsWith('SMA')) {
@@ -205,6 +293,12 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
         drawBollingerBands(ctx, indicator.settings.length as number, indicator.settings.mult as number);
       }
     });
+    
+    // Draw CVD if enabled
+    const cvdIndicator = indicators.find(i => i.name === 'CVD' && i.visible);
+    if (cvdIndicator) {
+      drawCVD(ctx, cvdIndicator.color, cvdIndicator.settings.cumulative as boolean);
+    }
   };
 
   const drawCustomIndicators = (ctx: CanvasRenderingContext2D) => {
@@ -470,6 +564,9 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   };
 
   // Mouse handlers
+  // State for vertical panning
+  const [lastPanY, setLastPanY] = useState(0);
+
   const handleMouseMove = (e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -478,9 +575,14 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
     const y = e.clientY - rect.top;
 
     if (isPanning) {
-      const delta = x - lastPanX;
-      onPan(delta);
+      const deltaX = x - lastPanX;
+      const deltaY = y - lastPanY;
+      onPan(deltaX);
+      // Vertical panning - shift price view
+      const priceShift = deltaY * (priceRange.max - priceRange.min) / chartHeight * 0.5;
+      setPriceOffset(prev => prev + priceShift);
       setLastPanX(x);
+      setLastPanY(y);
       return;
     }
 
@@ -499,9 +601,13 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
     if (e.button === 0 && !selectedDrawingTool) {
       setIsPanning(true);
-      setLastPanX(e.clientX - (canvasRef.current?.getBoundingClientRect().left || 0));
+      setLastPanX(e.clientX - rect.left);
+      setLastPanY(e.clientY - rect.top);
     } else if (selectedDrawingTool) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;

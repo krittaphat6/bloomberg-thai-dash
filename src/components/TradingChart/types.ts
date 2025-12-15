@@ -64,5 +64,6 @@ export const DEFAULT_INDICATORS: Omit<ChartIndicator, 'id'>[] = [
   { name: 'RSI', type: 'oscillator', visible: false, settings: { length: 14 }, color: '#f97316' },
   { name: 'MACD', type: 'oscillator', visible: false, settings: { fast: 12, slow: 26, signal: 9 }, color: '#3b82f6' },
   { name: 'Stochastic', type: 'oscillator', visible: false, settings: { k: 14, d: 3, smooth: 3 }, color: '#22c55e' },
+  { name: 'CVD', type: 'oscillator', visible: false, settings: { cumulative: true }, color: '#00ff00' },
   { name: 'Volume', type: 'oscillator', visible: true, settings: {}, color: '#3b82f6' },
 ];
