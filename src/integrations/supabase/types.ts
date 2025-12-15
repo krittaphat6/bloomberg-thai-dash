@@ -146,13 +146,6 @@ export type Database = {
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "chat_rooms_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users_public"
-            referencedColumns: ["id"]
-          },
         ]
       }
       friend_nicknames: {
@@ -213,24 +206,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "friendships_friend_id_fkey"
-            columns: ["friend_id"]
-            isOneToOne: false
-            referencedRelation: "users_public"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "friendships_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "friendships_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users_public"
             referencedColumns: ["id"]
           },
         ]
@@ -347,13 +326,6 @@ export type Database = {
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "messages_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users_public"
-            referencedColumns: ["id"]
-          },
         ]
       }
       room_members: {
@@ -388,13 +360,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "room_members_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users_public"
             referencedColumns: ["id"]
           },
         ]
@@ -505,13 +470,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "webhooks_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users_public"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "webhooks_room_id_fkey"
             columns: ["room_id"]
             isOneToOne: false
@@ -522,39 +480,7 @@ export type Database = {
       }
     }
     Views: {
-      users_public: {
-        Row: {
-          avatar_url: string | null
-          color: string | null
-          created_at: string | null
-          email: string | null
-          id: string | null
-          last_seen: string | null
-          status: string | null
-          username: string | null
-        }
-        Insert: {
-          avatar_url?: string | null
-          color?: string | null
-          created_at?: string | null
-          email?: never
-          id?: string | null
-          last_seen?: string | null
-          status?: string | null
-          username?: string | null
-        }
-        Update: {
-          avatar_url?: string | null
-          color?: string | null
-          created_at?: string | null
-          email?: never
-          id?: string | null
-          last_seen?: string | null
-          status?: string | null
-          username?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       [_ in never]: never
