@@ -1,4 +1,5 @@
 export { default as TradingChartMain } from './TradingChartMain';
+export { default as MobileTradingChart } from './MobileTradingChart';
 export { default as ChartCanvas } from './ChartCanvas';
 export { default as ChartToolbar } from './ChartToolbar';
 export { default as SymbolSearch } from './SymbolSearch';

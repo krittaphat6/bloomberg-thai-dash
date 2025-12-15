@@ -16,6 +16,8 @@ import AlertsPanel from './AlertsPanel';
 import ThemePanel from './ThemePanel';
 import CustomIndicatorsPanel from './CustomIndicatorsPanel';
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
+import MobileTradingChart from './MobileTradingChart';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface TradingChartMainProps {
   className?: string;
@@ -32,6 +34,21 @@ interface ActiveCustomIndicator {
 }
 
 const TradingChartMain: React.FC<TradingChartMainProps> = ({
+  className = '',
+  defaultSymbol = 'BTCUSDT',
+}) => {
+  const isMobile = useIsMobile();
+
+  // Return mobile version for iPhone/mobile
+  if (isMobile) {
+    return <MobileTradingChart className={className} defaultSymbol={defaultSymbol} />;
+  }
+
+  return <DesktopTradingChart className={className} defaultSymbol={defaultSymbol} />;
+};
+
+// Desktop version component
+const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
   className = '',
   defaultSymbol = 'BTCUSDT',
 }) => {

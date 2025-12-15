@@ -44,7 +44,7 @@ const INDICATOR_CATEGORIES = [
   {
     name: 'Oscillators',
     icon: BarChart2,
-    indicators: ['RSI', 'MACD', 'Stochastic'],
+    indicators: ['RSI', 'MACD', 'Stochastic', 'CVD'],
   },
   {
     name: 'Volume',

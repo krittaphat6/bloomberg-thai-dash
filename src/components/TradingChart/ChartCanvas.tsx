@@ -45,14 +45,16 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   // Touch state for gestures
   const [touchStart, setTouchStart] = useState<{ x: number; y: number; dist?: number } | null>(null);
 
-  // Chart dimensions
+  // Chart dimensions - more right padding like TradingView
   const chartHeight = height * 0.7;
   const volumeHeight = height * 0.15;
-  const padding = { top: 20, right: 80, bottom: 30, left: 10 };
+  const padding = { top: 20, right: 100, bottom: 30, left: 10 };
 
-  // Calculate visible data
+  // Calculate visible data - leave space at right edge like TradingView
+  const rightMarginBars = 5; // Empty space at right for future candles
   const visibleData = data.slice(visibleRange.start, visibleRange.end);
-  const candleWidth = (width - padding.left - padding.right) / visibleData.length;
+  const totalBarsWidth = visibleData.length + rightMarginBars;
+  const candleWidth = (width - padding.left - padding.right) / totalBarsWidth;
 
   // Price range with offset for free vertical panning
   const [priceOffset, setPriceOffset] = useState(0);
