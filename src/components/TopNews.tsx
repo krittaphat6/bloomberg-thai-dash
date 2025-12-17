@@ -1,17 +1,19 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   RefreshCw, Search, Flame, Clock, ExternalLink, Twitter, 
-  MessageCircle, Globe, Filter, ChevronUp, Zap, Brain,
+  MessageCircle, Globe, ChevronUp, Zap, Brain,
   TrendingUp, TrendingDown, Minus, Sparkles, Radio, Newspaper,
-  AlertCircle, CheckCircle2, XCircle, Loader2
+  Settings, X, Key, AlertTriangle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { fetchGoldNews, GoldNewsItem } from '@/services/goldNewsService';
+import { 
+  hybridAnalyzeNews, 
+  setGroqApiKey, 
+  hasGroqApiKey, 
+  clearGroqApiKey 
+} from '@/services/llmAnalysisService';
 
 // ============ TYPES ============
 interface NewsItem {
@@ -32,26 +34,26 @@ interface NewsItem {
   imageUrl?: string;
   isBreaking?: boolean;
   relatedTickers?: string[];
-}
-
-interface AIInsight {
-  summary: string;
-  topTrends: string[];
-  overallSentiment: 'bullish' | 'bearish' | 'neutral';
-  sentimentScore: number;
-  keyEvents: string[];
-  loading: boolean;
+  // Hybrid analysis fields
+  algoSentiment?: 'bullish' | 'bearish' | 'neutral';
+  algoRelevance?: number;
+  llmSentiment?: 'bullish' | 'bearish' | 'neutral';
+  llmConfidence?: number;
+  llmImpact?: 'high' | 'medium' | 'low';
+  llmSummary?: string;
+  isLLMAnalyzed?: boolean;
+  finalScore?: number;
 }
 
 // ============ CONFIG ============
 const NEWS_SOURCES = {
-  reddit: { name: 'Reddit', icon: MessageCircle, color: 'orange' },
-  hackernews: { name: 'HN', icon: Zap, color: 'orange' },
-  coingecko: { name: 'CoinGecko', icon: Globe, color: 'green' },
-  finnhub: { name: 'Finnhub', icon: TrendingUp, color: 'blue' },
-  gnews: { name: 'GNews', icon: Newspaper, color: 'purple' },
-  news: { name: 'News', icon: Globe, color: 'cyan' },
-  twitter: { name: 'X', icon: Twitter, color: 'blue' }
+  reddit: { name: 'Reddit', icon: MessageCircle, color: 'text-terminal-orange' },
+  hackernews: { name: 'HN', icon: Zap, color: 'text-terminal-amber' },
+  coingecko: { name: 'CoinGecko', icon: Globe, color: 'text-terminal-green' },
+  finnhub: { name: 'Finnhub', icon: TrendingUp, color: 'text-terminal-blue' },
+  gnews: { name: 'GNews', icon: Newspaper, color: 'text-terminal-cyan' },
+  news: { name: 'News', icon: Globe, color: 'text-terminal-cyan' },
+  twitter: { name: 'X', icon: Twitter, color: 'text-terminal-blue' }
 };
 
 // ============ SENTIMENT ANALYSIS ============
@@ -103,7 +105,7 @@ const extractTickers = (text: string): string[] => {
   const matches = text.match(/\$[A-Z]{2,5}/g) || [];
   matches.forEach(m => tickers.push(m.replace('$', '')));
   
-  const cryptos = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'DOT', 'AVAX', 'MATIC', 'LINK'];
+  const cryptos = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'DOT', 'AVAX', 'MATIC', 'LINK', 'XAU', 'XAG'];
   cryptos.forEach(c => { if (text.toUpperCase().includes(c)) tickers.push(c); });
   
   return [...new Set(tickers)].slice(0, 5);
@@ -178,35 +180,6 @@ const fetchHackerNews = async (query: string): Promise<NewsItem[]> => {
   }
 };
 
-const fetchCoinGecko = async (): Promise<NewsItem[]> => {
-  try {
-    const res = await fetch('https://api.coingecko.com/api/v3/status_updates?per_page=30');
-    if (!res.ok) throw new Error('CoinGecko error');
-    
-    const data = await res.json();
-    return (data.status_updates || []).map((u: any, i: number) => {
-      const { sentiment, score: sentScore } = analyzeSentimentAdvanced(u.description || '');
-      return {
-        id: `cg-${i}-${Date.now()}`,
-        title: u.description?.substring(0, 150) || 'Update',
-        source: 'coingecko' as const,
-        url: u.project?.links?.homepage?.[0] || 'https://coingecko.com',
-        timestamp: new Date(u.created_at).getTime(),
-        score: 0,
-        sentiment,
-        sentimentScore: sentScore,
-        relevance: 50,
-        category: u.category || 'Crypto',
-        imageUrl: u.project?.image?.small,
-        relatedTickers: u.project?.symbol ? [u.project.symbol.toUpperCase()] : []
-      };
-    });
-  } catch (e) {
-    console.error('CoinGecko error:', e);
-    return [];
-  }
-};
-
 const fetchCryptoCompare = async (query: string): Promise<NewsItem[]> => {
   try {
     const res = await fetch('https://min-api.cryptocompare.com/data/v2/news/?lang=EN&sortOrder=popular');
@@ -234,45 +207,6 @@ const fetchCryptoCompare = async (query: string): Promise<NewsItem[]> => {
     });
   } catch (e) {
     console.error('CryptoCompare error:', e);
-    return [];
-  }
-};
-
-const fetchFinnhub = async (query: string): Promise<NewsItem[]> => {
-  try {
-    const today = new Date();
-    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const from = weekAgo.toISOString().split('T')[0];
-    const to = today.toISOString().split('T')[0];
-    
-    const res = await fetch(
-      `https://finnhub.io/api/v1/news?category=general&from=${from}&to=${to}&token=demo`
-    );
-    
-    if (!res.ok) return [];
-    
-    const data = await res.json();
-    return (data || []).slice(0, 20).map((n: any) => {
-      const { sentiment, score: sentScore } = analyzeSentimentAdvanced(n.headline + ' ' + (n.summary || ''));
-      return {
-        id: `fh-${n.id}`,
-        title: n.headline,
-        source: 'finnhub' as const,
-        url: n.url,
-        timestamp: n.datetime * 1000,
-        score: 0,
-        sentiment,
-        sentimentScore: sentScore,
-        relevance: calculateRelevance(n.headline, query),
-        author: n.source,
-        category: n.category || 'Finance',
-        imageUrl: n.image,
-        summary: n.summary?.substring(0, 200),
-        relatedTickers: n.related ? n.related.split(',') : []
-      };
-    });
-  } catch (e) {
-    console.error('Finnhub error:', e);
     return [];
   }
 };
@@ -316,94 +250,136 @@ const generateMockTwitter = (query: string): NewsItem[] => {
   });
 };
 
-// ============ AI ANALYSIS ============
-const generateAIInsight = async (news: NewsItem[]): Promise<AIInsight> => {
-  const avgSentiment = news.reduce((sum, n) => sum + n.sentimentScore, 0) / (news.length || 1);
-  
-  const wordFreq: Record<string, number> = {};
-  news.forEach(n => {
-    const words = n.title.toLowerCase().split(/\s+/).filter(w => w.length > 4);
-    words.forEach(w => { wordFreq[w] = (wordFreq[w] || 0) + 1; });
-  });
-  
-  const topTrends = Object.entries(wordFreq)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
-  
-  return {
-    summary: avgSentiment > 15 
-      ? 'ตลาดแสดงแนวโน้มเชิงบวก มีข่าวดีหลายรายการ' 
-      : avgSentiment < -15 
-        ? 'ตลาดมีความกังวล มีแรงขายเข้ามา'
-        : 'ตลาดเคลื่อนไหวในกรอบแคบ รอปัจจัยใหม่',
-    topTrends,
-    overallSentiment: avgSentiment > 15 ? 'bullish' : avgSentiment < -15 ? 'bearish' : 'neutral',
-    sentimentScore: Math.round(avgSentiment),
-    keyEvents: news.slice(0, 3).map(n => n.title.substring(0, 60)),
-    loading: false
+// ============ COMPONENTS ============
+const SentimentBadge = ({ sentiment, confidence }: { sentiment: string; confidence?: number }) => {
+  const config = {
+    bullish: { bg: 'bg-terminal-green/20', text: 'text-terminal-green', border: 'border-terminal-green/50' },
+    bearish: { bg: 'bg-terminal-red/20', text: 'text-terminal-red', border: 'border-terminal-red/50' },
+    neutral: { bg: 'bg-terminal-gray/20', text: 'text-terminal-gray', border: 'border-terminal-gray/50' }
   };
+  
+  const style = config[sentiment as keyof typeof config] || config.neutral;
+  
+  return (
+    <span className={`${style.bg} ${style.text} ${style.border} border text-[10px] px-2 py-0.5 rounded font-mono`}>
+      {sentiment.toUpperCase()}
+      {confidence !== undefined && <span className="ml-1 opacity-70">({Math.round(confidence * 100)}%)</span>}
+    </span>
+  );
+};
+
+const SourceIcon = ({ source }: { source: string }) => {
+  const cfg = NEWS_SOURCES[source as keyof typeof NEWS_SOURCES];
+  if (!cfg) return <Globe className="w-3 h-3 text-terminal-gray" />;
+  const Icon = cfg.icon;
+  return <Icon className={`w-3 h-3 ${cfg.color}`} />;
+};
+
+const formatTimeAgo = (ts: number) => {
+  const diff = Date.now() - ts;
+  if (diff < 60000) return 'now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+  return `${Math.floor(diff / 86400000)}d`;
 };
 
 // ============ MAIN COMPONENT ============
 const TopNews = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [llmLoading, setLlmLoading] = useState(false);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('bitcoin crypto');
-  const [selectedSource, setSelectedSource] = useState<string>('all');
+  const [selectedView, setSelectedView] = useState<'all' | 'gold' | 'crypto' | 'forex'>('all');
   const [sortBy, setSortBy] = useState<'relevance' | 'time' | 'score' | 'sentiment'>('time');
-  const [aiInsight, setAiInsight] = useState<AIInsight>({ 
-    summary: '', topTrends: [], overallSentiment: 'neutral', 
-    sentimentScore: 0, keyEvents: [], loading: false 
-  });
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [showAI, setShowAI] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [hasLLM, setHasLLM] = useState(hasGroqApiKey());
 
-  const aggregateNews = useCallback(async (query: string) => {
-    const results = await Promise.allSettled([
+  // Stats
+  const sentimentStats = useMemo(() => {
+    const bullish = news.filter(n => n.sentiment === 'bullish' || n.llmSentiment === 'bullish').length;
+    const bearish = news.filter(n => n.sentiment === 'bearish' || n.llmSentiment === 'bearish').length;
+    const neutral = news.length - bullish - bearish;
+    const aiAnalyzed = news.filter(n => n.isLLMAnalyzed).length;
+    return { bullish, bearish, neutral, aiAnalyzed };
+  }, [news]);
+
+  const aggregateNews = useCallback(async (query: string, view: string) => {
+    const results: NewsItem[] = [];
+
+    if (view === 'gold') {
+      // Fetch gold-specific news
+      const goldNews = await fetchGoldNews();
+      const converted: NewsItem[] = goldNews.map((g: GoldNewsItem) => ({
+        id: g.id,
+        title: g.title,
+        source: g.source as NewsItem['source'],
+        url: g.url,
+        timestamp: g.timestamp,
+        score: 0,
+        sentiment: g.sentiment,
+        sentimentScore: g.sentiment === 'bullish' ? 50 : g.sentiment === 'bearish' ? -50 : 0,
+        relevance: g.relevance,
+        author: g.author,
+        category: g.category,
+        relatedTickers: ['XAU']
+      }));
+      return converted;
+    }
+
+    // Regular news aggregation
+    const fetchers = await Promise.allSettled([
       fetchReddit(query),
       fetchHackerNews(query),
-      fetchCoinGecko(),
       fetchCryptoCompare(query),
-      fetchFinnhub(query),
       Promise.resolve(generateMockTwitter(query))
     ]);
-    
-    const all: NewsItem[] = [];
-    results.forEach(r => {
-      if (r.status === 'fulfilled') all.push(...r.value);
+
+    fetchers.forEach(r => {
+      if (r.status === 'fulfilled') results.push(...r.value);
     });
-    
+
+    // Remove duplicates
     const seen = new Set<string>();
-    const unique = all.filter(n => {
+    const unique = results.filter(n => {
       const key = n.title.toLowerCase().substring(0, 50);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-    
+
     return unique;
   }, []);
 
   const fetchNews = useCallback(async () => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() && selectedView !== 'gold') return;
     
     setLoading(true);
-    setAiInsight(prev => ({ ...prev, loading: true }));
     
     try {
-      const aggregated = await aggregateNews(searchQuery);
-      setNews(aggregated);
+      const aggregated = await aggregateNews(searchQuery, selectedView);
       
       toast({
         title: '✅ อัพเดทข่าวแล้ว',
-        description: `พบ ${aggregated.length} รายการจาก ${Object.keys(NEWS_SOURCES).length} แหล่งข่าว`
+        description: `พบ ${aggregated.length} รายการ`
       });
-      
-      if (aggregated.length > 0 && showAI) {
-        const insight = await generateAIInsight(aggregated);
-        setAiInsight(insight);
+
+      // Apply hybrid analysis if LLM is available
+      if (hasLLM) {
+        setLlmLoading(true);
+        try {
+          const analyzed = await hybridAnalyzeNews(aggregated, searchQuery, true);
+          setNews(analyzed as NewsItem[]);
+        } catch (e) {
+          console.error('Hybrid analysis error:', e);
+          setNews(aggregated);
+        } finally {
+          setLlmLoading(false);
+        }
+      } else {
+        setNews(aggregated);
       }
     } catch (e) {
       console.error('Fetch error:', e);
@@ -411,11 +387,11 @@ const TopNews = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, aggregateNews, toast, showAI]);
+  }, [searchQuery, selectedView, aggregateNews, toast, hasLLM]);
 
   useEffect(() => {
     fetchNews();
-  }, []);
+  }, [selectedView]);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -424,262 +400,312 @@ const TopNews = () => {
   }, [autoRefresh, fetchNews]);
 
   const filteredNews = useMemo(() => {
-    let filtered = selectedSource === 'all' 
-      ? news 
-      : news.filter(n => n.source === selectedSource);
+    let filtered = [...news];
     
+    // Filter by view/category
+    if (selectedView === 'crypto') {
+      filtered = filtered.filter(n => 
+        n.category?.toLowerCase().includes('crypto') || 
+        n.relatedTickers?.some(t => ['BTC', 'ETH', 'SOL', 'XRP'].includes(t))
+      );
+    } else if (selectedView === 'forex') {
+      filtered = filtered.filter(n => 
+        n.category?.toLowerCase().includes('forex') ||
+        n.title.toLowerCase().includes('usd') ||
+        n.title.toLowerCase().includes('dollar')
+      );
+    }
+    
+    // Sort
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'time': return b.timestamp - a.timestamp;
-        case 'score': return b.score - a.score;
+        case 'score': return (b.finalScore || b.score) - (a.finalScore || a.score);
         case 'sentiment': return b.sentimentScore - a.sentimentScore;
-        default: return b.relevance - a.relevance;
+        default: return (b.finalScore || b.relevance) - (a.finalScore || a.relevance);
       }
     });
     
     return filtered;
-  }, [news, selectedSource, sortBy]);
+  }, [news, selectedView, sortBy]);
 
-  const sentimentStats = useMemo(() => ({
-    bullish: news.filter(n => n.sentiment === 'bullish').length,
-    bearish: news.filter(n => n.sentiment === 'bearish').length,
-    neutral: news.filter(n => n.sentiment === 'neutral').length,
-    avgScore: Math.round(news.reduce((s, n) => s + n.sentimentScore, 0) / (news.length || 1))
-  }), [news]);
-
-  const SentimentIcon = ({ sentiment }: { sentiment: string }) => {
-    if (sentiment === 'bullish') return <TrendingUp className="w-3 h-3 text-green-500" />;
-    if (sentiment === 'bearish') return <TrendingDown className="w-3 h-3 text-red-500" />;
-    return <Minus className="w-3 h-3 text-muted-foreground" />;
+  const handleSaveApiKey = () => {
+    if (apiKeyInput.trim()) {
+      setGroqApiKey(apiKeyInput.trim());
+      setHasLLM(true);
+      setApiKeyInput('');
+      setShowSettings(false);
+      toast({ title: '✅ บันทึก API Key แล้ว', description: 'ระบบ AI Analysis พร้อมใช้งาน' });
+    }
   };
 
-  const SourceIcon = ({ source }: { source: string }) => {
-    const cfg = NEWS_SOURCES[source as keyof typeof NEWS_SOURCES];
-    if (!cfg) return <Globe className="w-3 h-3" />;
-    const Icon = cfg.icon;
-    return <Icon className="w-3 h-3 text-primary" />;
-  };
-
-  const formatTime = (ts: number) => {
-    const diff = Date.now() - ts;
-    if (diff < 60000) return 'เมื่อกี้';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} นาที`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)} ชม.`;
-    return `${Math.floor(diff / 86400000)} วัน`;
+  const handleClearApiKey = () => {
+    clearGroqApiKey();
+    setHasLLM(false);
+    toast({ title: 'ลบ API Key แล้ว', description: 'ใช้ Algorithm Analysis เท่านั้น' });
   };
 
   return (
-    <Card className="w-full h-full bg-background/95 backdrop-blur border-primary/30 flex flex-col">
-      <CardHeader className="pb-2 px-3 pt-3">
-        <div className="flex items-center justify-between mb-2">
-          <CardTitle className="flex items-center gap-1.5 text-primary text-sm font-mono">
-            <Flame className="w-4 h-4 text-primary" />
-            TOP NEWS
-            <Badge variant="outline" className="ml-2 text-[9px] border-primary/50 text-primary">{news.length}</Badge>
-          </CardTitle>
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant={autoRefresh ? "default" : "outline"}
-              className="h-6 w-6 p-0"
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              title="Auto Refresh"
-            >
-              <Radio className={`w-3 h-3 ${autoRefresh ? 'animate-pulse' : ''}`} />
-            </Button>
-            <Button
-              size="sm"
-              variant={showAI ? "default" : "outline"}
-              className="h-6 w-6 p-0"
-              onClick={() => setShowAI(!showAI)}
-              title="AI Analysis"
-            >
-              <Brain className="w-3 h-3" />
-            </Button>
-            <Button
-              onClick={fetchNews}
-              size="sm"
-              variant="outline"
-              className="h-6 w-6 p-0 border-primary/30"
-              disabled={loading}
-            >
-              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
+    <div className="terminal-panel h-full flex flex-col text-[0.5rem] xs:text-[0.6rem] sm:text-xs md:text-sm">
+      {/* Header */}
+      <div className="panel-header flex items-center justify-between p-2 border-b border-border">
+        <div className="flex items-center gap-2">
+          <Flame className="w-4 h-4 text-terminal-amber" />
+          <span className="text-terminal-amber font-bold text-xs sm:text-sm font-mono">TOP NEWS AGGREGATOR</span>
+          {hasLLM && (
+            <span className="text-[8px] bg-terminal-cyan/20 text-terminal-cyan px-1.5 py-0.5 rounded font-mono">
+              AI
+            </span>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <select 
+            value={selectedView}
+            onChange={(e) => setSelectedView(e.target.value as any)}
+            className="bg-background border border-border text-terminal-green text-[10px] sm:text-xs px-2 py-1 font-mono"
+          >
+            <option value="all">All News</option>
+            <option value="gold">🥇 Gold & Commodities</option>
+            <option value="crypto">₿ Crypto</option>
+            <option value="forex">💱 Forex</option>
+          </select>
+          
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="p-1 hover:bg-background/50 rounded transition-colors"
+            title="Settings"
+          >
+            <Settings className="w-3 h-3 text-terminal-gray hover:text-terminal-amber" />
+          </button>
+        </div>
+      </div>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="bg-background/95 border-b border-terminal-cyan/50 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Key className="w-3 h-3 text-terminal-amber" />
+              <span className="text-terminal-amber text-xs font-bold font-mono">Groq API (LLM Analysis)</span>
+            </div>
+            <button onClick={() => setShowSettings(false)}>
+              <X className="w-3 h-3 text-terminal-gray hover:text-terminal-red" />
+            </button>
+          </div>
+          
+          {hasLLM ? (
+            <div className="flex items-center gap-2">
+              <span className="text-terminal-green text-[10px] font-mono">✓ API Key configured</span>
+              <button
+                onClick={handleClearApiKey}
+                className="bg-terminal-red/20 border border-terminal-red/50 text-terminal-red text-[10px] px-2 py-0.5 rounded font-mono hover:bg-terminal-red/30"
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-terminal-gray text-[10px] font-mono">
+                Get free API key at <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-terminal-cyan underline">console.groq.com</a>
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="gsk_xxxxxxxx..."
+                  className="flex-1 bg-background border border-border text-terminal-white text-[10px] px-2 py-1 font-mono"
+                />
+                <button
+                  onClick={handleSaveApiKey}
+                  className="bg-terminal-green/20 border border-terminal-green/50 text-terminal-green text-[10px] px-3 py-1 rounded font-mono hover:bg-terminal-green/30"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stats Summary Row */}
+      <div className="grid grid-cols-4 gap-2 p-2 border-b border-border/50">
+        <div className="bg-background/30 p-2 rounded">
+          <div className="text-[10px] text-terminal-amber mb-0.5 font-mono">Total</div>
+          <div className="text-sm sm:text-lg text-terminal-white font-bold font-mono">{news.length}</div>
+        </div>
+        <div className="bg-background/30 p-2 rounded">
+          <div className="text-[10px] text-terminal-amber mb-0.5 font-mono">Bullish</div>
+          <div className="text-sm sm:text-lg text-terminal-green font-bold font-mono">{sentimentStats.bullish}</div>
+        </div>
+        <div className="bg-background/30 p-2 rounded">
+          <div className="text-[10px] text-terminal-amber mb-0.5 font-mono">Bearish</div>
+          <div className="text-sm sm:text-lg text-terminal-red font-bold font-mono">{sentimentStats.bearish}</div>
+        </div>
+        <div className="bg-background/30 p-2 rounded">
+          <div className="text-[10px] text-terminal-amber mb-0.5 font-mono">AI Analyzed</div>
+          <div className="text-sm sm:text-lg text-terminal-cyan font-bold font-mono">
+            {llmLoading ? <Sparkles className="w-4 h-4 animate-pulse" /> : sentimentStats.aiAnalyzed}
           </div>
         </div>
+      </div>
 
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-          <Input
+      {/* Search & Filters */}
+      <div className="flex gap-2 p-2 border-b border-border/50">
+        <div className="relative flex-1">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-terminal-gray" />
+          <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && fetchNews()}
-            placeholder="ค้นหา (BTC, หุ้น, crypto)..."
-            className="pl-7 h-7 text-xs bg-background/50 border-primary/30 font-mono"
+            placeholder="Search news..."
+            className="w-full bg-background border border-border text-terminal-white text-[10px] sm:text-xs pl-7 pr-2 py-1.5 font-mono"
           />
         </div>
+        <button
+          onClick={() => setAutoRefresh(!autoRefresh)}
+          className={`p-1.5 border rounded transition-colors ${
+            autoRefresh 
+              ? 'bg-terminal-green/20 border-terminal-green/50 text-terminal-green' 
+              : 'bg-background border-border text-terminal-gray'
+          }`}
+          title="Auto Refresh"
+        >
+          <Radio className={`w-3 h-3 ${autoRefresh ? 'animate-pulse' : ''}`} />
+        </button>
+        <button
+          onClick={fetchNews}
+          disabled={loading}
+          className="bg-terminal-amber/20 border border-terminal-amber/50 text-terminal-amber p-1.5 rounded hover:bg-terminal-amber/30 transition-colors"
+        >
+          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
 
-        {showAI && (aiInsight.summary || aiInsight.loading) && (
-          <div className="mt-2 p-2 bg-primary/5 border border-primary/30 rounded-lg">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Sparkles className="w-3 h-3 text-primary" />
-              <span className="text-[10px] font-bold text-primary font-mono">AI INSIGHT</span>
-              {aiInsight.loading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-            </div>
-            {!aiInsight.loading && (
-              <>
-                <p className="text-[10px] text-foreground/80 mb-1 font-mono">{aiInsight.summary}</p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge 
-                    variant="outline" 
-                    className={`text-[8px] font-mono ${
-                      aiInsight.overallSentiment === 'bullish' ? 'border-green-500 text-green-500' :
-                      aiInsight.overallSentiment === 'bearish' ? 'border-red-500 text-red-500' :
-                      'border-muted-foreground text-muted-foreground'
-                    }`}
-                  >
-                    {aiInsight.overallSentiment === 'bullish' ? '📈 BULLISH' : 
-                     aiInsight.overallSentiment === 'bearish' ? '📉 BEARISH' : '➖ NEUTRAL'} 
-                    ({aiInsight.sentimentScore > 0 ? '+' : ''}{aiInsight.sentimentScore})
-                  </Badge>
-                  {aiInsight.topTrends.slice(0, 3).map((t, i) => (
-                    <Badge key={i} variant="secondary" className="text-[8px] font-mono">{t}</Badge>
-                  ))}
-                </div>
-              </>
-            )}
+      {/* Sort Buttons */}
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/50">
+        <div className="flex gap-1">
+          {(['time', 'relevance', 'score', 'sentiment'] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setSortBy(s)}
+              className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded font-mono transition-colors ${
+                sortBy === s 
+                  ? 'bg-terminal-amber/20 text-terminal-amber border border-terminal-amber/50' 
+                  : 'text-terminal-gray hover:text-terminal-white'
+              }`}
+            >
+              {s === 'time' ? '🕐 Time' : s === 'relevance' ? '🎯 Relevance' : s === 'score' ? '⬆️ Score' : '📊 Sentiment'}
+            </button>
+          ))}
+        </div>
+        {hasLLM && (
+          <div className="flex items-center gap-1 text-[9px] text-terminal-cyan font-mono">
+            <Brain className="w-3 h-3" />
+            <span>Hybrid AI</span>
           </div>
         )}
+      </div>
 
-        <div className="flex items-center gap-1.5 mt-2">
-          <Tabs value={selectedSource} onValueChange={setSelectedSource} className="flex-1">
-            <TabsList className="grid grid-cols-7 h-6 bg-background/50">
-              <TabsTrigger value="all" className="text-[9px] px-1 font-mono">All</TabsTrigger>
-              <TabsTrigger value="twitter" className="text-[9px] px-1 font-mono">X</TabsTrigger>
-              <TabsTrigger value="reddit" className="text-[9px] px-1 font-mono">Reddit</TabsTrigger>
-              <TabsTrigger value="news" className="text-[9px] px-1 font-mono">News</TabsTrigger>
-              <TabsTrigger value="hackernews" className="text-[9px] px-1 font-mono">HN</TabsTrigger>
-              <TabsTrigger value="finnhub" className="text-[9px] px-1 font-mono">Fin</TabsTrigger>
-              <TabsTrigger value="coingecko" className="text-[9px] px-1 font-mono">CG</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
+      {/* Table Header */}
+      <div className="grid grid-cols-12 gap-2 text-[9px] sm:text-[10px] text-terminal-amber border-b border-border p-2 font-mono">
+        <div className="col-span-1">Src</div>
+        <div className="col-span-5">Headline</div>
+        <div className="col-span-2 text-center">Sentiment</div>
+        <div className="col-span-2 text-center">{hasLLM ? 'AI Score' : 'Score'}</div>
+        <div className="col-span-2 text-right">Time</div>
+      </div>
 
-        <div className="flex items-center justify-between mt-2">
-          <div className="flex gap-1">
-            {(['time', 'relevance', 'score', 'sentiment'] as const).map(s => (
-              <Button
-                key={s}
-                size="sm"
-                variant={sortBy === s ? "default" : "outline"}
-                onClick={() => setSortBy(s)}
-                className="h-5 text-[9px] px-1.5 font-mono"
+      {/* News List */}
+      <ScrollArea className="flex-1">
+        {loading && news.length === 0 ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="text-center">
+              <RefreshCw className="w-6 h-6 animate-spin text-terminal-amber mx-auto mb-2" />
+              <p className="text-[10px] text-terminal-gray font-mono">กำลังดึงข่าว...</p>
+            </div>
+          </div>
+        ) : filteredNews.length === 0 ? (
+          <div className="flex items-center justify-center h-32 text-terminal-gray text-xs font-mono">
+            ไม่พบข่าว
+          </div>
+        ) : (
+          <div>
+            {filteredNews.map((item) => (
+              <div
+                key={item.id}
+                className="grid grid-cols-12 gap-2 text-[10px] sm:text-xs py-2 px-2 border-b border-border/20 hover:bg-background/50 cursor-pointer transition-colors group"
+                onClick={() => window.open(item.url, '_blank')}
               >
-                {s === 'time' ? '🕐' : s === 'relevance' ? '🎯' : s === 'score' ? '⬆️' : '📊'}
-              </Button>
-            ))}
-          </div>
-          <div className="flex gap-1">
-            <Badge variant="outline" className="text-[8px] border-green-500/50 text-green-500 font-mono">
-              ↑{sentimentStats.bullish}
-            </Badge>
-            <Badge variant="outline" className="text-[8px] border-red-500/50 text-red-500 font-mono">
-              ↓{sentimentStats.bearish}
-            </Badge>
-            <Badge variant="outline" className="text-[8px] border-muted-foreground/50 font-mono">
-              ={sentimentStats.neutral}
-            </Badge>
-          </div>
-        </div>
-      </CardHeader>
+                {/* Source */}
+                <div className="col-span-1 flex items-center justify-center">
+                  <SourceIcon source={item.source} />
+                </div>
 
-      <CardContent className="flex-1 min-h-0 p-0">
-        <ScrollArea className="h-full px-3 pb-3">
-          {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="text-center">
-                <RefreshCw className="w-6 h-6 animate-spin text-primary mx-auto mb-2" />
-                <p className="text-[10px] text-muted-foreground font-mono">กำลังดึงข่าวจาก {Object.keys(NEWS_SOURCES).length} แหล่ง...</p>
-              </div>
-            </div>
-          ) : filteredNews.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-muted-foreground text-sm font-mono">
-              ไม่พบข่าว
-            </div>
-          ) : (
-            <div className="space-y-2 pt-2">
-              {filteredNews.map((item) => (
-                <div
-                  key={item.id}
-                  className={`p-2 rounded-lg border transition-all hover:bg-primary/5 cursor-pointer group ${
-                    item.isBreaking ? 'border-yellow-500/50 bg-yellow-500/5' : 'border-border/50 hover:border-primary/50'
-                  }`}
-                  onClick={() => window.open(item.url, '_blank')}
-                >
-                  <div className="flex items-start gap-2">
-                    {item.imageUrl && (
-                      <img 
-                        src={item.imageUrl} 
-                        alt="" 
-                        className="w-12 h-12 rounded object-cover flex-shrink-0"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
+                {/* Headline */}
+                <div className="col-span-5 min-w-0">
+                  <p className="text-terminal-white font-mono truncate group-hover:text-terminal-cyan transition-colors">
+                    {item.title}
+                  </p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {item.author && (
+                      <span className="text-[8px] text-terminal-gray font-mono">{item.author}</span>
                     )}
-                    
-                    <div className="flex flex-col items-center gap-1 pt-0.5">
-                      <SourceIcon source={item.source} />
-                      <SentimentIcon sentiment={item.sentiment} />
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-medium leading-tight line-clamp-2 group-hover:text-primary transition-colors font-mono">
-                        {item.title}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="text-[9px] text-muted-foreground font-mono">
-                          {item.author && `${item.author} • `}
-                          {formatTime(item.timestamp)}
-                        </span>
-                        {item.score > 0 && (
-                          <Badge variant="secondary" className="text-[8px] px-1 py-0 font-mono">
-                            <ChevronUp className="w-2 h-2" />{item.score}
-                          </Badge>
-                        )}
-                        {item.comments !== undefined && item.comments > 0 && (
-                          <Badge variant="secondary" className="text-[8px] px-1 py-0 font-mono">
-                            💬{item.comments}
-                          </Badge>
-                        )}
-                        {item.relatedTickers?.slice(0, 3).map(t => (
-                          <Badge key={t} variant="outline" className="text-[8px] px-1 py-0 text-primary border-primary/50 font-mono">
-                            ${t}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-col items-end gap-1">
-                      <Badge 
-                        variant="outline" 
-                        className={`text-[8px] px-1 py-0 font-mono ${
-                          item.sentiment === 'bullish' ? 'border-green-500/50 text-green-500' :
-                          item.sentiment === 'bearish' ? 'border-red-500/50 text-red-500' :
-                          'border-muted-foreground/50 text-muted-foreground'
-                        }`}
-                      >
-                        {item.sentimentScore > 0 ? '+' : ''}{item.sentimentScore}
-                      </Badge>
-                      <span className="text-[8px] text-muted-foreground font-mono">{item.category}</span>
-                      <ExternalLink className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
+                    {item.isLLMAnalyzed && item.llmSummary && (
+                      <span className="text-[8px] text-terminal-cyan font-mono ml-1" title={item.llmSummary}>
+                        💡
+                      </span>
+                    )}
+                    {item.relatedTickers?.slice(0, 2).map(t => (
+                      <span key={t} className="text-[8px] text-terminal-amber font-mono">${t}</span>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </ScrollArea>
-      </CardContent>
-    </Card>
+
+                {/* Sentiment */}
+                <div className="col-span-2 flex items-center justify-center">
+                  <SentimentBadge 
+                    sentiment={item.llmSentiment || item.sentiment} 
+                    confidence={item.llmConfidence}
+                  />
+                </div>
+
+                {/* Score */}
+                <div className="col-span-2 flex items-center justify-center">
+                  {item.isLLMAnalyzed ? (
+                    <div className="flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5 text-terminal-cyan" />
+                      <span className="text-terminal-cyan font-mono font-bold">
+                        {item.finalScore || item.llmConfidence ? Math.round((item.llmConfidence || 0) * 100) : '-'}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-terminal-gray font-mono">
+                      {item.score > 0 ? item.score : item.relevance || '-'}
+                    </span>
+                  )}
+                </div>
+
+                {/* Time */}
+                <div className="col-span-2 flex items-center justify-end gap-1">
+                  <span className="text-terminal-gray font-mono">{formatTimeAgo(item.timestamp)}</span>
+                  <ExternalLink className="w-2.5 h-2.5 text-terminal-gray opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </ScrollArea>
+
+      {/* LLM Loading Indicator */}
+      {llmLoading && (
+        <div className="flex items-center justify-center gap-2 p-2 bg-terminal-cyan/10 border-t border-terminal-cyan/30">
+          <Brain className="w-3 h-3 text-terminal-cyan animate-pulse" />
+          <span className="text-[10px] text-terminal-cyan font-mono">กำลังวิเคราะห์ด้วย AI...</span>
+        </div>
+      )}
+    </div>
   );
 };
 
