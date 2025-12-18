@@ -209,14 +209,32 @@ const isHeaderLine = (line: string): boolean => {
   const headerKeywords = [
     'security', 'ticker', 'position', 'source', 'filing',
     'no.', 'pos chg', 'pct', 'mkt val', 'field', 'holdings', 
-    'region', 'num of', 'curr', '% out', 'name', 'rk'
+    'region', 'num of', 'curr', '% out', 'all',
+    'total', 'currency', 'periodicity', 'management',
+    'institution', 'historical', 'group by', 'show asset'
   ];
   const lowLine = line.toLowerCase();
+  
+  // Check for multiple header keywords
   const matchCount = headerKeywords.filter(k => lowLine.includes(k)).length;
-  return matchCount >= 2;
+  if (matchCount >= 2) return true;
+  
+  // Check for header-only patterns
+  if (/^(no|security|ticker|source|position|filing)/i.test(lowLine)) {
+    return true;
+  }
+  
+  // Check if line is mostly non-data text
+  const numbers = line.match(/\d+/g) || [];
+  const letters = line.match(/[a-zA-Z]+/g) || [];
+  if (letters.length > numbers.length * 3 && matchCount >= 1) {
+    return true;
+  }
+  
+  return false;
 };
 
-// Parse OCR text into structured table rows
+// Parse OCR text into structured table rows - Enhanced version
 const parseOCRText = (text: string): Array<{
   rank: string;
   name: string;
@@ -242,98 +260,244 @@ const parseOCRText = (text: string): Array<{
   
   const lines = text.split('\n').filter(line => line.trim());
   
-  const tickerPattern = /([A-Z0-9]{1,10})\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB|IT|SW|C|IM|SS|SZ|KS|TT|PM|IJ|MK|NZ|AB|AV|BB|CT|DC|FH|GA|GR|ID|IR|LI|MC|NA|NO|PL|PW|RO|SM|SE|VX)\b/i;
+  // Expanded ticker patterns including Treasury and special tickers
+  const tickerPatterns = [
+    // Standard tickers: MSFT US, NVDA US, etc.
+    /([A-Z]{2,5})\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB)\b/i,
+    // Japanese tickers: 7203 JP
+    /(\d{4})\s+(JP)\b/i,
+    // Treasury/Float tickers: TF Float 0..., TF Float 1...
+    /TF\s*Float\s*[\d\.]+/i,
+    // Bond tickers: B 0 02/05...
+    /B\s+\d+\s+\d{2}\/\d{2}/i,
+  ];
+  
+  // Date pattern
   const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
-  const numberPattern = /[+-]?[\d,]+(?:\.\d+)?/g;
+  
+  // Number patterns
+  const positionPattern = /\b(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\b/g;
+  const posChgPattern = /([+-]\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?)/;
+  const mvPattern = /([\d,.]+)\s*(BLN|MLN|M|B)\b/i;
+  
+  // Security names keywords to look for
+  const securityKeywords = [
+    'TREASURY', 'FRN', 'BILL',
+    'Microsoft', 'NVIDIA', 'Apple', 'Alphabet', 'Google',
+    'Exxon', 'Meta', 'Broadcom', 'Home Depot', 'JPMorgan',
+    'Chevron', 'UnitedHealth', 'Coca-Cola', 'AbbVie', 'Toyota', 'Oracle',
+    'Corp', 'Inc', 'Ltd', 'Co', 'Class', 'Common', 'Mobil', 'Procter', 'Gamble'
+  ];
+  
+  let rowCounter = 1;
   
   for (const line of lines) {
     const trimmedLine = line.trim();
     
+    // Skip headers and short lines
     if (isHeaderLine(trimmedLine)) continue;
-    if (trimmedLine.length < 10) continue;
+    if (trimmedLine.length < 15) continue;
     
-    const startsWithNumber = /^\d+[\s\)\.]+/.test(trimmedLine);
-    const hasTicker = tickerPattern.test(trimmedLine);
+    // Initialize row data
+    let rowData = {
+      rank: '',
+      name: '',
+      ticker: '',
+      field: 'ULT-AGG',
+      position: '',
+      posChg: '',
+      pctOut: '',
+      currMV: '',
+      filingDate: ''
+    };
     
-    if (!startsWithNumber && !hasTicker) continue;
-    
-    const rowNumMatch = trimmedLine.match(/^(\d+)[\s\)\.]*/);
-    const rowNum = rowNumMatch ? rowNumMatch[1] : '';
-    
-    const tickerMatch = trimmedLine.match(tickerPattern);
-    const ticker = tickerMatch ? `${tickerMatch[1]} ${tickerMatch[2]}` : '';
-    
-    let name = '';
-    if (tickerMatch && tickerMatch.index !== undefined) {
-      name = trimmedLine
-        .substring(0, tickerMatch.index)
-        .replace(/^\d+[\s\)\.]+/, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+    // Extract row number (at start of line)
+    const rowNumMatch = trimmedLine.match(/^(\d{1,2})[\s\)\.\]]+/);
+    if (rowNumMatch) {
+      rowData.rank = rowNumMatch[1];
     }
     
-    const dateMatch = trimmedLine.match(datePattern);
-    const filingDate = dateMatch ? dateMatch[1] : '';
-    
-    const numbers = trimmedLine.match(numberPattern) || [];
-    const cleanNumbers = numbers
-      .filter(n => n !== rowNum && !n.includes('/'))
-      .map(n => n.trim());
-    
-    let position = '';
-    let posChg = '';
-    let pctOut = '';
-    let currMV = '';
-    
-    const posChgMatch = trimmedLine.match(/([+-]\s*[\d,]+)/);
-    if (posChgMatch) {
-      posChg = posChgMatch[1].replace(/\s/g, '');
-    }
-    
-    for (const num of cleanNumbers) {
-      const val = parseFloat(num.replace(/,/g, ''));
-      if (!isNaN(val) && val < 100 && num.includes('.') && val > 0) {
-        if (!pctOut) pctOut = num;
+    // Extract ticker
+    let tickerFound = false;
+    let tickerMatch: RegExpMatchArray | null = null;
+    for (const pattern of tickerPatterns) {
+      tickerMatch = trimmedLine.match(pattern);
+      if (tickerMatch) {
+        rowData.ticker = tickerMatch[0].trim().toUpperCase();
+        tickerFound = true;
+        break;
       }
     }
     
-    for (const num of cleanNumbers) {
-      const val = parseFloat(num.replace(/,/g, ''));
-      if (!isNaN(val) && val > 10000 && !num.includes('.') && !num.startsWith('+') && !num.startsWith('-')) {
-        if (!position) position = num;
+    // If no standard ticker found, check for partial patterns
+    if (!tickerFound) {
+      // Check for patterns like single letter + US which might be OCR errors
+      const partialTicker = trimmedLine.match(/\b([A-Z]{2,5})\s+(US|JP|HK)\b/i);
+      if (partialTicker) {
+        rowData.ticker = `${partialTicker[1]} ${partialTicker[2]}`.toUpperCase();
+        tickerFound = true;
+        tickerMatch = partialTicker;
       }
     }
     
-    const mvMatch = trimmedLine.match(/([\d,.]+)\s*(MLN|BLN|M|B)/i);
-    if (mvMatch) {
-      currMV = mvMatch[0];
-    } else {
-      for (const num of cleanNumbers) {
-        const val = parseFloat(num.replace(/,/g, ''));
-        if (!isNaN(val) && val > 100 && num.includes('.') && num !== pctOut) {
-          if (!currMV) currMV = num;
+    // Extract security name (text before ticker or between row number and ticker)
+    if (tickerFound && tickerMatch && tickerMatch.index !== undefined) {
+      const tickerIndex = tickerMatch.index;
+      if (tickerIndex > 0) {
+        let nameStart = rowNumMatch ? rowNumMatch[0].length : 0;
+        let potentialName = trimmedLine.substring(nameStart, tickerIndex).trim();
+        
+        // Clean up the name
+        potentialName = potentialName
+          .replace(/^[\s\-\)\.\]]+/, '')
+          .replace(/[\s\-\)\.\]]+$/, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        // Validate it looks like a security name
+        if (potentialName.length > 2) {
+          const hasSecurityWord = securityKeywords.some(kw => 
+            potentialName.toLowerCase().includes(kw.toLowerCase())
+          );
+          // Accept if it has security keywords or looks like a company name
+          if (hasSecurityWord || /^[A-Za-z\s&\.]+$/.test(potentialName) || potentialName.length > 5) {
+            rowData.name = potentialName;
+          }
         }
       }
     }
     
-    const row = {
-      rank: rowNum,
-      name: name,
-      ticker: ticker,
-      field: 'ULT-AGG',
-      position: position,
-      posChg: posChg,
-      pctOut: pctOut,
-      currMV: currMV,
-      filingDate: filingDate
-    };
+    // Extract filing date
+    const dateMatch = trimmedLine.match(datePattern);
+    if (dateMatch) {
+      rowData.filingDate = dateMatch[1];
+    }
     
-    if (ticker || name || position) {
-      rows.push(row);
+    // Extract position change (has +/- sign)
+    const posChgMatch = trimmedLine.match(posChgPattern);
+    if (posChgMatch) {
+      rowData.posChg = posChgMatch[1].replace(/\s/g, '');
+    }
+    
+    // Extract market value (with BLN/MLN suffix)
+    const mvMatch = trimmedLine.match(mvPattern);
+    if (mvMatch) {
+      rowData.currMV = mvMatch[0];
+    }
+    
+    // Extract all numbers for position and % out
+    const allNumbers = [...trimmedLine.matchAll(positionPattern)];
+    const numbers = allNumbers
+      .map(m => m[1])
+      .filter(n => {
+        // Exclude already extracted values
+        if (n === rowData.rank) return false;
+        if (rowData.posChg.includes(n)) return false;
+        if (rowData.currMV.includes(n)) return false;
+        if (rowData.filingDate.includes(n)) return false;
+        return true;
+      });
+    
+    // Find position (large number, usually > 100,000)
+    for (const num of numbers) {
+      const val = parseFloat(num.replace(/,/g, ''));
+      if (!isNaN(val) && val > 100000 && !num.includes('.')) {
+        if (!rowData.position) {
+          rowData.position = num;
+        }
+      }
+    }
+    
+    // Find % out (small decimal between 0-100)
+    for (const num of numbers) {
+      const val = parseFloat(num.replace(/,/g, ''));
+      if (!isNaN(val) && val > 0 && val < 100 && num.includes('.')) {
+        if (!rowData.pctOut && num !== rowData.position) {
+          rowData.pctOut = num;
+        }
+      }
+    }
+    
+    // Assign row number if not found but we have data
+    if (!rowData.rank && (tickerFound || rowData.position)) {
+      rowData.rank = String(rowCounter);
+    }
+    
+    // Only add row if we have meaningful data
+    if (rowData.ticker || rowData.position || rowData.name) {
+      rows.push(rowData);
+      rowCounter++;
     }
   }
   
-  return rows;
+  // Post-process to clean up data
+  return postProcessRows(rows);
+};
+
+// Post-process rows to clean up data
+const postProcessRows = (rows: Array<{
+  rank: string;
+  name: string;
+  ticker: string;
+  field: string;
+  position: string;
+  posChg: string;
+  pctOut: string;
+  currMV: string;
+  filingDate: string;
+}>): typeof rows => {
+  
+  return rows.map((row, index) => {
+    // Ensure rank is set
+    if (!row.rank || row.rank === '-') {
+      row.rank = String(index + 1);
+    }
+    
+    // Ensure field is set
+    if (!row.field || row.field === '-') {
+      row.field = 'ULT-AGG';
+    }
+    
+    // Clean up ticker - fix common OCR errors
+    if (row.ticker) {
+      // Keep the ticker mostly as-is but uppercase
+      row.ticker = row.ticker.toUpperCase().trim();
+      
+      // Fix single letter tickers that are likely OCR errors
+      if (/^[A-Z]\s+US$/i.test(row.ticker)) {
+        // Single letter ticker like "D US" - likely an error, keep but flag
+        row.ticker = row.ticker;
+      }
+    }
+    
+    // Clean up position - remove any letters
+    if (row.position) {
+      row.position = row.position.replace(/[^\d,\.]/g, '');
+    }
+    
+    // Clean up posChg - ensure sign is present
+    if (row.posChg) {
+      row.posChg = row.posChg.replace(/[^\d,\.\-\+]/g, '');
+      if (row.posChg && !row.posChg.startsWith('+') && !row.posChg.startsWith('-')) {
+        row.posChg = '+' + row.posChg;
+      }
+    }
+    
+    // Clean up pctOut
+    if (row.pctOut) {
+      row.pctOut = row.pctOut.replace(/[^\d\.]/g, '');
+    }
+    
+    // Format currMV
+    if (row.currMV) {
+      row.currMV = row.currMV
+        .replace(/\s+/g, '')
+        .replace(/m$/i, 'MLN')
+        .replace(/b$/i, 'BLN');
+    }
+    
+    return row;
+  });
 };
 
 export class BloombergProcessor {
