@@ -3,6 +3,7 @@ import { ExcelRibbon } from './ExcelRibbon';
 import { ExcelFormulaBar } from './ExcelFormulaBar';
 import { ExcelGrid } from './ExcelGrid';
 import { ExcelSheetTabs } from './ExcelSheetTabs';
+import { BloombergImageExtractor } from './BloombergOCR/BloombergImageExtractor';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -37,8 +38,27 @@ export const ExcelClone = ({ initialData, onSave }: ExcelCloneProps) => {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showBloombergImporter, setShowBloombergImporter] = useState(false);
 
   const currentSheet = sheets.find(s => s.id === activeSheetId);
+  
+  const handleBloombergImport = () => {
+    setShowBloombergImporter(true);
+  };
+
+  const handleBloombergDataInsert = (data: Record<string, any>) => {
+    setSheets(prev => prev.map(sheet => 
+      sheet.id === activeSheetId 
+        ? { ...sheet, data: { ...sheet.data, ...data } }
+        : sheet
+    ));
+    setShowBloombergImporter(false);
+    setHasUnsavedChanges(true);
+    toast({
+      title: "Bloomberg Data Imported!",
+      description: `Successfully imported data from images`
+    });
+  };
 
   const getCellAddress = (row: number, col: number) => {
     let label = '';
@@ -242,7 +262,15 @@ export const ExcelClone = ({ initialData, onSave }: ExcelCloneProps) => {
       </div>
       
       {/* Excel Ribbon Menu */}
-      <ExcelRibbon onExcelImport={handleExcelImport} />
+      <ExcelRibbon onExcelImport={handleExcelImport} onBloombergImport={handleBloombergImport} />
+      
+      {/* Bloomberg Importer Dialog */}
+      {showBloombergImporter && (
+        <BloombergImageExtractor
+          onInsertData={handleBloombergDataInsert}
+          onClose={() => setShowBloombergImporter(false)}
+        />
+      )}
       
       {/* Formula Bar */}
       <ExcelFormulaBar 

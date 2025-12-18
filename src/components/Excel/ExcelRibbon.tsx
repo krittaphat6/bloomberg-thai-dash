@@ -3,14 +3,15 @@ import { Button } from '@/components/ui/button';
 import { 
   Copy, Scissors, ClipboardPaste, Bold, Italic, Underline,
   AlignLeft, AlignCenter, AlignRight, Palette, Type,
-  Calculator, FileSpreadsheet, Save, Download, Upload
+  Calculator, FileSpreadsheet, Save, Download, Upload, Camera
 } from 'lucide-react';
 
 interface ExcelRibbonProps {
   onExcelImport?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onBloombergImport?: () => void;
 }
 
-export const ExcelRibbon = ({ onExcelImport }: ExcelRibbonProps) => {
+export const ExcelRibbon = ({ onExcelImport, onBloombergImport }: ExcelRibbonProps) => {
   const [activeTab, setActiveTab] = useState('Home');
   
   const tabs = ['File', 'Home', 'Insert', 'Page Layout', 'Formulas', 'Data', 'Review', 'View'];
@@ -38,7 +39,7 @@ export const ExcelRibbon = ({ onExcelImport }: ExcelRibbonProps) => {
         {activeTab === 'Home' && <HomeRibbon />}
         {activeTab === 'Insert' && <InsertRibbon />}
         {activeTab === 'Formulas' && <FormulasRibbon />}
-        {activeTab === 'Data' && <DataRibbon />}
+        {activeTab === 'Data' && <DataRibbon onBloombergImport={onBloombergImport} />}
       </div>
     </div>
   );
@@ -187,27 +188,40 @@ const FormulasRibbon = () => (
   </div>
 );
 
-const DataRibbon = () => (
+const DataRibbon = ({ onBloombergImport }: { onBloombergImport?: () => void }) => (
   <div className="flex gap-6">
     <div className="flex flex-col items-start border-r pr-4">
-      <div className="text-xs text-gray-600 mb-2">Get Data</div>
+      <div className="text-xs text-muted-foreground mb-2">Get Data</div>
       <div className="flex gap-1">
-        <button className="p-2 hover:bg-gray-200 rounded flex flex-col items-center">
-          <Upload className="h-5 w-5" />
+        <button className="p-2 hover:bg-muted rounded flex flex-col items-center">
+          <Upload className="h-5 w-5 text-terminal-green" />
           <span className="text-xs mt-1">Import</span>
         </button>
-        <button className="p-2 hover:bg-gray-200 rounded flex flex-col items-center">
-          <Download className="h-5 w-5" />
+        <button className="p-2 hover:bg-muted rounded flex flex-col items-center">
+          <Download className="h-5 w-5 text-terminal-green" />
           <span className="text-xs mt-1">Export</span>
         </button>
       </div>
     </div>
     
+    <div className="flex flex-col items-start border-r pr-4">
+      <div className="text-xs text-muted-foreground mb-2">Bloomberg Import</div>
+      <Button
+        variant="outline"
+        size="sm"
+        className="border-terminal-amber text-terminal-amber hover:bg-terminal-amber/10"
+        onClick={onBloombergImport}
+      >
+        <Camera className="h-4 w-4 mr-2" />
+        Import from Images
+      </Button>
+    </div>
+    
     <div className="flex flex-col items-start">
-      <div className="text-xs text-gray-600 mb-2">Sort & Filter</div>
+      <div className="text-xs text-muted-foreground mb-2">Sort & Filter</div>
       <div className="flex gap-1">
-        <button className="px-3 py-1 text-sm border rounded hover:bg-gray-200">Sort A-Z</button>
-        <button className="px-3 py-1 text-sm border rounded hover:bg-gray-200">Filter</button>
+        <button className="px-3 py-1 text-sm border border-border rounded hover:bg-muted">Sort A-Z</button>
+        <button className="px-3 py-1 text-sm border border-border rounded hover:bg-muted">Filter</button>
       </div>
     </div>
   </div>
