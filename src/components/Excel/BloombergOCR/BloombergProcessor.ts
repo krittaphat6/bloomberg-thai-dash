@@ -1,6 +1,5 @@
-// Bloomberg Image Processing Pipeline using Tesseract.js OCR
+// Bloomberg Image Processing Pipeline using Tesseract.js OCR - Improved Version
 import Tesseract from 'tesseract.js';
-import { BLOOMBERG_LAYOUT } from './BloombergFontDatabase';
 
 export interface ExtractedCell {
   column: string;
@@ -36,6 +35,19 @@ export interface ProcessingProgress {
   status: string;
 }
 
+// Column definitions for Bloomberg data
+const BLOOMBERG_COLUMNS = [
+  'Rk',
+  'Name', 
+  'Ticker',
+  'Field',
+  'Position',
+  'Pos Chg',
+  '% Out',
+  'Curr MV',
+  'Filing Date'
+];
+
 // Preprocess image for better OCR results on Bloomberg terminal
 const preprocessImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -68,16 +80,17 @@ const preprocessImage = (file: File): Promise<string> => {
         const g = data[i + 1];
         const b = data[i + 2];
         
-        // Detect text colors (green, yellow, white, orange, red)
-        const isGreen = g > 120 && r < 150 && b < 150;
-        const isYellow = r > 180 && g > 180 && b < 120;
-        const isWhite = r > 150 && g > 150 && b > 150;
-        const isOrange = r > 180 && g > 80 && g < 180 && b < 80;
-        const isRed = r > 180 && g < 80 && b < 80;
-        const isCyan = g > 150 && b > 150 && r < 150;
+        // Detect text colors (green, yellow, white, orange, red, cyan, amber)
+        const isGreen = g > 100 && r < 150 && b < 150;
+        const isYellow = r > 180 && g > 180 && b < 150;
+        const isWhite = r > 130 && g > 130 && b > 130;
+        const isOrange = r > 160 && g > 80 && g < 180 && b < 100;
+        const isRed = r > 150 && g < 100 && b < 100;
+        const isCyan = g > 120 && b > 120 && r < 150;
+        const isAmber = r > 200 && g > 150 && g < 200 && b < 80;
         
         // Make text black, background white
-        if (isGreen || isYellow || isWhite || isOrange || isRed || isCyan) {
+        if (isGreen || isYellow || isWhite || isOrange || isRed || isCyan || isAmber) {
           data[i] = 0;
           data[i + 1] = 0;
           data[i + 2] = 0;
@@ -97,12 +110,24 @@ const preprocessImage = (file: File): Promise<string> => {
   });
 };
 
-// Parse OCR text into structured table rows
+// Check if line is a header
+const isHeaderLine = (line: string): boolean => {
+  const headerKeywords = [
+    'security', 'ticker', 'position', 'source', 'filing',
+    'no.', 'pos chg', 'pct', 'mkt val', 'field', 'holdings', 
+    'region', 'num of', 'curr', '% out'
+  ];
+  const lowLine = line.toLowerCase();
+  const matchCount = headerKeywords.filter(k => lowLine.includes(k)).length;
+  return matchCount >= 2;
+};
+
+// Parse OCR text into structured table rows - Improved algorithm
 const parseOCRText = (text: string): Array<{
   rank: string;
-  security: string;
+  name: string;
   ticker: string;
-  source: string;
+  field: string;
   position: string;
   posChg: string;
   pctOut: string;
@@ -111,9 +136,9 @@ const parseOCRText = (text: string): Array<{
 }> => {
   const rows: Array<{
     rank: string;
-    security: string;
+    name: string;
     ticker: string;
-    source: string;
+    field: string;
     position: string;
     posChg: string;
     pctOut: string;
@@ -123,78 +148,109 @@ const parseOCRText = (text: string): Array<{
   
   const lines = text.split('\n').filter(line => line.trim());
   
-  // Pattern for ticker codes
-  const tickerPattern = /([A-Z0-9]+)\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB|IT|SW|C|IM|SS|SZ)/i;
+  // Common patterns
+  const tickerPattern = /([A-Z0-9]{1,10})\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB|IT|SW|C|IM|SS|SZ|KS|TT|PM|IJ|MK|NZ|AB|AV|BB|CT|DC|FH|GA|GR|ID|IR|LI|MC|NA|NO|PL|PW|RO|SM|SE|VX)\b/i;
   const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
   const numberPattern = /[+-]?[\d,]+(?:\.\d+)?/g;
-  const marketValuePattern = /[\d,.]+(?:MLN|BLN|K)/i;
   
   for (const line of lines) {
-    // Skip header lines
-    if (line.includes('Security') || line.includes('Ticker') || line.includes('Position') || line.includes('Source')) {
-      continue;
-    }
+    const trimmedLine = line.trim();
     
-    // Check if line starts with a number (row number)
-    const rowNumMatch = line.match(/^(\d+)\)?[\s]+/);
-    if (!rowNumMatch && !tickerPattern.test(line)) {
-      continue;
-    }
+    // Skip headers and short lines
+    if (isHeaderLine(trimmedLine)) continue;
+    if (trimmedLine.length < 10) continue;
     
-    const tickerMatch = line.match(tickerPattern);
-    const dateMatch = line.match(datePattern);
-    const mvMatch = line.match(marketValuePattern);
-    const numbers = line.match(numberPattern) || [];
+    // Check if line starts with a row number or contains a ticker
+    const startsWithNumber = /^\d+[\s\)\.]+/.test(trimmedLine);
+    const hasTicker = tickerPattern.test(trimmedLine);
+    
+    if (!startsWithNumber && !hasTicker) continue;
+    
+    // Extract row number
+    const rowNumMatch = trimmedLine.match(/^(\d+)[\s\)\.]*/);
+    const rowNum = rowNumMatch ? rowNumMatch[1] : '';
+    
+    // Extract ticker
+    const tickerMatch = trimmedLine.match(tickerPattern);
+    const ticker = tickerMatch ? `${tickerMatch[1]} ${tickerMatch[2]}` : '';
     
     // Extract security name (text before ticker)
-    let security = '';
+    let name = '';
     if (tickerMatch && tickerMatch.index !== undefined) {
-      security = line.substring(0, tickerMatch.index)
-        .replace(/^\d+\)?[\s]+/, '')
+      name = trimmedLine
+        .substring(0, tickerMatch.index)
+        .replace(/^\d+[\s\)\.]+/, '')
+        .replace(/\s+/g, ' ')
         .trim();
     }
     
-    // Build row data
-    const row = {
-      rank: rowNumMatch ? rowNumMatch[1] : '',
-      security: security || '',
-      ticker: tickerMatch ? `${tickerMatch[1]} ${tickerMatch[2]}` : '',
-      source: 'ULT-AGG',
-      position: '',
-      posChg: '',
-      pctOut: '',
-      currMV: mvMatch ? mvMatch[0] : '',
-      filingDate: dateMatch ? dateMatch[1] : ''
-    };
+    // Extract date
+    const dateMatch = trimmedLine.match(datePattern);
+    const filingDate = dateMatch ? dateMatch[1] : '';
     
-    // Try to extract numeric values
-    // Position is usually the largest number
-    // Pos Chg has +/- prefix
-    // % Out is usually small decimal
-    const posChgMatch = line.match(/([+-][\d,]+)/);
-    const pctMatch = line.match(/(\d+\.\d+)(?!\d)/);
+    // Extract all numbers
+    const numbers = trimmedLine.match(numberPattern) || [];
+    const cleanNumbers = numbers
+      .filter(n => n !== rowNum && !n.includes('/'))
+      .map(n => n.trim());
     
-    if (numbers.length >= 1) {
-      // First big number is usually position
-      const positionCandidates = numbers.filter(n => {
-        const num = parseFloat(n.replace(/,/g, ''));
-        return num > 1000 && !n.startsWith('+') && !n.startsWith('-');
-      });
-      if (positionCandidates.length > 0) {
-        row.position = positionCandidates[0];
+    // Identify specific values
+    let position = '';
+    let posChg = '';
+    let pctOut = '';
+    let currMV = '';
+    
+    // Find position change (usually has +/- prefix)
+    const posChgMatch = trimmedLine.match(/([+-]\s*[\d,]+)/);
+    if (posChgMatch) {
+      posChg = posChgMatch[1].replace(/\s/g, '');
+    }
+    
+    // Find percentage (small decimal number, usually 0.XX)
+    for (const num of cleanNumbers) {
+      const val = parseFloat(num.replace(/,/g, ''));
+      if (!isNaN(val) && val < 100 && num.includes('.') && val > 0) {
+        if (!pctOut) pctOut = num;
       }
     }
     
-    if (posChgMatch) {
-      row.posChg = posChgMatch[1];
+    // Find position (large integer)
+    for (const num of cleanNumbers) {
+      const val = parseFloat(num.replace(/,/g, ''));
+      if (!isNaN(val) && val > 10000 && !num.includes('.') && !num.startsWith('+') && !num.startsWith('-')) {
+        if (!position) position = num;
+      }
     }
     
-    if (pctMatch) {
-      row.pctOut = pctMatch[1];
+    // Find market value (with MLN/BLN suffix or large decimal)
+    const mvMatch = trimmedLine.match(/([\d,.]+)\s*(MLN|BLN|M|B)/i);
+    if (mvMatch) {
+      currMV = mvMatch[0];
+    } else {
+      // Look for large decimal numbers that could be market value
+      for (const num of cleanNumbers) {
+        const val = parseFloat(num.replace(/,/g, ''));
+        if (!isNaN(val) && val > 100 && num.includes('.') && num !== pctOut) {
+          if (!currMV) currMV = num;
+        }
+      }
     }
+    
+    // Build row
+    const row = {
+      rank: rowNum,
+      name: name,
+      ticker: ticker,
+      field: 'ULT-AGG',
+      position: position,
+      posChg: posChg,
+      pctOut: pctOut,
+      currMV: currMV,
+      filingDate: filingDate
+    };
     
     // Only add if we have meaningful data
-    if (row.ticker || row.security || row.position) {
+    if (ticker || name || position) {
       rows.push(row);
     }
   }
@@ -210,8 +266,6 @@ export class BloombergProcessor {
   }
   
   async processImage(file: File, imageIndex: number = 0): Promise<ExtractedRow[]> {
-    const columns = BLOOMBERG_LAYOUT.columns;
-    
     // Update progress
     if (this.onProgress) {
       this.onProgress({
@@ -271,10 +325,10 @@ export class BloombergProcessor {
     // Convert to ExtractedRow format
     const rows: ExtractedRow[] = parsedRows.map((parsed, idx) => {
       const cells: ExtractedCell[] = [
-        { column: 'NO', value: parsed.rank || String(idx + 1), confidence: 0.9, originalColor: 'white' },
-        { column: 'Security', value: parsed.security, confidence: 0.85, originalColor: 'white' },
+        { column: 'Rk', value: parsed.rank || String(idx + 1), confidence: 0.9, originalColor: 'white' },
+        { column: 'Name', value: parsed.name, confidence: 0.85, originalColor: 'white' },
         { column: 'Ticker', value: parsed.ticker, confidence: 0.9, originalColor: 'yellow' },
-        { column: 'Source', value: parsed.source, confidence: 0.95, originalColor: 'white' },
+        { column: 'Field', value: parsed.field, confidence: 0.95, originalColor: 'white' },
         { column: 'Position', value: parsed.position, confidence: 0.8, originalColor: 'white' },
         { column: 'Pos Chg', value: parsed.posChg, confidence: 0.8, originalColor: parsed.posChg.startsWith('-') ? 'red' : 'green' },
         { column: '% Out', value: parsed.pctOut, confidence: 0.8, originalColor: 'white' },
@@ -324,10 +378,10 @@ export class BloombergProcessor {
       // Renumber rows to be continuous across images
       for (const row of rows) {
         row.rowNumber = globalRowNumber++;
-        // Update NO cell
-        const noCell = row.cells.find(c => c.column === 'NO');
-        if (noCell) {
-          noCell.value = String(row.rowNumber);
+        // Update Rk cell
+        const rkCell = row.cells.find(c => c.column === 'Rk');
+        if (rkCell) {
+          rkCell.value = String(row.rowNumber);
         }
         allRows.push(row);
       }
@@ -338,12 +392,11 @@ export class BloombergProcessor {
   
   convertToExcelData(rows: ExtractedRow[]): Record<string, any> {
     const excelData: Record<string, any> = {};
-    const columns = BLOOMBERG_LAYOUT.columns;
     
     // Add headers
-    columns.forEach((col, colIdx) => {
+    BLOOMBERG_COLUMNS.forEach((col, colIdx) => {
       const address = this.getCellAddress(0, colIdx);
-      excelData[address] = col.name;
+      excelData[address] = col;
     });
     
     // Add data rows
@@ -398,10 +451,13 @@ export class BloombergProcessor {
       warnings.push('No rows were detected in the images');
     }
     
-    // Check for common issues
-    const emptyRows = rows.filter(r => r.cells.every(c => !c.value.trim()));
-    if (emptyRows.length > 0) {
-      warnings.push(`${emptyRows.length} empty rows detected`);
+    // Check for empty important cells
+    const emptyTickers = rows.filter(r => {
+      const ticker = r.cells.find(c => c.column === 'Ticker');
+      return !ticker?.value.trim();
+    });
+    if (emptyTickers.length > 0) {
+      warnings.push(`${emptyTickers.length} rows missing ticker`);
     }
     
     return {
