@@ -1,6 +1,5 @@
-// Bloomberg Image Processing Pipeline
-import { BloombergGridDetector } from './BloombergGridDetector';
-import { BloombergCharRecognizer } from './BloombergCharRecognizer';
+// Bloomberg Image Processing Pipeline using Tesseract.js OCR
+import Tesseract from 'tesseract.js';
 import { BLOOMBERG_LAYOUT } from './BloombergFontDatabase';
 
 export interface ExtractedCell {
@@ -37,80 +36,267 @@ export interface ProcessingProgress {
   status: string;
 }
 
+// Preprocess image for better OCR results on Bloomberg terminal
+const preprocessImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    img.onload = () => {
+      // Scale up for better OCR (2x)
+      const scale = 2;
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      
+      // Bloomberg terminal: colored text on dark background
+      // Convert to black text on white background for OCR
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        
+        // Detect text colors (green, yellow, white, orange, red)
+        const isGreen = g > 120 && r < 150 && b < 150;
+        const isYellow = r > 180 && g > 180 && b < 120;
+        const isWhite = r > 150 && g > 150 && b > 150;
+        const isOrange = r > 180 && g > 80 && g < 180 && b < 80;
+        const isRed = r > 180 && g < 80 && b < 80;
+        const isCyan = g > 150 && b > 150 && r < 150;
+        
+        // Make text black, background white
+        if (isGreen || isYellow || isWhite || isOrange || isRed || isCyan) {
+          data[i] = 0;
+          data[i + 1] = 0;
+          data[i + 2] = 0;
+        } else {
+          data[i] = 255;
+          data[i + 1] = 255;
+          data[i + 2] = 255;
+        }
+      }
+      
+      ctx.putImageData(imageData, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = URL.createObjectURL(file);
+  });
+};
+
+// Parse OCR text into structured table rows
+const parseOCRText = (text: string): Array<{
+  rank: string;
+  security: string;
+  ticker: string;
+  source: string;
+  position: string;
+  posChg: string;
+  pctOut: string;
+  currMV: string;
+  filingDate: string;
+}> => {
+  const rows: Array<{
+    rank: string;
+    security: string;
+    ticker: string;
+    source: string;
+    position: string;
+    posChg: string;
+    pctOut: string;
+    currMV: string;
+    filingDate: string;
+  }> = [];
+  
+  const lines = text.split('\n').filter(line => line.trim());
+  
+  // Pattern for ticker codes
+  const tickerPattern = /([A-Z0-9]+)\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB|IT|SW|C|IM|SS|SZ)/i;
+  const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
+  const numberPattern = /[+-]?[\d,]+(?:\.\d+)?/g;
+  const marketValuePattern = /[\d,.]+(?:MLN|BLN|K)/i;
+  
+  for (const line of lines) {
+    // Skip header lines
+    if (line.includes('Security') || line.includes('Ticker') || line.includes('Position') || line.includes('Source')) {
+      continue;
+    }
+    
+    // Check if line starts with a number (row number)
+    const rowNumMatch = line.match(/^(\d+)\)?[\s]+/);
+    if (!rowNumMatch && !tickerPattern.test(line)) {
+      continue;
+    }
+    
+    const tickerMatch = line.match(tickerPattern);
+    const dateMatch = line.match(datePattern);
+    const mvMatch = line.match(marketValuePattern);
+    const numbers = line.match(numberPattern) || [];
+    
+    // Extract security name (text before ticker)
+    let security = '';
+    if (tickerMatch && tickerMatch.index !== undefined) {
+      security = line.substring(0, tickerMatch.index)
+        .replace(/^\d+\)?[\s]+/, '')
+        .trim();
+    }
+    
+    // Build row data
+    const row = {
+      rank: rowNumMatch ? rowNumMatch[1] : '',
+      security: security || '',
+      ticker: tickerMatch ? `${tickerMatch[1]} ${tickerMatch[2]}` : '',
+      source: 'ULT-AGG',
+      position: '',
+      posChg: '',
+      pctOut: '',
+      currMV: mvMatch ? mvMatch[0] : '',
+      filingDate: dateMatch ? dateMatch[1] : ''
+    };
+    
+    // Try to extract numeric values
+    // Position is usually the largest number
+    // Pos Chg has +/- prefix
+    // % Out is usually small decimal
+    const posChgMatch = line.match(/([+-][\d,]+)/);
+    const pctMatch = line.match(/(\d+\.\d+)(?!\d)/);
+    
+    if (numbers.length >= 1) {
+      // First big number is usually position
+      const positionCandidates = numbers.filter(n => {
+        const num = parseFloat(n.replace(/,/g, ''));
+        return num > 1000 && !n.startsWith('+') && !n.startsWith('-');
+      });
+      if (positionCandidates.length > 0) {
+        row.position = positionCandidates[0];
+      }
+    }
+    
+    if (posChgMatch) {
+      row.posChg = posChgMatch[1];
+    }
+    
+    if (pctMatch) {
+      row.pctOut = pctMatch[1];
+    }
+    
+    // Only add if we have meaningful data
+    if (row.ticker || row.security || row.position) {
+      rows.push(row);
+    }
+  }
+  
+  return rows;
+};
+
 export class BloombergProcessor {
-  private gridDetector: BloombergGridDetector;
-  private charRecognizer: BloombergCharRecognizer;
   private onProgress?: (progress: ProcessingProgress) => void;
   
   constructor(onProgress?: (progress: ProcessingProgress) => void) {
-    this.gridDetector = new BloombergGridDetector();
-    this.charRecognizer = new BloombergCharRecognizer();
     this.onProgress = onProgress;
   }
   
   async processImage(file: File, imageIndex: number = 0): Promise<ExtractedRow[]> {
-    const imageData = await this.gridDetector.loadImage(file);
-    const gridInfo = this.gridDetector.detectGrid(imageData);
-    
-    const rows: ExtractedRow[] = [];
     const columns = BLOOMBERG_LAYOUT.columns;
-    const lineHeight = BLOOMBERG_LAYOUT.lineHeight;
     
-    for (let rowIdx = 0; rowIdx < gridInfo.rows.length; rowIdx++) {
-      const rowY = gridInfo.rows[rowIdx];
-      const cells: ExtractedCell[] = [];
-      
-      // Update progress
-      if (this.onProgress) {
-        this.onProgress({
-          current: rowIdx + 1,
-          total: gridInfo.rows.length,
-          currentImage: imageIndex + 1,
-          totalImages: 1,
-          status: `Processing row ${rowIdx + 1}/${gridInfo.rows.length}`
-        });
+    // Update progress
+    if (this.onProgress) {
+      this.onProgress({
+        current: 0,
+        total: 100,
+        currentImage: imageIndex + 1,
+        totalImages: 1,
+        status: 'Preprocessing image...'
+      });
+    }
+    
+    // Preprocess image
+    const processedImage = await preprocessImage(file);
+    
+    if (this.onProgress) {
+      this.onProgress({
+        current: 10,
+        total: 100,
+        currentImage: imageIndex + 1,
+        totalImages: 1,
+        status: 'Running OCR...'
+      });
+    }
+    
+    // Run Tesseract OCR
+    const result = await Tesseract.recognize(
+      processedImage,
+      'eng',
+      {
+        logger: (m) => {
+          if (m.status === 'recognizing text' && this.onProgress) {
+            this.onProgress({
+              current: 10 + Math.round(m.progress * 80),
+              total: 100,
+              currentImage: imageIndex + 1,
+              totalImages: 1,
+              status: `OCR: ${Math.round(m.progress * 100)}%`
+            });
+          }
+        }
       }
+    );
+    
+    if (this.onProgress) {
+      this.onProgress({
+        current: 95,
+        total: 100,
+        currentImage: imageIndex + 1,
+        totalImages: 1,
+        status: 'Parsing results...'
+      });
+    }
+    
+    // Parse OCR text
+    const parsedRows = parseOCRText(result.data.text);
+    
+    // Convert to ExtractedRow format
+    const rows: ExtractedRow[] = parsedRows.map((parsed, idx) => {
+      const cells: ExtractedCell[] = [
+        { column: 'NO', value: parsed.rank || String(idx + 1), confidence: 0.9, originalColor: 'white' },
+        { column: 'Security', value: parsed.security, confidence: 0.85, originalColor: 'white' },
+        { column: 'Ticker', value: parsed.ticker, confidence: 0.9, originalColor: 'yellow' },
+        { column: 'Source', value: parsed.source, confidence: 0.95, originalColor: 'white' },
+        { column: 'Position', value: parsed.position, confidence: 0.8, originalColor: 'white' },
+        { column: 'Pos Chg', value: parsed.posChg, confidence: 0.8, originalColor: parsed.posChg.startsWith('-') ? 'red' : 'green' },
+        { column: '% Out', value: parsed.pctOut, confidence: 0.8, originalColor: 'white' },
+        { column: 'Curr MV', value: parsed.currMV, confidence: 0.85, originalColor: 'white' },
+        { column: 'Filing Date', value: parsed.filingDate, confidence: 0.9, originalColor: 'white' }
+      ];
       
-      for (const column of columns) {
-        const cellImage = this.gridDetector.extractCellImage(
-          imageData,
-          column.startX,
-          rowY,
-          column.width,
-          lineHeight
-        );
-        
-        const text = this.charRecognizer.recognizeCell(cellImage);
-        const color = this.charRecognizer.detectCellTextColor(cellImage);
-        
-        // Calculate confidence based on recognition quality
-        const confidence = this.calculateConfidence(text, column.name);
-        
-        cells.push({
-          column: column.name,
-          value: text,
-          confidence,
-          originalColor: color
-        });
-      }
-      
-      // Extract row number from first cell
-      const rowNumberCell = cells.find(c => c.column === 'NO');
-      let rowNumber = rowIdx + 1;
-      if (rowNumberCell && /^\d+$/.test(rowNumberCell.value)) {
-        rowNumber = parseInt(rowNumberCell.value, 10);
-      }
-      
-      rows.push({
-        rowNumber,
+      return {
+        rowNumber: idx + 1,
         cells,
         imageIndex
+      };
+    });
+    
+    if (this.onProgress) {
+      this.onProgress({
+        current: 100,
+        total: 100,
+        currentImage: imageIndex + 1,
+        totalImages: 1,
+        status: 'Done'
       });
-      
-      // Small delay to prevent UI freeze
-      if (rowIdx % 10 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
     }
     
     return rows;
@@ -126,7 +312,7 @@ export class BloombergProcessor {
       if (this.onProgress) {
         this.onProgress({
           current: 0,
-          total: 0,
+          total: 100,
           currentImage: i + 1,
           totalImages: files.length,
           status: `Loading image ${i + 1}/${files.length}`
@@ -138,6 +324,11 @@ export class BloombergProcessor {
       // Renumber rows to be continuous across images
       for (const row of rows) {
         row.rowNumber = globalRowNumber++;
+        // Update NO cell
+        const noCell = row.cells.find(c => c.column === 'NO');
+        if (noCell) {
+          noCell.value = String(row.rowNumber);
+        }
         allRows.push(row);
       }
     }
@@ -220,46 +411,6 @@ export class BloombergProcessor {
       warnings,
       lowConfidenceCells
     };
-  }
-  
-  private calculateConfidence(text: string, columnName: string): number {
-    if (!text || !text.trim()) return 0.3;
-    
-    // Column-specific validation
-    switch (columnName) {
-      case 'NO':
-        // Should be a number
-        if (/^\d+$/.test(text.trim())) return 0.95;
-        return 0.4;
-        
-      case 'Position':
-      case 'Pos Chg':
-      case 'Curr MV':
-      case '% Out':
-        // Should be a number (possibly with commas, +/-, %)
-        if (/^[+-]?[\d,]+\.?\d*%?$/.test(text.replace(/\s/g, ''))) return 0.9;
-        return 0.5;
-        
-      case 'Filing Date':
-        // Should be a date format
-        if (/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(text)) return 0.9;
-        if (/\d{4}-\d{2}-\d{2}/.test(text)) return 0.9;
-        return 0.5;
-        
-      case 'Ticker':
-        // Usually uppercase letters with optional exchange suffix
-        if (/^[A-Z]{1,5}(\s+(US|JP|HK|LN))?$/i.test(text.trim())) return 0.9;
-        return 0.6;
-        
-      case 'Security':
-      case 'Source':
-        // Text - just needs to have characters
-        if (text.trim().length > 0) return 0.8;
-        return 0.4;
-        
-      default:
-        return text.trim().length > 0 ? 0.7 : 0.3;
-    }
   }
 }
 
