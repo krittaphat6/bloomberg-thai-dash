@@ -1,10 +1,11 @@
-// Tesseract.js based OCR for Bloomberg Terminal images - Improved Version
+// Tesseract.js based OCR for Bloomberg Terminal images - Enhanced Version
 import Tesseract from 'tesseract.js';
 
 export interface OCRResult {
   text: string;
   confidence: number;
   rows: string[][];
+  processedImageUrl?: string;
 }
 
 export interface ProcessingProgress {
@@ -12,8 +13,81 @@ export interface ProcessingProgress {
   progress: number;
 }
 
+// Unsharp Mask for sharpening
+const applyUnsharpMask = (imageData: ImageData): ImageData => {
+  const { width, height, data } = imageData;
+  const output = new Uint8ClampedArray(data);
+  
+  // 3x3 sharpening kernel
+  const kernel = [
+    0, -1, 0,
+    -1, 5, -1,
+    0, -1, 0
+  ];
+  
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            const idx = ((y + ky) * width + (x + kx)) * 4 + c;
+            sum += data[idx] * kernel[(ky + 1) * 3 + (kx + 1)];
+          }
+        }
+        const idx = (y * width + x) * 4 + c;
+        output[idx] = Math.max(0, Math.min(255, sum));
+      }
+    }
+  }
+  
+  return new ImageData(output, width, height);
+};
+
+// Dilation to thicken text
+const dilateImage = (imageData: ImageData, iterations: number): ImageData => {
+  const { width, height, data } = imageData;
+  let current = new Uint8ClampedArray(data);
+  
+  for (let iter = 0; iter < iterations; iter++) {
+    const next = new Uint8ClampedArray(current);
+    
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4;
+        
+        // If current pixel is white (background)
+        if (current[idx] > 200) {
+          // Check neighbors
+          let hasBlackNeighbor = false;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const nidx = ((y + dy) * width + (x + dx)) * 4;
+              if (current[nidx] < 50) {
+                hasBlackNeighbor = true;
+                break;
+              }
+            }
+            if (hasBlackNeighbor) break;
+          }
+          
+          if (hasBlackNeighbor) {
+            next[idx] = 0;
+            next[idx + 1] = 0;
+            next[idx + 2] = 0;
+          }
+        }
+      }
+    }
+    
+    current = next;
+  }
+  
+  return new ImageData(current, width, height);
+};
+
 /**
- * Bloomberg OCR using Tesseract.js (FREE - runs in browser)
+ * Bloomberg OCR using Tesseract.js - Enhanced
  */
 export class TesseractOCR {
   
@@ -27,8 +101,8 @@ export class TesseractOCR {
       const img = new Image();
       
       img.onload = () => {
-        // Scale up 2x for better OCR accuracy
-        const scale = 2;
+        // Scale up 3x for better OCR accuracy
+        const scale = 3;
         canvas.width = img.width * scale;
         canvas.height = img.height * scale;
         
@@ -37,12 +111,18 @@ export class TesseractOCR {
           return;
         }
         
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        // Disable smoothing for sharper text
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
+        // Apply sharpening first
+        let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        imageData = applyUnsharpMask(imageData);
+        ctx.putImageData(imageData, 0, 0);
+        
+        // Get image data again for color processing
+        const processedData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = processedData.data;
         
         // Bloomberg terminal: colored text on dark background
         // Convert to black text on white background for OCR
@@ -51,16 +131,26 @@ export class TesseractOCR {
           const g = data[i + 1];
           const b = data[i + 2];
           
-          // Detect text colors (green, yellow, white, orange, red, cyan)
-          const isGreen = g > 100 && r < 150 && b < 150;
-          const isYellow = r > 180 && g > 180 && b < 150;
-          const isWhite = r > 140 && g > 140 && b > 140;
-          const isOrange = r > 160 && g > 80 && g < 180 && b < 100;
-          const isRed = r > 150 && g < 100 && b < 100;
-          const isCyan = g > 130 && b > 130 && r < 150;
+          // Calculate brightness
+          const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
           
-          // Make text black, background white
-          if (isGreen || isYellow || isWhite || isOrange || isRed || isCyan) {
+          // Enhanced Bloomberg text color detection
+          const isGreen = g > 80 && g > r * 1.3 && g > b * 1.3;
+          const isYellow = r > 150 && g > 150 && b < 120 && Math.abs(r - g) < 60;
+          const isOrange = r > 180 && g > 100 && g < 200 && b < 80;
+          const isAmber = r > 200 && g > 140 && g < 220 && b < 100;
+          const isWhite = r > 150 && g > 150 && b > 150;
+          const isRed = r > 150 && r > g * 1.5 && r > b * 1.5;
+          const isCyan = b > 100 && g > 100 && r < 120;
+          const isLightBlue = b > 150 && g > 150 && r < 180;
+          
+          // Check if pixel is text
+          const isText = isGreen || isYellow || isOrange || isAmber || 
+                         isWhite || isRed || isCyan || isLightBlue || 
+                         brightness > 100;
+          
+          // Convert to black text on white background
+          if (isText) {
             data[i] = 0;
             data[i + 1] = 0;
             data[i + 2] = 0;
@@ -71,8 +161,14 @@ export class TesseractOCR {
           }
         }
         
-        ctx.putImageData(imageData, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
+        ctx.putImageData(processedData, 0, 0);
+        
+        // Apply dilation to thicken text
+        const finalData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const dilated = dilateImage(finalData, 1);
+        ctx.putImageData(dilated, 0, 0);
+        
+        resolve(canvas.toDataURL('image/png', 1.0));
       };
       
       img.onerror = () => reject(new Error('Failed to load image'));
@@ -89,31 +185,33 @@ export class TesseractOCR {
   ): Promise<OCRResult> {
     
     let imageUrl: string;
+    let processedImageUrl: string | undefined;
     
     if (typeof imageSource === 'string') {
       imageUrl = imageSource;
+      processedImageUrl = imageSource;
     } else {
       // Preprocess the image first
       if (onProgress) onProgress({ status: 'Preprocessing...', progress: 5 });
       imageUrl = await this.preprocessImage(imageSource);
+      processedImageUrl = imageUrl;
     }
     
     if (onProgress) onProgress({ status: 'Starting OCR...', progress: 10 });
     
-    const result = await Tesseract.recognize(
-      imageUrl,
-      'eng',
-      {
-        logger: (m) => {
-          if (onProgress && m.status === 'recognizing text') {
-            onProgress({
-              status: 'Recognizing text...',
-              progress: 10 + Math.round((m.progress || 0) * 80)
-            });
-          }
-        }
-      }
-    );
+    // Use createWorker for better control
+    const worker = await Tesseract.createWorker('eng');
+    
+    // Set parameters for table recognition
+    await worker.setParameters({
+      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,+-/%()$ ',
+      preserve_interword_spaces: '1',
+    });
+    
+    const result = await worker.recognize(imageUrl);
+
+    await worker.terminate();
 
     const text = result.data.text;
     const confidence = result.data.confidence;
@@ -125,7 +223,7 @@ export class TesseractOCR {
     
     if (onProgress) onProgress({ status: 'Complete', progress: 100 });
     
-    return { text, confidence, rows };
+    return { text, confidence, rows, processedImageUrl };
   }
 
   /**
@@ -158,7 +256,6 @@ export class TesseractOCR {
     // Common patterns
     const tickerPattern = /([A-Z0-9]{1,10})\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB|IT|SW|C|IM|SS|SZ|KS|TT|PM|IJ|MK|NZ|AB|AV|BB|CT|DC|FH|GA|GR|ID|IR|LI|MC|NA|NO|PL|PW|RO|SM|SE|VX)\b/i;
     const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
-    const percentPattern = /(\d+\.\d+)/;
     const numberWithCommas = /[\d,]+(?:\.\d+)?/g;
     
     for (const line of lines) {
@@ -202,13 +299,13 @@ export class TesseractOCR {
         .filter(n => n !== rowNum && !n.includes('/'))
         .map(n => n.replace(/,/g, ''));
       
-      // Try to identify specific numbers
+      // Identify specific values
       let position = '';
       let posChg = '';
       let pctOut = '';
       let currMV = '';
       
-      // Find position change (usually has +/- prefix in context)
+      // Find position change (usually has +/- prefix)
       const posChgMatch = trimmedLine.match(/([+-]\s*[\d,]+)/);
       if (posChgMatch) {
         posChg = posChgMatch[1].replace(/\s/g, '');
@@ -218,17 +315,24 @@ export class TesseractOCR {
       const pctMatch = trimmedLine.match(/(\d+\.\d{2,4})\s*$/);
       if (pctMatch) {
         pctOut = pctMatch[1];
+      } else {
+        for (const num of cleanNumbers) {
+          const val = parseFloat(num);
+          if (!isNaN(val) && val < 100 && num.includes('.') && val > 0) {
+            if (!pctOut) pctOut = num;
+          }
+        }
       }
       
-      // Identify position (large number without decimal)
+      // Find position (large integer)
       for (const num of cleanNumbers) {
         const numVal = parseFloat(num);
-        if (numVal > 10000 && !num.includes('.')) {
+        if (numVal > 10000 && !num.includes('.') && !num.startsWith('+') && !num.startsWith('-')) {
           if (!position) position = num;
         }
       }
       
-      // Find market value (MLN, BLN, or large decimal number)
+      // Find market value
       const mvMatch = trimmedLine.match(/([\d,.]+)\s*(?:MLN|BLN|M|B)/i);
       if (mvMatch) {
         currMV = mvMatch[0];
@@ -236,15 +340,15 @@ export class TesseractOCR {
       
       // Build row
       const row = [
-        rowNum,           // Rk
-        security,         // Name
-        ticker,           // Ticker
-        'ULT-AGG',        // Field (default)
-        position,         // Position
-        posChg,           // Pos Chg
-        pctOut,           // % Out
-        currMV,           // Curr MV
-        filingDate        // Filing Date
+        rowNum,
+        security,
+        ticker,
+        'ULT-AGG',
+        position,
+        posChg,
+        pctOut,
+        currMV,
+        filingDate
       ];
       
       // Only add if we have meaningful data
@@ -263,7 +367,7 @@ export class TesseractOCR {
     const headerKeywords = [
       'security', 'ticker', 'position', 'source', 'filing',
       'no.', 'pos chg', 'pct', 'mkt val', 'date', 'field',
-      'holdings', 'region', 'num of', '%', 'curr'
+      'holdings', 'region', 'num of', '%', 'curr', 'name', 'rk'
     ];
     const rowText = row.join(' ').toLowerCase();
     const matchCount = headerKeywords.filter(keyword => rowText.includes(keyword)).length;
@@ -314,7 +418,6 @@ export class TesseractOCR {
         // Skip header rows
         if (this.isHeaderRow(row)) continue;
         
-        // Map row data to columns
         row.forEach((cell, colIndex) => {
           if (colIndex < headers.length) {
             const cellAddress = this.getCellAddress(rowIndex, colIndex);

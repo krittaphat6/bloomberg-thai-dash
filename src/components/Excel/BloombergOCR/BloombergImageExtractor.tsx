@@ -8,7 +8,8 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ImageUploadSlot } from './ImageUploadSlot';
 import { ResultsPreview } from './ResultsPreview';
-import { BloombergProcessor, ExtractedRow, ValidationReport } from './BloombergProcessor';
+import { BloombergProcessor, ExtractedRow, ValidationReport, DebugInfo } from './BloombergProcessor';
+import { OCRDebugger } from './OCRDebugger';
 
 interface ImageSlot {
   slot: number;
@@ -51,6 +52,7 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
   // Results state
   const [results, setResults] = useState<ExtractedRow[]>([]);
   const [validation, setValidation] = useState<ValidationReport | null>(null);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   
   // Stats
   const uploadedCount = imageSlots.filter(s => s.file !== null).length;
