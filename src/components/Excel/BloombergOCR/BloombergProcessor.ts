@@ -1,4 +1,4 @@
-// Bloomberg Image Processing Pipeline using Tesseract.js OCR - Improved Version
+// Bloomberg Image Processing Pipeline using Tesseract.js OCR - Enhanced Version
 import Tesseract from 'tesseract.js';
 
 export interface ExtractedCell {
@@ -35,6 +35,13 @@ export interface ProcessingProgress {
   status: string;
 }
 
+export interface DebugInfo {
+  originalImageUrl: string;
+  processedImageUrl: string;
+  rawOcrText: string;
+  confidence: number;
+}
+
 // Column definitions for Bloomberg data
 const BLOOMBERG_COLUMNS = [
   'Rk',
@@ -48,6 +55,76 @@ const BLOOMBERG_COLUMNS = [
   'Filing Date'
 ];
 
+// Unsharp Mask for sharpening
+const applyUnsharpMask = (imageData: ImageData): ImageData => {
+  const { width, height, data } = imageData;
+  const output = new Uint8ClampedArray(data);
+  
+  const kernel = [
+    0, -1, 0,
+    -1, 5, -1,
+    0, -1, 0
+  ];
+  
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            const idx = ((y + ky) * width + (x + kx)) * 4 + c;
+            sum += data[idx] * kernel[(ky + 1) * 3 + (kx + 1)];
+          }
+        }
+        const idx = (y * width + x) * 4 + c;
+        output[idx] = Math.max(0, Math.min(255, sum));
+      }
+    }
+  }
+  
+  return new ImageData(output, width, height);
+};
+
+// Dilation to thicken text
+const dilateImage = (imageData: ImageData, iterations: number): ImageData => {
+  const { width, height, data } = imageData;
+  let current = new Uint8ClampedArray(data);
+  
+  for (let iter = 0; iter < iterations; iter++) {
+    const next = new Uint8ClampedArray(current);
+    
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4;
+        
+        if (current[idx] > 200) {
+          let hasBlackNeighbor = false;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const nidx = ((y + dy) * width + (x + dx)) * 4;
+              if (current[nidx] < 50) {
+                hasBlackNeighbor = true;
+                break;
+              }
+            }
+            if (hasBlackNeighbor) break;
+          }
+          
+          if (hasBlackNeighbor) {
+            next[idx] = 0;
+            next[idx + 1] = 0;
+            next[idx + 2] = 0;
+          }
+        }
+      }
+    }
+    
+    current = next;
+  }
+  
+  return new ImageData(current, width, height);
+};
+
 // Preprocess image for better OCR results on Bloomberg terminal
 const preprocessImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -56,8 +133,8 @@ const preprocessImage = (file: File): Promise<string> => {
     const img = new Image();
     
     img.onload = () => {
-      // Scale up for better OCR (2x)
-      const scale = 2;
+      // Scale up 3x for better OCR
+      const scale = 3;
       canvas.width = img.width * scale;
       canvas.height = img.height * scale;
       
@@ -66,31 +143,42 @@ const preprocessImage = (file: File): Promise<string> => {
         return;
       }
       
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
+      // Disable smoothing for sharper text
+      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
+      // Apply sharpening
+      let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      imageData = applyUnsharpMask(imageData);
+      ctx.putImageData(imageData, 0, 0);
       
-      // Bloomberg terminal: colored text on dark background
-      // Convert to black text on white background for OCR
+      // Get image data again
+      const processedData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = processedData.data;
+      
+      // Bloomberg terminal color detection - Enhanced thresholds
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
         
-        // Detect text colors (green, yellow, white, orange, red, cyan, amber)
-        const isGreen = g > 100 && r < 150 && b < 150;
-        const isYellow = r > 180 && g > 180 && b < 150;
-        const isWhite = r > 130 && g > 130 && b > 130;
-        const isOrange = r > 160 && g > 80 && g < 180 && b < 100;
-        const isRed = r > 150 && g < 100 && b < 100;
-        const isCyan = g > 120 && b > 120 && r < 150;
-        const isAmber = r > 200 && g > 150 && g < 200 && b < 80;
+        const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
         
-        // Make text black, background white
-        if (isGreen || isYellow || isWhite || isOrange || isRed || isCyan || isAmber) {
+        // Enhanced text color detection
+        const isGreen = g > 80 && g > r * 1.3 && g > b * 1.3;
+        const isYellow = r > 150 && g > 150 && b < 120 && Math.abs(r - g) < 60;
+        const isOrange = r > 180 && g > 100 && g < 200 && b < 80;
+        const isAmber = r > 200 && g > 140 && g < 220 && b < 100;
+        const isWhite = r > 150 && g > 150 && b > 150;
+        const isRed = r > 150 && r > g * 1.5 && r > b * 1.5;
+        const isCyan = b > 100 && g > 100 && r < 120;
+        const isLightBlue = b > 150 && g > 150 && r < 180;
+        
+        const isText = isGreen || isYellow || isOrange || isAmber || 
+                       isWhite || isRed || isCyan || isLightBlue || 
+                       brightness > 100;
+        
+        if (isText) {
           data[i] = 0;
           data[i + 1] = 0;
           data[i + 2] = 0;
@@ -101,8 +189,14 @@ const preprocessImage = (file: File): Promise<string> => {
         }
       }
       
-      ctx.putImageData(imageData, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
+      ctx.putImageData(processedData, 0, 0);
+      
+      // Apply dilation to thicken text
+      const finalData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const dilated = dilateImage(finalData, 1);
+      ctx.putImageData(dilated, 0, 0);
+      
+      resolve(canvas.toDataURL('image/png', 1.0));
     };
     
     img.onerror = () => reject(new Error('Failed to load image'));
@@ -115,14 +209,14 @@ const isHeaderLine = (line: string): boolean => {
   const headerKeywords = [
     'security', 'ticker', 'position', 'source', 'filing',
     'no.', 'pos chg', 'pct', 'mkt val', 'field', 'holdings', 
-    'region', 'num of', 'curr', '% out'
+    'region', 'num of', 'curr', '% out', 'name', 'rk'
   ];
   const lowLine = line.toLowerCase();
   const matchCount = headerKeywords.filter(k => lowLine.includes(k)).length;
   return matchCount >= 2;
 };
 
-// Parse OCR text into structured table rows - Improved algorithm
+// Parse OCR text into structured table rows
 const parseOCRText = (text: string): Array<{
   rank: string;
   name: string;
@@ -148,7 +242,6 @@ const parseOCRText = (text: string): Array<{
   
   const lines = text.split('\n').filter(line => line.trim());
   
-  // Common patterns
   const tickerPattern = /([A-Z0-9]{1,10})\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB|IT|SW|C|IM|SS|SZ|KS|TT|PM|IJ|MK|NZ|AB|AV|BB|CT|DC|FH|GA|GR|ID|IR|LI|MC|NA|NO|PL|PW|RO|SM|SE|VX)\b/i;
   const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
   const numberPattern = /[+-]?[\d,]+(?:\.\d+)?/g;
@@ -156,25 +249,20 @@ const parseOCRText = (text: string): Array<{
   for (const line of lines) {
     const trimmedLine = line.trim();
     
-    // Skip headers and short lines
     if (isHeaderLine(trimmedLine)) continue;
     if (trimmedLine.length < 10) continue;
     
-    // Check if line starts with a row number or contains a ticker
     const startsWithNumber = /^\d+[\s\)\.]+/.test(trimmedLine);
     const hasTicker = tickerPattern.test(trimmedLine);
     
     if (!startsWithNumber && !hasTicker) continue;
     
-    // Extract row number
     const rowNumMatch = trimmedLine.match(/^(\d+)[\s\)\.]*/);
     const rowNum = rowNumMatch ? rowNumMatch[1] : '';
     
-    // Extract ticker
     const tickerMatch = trimmedLine.match(tickerPattern);
     const ticker = tickerMatch ? `${tickerMatch[1]} ${tickerMatch[2]}` : '';
     
-    // Extract security name (text before ticker)
     let name = '';
     if (tickerMatch && tickerMatch.index !== undefined) {
       name = trimmedLine
@@ -184,29 +272,24 @@ const parseOCRText = (text: string): Array<{
         .trim();
     }
     
-    // Extract date
     const dateMatch = trimmedLine.match(datePattern);
     const filingDate = dateMatch ? dateMatch[1] : '';
     
-    // Extract all numbers
     const numbers = trimmedLine.match(numberPattern) || [];
     const cleanNumbers = numbers
       .filter(n => n !== rowNum && !n.includes('/'))
       .map(n => n.trim());
     
-    // Identify specific values
     let position = '';
     let posChg = '';
     let pctOut = '';
     let currMV = '';
     
-    // Find position change (usually has +/- prefix)
     const posChgMatch = trimmedLine.match(/([+-]\s*[\d,]+)/);
     if (posChgMatch) {
       posChg = posChgMatch[1].replace(/\s/g, '');
     }
     
-    // Find percentage (small decimal number, usually 0.XX)
     for (const num of cleanNumbers) {
       const val = parseFloat(num.replace(/,/g, ''));
       if (!isNaN(val) && val < 100 && num.includes('.') && val > 0) {
@@ -214,7 +297,6 @@ const parseOCRText = (text: string): Array<{
       }
     }
     
-    // Find position (large integer)
     for (const num of cleanNumbers) {
       const val = parseFloat(num.replace(/,/g, ''));
       if (!isNaN(val) && val > 10000 && !num.includes('.') && !num.startsWith('+') && !num.startsWith('-')) {
@@ -222,12 +304,10 @@ const parseOCRText = (text: string): Array<{
       }
     }
     
-    // Find market value (with MLN/BLN suffix or large decimal)
     const mvMatch = trimmedLine.match(/([\d,.]+)\s*(MLN|BLN|M|B)/i);
     if (mvMatch) {
       currMV = mvMatch[0];
     } else {
-      // Look for large decimal numbers that could be market value
       for (const num of cleanNumbers) {
         const val = parseFloat(num.replace(/,/g, ''));
         if (!isNaN(val) && val > 100 && num.includes('.') && num !== pctOut) {
@@ -236,7 +316,6 @@ const parseOCRText = (text: string): Array<{
       }
     }
     
-    // Build row
     const row = {
       rank: rowNum,
       name: name,
@@ -249,7 +328,6 @@ const parseOCRText = (text: string): Array<{
       filingDate: filingDate
     };
     
-    // Only add if we have meaningful data
     if (ticker || name || position) {
       rows.push(row);
     }
@@ -260,13 +338,17 @@ const parseOCRText = (text: string): Array<{
 
 export class BloombergProcessor {
   private onProgress?: (progress: ProcessingProgress) => void;
+  private debugInfo?: DebugInfo;
   
   constructor(onProgress?: (progress: ProcessingProgress) => void) {
     this.onProgress = onProgress;
   }
   
-  async processImage(file: File, imageIndex: number = 0): Promise<ExtractedRow[]> {
-    // Update progress
+  getDebugInfo(): DebugInfo | undefined {
+    return this.debugInfo;
+  }
+  
+  async processImage(file: File, imageIndex: number = 0, originalDataUrl?: string): Promise<ExtractedRow[]> {
     if (this.onProgress) {
       this.onProgress({
         current: 0,
@@ -277,7 +359,6 @@ export class BloombergProcessor {
       });
     }
     
-    // Preprocess image
     const processedImage = await preprocessImage(file);
     
     if (this.onProgress) {
@@ -290,24 +371,26 @@ export class BloombergProcessor {
       });
     }
     
-    // Run Tesseract OCR
-    const result = await Tesseract.recognize(
-      processedImage,
-      'eng',
-      {
-        logger: (m) => {
-          if (m.status === 'recognizing text' && this.onProgress) {
-            this.onProgress({
-              current: 10 + Math.round(m.progress * 80),
-              total: 100,
-              currentImage: imageIndex + 1,
-              totalImages: 1,
-              status: `OCR: ${Math.round(m.progress * 100)}%`
-            });
-          }
-        }
-      }
-    );
+    // Use createWorker for better control
+    const worker = await Tesseract.createWorker('eng');
+    
+    await worker.setParameters({
+      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,+-/%()$ ',
+      preserve_interword_spaces: '1',
+    });
+    
+    const result = await worker.recognize(processedImage);
+    
+    await worker.terminate();
+    
+    // Store debug info
+    this.debugInfo = {
+      originalImageUrl: originalDataUrl || '',
+      processedImageUrl: processedImage,
+      rawOcrText: result.data.text,
+      confidence: result.data.confidence
+    };
     
     if (this.onProgress) {
       this.onProgress({
@@ -319,10 +402,8 @@ export class BloombergProcessor {
       });
     }
     
-    // Parse OCR text
     const parsedRows = parseOCRText(result.data.text);
     
-    // Convert to ExtractedRow format
     const rows: ExtractedRow[] = parsedRows.map((parsed, idx) => {
       const cells: ExtractedCell[] = [
         { column: 'Rk', value: parsed.rank || String(idx + 1), confidence: 0.9, originalColor: 'white' },
@@ -356,7 +437,7 @@ export class BloombergProcessor {
     return rows;
   }
   
-  async processMultipleImages(files: File[]): Promise<ExtractedRow[]> {
+  async processMultipleImages(files: File[], dataUrls?: string[]): Promise<ExtractedRow[]> {
     const allRows: ExtractedRow[] = [];
     let globalRowNumber = 1;
     
@@ -373,12 +454,10 @@ export class BloombergProcessor {
         });
       }
       
-      const rows = await this.processImage(file, i);
+      const rows = await this.processImage(file, i, dataUrls?.[i]);
       
-      // Renumber rows to be continuous across images
       for (const row of rows) {
         row.rowNumber = globalRowNumber++;
-        // Update Rk cell
         const rkCell = row.cells.find(c => c.column === 'Rk');
         if (rkCell) {
           rkCell.value = String(row.rowNumber);
@@ -393,13 +472,11 @@ export class BloombergProcessor {
   convertToExcelData(rows: ExtractedRow[]): Record<string, any> {
     const excelData: Record<string, any> = {};
     
-    // Add headers
     BLOOMBERG_COLUMNS.forEach((col, colIdx) => {
       const address = this.getCellAddress(0, colIdx);
       excelData[address] = col;
     });
     
-    // Add data rows
     rows.forEach((row, rowIdx) => {
       row.cells.forEach((cell, colIdx) => {
         const address = this.getCellAddress(rowIdx + 1, colIdx);
@@ -441,7 +518,6 @@ export class BloombergProcessor {
       }
     }
     
-    // Generate warnings
     if (lowConfidenceCells.length > 0) {
       const lowConfPct = Math.round((lowConfidenceCells.length / totalCells) * 100);
       warnings.push(`${lowConfidenceCells.length} cells (${lowConfPct}%) have low confidence`);
@@ -451,7 +527,6 @@ export class BloombergProcessor {
       warnings.push('No rows were detected in the images');
     }
     
-    // Check for empty important cells
     const emptyTickers = rows.filter(r => {
       const ticker = r.cells.find(c => c.column === 'Ticker');
       return !ticker?.value.trim();
