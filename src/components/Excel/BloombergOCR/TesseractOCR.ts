@@ -247,100 +247,146 @@ export class TesseractOCR {
   }
 
   /**
-   * Parse Bloomberg text into structured rows - Improved algorithm
+   * Parse Bloomberg text into structured rows - Enhanced algorithm
    */
   static parseBloombergText(text: string): string[][] {
     const lines = text.split('\n').filter(line => line.trim());
     const rows: string[][] = [];
     
-    // Common patterns
-    const tickerPattern = /([A-Z0-9]{1,10})\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB|IT|SW|C|IM|SS|SZ|KS|TT|PM|IJ|MK|NZ|AB|AV|BB|CT|DC|FH|GA|GR|ID|IR|LI|MC|NA|NO|PL|PW|RO|SM|SE|VX)\b/i;
+    // Expanded ticker patterns
+    const tickerPatterns = [
+      /([A-Z]{2,5})\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB)\b/i,
+      /(\d{4})\s+(JP)\b/i,
+      /TF\s*Float\s*[\d\.]+/i,
+    ];
+    
     const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
-    const numberWithCommas = /[\d,]+(?:\.\d+)?/g;
+    const positionPattern = /\b(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\b/g;
+    const posChgPattern = /([+-]\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?)/;
+    const mvPattern = /([\d,.]+)\s*(BLN|MLN|M|B)\b/i;
+    
+    const securityKeywords = [
+      'TREASURY', 'Microsoft', 'NVIDIA', 'Apple', 'Alphabet', 'Google',
+      'Exxon', 'Meta', 'Broadcom', 'Home Depot', 'JPMorgan', 'Chevron',
+      'Corp', 'Inc', 'Ltd', 'Co', 'Class', 'Common'
+    ];
+    
+    let rowCounter = 1;
     
     for (const line of lines) {
       const trimmedLine = line.trim();
       
-      // Skip header lines
       if (this.isHeaderRow([trimmedLine])) continue;
-      if (trimmedLine.length < 10) continue;
+      if (trimmedLine.length < 15) continue;
       
-      // Check if line starts with a row number or contains a ticker
-      const startsWithNumber = /^\d+[\s\)\.]+/.test(trimmedLine);
-      const hasTicker = tickerPattern.test(trimmedLine);
-      
-      if (!startsWithNumber && !hasTicker) continue;
-      
-      // Extract row number
-      const rowNumMatch = trimmedLine.match(/^(\d+)[\s\)\.]*/);
-      const rowNum = rowNumMatch ? rowNumMatch[1] : '';
-      
-      // Extract ticker
-      const tickerMatch = trimmedLine.match(tickerPattern);
-      const ticker = tickerMatch ? `${tickerMatch[1]} ${tickerMatch[2]}` : '';
-      
-      // Extract security name (text before ticker)
+      // Initialize row values
+      let rowNum = '';
       let security = '';
-      if (tickerMatch && tickerMatch.index !== undefined) {
-        security = trimmedLine
-          .substring(0, tickerMatch.index)
-          .replace(/^\d+[\s\)\.]+/, '')
-          .replace(/\s+/g, ' ')
-          .trim();
-      }
-      
-      // Extract date
-      const dateMatch = trimmedLine.match(datePattern);
-      const filingDate = dateMatch ? dateMatch[1] : '';
-      
-      // Extract numbers
-      const numbers = trimmedLine.match(numberWithCommas) || [];
-      const cleanNumbers = numbers
-        .filter(n => n !== rowNum && !n.includes('/'))
-        .map(n => n.replace(/,/g, ''));
-      
-      // Identify specific values
+      let ticker = '';
       let position = '';
       let posChg = '';
       let pctOut = '';
       let currMV = '';
+      let filingDate = '';
       
-      // Find position change (usually has +/- prefix)
-      const posChgMatch = trimmedLine.match(/([+-]\s*[\d,]+)/);
-      if (posChgMatch) {
-        posChg = posChgMatch[1].replace(/\s/g, '');
+      // Extract row number
+      const rowNumMatch = trimmedLine.match(/^(\d{1,2})[\s\)\.\]]+/);
+      if (rowNumMatch) {
+        rowNum = rowNumMatch[1];
       }
       
-      // Find percentage (small decimal number)
-      const pctMatch = trimmedLine.match(/(\d+\.\d{2,4})\s*$/);
-      if (pctMatch) {
-        pctOut = pctMatch[1];
-      } else {
-        for (const num of cleanNumbers) {
-          const val = parseFloat(num);
-          if (!isNaN(val) && val < 100 && num.includes('.') && val > 0) {
-            if (!pctOut) pctOut = num;
+      // Extract ticker
+      let tickerFound = false;
+      let tickerMatch: RegExpMatchArray | null = null;
+      for (const pattern of tickerPatterns) {
+        tickerMatch = trimmedLine.match(pattern);
+        if (tickerMatch) {
+          ticker = tickerMatch[0].trim().toUpperCase();
+          tickerFound = true;
+          break;
+        }
+      }
+      
+      // Extract security name
+      if (tickerFound && tickerMatch && tickerMatch.index !== undefined) {
+        const tickerIndex = tickerMatch.index;
+        if (tickerIndex > 0) {
+          let nameStart = rowNumMatch ? rowNumMatch[0].length : 0;
+          let potentialName = trimmedLine.substring(nameStart, tickerIndex).trim();
+          potentialName = potentialName
+            .replace(/^[\s\-\)\.\]]+/, '')
+            .replace(/[\s\-\)\.\]]+$/, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          if (potentialName.length > 2) {
+            const hasSecurityWord = securityKeywords.some(kw => 
+              potentialName.toLowerCase().includes(kw.toLowerCase())
+            );
+            if (hasSecurityWord || /^[A-Za-z\s&\.]+$/.test(potentialName) || potentialName.length > 5) {
+              security = potentialName;
+            }
           }
         }
       }
       
-      // Find position (large integer)
-      for (const num of cleanNumbers) {
-        const numVal = parseFloat(num);
-        if (numVal > 10000 && !num.includes('.') && !num.startsWith('+') && !num.startsWith('-')) {
-          if (!position) position = num;
-        }
+      // Skip if no ticker found
+      if (!tickerFound) continue;
+      
+      // Extract filing date
+      const dateMatch = trimmedLine.match(datePattern);
+      if (dateMatch) {
+        filingDate = dateMatch[1];
       }
       
-      // Find market value
-      const mvMatch = trimmedLine.match(/([\d,.]+)\s*(?:MLN|BLN|M|B)/i);
+      // Extract position change
+      const posChgMatch = trimmedLine.match(posChgPattern);
+      if (posChgMatch) {
+        posChg = posChgMatch[1].replace(/\s/g, '');
+      }
+      
+      // Extract market value
+      const mvMatch = trimmedLine.match(mvPattern);
       if (mvMatch) {
         currMV = mvMatch[0];
       }
       
-      // Build row
+      // Extract numbers for position and % out
+      const allNumbers = [...trimmedLine.matchAll(positionPattern)];
+      const numbers = allNumbers
+        .map(m => m[1])
+        .filter(n => {
+          if (n === rowNum) return false;
+          if (posChg.includes(n)) return false;
+          if (currMV.includes(n)) return false;
+          if (filingDate.includes(n)) return false;
+          return true;
+        });
+      
+      // Find position
+      for (const num of numbers) {
+        const val = parseFloat(num.replace(/,/g, ''));
+        if (!isNaN(val) && val > 100000 && !num.includes('.')) {
+          if (!position) position = num;
+        }
+      }
+      
+      // Find % out
+      for (const num of numbers) {
+        const val = parseFloat(num.replace(/,/g, ''));
+        if (!isNaN(val) && val > 0 && val < 100 && num.includes('.')) {
+          if (!pctOut && num !== position) pctOut = num;
+        }
+      }
+      
+      // Assign row number if not found
+      if (!rowNum && (tickerFound || position)) {
+        rowNum = String(rowCounter);
+      }
+      
+      // Build row array
       const row = [
-        rowNum,
+        rowNum || String(rowCounter),
         security,
         ticker,
         'ULT-AGG',
@@ -351,9 +397,9 @@ export class TesseractOCR {
         filingDate
       ];
       
-      // Only add if we have meaningful data
       if (ticker || security || position) {
         rows.push(row);
+        rowCounter++;
       }
     }
     
@@ -367,7 +413,8 @@ export class TesseractOCR {
     const headerKeywords = [
       'security', 'ticker', 'position', 'source', 'filing',
       'no.', 'pos chg', 'pct', 'mkt val', 'date', 'field',
-      'holdings', 'region', 'num of', '%', 'curr', 'name', 'rk'
+      'holdings', 'region', 'num of', '%', 'curr', 'name', 'rk',
+      'total', 'currency', 'periodicity', 'management'
     ];
     const rowText = row.join(' ').toLowerCase();
     const matchCount = headerKeywords.filter(keyword => rowText.includes(keyword)).length;
