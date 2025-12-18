@@ -860,7 +860,7 @@ export default function NoteTaking() {
                     <Table className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
                     <h3 className="text-lg font-semibold mb-2">Excel-Style Spreadsheets</h3>
                     <p className="text-muted-foreground mb-4">Create powerful spreadsheets with formulas, charts, and data analysis</p>
-                    <div className="flex gap-2 justify-center">
+                    <div className="flex gap-2 justify-center flex-wrap">
                       <Button onClick={createNewSpreadsheet}>
                         <Plus className="h-4 w-4 mr-2" />
                         New Spreadsheet

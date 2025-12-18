@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Camera, RefreshCw, Check, X, AlertTriangle, FileSpreadsheet } from 'lucide-react';
+import { Camera, RefreshCw, Check, X, AlertTriangle, FileSpreadsheet, Upload, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ImageUploadSlot } from './ImageUploadSlot';
@@ -29,6 +29,8 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
 }) => {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'upload' | 'preview'>('upload');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentUploadSlot, setCurrentUploadSlot] = useState<number | null>(null);
   
   // Image slots state
   const [imageSlots, setImageSlots] = useState<ImageSlot[]>(
@@ -73,6 +75,20 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
         : slot
     ));
   }, []);
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && currentUploadSlot !== null) {
+      handleImageUpload(currentUploadSlot, file);
+    }
+    e.target.value = '';
+    setCurrentUploadSlot(null);
+  };
+
+  const triggerFileInput = (slotIndex: number) => {
+    setCurrentUploadSlot(slotIndex);
+    fileInputRef.current?.click();
+  };
   
   const handleProcessAll = async () => {
     const filesToProcess = imageSlots.filter(s => s.file !== null);
@@ -101,11 +117,16 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
         setProcessingStatus(progress.status);
         
         // Update individual slot progress
-        setImageSlots(prev => prev.map((slot, i) => 
-          i === progress.currentImage - 1 && slot.file
-            ? { ...slot, progress: Math.round((progress.current / progress.total) * 100) }
-            : slot
-        ));
+        if (progress.currentImage > 0) {
+          setImageSlots(prev => prev.map((slot, i) => {
+            const slotsWithFiles = prev.filter(s => s.file !== null);
+            const currentIndex = progress.currentImage - 1;
+            if (slotsWithFiles[currentIndex] && slot.slot === slotsWithFiles[currentIndex].slot) {
+              return { ...slot, progress: progress.current };
+            }
+            return slot;
+          }));
+        }
       });
       
       const files = filesToProcess.map(s => s.file!);
@@ -207,14 +228,23 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
   return (
     <Dialog open onOpenChange={() => onClose()}>
       <DialogContent className="max-w-[95vw] max-h-[95vh] w-[1200px] h-[800px] flex flex-col p-0 gap-0">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileInputChange}
+          className="hidden"
+        />
+
         {/* Header */}
         <DialogHeader className="px-4 py-3 border-b border-border bg-card">
           <DialogTitle className="flex items-center gap-2 text-terminal-green">
             <Camera className="h-5 w-5 text-terminal-amber" />
-            Bloomberg Image to Excel Converter
+            Bloomberg Image to Excel (Tesseract OCR - ฟรี!)
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
-            แปลงรูปภาพ Bloomberg Terminal เป็นข้อมูลตาราง Excel
+            แปลงรูปภาพ Bloomberg Terminal เป็นข้อมูลตาราง Excel โดยใช้ OCR
           </p>
         </DialogHeader>
         
@@ -283,13 +313,16 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
             {isProcessing && (
               <div className="mt-4 p-3 bg-terminal-amber/10 border border-terminal-amber/30 rounded">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-bold text-terminal-amber">กำลังประมวลผล...</span>
+                  <span className="text-sm font-bold text-terminal-amber flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    กำลังประมวลผล...
+                  </span>
                   <span className="text-xs text-muted-foreground">
-                    {overallProgress.current}/{overallProgress.total} แถว
+                    {overallProgress.current}%
                   </span>
                 </div>
                 <Progress 
-                  value={overallProgress.total > 0 ? (overallProgress.current / overallProgress.total) * 100 : 0} 
+                  value={overallProgress.current} 
                   className="h-2"
                 />
                 <p className="text-xs text-muted-foreground mt-1">{processingStatus}</p>
@@ -345,8 +378,17 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
                 disabled={isProcessing || uploadedCount === 0}
                 className="bg-terminal-amber text-black hover:bg-terminal-amber/90"
               >
-                <RefreshCw className={cn("h-4 w-4 mr-1", isProcessing && "animate-spin")} />
-                {isProcessing ? 'กำลังประมวลผล...' : 'ประมวลผลทั้งหมด'}
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    กำลังประมวลผล...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                    ประมวลผลทั้งหมด ({uploadedCount})
+                  </>
+                )}
               </Button>
             ) : (
               <Button 
