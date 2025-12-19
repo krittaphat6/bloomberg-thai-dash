@@ -181,8 +181,9 @@ export default function TradingJournal() {
     return trades.filter(t => t.folderId === folderId).length;
   };
 
+  // Calculate stats from filtered trades (not all trades)
   const calculateStats = (): TradingStats => {
-    const closedTrades = trades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined);
+    const closedTrades = filteredTrades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined);
     const wins = closedTrades.filter(t => t.pnl! > 0);
     const losses = closedTrades.filter(t => t.pnl! < 0);
     
@@ -202,12 +203,13 @@ export default function TradingJournal() {
     };
   };
 
+  // Use filteredTrades for monthly stats
   const getTradesByMonth = () => {
     const months = [];
     const now = new Date();
     for (let i = 0; i < 6; i++) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthTrades = trades.filter(t => {
+      const monthTrades = filteredTrades.filter(t => {
         const tradeDate = new Date(t.date);
         return tradeDate.getMonth() === date.getMonth() && 
                tradeDate.getFullYear() === date.getFullYear() &&
@@ -244,7 +246,7 @@ export default function TradingJournal() {
     
     while (current <= endDate) {
       const dateStr = current.toISOString().split('T')[0];
-      const dayTrades = trades.filter(t => t.date === dateStr && t.status === 'CLOSED');
+      const dayTrades = filteredTrades.filter(t => t.date === dateStr && t.status === 'CLOSED');
       const dayPnL = dayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
       const isCurrentMonth = current.getMonth() === month;
       
@@ -275,7 +277,7 @@ export default function TradingJournal() {
   };
 
   const getZellaScore = () => {
-    const closedTrades = trades.filter(t => t.status === 'CLOSED');
+    const closedTrades = filteredTrades.filter(t => t.status === 'CLOSED');
     if (closedTrades.length === 0) return [];
     
     const profitFactor = Math.min(stats.profitFactor * 20, 100);
@@ -303,7 +305,7 @@ export default function TradingJournal() {
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
       
-      const dayTrades = trades.filter(t => t.date === dateStr && t.status === 'CLOSED');
+      const dayTrades = filteredTrades.filter(t => t.date === dateStr && t.status === 'CLOSED');
       const dayPnL = dayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
       cumulativePnL += dayPnL;
       
@@ -451,11 +453,11 @@ export default function TradingJournal() {
     }));
   };
 
-  // Calculate profit factor by symbols
+  // Calculate profit factor by symbols (use filteredTrades)
   const getProfitFactorBySymbols = () => {
     const symbolStats = new Map();
     
-    trades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined).forEach(trade => {
+    filteredTrades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined).forEach(trade => {
       const symbol = trade.symbol;
       if (!symbolStats.has(symbol)) {
         symbolStats.set(symbol, {
@@ -488,9 +490,9 @@ export default function TradingJournal() {
     })).sort((a, b) => b.profitFactor - a.profitFactor);
   };
 
-  // Get Long vs Short breakdown
+  // Get Long vs Short breakdown (use filteredTrades)
   const getLongShortBreakdown = () => {
-    const closedTrades = trades.filter(t => t.status === 'CLOSED');
+    const closedTrades = filteredTrades.filter(t => t.status === 'CLOSED');
     const longTrades = closedTrades.filter(t => t.side === 'LONG');
     const shortTrades = closedTrades.filter(t => t.side === 'SHORT');
     
