@@ -128,17 +128,33 @@ export const AuthScreen = () => {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       
-      if (error) throw error;
+      if (error) {
+        // Check for specific error types
+        if (error.message.includes('rate limit')) {
+          throw new Error('Too many requests. Please wait a few minutes and try again.');
+        }
+        if (error.message.includes('not found') || error.message.includes('invalid')) {
+          // Don't reveal if email exists for security
+          setResetSent(true);
+          toast({
+            title: 'Reset Email Sent!',
+            description: 'If an account exists with this email, you will receive a reset link.',
+          });
+          return;
+        }
+        throw error;
+      }
       
       setResetSent(true);
       toast({
         title: 'Reset Email Sent!',
-        description: 'Check your email for the password reset link',
+        description: 'Check your email for the password reset link. Note: Check spam folder if not received.',
       });
     } catch (error: any) {
+      console.error('Reset password error:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to send reset email',
+        description: error.message || 'Failed to send reset email. Please check your Supabase SMTP settings.',
         variant: 'destructive'
       });
     } finally {

@@ -1,5 +1,6 @@
 // Bloomberg Image Processing Pipeline using Tesseract.js OCR - Enhanced Version
 import Tesseract from 'tesseract.js';
+import { correctOCRText, matchSecurityName, correctTicker, postProcessBloombergRows } from './AIEnhancedOCR';
 
 export interface ExtractedCell {
   column: string;
@@ -421,6 +422,14 @@ const parseOCRText = (text: string): Array<{
     // Assign row number if not found but we have data
     if (!rowData.rank && (tickerFound || rowData.position)) {
       rowData.rank = String(rowCounter);
+    }
+    
+    // Apply AI corrections before adding
+    if (rowData.name) {
+      rowData.name = matchSecurityName(rowData.name);
+    }
+    if (rowData.ticker) {
+      rowData.ticker = correctTicker(rowData.ticker);
     }
     
     // Only add row if we have meaningful data
