@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar, Upload, Webhook, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar, Upload, Webhook, RefreshCw, FolderPlus, Folder, FolderOpen, Settings2, ChevronRight, Download } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { Separator } from '@/components/ui/separator';
@@ -21,19 +21,31 @@ import { EnhancedProfitFactorChart } from './EnhancedProfitFactorChart';
 import { EnhancedSectorAnalysis } from './EnhancedSectorAnalysis';
 import { EnhancedWinRateChart } from './EnhancedWinRateChart';
 import CSVImportDialog from './CSVImportDialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+
+// Folder/Room interface
+interface TradingFolder {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  icon: string;
+  createdAt: Date;
+}
 
 interface Trade {
   id: string;
   date: string;
   symbol: string;
   side: 'LONG' | 'SHORT';
-  type: 'CFD' | 'STOCK'; // New field for trade type
+  type: 'CFD' | 'STOCK';
   entryPrice: number;
   exitPrice?: number;
   quantity: number;
-  lotSize?: number; // For CFD trades
-  contractSize?: number; // For CFD trades
-  leverage?: number; // For CFD trades
+  lotSize?: number;
+  contractSize?: number;
+  leverage?: number;
   pnl?: number;
   pnlPercentage?: number;
   status: 'OPEN' | 'CLOSED';
@@ -42,9 +54,10 @@ interface Trade {
   tags?: string[];
   riskReward?: number;
   commission?: number;
-  swap?: number; // For CFD overnight fees
-  dividends?: number; // For stock dividends
-  entryTime?: string; // Added for time-based analysis
+  swap?: number;
+  dividends?: number;
+  entryTime?: string;
+  folderId?: string; // Added for folder organization
 }
 
 interface TradingStats {
@@ -73,8 +86,19 @@ export default function TradingJournal() {
     quantity: 1,
     commission: 0,
     leverage: 1,
-    lotSize: 1
+    lotSize: 1,
+    folderId: 'default'
   });
+
+  // Folder/Room states
+  const [folders, setFolders] = useState<TradingFolder[]>([
+    { id: 'default', name: 'All Trades', description: 'All trading records', color: 'bg-slate-500', icon: '📊', createdAt: new Date() },
+    { id: 'system-1', name: 'Trend Following', description: 'Long-term trend strategy', color: 'bg-emerald-500', icon: '📈', createdAt: new Date() },
+    { id: 'scalping', name: 'Scalping', description: 'Quick intraday trades', color: 'bg-amber-500', icon: '⚡', createdAt: new Date() },
+  ]);
+  const [selectedFolderId, setSelectedFolderId] = useState('default');
+  const [showFolderManager, setShowFolderManager] = useState(false);
+  const [newFolder, setNewFolder] = useState({ name: '', description: '', color: 'bg-blue-500', icon: '📁' });
   
   // Webhook import states
   const [showWebhookImport, setShowWebhookImport] = useState(false);
@@ -82,11 +106,15 @@ export default function TradingJournal() {
   const [selectedWebhookRoom, setSelectedWebhookRoom] = useState<string | null>(null);
   const [isLoadingWebhook, setIsLoadingWebhook] = useState(false);
 
-  // Load trades from localStorage
+  // Load trades and folders from localStorage
   useEffect(() => {
     const savedTrades = localStorage.getItem('tradingJournal');
     if (savedTrades) {
       setTrades(JSON.parse(savedTrades));
+    }
+    const savedFolders = localStorage.getItem('tradingJournalFolders');
+    if (savedFolders) {
+      setFolders(JSON.parse(savedFolders));
     }
   }, []);
 
@@ -94,6 +122,64 @@ export default function TradingJournal() {
   useEffect(() => {
     localStorage.setItem('tradingJournal', JSON.stringify(trades));
   }, [trades]);
+
+  // Save folders to localStorage
+  useEffect(() => {
+    localStorage.setItem('tradingJournalFolders', JSON.stringify(folders));
+  }, [folders]);
+
+  // Folder management functions
+  const handleAddFolder = () => {
+    if (!newFolder.name.trim()) return;
+    
+    const folder: TradingFolder = {
+      id: `folder-${Date.now()}`,
+      name: newFolder.name.trim(),
+      description: newFolder.description.trim(),
+      color: newFolder.color,
+      icon: newFolder.icon,
+      createdAt: new Date()
+    };
+    
+    setFolders(prev => [...prev, folder]);
+    setNewFolder({ name: '', description: '', color: 'bg-blue-500', icon: '📁' });
+    
+    toast({
+      title: 'Folder Created',
+      description: `"${folder.name}" has been created`
+    });
+  };
+
+  const handleDeleteFolder = (folderId: string) => {
+    if (folderId === 'default') return;
+    
+    // Move trades to default folder
+    setTrades(prev => prev.map(t => 
+      t.folderId === folderId ? { ...t, folderId: 'default' } : t
+    ));
+    
+    setFolders(prev => prev.filter(f => f.id !== folderId));
+    
+    if (selectedFolderId === folderId) {
+      setSelectedFolderId('default');
+    }
+    
+    toast({
+      title: 'Folder Deleted',
+      description: 'Trades moved to All Trades'
+    });
+  };
+
+  // Filter trades by folder
+  const filteredTrades = selectedFolderId === 'default' 
+    ? trades 
+    : trades.filter(t => t.folderId === selectedFolderId);
+
+  // Get folder trade count
+  const getFolderTradeCount = (folderId: string) => {
+    if (folderId === 'default') return trades.length;
+    return trades.filter(t => t.folderId === folderId).length;
+  };
 
   const calculateStats = (): TradingStats => {
     const closedTrades = trades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined);
@@ -573,58 +659,134 @@ export default function TradingJournal() {
   };
 
   return (
-    <div className="w-full min-h-screen flex flex-col bg-background p-2 sm:p-4 space-y-3 sm:space-y-4 overflow-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
-        <h2 className="text-xl sm:text-2xl font-bold text-primary">Trading Journal</h2>
-        <div className="flex gap-2">
-          {trades.length === 0 && (
-            <Button 
-              onClick={loadSampleData} 
-              variant="outline" 
-              className="w-full sm:w-auto text-sm sm:text-base"
-            >
-              Load Sample Data
-            </Button>
-          )}
-          {trades.length > 0 && (
-            <>
-              <Button 
-                onClick={clearAllTrades} 
-                variant="destructive"
-                className="w-full sm:w-auto text-sm sm:text-base"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Clear All ({trades.length})
-              </Button>
-              <Separator orientation="vertical" className="hidden sm:block" />
-            </>
-          )}
+    <div className="w-full min-h-screen flex bg-background text-xs">
+      {/* Folder Sidebar */}
+      <div className="w-56 border-r border-terminal-green/30 flex flex-col bg-card/50 hidden lg:flex">
+        {/* Sidebar Header */}
+        <div className="p-3 border-b border-terminal-green/30 flex items-center justify-between">
+          <span className="flex items-center gap-2 text-terminal-green font-bold">
+            <Folder className="h-4 w-4" />
+            Trading Rooms
+          </span>
           <Button 
-            onClick={() => {
-              loadWebhookRooms();
-              setShowWebhookImport(true);
-            }} 
-            variant="outline"
-            className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto text-sm sm:text-base"
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setShowFolderManager(true)}
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-terminal-amber"
           >
-            <Webhook className="h-4 w-4 mr-2" />
-            Import Webhook
-          </Button>
-          <Button 
-            onClick={() => setShowCSVImport(true)} 
-            variant="outline"
-            className="bg-terminal-amber hover:bg-terminal-amber/90 text-black w-full sm:w-auto text-sm sm:text-base"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Import CSV
-          </Button>
-          <Button onClick={() => setIsAddingTrade(true)} className="bg-primary hover:bg-primary/90 w-full sm:w-auto text-sm sm:text-base">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Trade
+            <Settings2 className="h-4 w-4" />
           </Button>
         </div>
+        
+        {/* Folder List */}
+        <ScrollArea className="flex-1 p-2">
+          <div className="space-y-1">
+            {folders.map(folder => (
+              <button
+                key={folder.id}
+                onClick={() => setSelectedFolderId(folder.id)}
+                className={cn(
+                  "w-full flex items-center gap-2 p-2 rounded-lg text-left transition-all text-sm",
+                  selectedFolderId === folder.id
+                    ? "bg-terminal-amber/20 text-terminal-amber border border-terminal-amber/30"
+                    : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span className="text-base">{folder.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate text-xs">{folder.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {getFolderTradeCount(folder.id)} trades
+                  </p>
+                </div>
+                {selectedFolderId === folder.id && (
+                  <ChevronRight className="h-4 w-4 text-terminal-amber" />
+                )}
+              </button>
+            ))}
+          </div>
+        </ScrollArea>
+        
+        {/* Sidebar Footer Stats */}
+        <div className="p-3 border-t border-terminal-green/30 bg-muted/30">
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div>
+              <p className="text-lg font-bold text-terminal-green">{folders.length}</p>
+              <p className="text-xs text-muted-foreground">Rooms</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold text-terminal-amber">{trades.length}</p>
+              <p className="text-xs text-muted-foreground">Trades</p>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col p-2 sm:p-4 space-y-3 sm:space-y-4 overflow-auto">
+        {/* COT Style Header */}
+        <div className="flex justify-between items-center pb-2 border-b border-terminal-green/30">
+          <div className="flex flex-col">
+            <span className="font-bold text-terminal-green text-sm sm:text-base">
+              📔 TRADING JOURNAL - {folders.find(f => f.id === selectedFolderId)?.name.toUpperCase() || 'ALL TRADES'}
+            </span>
+            <span className="text-xs text-muted-foreground mt-1">
+              Last updated: {new Date().toLocaleString()} • {filteredTrades.length} trades
+            </span>
+          </div>
+
+          <div className="flex gap-2 items-center flex-wrap">
+            {/* Mobile folder selector */}
+            <div className="lg:hidden">
+              <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
+                <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {folders.map(f => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.icon} {f.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {trades.length === 0 && (
+              <Button onClick={loadSampleData} variant="outline" size="sm">
+                Load Sample
+              </Button>
+            )}
+            {trades.length > 0 && (
+              <Button onClick={clearAllTrades} variant="destructive" size="sm">
+                <Trash2 className="h-3 w-3 mr-1" />
+                Clear ({trades.length})
+              </Button>
+            )}
+            <Button 
+              onClick={() => { loadWebhookRooms(); setShowWebhookImport(true); }} 
+              variant="outline" 
+              size="sm"
+              className="bg-blue-600/20 text-blue-400 hover:bg-blue-600/30"
+            >
+              <Webhook className="h-3 w-3 mr-1" />
+              Webhook
+            </Button>
+            <Button 
+              onClick={() => setShowCSVImport(true)} 
+              variant="outline" 
+              size="sm"
+              className="bg-terminal-amber/20 text-terminal-amber hover:bg-terminal-amber/30"
+            >
+              <Upload className="h-3 w-3 mr-1" />
+              CSV
+            </Button>
+            <Button onClick={() => setIsAddingTrade(true)} size="sm" className="bg-terminal-green hover:bg-terminal-green/90 text-black">
+              <Plus className="h-3 w-3 mr-1" />
+              Add Trade
+            </Button>
+          </div>
+        </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
@@ -1775,6 +1937,119 @@ export default function TradingJournal() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Folder Manager Dialog */}
+      <Dialog open={showFolderManager} onOpenChange={setShowFolderManager}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-terminal-green">
+              <Folder className="h-5 w-5" />
+              Manage Trading Rooms
+            </DialogTitle>
+            <DialogDescription>
+              Create and organize folders for different trading strategies
+            </DialogDescription>
+          </DialogHeader>
+          
+          {/* Add New Folder */}
+          <div className="space-y-4 border-b border-border pb-4">
+            <h4 className="text-sm font-medium flex items-center gap-2">
+              <FolderPlus className="h-4 w-4" />
+              Create New Room
+            </h4>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Room Name</Label>
+                <Input
+                  placeholder="e.g., Scalping System"
+                  value={newFolder.name}
+                  onChange={(e) => setNewFolder({ ...newFolder, name: e.target.value })}
+                  className="mt-1 h-8 text-sm"
+                />
+              </div>
+              
+              <div>
+                <Label className="text-xs">Description</Label>
+                <Input
+                  placeholder="Strategy description"
+                  value={newFolder.description}
+                  onChange={(e) => setNewFolder({ ...newFolder, description: e.target.value })}
+                  className="mt-1 h-8 text-sm"
+                />
+              </div>
+              
+              <div>
+                <Label className="text-xs">Icon</Label>
+                <Select value={newFolder.icon} onValueChange={(v) => setNewFolder({ ...newFolder, icon: v })}>
+                  <SelectTrigger className="mt-1 h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="📁">📁 Folder</SelectItem>
+                    <SelectItem value="📈">📈 Chart Up</SelectItem>
+                    <SelectItem value="📉">📉 Chart Down</SelectItem>
+                    <SelectItem value="💹">💹 Stock</SelectItem>
+                    <SelectItem value="₿">₿ Bitcoin</SelectItem>
+                    <SelectItem value="💱">💱 Forex</SelectItem>
+                    <SelectItem value="🥇">🥇 Gold</SelectItem>
+                    <SelectItem value="⚡">⚡ Scalping</SelectItem>
+                    <SelectItem value="🎯">🎯 Strategy</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label className="text-xs">Color</Label>
+                <Select value={newFolder.color} onValueChange={(v) => setNewFolder({ ...newFolder, color: v })}>
+                  <SelectTrigger className="mt-1 h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bg-blue-500">🔵 Blue</SelectItem>
+                    <SelectItem value="bg-emerald-500">🟢 Green</SelectItem>
+                    <SelectItem value="bg-amber-500">🟡 Amber</SelectItem>
+                    <SelectItem value="bg-red-500">🔴 Red</SelectItem>
+                    <SelectItem value="bg-purple-500">🟣 Purple</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <Button onClick={handleAddFolder} disabled={!newFolder.name.trim()} size="sm" className="w-full">
+              <FolderPlus className="h-4 w-4 mr-2" />
+              Create Room
+            </Button>
+          </div>
+          
+          {/* Existing Folders */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Existing Rooms</h4>
+            {folders.filter(f => f.id !== 'default').map(folder => (
+              <div key={folder.id} className="flex items-center justify-between p-2 bg-muted/50 rounded border border-border">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{folder.icon}</span>
+                  <div>
+                    <p className="font-medium text-sm">{folder.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {folder.description || 'No description'} • {getFolderTradeCount(folder.id)} trades
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDeleteFolder(folder.id)}
+                  className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+      </div>
     </div>
   );
 }

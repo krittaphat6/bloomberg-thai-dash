@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Mail, Lock, User, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, Loader2, KeyRound, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import ableTerminalLogo from '@/assets/able-terminal-logo.png';
 
 export const AuthScreen = () => {
@@ -22,6 +23,11 @@ export const AuthScreen = () => {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
   const [signupUsername, setSignupUsername] = useState('');
+
+  // Forgot password
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +100,6 @@ export const AuthScreen = () => {
         title: 'Account Created!',
         description: 'You can now login with your credentials'
       });
-      // Clear signup form
       setSignupEmail('');
       setSignupPassword('');
       setSignupConfirmPassword('');
@@ -102,6 +107,43 @@ export const AuthScreen = () => {
     }
     
     setIsLoading(false);
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!forgotEmail) {
+      toast({
+        title: 'Error',
+        description: 'Please enter your email address',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (error) throw error;
+      
+      setResetSent(true);
+      toast({
+        title: 'Reset Email Sent!',
+        description: 'Check your email for the password reset link',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to send reset email',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -130,148 +172,250 @@ export const AuthScreen = () => {
         </CardHeader>
 
         <CardContent>
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6 bg-muted/50">
-              <TabsTrigger value="login" className="font-mono data-[state=active]:bg-terminal-amber data-[state=active]:text-black">
-                Login
-              </TabsTrigger>
-              <TabsTrigger value="signup" className="font-mono data-[state=active]:bg-terminal-green data-[state=active]:text-black">
-                Sign Up
-              </TabsTrigger>
-            </TabsList>
+          {showForgotPassword ? (
+            // Forgot Password View
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setResetSent(false);
+                    setForgotEmail('');
+                  }}
+                  className="p-1 h-8 w-8"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <h3 className="text-lg font-semibold text-terminal-amber font-mono">Reset Password</h3>
+              </div>
 
-            {/* Login Tab */}
-            <TabsContent value="login">
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-amber/60" />
-                  <Input
-                    type="email"
-                    placeholder="Email"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    className="pl-10 bg-input/50 border-terminal-amber/20 focus:border-terminal-amber/50 font-mono"
-                    required
-                  />
-                </div>
-                
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-amber/60" />
-                  <Input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    className="pl-10 pr-10 bg-input/50 border-terminal-amber/20 focus:border-terminal-amber/50 font-mono"
-                    required
-                  />
+              {resetSent ? (
+                <div className="text-center space-y-4 py-6">
+                  <div className="flex justify-center">
+                    <div className="w-16 h-16 rounded-full bg-terminal-green/20 flex items-center justify-center">
+                      <CheckCircle className="h-8 w-8 text-terminal-green" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-lg font-bold text-terminal-green">Email Sent!</h4>
+                    <p className="text-sm text-muted-foreground">
+                      We've sent a password reset link to:
+                    </p>
+                    <p className="text-sm font-mono text-terminal-amber">
+                      {forgotEmail}
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Check your inbox and follow the link to reset your password.
+                  </p>
                   <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 text-terminal-amber/60 hover:text-terminal-amber"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      setResetSent(false);
+                      setForgotEmail('');
+                    }}
+                    className="w-full bg-terminal-amber hover:bg-terminal-amber/90 text-black font-mono"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    Back to Login
                   </Button>
                 </div>
-
-                <Button
-                  type="submit"
-                  disabled={isLoading || !loginEmail || !loginPassword}
-                  className="w-full bg-terminal-amber hover:bg-terminal-amber/90 text-black font-mono font-semibold disabled:opacity-50"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Authenticating...
-                    </>
-                  ) : (
-                    'Login'
-                  )}
-                </Button>
-              </form>
-            </TabsContent>
-
-            {/* Signup Tab */}
-            <TabsContent value="signup">
-              <form onSubmit={handleSignup} className="space-y-4">
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-green/60" />
-                  <Input
-                    type="text"
-                    placeholder="Username"
-                    value={signupUsername}
-                    onChange={(e) => setSignupUsername(e.target.value)}
-                    className="pl-10 bg-input/50 border-terminal-green/20 focus:border-terminal-green/50 font-mono"
-                    required
-                    minLength={2}
-                  />
-                </div>
-                
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-green/60" />
-                  <Input
-                    type="email"
-                    placeholder="Email"
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    className="pl-10 bg-input/50 border-terminal-green/20 focus:border-terminal-green/50 font-mono"
-                    required
-                  />
-                </div>
-                
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-green/60" />
-                  <Input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Password (min 6 characters)"
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    className="pl-10 bg-input/50 border-terminal-green/20 focus:border-terminal-green/50 font-mono"
-                    required
-                    minLength={6}
-                  />
-                </div>
-                
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-green/60" />
-                  <Input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Confirm Password"
-                    value={signupConfirmPassword}
-                    onChange={(e) => setSignupConfirmPassword(e.target.value)}
-                    className="pl-10 pr-10 bg-input/50 border-terminal-green/20 focus:border-terminal-green/50 font-mono"
-                    required
-                  />
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Enter your email address and we'll send you a link to reset your password.
+                  </p>
+                  
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-amber/60" />
+                    <Input
+                      type="email"
+                      placeholder="Enter your email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      className="pl-10 bg-input/50 border-terminal-amber/20 focus:border-terminal-amber/50 font-mono"
+                      required
+                    />
+                  </div>
+                  
                   <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 text-terminal-green/60 hover:text-terminal-green"
-                    onClick={() => setShowPassword(!showPassword)}
+                    type="submit"
+                    disabled={isLoading || !forgotEmail}
+                    className="w-full bg-terminal-amber hover:bg-terminal-amber/90 text-black font-mono font-semibold"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound className="h-4 w-4 mr-2" />
+                        Send Reset Link
+                      </>
+                    )}
                   </Button>
-                </div>
+                </form>
+              )}
+            </div>
+          ) : (
+            // Login/Signup Tabs
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6 bg-muted/50">
+                <TabsTrigger value="login" className="font-mono data-[state=active]:bg-terminal-amber data-[state=active]:text-black">
+                  Login
+                </TabsTrigger>
+                <TabsTrigger value="signup" className="font-mono data-[state=active]:bg-terminal-green data-[state=active]:text-black">
+                  Sign Up
+                </TabsTrigger>
+              </TabsList>
 
-                <Button
-                  type="submit"
-                  disabled={isLoading || !signupEmail || !signupPassword || !signupUsername}
-                  className="w-full bg-terminal-green hover:bg-terminal-green/90 text-black font-mono font-semibold disabled:opacity-50"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Creating Account...
-                    </>
-                  ) : (
-                    'Create Account'
-                  )}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
+              {/* Login Tab */}
+              <TabsContent value="login">
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-amber/60" />
+                    <Input
+                      type="email"
+                      placeholder="Email"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      className="pl-10 bg-input/50 border-terminal-amber/20 focus:border-terminal-amber/50 font-mono"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-amber/60" />
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Password"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="pl-10 pr-10 bg-input/50 border-terminal-amber/20 focus:border-terminal-amber/50 font-mono"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 text-terminal-amber/60 hover:text-terminal-amber"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={isLoading || !loginEmail || !loginPassword}
+                    className="w-full bg-terminal-amber hover:bg-terminal-amber/90 text-black font-mono font-semibold disabled:opacity-50"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Authenticating...
+                      </>
+                    ) : (
+                      'Login'
+                    )}
+                  </Button>
+
+                  {/* Forgot Password Link */}
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPassword(true)}
+                      className="text-terminal-amber/70 hover:text-terminal-amber text-sm font-mono inline-flex items-center gap-1"
+                    >
+                      <KeyRound className="h-3 w-3" />
+                      Forgot Password?
+                    </button>
+                  </div>
+                </form>
+              </TabsContent>
+
+              {/* Signup Tab */}
+              <TabsContent value="signup">
+                <form onSubmit={handleSignup} className="space-y-4">
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-green/60" />
+                    <Input
+                      type="text"
+                      placeholder="Username"
+                      value={signupUsername}
+                      onChange={(e) => setSignupUsername(e.target.value)}
+                      className="pl-10 bg-input/50 border-terminal-green/20 focus:border-terminal-green/50 font-mono"
+                      required
+                      minLength={2}
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-green/60" />
+                    <Input
+                      type="email"
+                      placeholder="Email"
+                      value={signupEmail}
+                      onChange={(e) => setSignupEmail(e.target.value)}
+                      className="pl-10 bg-input/50 border-terminal-green/20 focus:border-terminal-green/50 font-mono"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-green/60" />
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Password (min 6 characters)"
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      className="pl-10 bg-input/50 border-terminal-green/20 focus:border-terminal-green/50 font-mono"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-terminal-green/60" />
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Confirm Password"
+                      value={signupConfirmPassword}
+                      onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                      className="pl-10 pr-10 bg-input/50 border-terminal-green/20 focus:border-terminal-green/50 font-mono"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 text-terminal-green/60 hover:text-terminal-green"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={isLoading || !signupEmail || !signupPassword || !signupUsername}
+                    className="w-full bg-terminal-green hover:bg-terminal-green/90 text-black font-mono font-semibold disabled:opacity-50"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Creating Account...
+                      </>
+                    ) : (
+                      'Create Account'
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          )}
 
           {/* Footer */}
           <div className="mt-6 text-center text-xs text-muted-foreground font-mono">
