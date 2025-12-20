@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Card } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScatterChart as RechartsScatter, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { BarChart3, Table } from 'lucide-react';
+import { COTStyleWrapper } from '@/components/ui/COTStyleWrapper';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface CommodityData {
   name: string;
-  momChange: number; // Month over Month
-  yoyChange: number; // Year over Year
+  momChange: number;
+  yoyChange: number;
   color: string;
 }
 
@@ -32,15 +32,15 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="bg-card border border-border p-3 rounded-lg shadow-lg">
-        <p className="text-terminal-amber font-bold">{data.name}</p>
-        <p className="text-terminal-cyan">
-          MoM Change: <span className={data.momChange >= 0 ? 'text-terminal-green' : 'text-terminal-red'}>
+      <div className="bg-card border border-border p-2 rounded-lg shadow-lg text-xs">
+        <p className="text-amber-400 font-bold">{data.name}</p>
+        <p className="text-cyan-400">
+          MoM: <span className={data.momChange >= 0 ? 'text-green-400' : 'text-red-400'}>
             {data.momChange > 0 ? '+' : ''}{data.momChange}%
           </span>
         </p>
-        <p className="text-terminal-cyan">
-          YoY Change: <span className={data.yoyChange >= 0 ? 'text-terminal-green' : 'text-terminal-red'}>
+        <p className="text-cyan-400">
+          YoY: <span className={data.yoyChange >= 0 ? 'text-green-400' : 'text-red-400'}>
             {data.yoyChange > 0 ? '+' : ''}{data.yoyChange}%
           </span>
         </p>
@@ -51,119 +51,147 @@ const CustomTooltip = ({ active, payload }: any) => {
 };
 
 const ScatterAnalysis = () => {
-  const [timeframe, setTimeframe] = useState("monthly");
   const [category, setCategory] = useState("all");
 
   const filteredData = commodityData.filter(item => {
     if (category === "all") return true;
     if (category === "metals") return ["Gold", "Silver", "Copper", "Steel"].includes(item.name);
     if (category === "energy") return ["Oil", "Natural Gas", "Coal", "Gasoline", "Heating Oil", "Brent Oil"].includes(item.name);
-    if (category === "agriculture") return ["Wheat", "Soybeans", "Corn"].includes(item.name);
+    if (category === "agriculture") return ["Wheat", "Soybeans", "Corn", "Lumber"].includes(item.name);
     return true;
   });
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-terminal-amber">Commodity Correlation Analysis</h2>
-          <p className="text-terminal-cyan text-sm">Scatter plot showing MoM vs YoY price changes</p>
-        </div>
-        
-        <div className="flex gap-3">
-          <Select value={timeframe} onValueChange={setTimeframe}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="monthly">Monthly</SelectItem>
-              <SelectItem value="quarterly">Quarterly</SelectItem>
-              <SelectItem value="yearly">Yearly</SelectItem>
-            </SelectContent>
-          </Select>
+  const gainers = filteredData.filter(c => c.momChange > 0 && c.yoyChange > 0);
+  const losers = filteredData.filter(c => c.momChange < 0 && c.yoyChange < 0);
 
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Commodities</SelectItem>
-              <SelectItem value="metals">Metals</SelectItem>
-              <SelectItem value="energy">Energy</SelectItem>
-              <SelectItem value="agriculture">Agriculture</SelectItem>
-            </SelectContent>
-          </Select>
+  // Chart Content
+  const ChartContent = () => (
+    <div className="h-full">
+      <ResponsiveContainer width="100%" height="85%">
+        <RechartsScatter margin={{ top: 10, right: 10, bottom: 30, left: 40 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+          <XAxis
+            type="number"
+            dataKey="yoyChange"
+            name="YoY Change"
+            unit="%"
+            domain={[-25, 65]}
+            stroke="hsl(var(--muted-foreground))"
+            tick={{ fontSize: 10 }}
+            label={{ value: 'YoY Change %', position: 'bottom', offset: 10, fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+          />
+          <YAxis
+            type="number"
+            dataKey="momChange"
+            name="MoM Change"
+            unit="%"
+            domain={[-10, 15]}
+            stroke="hsl(var(--muted-foreground))"
+            tick={{ fontSize: 10 }}
+            label={{ value: 'MoM %', angle: -90, position: 'insideLeft', fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+          />
+          
+          <ReferenceLine x={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" />
+          <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" />
+          
+          <Tooltip content={<CustomTooltip />} />
+          
+          <Scatter
+            name="Commodities"
+            data={filteredData}
+            fill="#fbbf24"
+          />
+        </RechartsScatter>
+      </ResponsiveContainer>
+      
+      <div className="grid grid-cols-4 gap-2 text-[10px] mt-2">
+        <div className="text-cyan-400">
+          <div className="font-bold">Q1 (Top Right)</div>
+          <div className="text-muted-foreground">+MoM & +YoY</div>
+        </div>
+        <div className="text-cyan-400">
+          <div className="font-bold">Q2 (Top Left)</div>
+          <div className="text-muted-foreground">+MoM, -YoY</div>
+        </div>
+        <div className="text-cyan-400">
+          <div className="font-bold">Q3 (Bottom Left)</div>
+          <div className="text-muted-foreground">-MoM & -YoY</div>
+        </div>
+        <div className="text-cyan-400">
+          <div className="font-bold">Q4 (Bottom Right)</div>
+          <div className="text-muted-foreground">-MoM, +YoY</div>
         </div>
       </div>
-
-      <Card className="p-6">
-        <ResponsiveContainer width="100%" height={500}>
-          <ScatterChart margin={{ top: 20, right: 20, bottom: 60, left: 60 }}>
-            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-            <XAxis
-              type="number"
-              dataKey="yoyChange"
-              name="YoY Change"
-              unit="%"
-              domain={[-25, 65]}
-              axisLine={{ stroke: 'hsl(var(--terminal-cyan))' }}
-              tickLine={{ stroke: 'hsl(var(--terminal-cyan))' }}
-              tick={{ fill: 'hsl(var(--terminal-cyan))', fontSize: 12 }}
-            />
-            <YAxis
-              type="number"
-              dataKey="momChange"
-              name="MoM Change"
-              unit="%"
-              domain={[-10, 15]}
-              axisLine={{ stroke: 'hsl(var(--terminal-cyan))' }}
-              tickLine={{ stroke: 'hsl(var(--terminal-cyan))' }}
-              tick={{ fill: 'hsl(var(--terminal-cyan))', fontSize: 12 }}
-            />
-            
-            {/* Reference lines for zero */}
-            <ReferenceLine x={0} stroke="hsl(var(--terminal-gray))" strokeDasharray="2 2" />
-            <ReferenceLine y={0} stroke="hsl(var(--terminal-gray))" strokeDasharray="2 2" />
-            
-            <Tooltip content={<CustomTooltip />} />
-            
-            <Scatter
-              name="Commodities"
-              data={filteredData}
-              fill="hsl(var(--terminal-amber))"
-            >
-              {filteredData.map((entry, index) => (
-                <Scatter
-                  key={`cell-${index}`}
-                  fill={entry.color}
-                  stroke="hsl(var(--foreground))"
-                  strokeWidth={1}
-                />
-              ))}
-            </Scatter>
-          </ScatterChart>
-        </ResponsiveContainer>
-        
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-          <div className="text-terminal-cyan">
-            <div className="font-bold">Quadrant I (Top Right)</div>
-            <div>Positive MoM & YoY</div>
-          </div>
-          <div className="text-terminal-cyan">
-            <div className="font-bold">Quadrant II (Top Left)</div>
-            <div>Positive MoM, Negative YoY</div>
-          </div>
-          <div className="text-terminal-cyan">
-            <div className="font-bold">Quadrant III (Bottom Left)</div>
-            <div>Negative MoM & YoY</div>
-          </div>
-          <div className="text-terminal-cyan">
-            <div className="font-bold">Quadrant IV (Bottom Right)</div>
-            <div>Negative MoM, Positive YoY</div>
-          </div>
-        </div>
-      </Card>
     </div>
+  );
+
+  // Table Content
+  const TableContent = () => (
+    <ScrollArea className="h-64">
+      <table className="w-full text-xs">
+        <thead className="sticky top-0 bg-background border-b border-green-500/30">
+          <tr className="text-amber-400">
+            <th className="text-left py-1 px-2">Commodity</th>
+            <th className="text-right py-1 px-2">MoM Change</th>
+            <th className="text-right py-1 px-2">YoY Change</th>
+            <th className="text-center py-1 px-2">Quadrant</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredData.map((item, index) => {
+            const quadrant = item.momChange >= 0 && item.yoyChange >= 0 ? 'Q1' :
+                           item.momChange >= 0 && item.yoyChange < 0 ? 'Q2' :
+                           item.momChange < 0 && item.yoyChange < 0 ? 'Q3' : 'Q4';
+            return (
+              <tr key={index} className="border-b border-border/10 hover:bg-accent/50">
+                <td className="py-1 px-2 font-bold text-foreground">{item.name}</td>
+                <td className={`py-1 px-2 text-right font-bold ${item.momChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {item.momChange > 0 ? '+' : ''}{item.momChange}%
+                </td>
+                <td className={`py-1 px-2 text-right font-bold ${item.yoyChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {item.yoyChange > 0 ? '+' : ''}{item.yoyChange}%
+                </td>
+                <td className="py-1 px-2 text-center text-amber-400">{quadrant}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </ScrollArea>
+  );
+
+  return (
+    <COTStyleWrapper
+      title="COMMODITY CORRELATION"
+      icon="📈"
+      selectOptions={[
+        { value: 'all', label: '🌐 All Commodities' },
+        { value: 'metals', label: '🥇 Metals' },
+        { value: 'energy', label: '⛽ Energy' },
+        { value: 'agriculture', label: '🌾 Agriculture' }
+      ]}
+      selectedValue={category}
+      onSelectChange={setCategory}
+      tabs={[
+        {
+          id: 'chart',
+          label: 'Scatter',
+          icon: <BarChart3 className="w-3 h-3" />,
+          content: <ChartContent />
+        },
+        {
+          id: 'table',
+          label: 'Table',
+          icon: <Table className="w-3 h-3" />,
+          content: <TableContent />
+        }
+      ]}
+      footerLeft={`Total: ${filteredData.length} commodities`}
+      footerStats={[
+        { label: '📈 Gainers', value: gainers.length },
+        { label: '📉 Losers', value: losers.length }
+      ]}
+    />
   );
 };
 

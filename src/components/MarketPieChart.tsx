@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { PieChart as PieIcon, Table } from 'lucide-react';
+import { COTStyleWrapper } from '@/components/ui/COTStyleWrapper';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const regionData = [
   { name: 'Singapore', value: 0.34, change: 0.34 },
@@ -25,11 +28,9 @@ const sectorData = [
 
 const getColor = (value: number, index: number) => {
   if (value > 0) {
-    // Shades of green for positive values
     const greenColors = ['#10B981', '#059669', '#047857', '#065F46', '#064E3B'];
     return greenColors[index % greenColors.length];
   } else {
-    // Shades of red for negative values
     const redColors = ['#EF4444', '#DC2626', '#B91C1C', '#991B1B', '#7F1D1D'];
     return redColors[index % redColors.length];
   }
@@ -39,9 +40,9 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="bg-background border border-terminal-cyan p-2 rounded text-xs">
-        <p className="text-terminal-white">{data.name}</p>
-        <p className={data.change >= 0 ? 'text-terminal-green' : 'text-terminal-red'}>
+      <div className="bg-card border border-border p-2 rounded text-xs">
+        <p className="text-foreground font-bold">{data.name}</p>
+        <p className={data.change >= 0 ? 'text-green-400' : 'text-red-400'}>
           {data.change >= 0 ? '+' : ''}{data.change.toFixed(2)}%
         </p>
       </div>
@@ -53,43 +54,22 @@ const CustomTooltip = ({ active, payload }: any) => {
 const MarketPieChart = () => {
   const [viewType, setViewType] = useState<'region' | 'sector'>('region');
   const currentData = viewType === 'region' ? regionData : sectorData;
+  
+  const gainers = currentData.filter(d => d.change > 0);
+  const losers = currentData.filter(d => d.change < 0);
 
-  return (
-    <div className="terminal-panel h-full">
-      <div className="panel-header flex justify-between items-center">
-        <span>GLOBAL MARKET RETURNS</span>
-        <div className="flex gap-1">
-          <button
-            className={`px-2 py-1 text-xs rounded ${
-              viewType === 'region' 
-                ? 'bg-terminal-cyan text-black' 
-                : 'text-terminal-cyan border border-terminal-cyan'
-            }`}
-            onClick={() => setViewType('region')}
-          >
-            BY REGION
-          </button>
-          <button
-            className={`px-2 py-1 text-xs rounded ${
-              viewType === 'sector' 
-                ? 'bg-terminal-cyan text-black' 
-                : 'text-terminal-cyan border border-terminal-cyan'
-            }`}
-            onClick={() => setViewType('sector')}
-          >
-            BY SECTOR
-          </button>
-        </div>
-      </div>
-      <div className="panel-content h-full">
+  // Chart Content
+  const ChartContent = () => (
+    <div className="h-full flex flex-col">
+      <div className="flex-1">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={currentData}
               cx="50%"
               cy="50%"
-              innerRadius={40}
-              outerRadius={80}
+              innerRadius={35}
+              outerRadius={70}
               paddingAngle={2}
               dataKey="value"
             >
@@ -97,7 +77,7 @@ const MarketPieChart = () => {
                 <Cell 
                   key={`cell-${index}`} 
                   fill={getColor(entry.value, index)}
-                  stroke="#1a1a1a"
+                  stroke="hsl(var(--background))"
                   strokeWidth={1}
                 />
               ))}
@@ -105,28 +85,82 @@ const MarketPieChart = () => {
             <Tooltip content={<CustomTooltip />} />
           </PieChart>
         </ResponsiveContainer>
-        
-        {/* Legend */}
-        <div className="absolute bottom-2 left-2 right-2">
-          <div className="grid grid-cols-2 gap-1 text-xs">
-            {currentData.slice(0, 6).map((entry, index) => (
-              <div key={entry.name} className="flex items-center gap-1">
-                <div 
-                  className="w-2 h-2 rounded-sm"
-                  style={{ backgroundColor: getColor(entry.value, index) }}
-                />
-                <span className="text-terminal-white truncate text-xs">
-                  {entry.name.length > 12 ? entry.name.substring(0, 12) + '...' : entry.name}
-                </span>
-                <span className={entry.change >= 0 ? 'text-terminal-green' : 'text-terminal-red'}>
-                  {entry.change >= 0 ? '+' : ''}{entry.change.toFixed(1)}%
-                </span>
-              </div>
-            ))}
+      </div>
+      
+      {/* Legend */}
+      <div className="grid grid-cols-2 gap-1 text-[10px] mt-2">
+        {currentData.slice(0, 6).map((entry, index) => (
+          <div key={entry.name} className="flex items-center gap-1">
+            <div 
+              className="w-2 h-2 rounded-sm flex-shrink-0"
+              style={{ backgroundColor: getColor(entry.value, index) }}
+            />
+            <span className="text-foreground truncate">
+              {entry.name.length > 10 ? entry.name.substring(0, 10) + '...' : entry.name}
+            </span>
+            <span className={entry.change >= 0 ? 'text-green-400' : 'text-red-400'}>
+              {entry.change >= 0 ? '+' : ''}{entry.change.toFixed(1)}%
+            </span>
           </div>
-        </div>
+        ))}
       </div>
     </div>
+  );
+
+  // Table Content
+  const TableContent = () => (
+    <ScrollArea className="h-48">
+      <table className="w-full text-xs">
+        <thead className="sticky top-0 bg-background border-b border-green-500/30">
+          <tr className="text-amber-400">
+            <th className="text-left py-1 px-2">{viewType === 'region' ? 'Region' : 'Sector'}</th>
+            <th className="text-right py-1 px-2">Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {currentData.map((item, index) => (
+            <tr key={index} className="border-b border-border/10 hover:bg-accent/50">
+              <td className="py-1 px-2 text-foreground">{item.name}</td>
+              <td className={`py-1 px-2 text-right font-bold ${item.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </ScrollArea>
+  );
+
+  return (
+    <COTStyleWrapper
+      title="GLOBAL MARKET RETURNS"
+      icon="🌍"
+      selectOptions={[
+        { value: 'region', label: '🗺️ By Region' },
+        { value: 'sector', label: '📊 By Sector' }
+      ]}
+      selectedValue={viewType}
+      onSelectChange={(v) => setViewType(v as 'region' | 'sector')}
+      tabs={[
+        {
+          id: 'chart',
+          label: 'Chart',
+          icon: <PieIcon className="w-3 h-3" />,
+          content: <ChartContent />
+        },
+        {
+          id: 'table',
+          label: 'Table',
+          icon: <Table className="w-3 h-3" />,
+          content: <TableContent />
+        }
+      ]}
+      footerLeft={`Total: ${currentData.length} items`}
+      footerStats={[
+        { label: '📈 Gainers', value: gainers.length },
+        { label: '📉 Losers', value: losers.length }
+      ]}
+    />
   );
 };
 
