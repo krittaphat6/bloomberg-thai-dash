@@ -1,4 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Globe, Table, Clock } from 'lucide-react';
+import { COTStyleWrapper } from '@/components/ui/COTStyleWrapper';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface StockMarket {
   name: string;
@@ -53,7 +56,6 @@ const WorldStockMarkets = () => {
   }, []);
 
   useEffect(() => {
-    // Auto rotate based on UTC time (sun-synchronous)
     const utcHours = currentTime.getUTCHours() + currentTime.getUTCMinutes() / 60;
     setRotation((utcHours - 12) * 15);
   }, [currentTime]);
@@ -107,8 +109,7 @@ const WorldStockMarkets = () => {
   const formatDuration = (totalSecs: number) => {
     const h = Math.floor(Math.abs(totalSecs) / 3600);
     const m = Math.floor(Math.abs(totalSecs) / 60) % 60;
-    const s = Math.abs(totalSecs) % 60;
-    return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
+    return `${h}h ${m.toString().padStart(2, '0')}m`;
   };
 
   const getTimeToOpen = (market: StockMarket) => {
@@ -119,19 +120,12 @@ const WorldStockMarkets = () => {
     return diff;
   };
 
-  const getSinceOpen = (market: StockMarket) => {
-    const currentSecs = market.localHour * 3600 + market.localMin * 60 + market.localSec;
-    const openSecs = market.openHour * 3600 + market.openMin * 60;
-    return currentSecs - openSecs;
-  };
-
   const getTimeToClose = (market: StockMarket) => {
     const currentSecs = market.localHour * 3600 + market.localMin * 60 + market.localSec;
     const closeSecs = market.closeHour * 3600 + market.closeMin * 60;
     return closeSecs - currentSecs;
   };
 
-  // Simple 2D globe projection
   const projectToGlobe = (lat: number, lon: number, radius: number) => {
     const adjustedLon = lon - rotation;
     const latRad = (lat * Math.PI) / 180;
@@ -141,7 +135,6 @@ const WorldStockMarkets = () => {
     const y = Math.sin(latRad);
     const z = Math.cos(latRad) * Math.cos(lonRad);
     
-    // Simple rotation around X axis (tilt)
     const tilt = 18 * Math.PI / 180;
     const rotY = y * Math.cos(tilt) - z * Math.sin(tilt);
     const rotZ = y * Math.sin(tilt) + z * Math.cos(tilt);
@@ -153,194 +146,167 @@ const WorldStockMarkets = () => {
     return { x: screenX, y: screenY, visible, depth: rotZ };
   };
 
-  const globeRadius = 120;
-  const globeCenterX = 150;
-  const globeCenterY = 150;
+  const globeRadius = 80;
+  const globeCenterX = 100;
+  const globeCenterY = 100;
 
-  return (
-    <div className="h-full w-full bg-[#000814] text-white overflow-auto p-4">
-      <div className="flex flex-col lg:flex-row gap-4">
-        {/* Globe Visualization */}
-        <div className="flex-shrink-0">
-          <svg width="300" height="300" className="mx-auto">
-            {/* Ocean */}
-            <circle 
-              cx={globeCenterX} 
-              cy={globeCenterY} 
-              r={globeRadius} 
-              fill="#001d3d" 
-              stroke="#48cae4" 
-              strokeWidth="2"
+  // Globe Content
+  const GlobeContent = () => (
+    <div className="flex flex-col items-center">
+      <svg width="200" height="200">
+        <circle 
+          cx={globeCenterX} 
+          cy={globeCenterY} 
+          r={globeRadius} 
+          fill="#001d3d" 
+          stroke="#48cae4" 
+          strokeWidth="1"
+        />
+        
+        {[-60, -30, 0, 30, 60].map(lat => {
+          const points: string[] = [];
+          for (let lon = -180; lon <= 180; lon += 15) {
+            const { x, y, visible } = projectToGlobe(lat, lon, globeRadius);
+            if (visible) {
+              points.push(`${globeCenterX + x},${globeCenterY - y}`);
+            }
+          }
+          return points.length > 1 ? (
+            <polyline
+              key={`lat-${lat}`}
+              points={points.join(' ')}
+              fill="none"
+              stroke="#3d5a80"
+              strokeWidth="0.5"
+              opacity="0.5"
             />
-            
-            {/* Grid lines - simplified */}
-            {[-60, -30, 0, 30, 60].map(lat => {
-              const points: string[] = [];
-              for (let lon = -180; lon <= 180; lon += 15) {
-                const { x, y, visible } = projectToGlobe(lat, lon, globeRadius);
-                if (visible) {
-                  points.push(`${globeCenterX + x},${globeCenterY - y}`);
-                }
-              }
-              return points.length > 1 ? (
-                <polyline
-                  key={`lat-${lat}`}
-                  points={points.join(' ')}
-                  fill="none"
-                  stroke="#3d5a80"
-                  strokeWidth="0.5"
-                  opacity="0.5"
-                />
-              ) : null;
-            })}
-            
-            {/* Meridians */}
-            {[-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150, 180].map(lon => {
-              const points: string[] = [];
-              for (let lat = -80; lat <= 80; lat += 10) {
-                const { x, y, visible } = projectToGlobe(lat, lon, globeRadius);
-                if (visible) {
-                  points.push(`${globeCenterX + x},${globeCenterY - y}`);
-                }
-              }
-              return points.length > 1 ? (
-                <polyline
-                  key={`lon-${lon}`}
-                  points={points.join(' ')}
-                  fill="none"
-                  stroke="#3d5a80"
-                  strokeWidth="0.5"
-                  opacity="0.5"
-                />
-              ) : null;
-            })}
-            
-            {/* Market dots */}
-            {markets.map(market => {
-              const { x, y, visible, depth } = projectToGlobe(market.lat, market.lon, globeRadius);
-              if (!visible) return null;
-              
-              const dotSize = market.isOpen ? 8 : 5;
-              const color = market.isOpen ? '#00ff88' : '#ff6b6b';
-              const opacity = Math.max(0.3, (depth + 1) / 2);
-              
-              return (
-                <g key={market.name}>
-                  {market.isOpen && (
-                    <circle
-                      cx={globeCenterX + x}
-                      cy={globeCenterY - y}
-                      r={dotSize + 4}
-                      fill={color}
-                      opacity={0.2}
-                    />
-                  )}
-                  <circle
-                    cx={globeCenterX + x}
-                    cy={globeCenterY - y}
-                    r={dotSize}
-                    fill={market.isOpen ? color : 'transparent'}
-                    stroke={color}
-                    strokeWidth="2"
-                    opacity={opacity}
-                  />
-                </g>
-              );
-            })}
-          </svg>
+          ) : null;
+        })}
+        
+        {markets.map(market => {
+          const { x, y, visible, depth } = projectToGlobe(market.lat, market.lon, globeRadius);
+          if (!visible) return null;
           
-          {/* Title and Status */}
-          <div className="text-center mt-2">
-            <h2 className="text-lg font-bold text-white">WORLD STOCK MARKETS</h2>
-            <p className={`text-sm ${openMarkets.length > 0 ? 'text-terminal-green' : 'text-red-400'}`}>
-              {openMarkets.length > 0 
-                ? `${openMarkets.length} MARKET${openMarkets.length > 1 ? 'S' : ''} OPEN` 
-                : 'ALL MARKETS CLOSED'}
-            </p>
-            <p className="text-xs text-white/50">
-              UTC {formatTime(currentTime.getUTCHours(), currentTime.getUTCMinutes(), currentTime.getUTCSeconds())}
-            </p>
-          </div>
-        </div>
-
-        {/* Market Table */}
-        <div className="flex-1 overflow-auto">
-          <table className="w-full text-xs border-collapse">
-            <thead className="bg-[#1a365d] sticky top-0">
-              <tr>
-                <th className="p-2 text-left">Status</th>
-                <th className="p-2 text-left">Exchange</th>
-                <th className="p-2 text-left">Country</th>
-                <th className="p-2 text-center">Local</th>
-                <th className="p-2 text-center">Opens</th>
-                <th className="p-2 text-center">To Open</th>
-                <th className="p-2 text-center">Since Open</th>
-                <th className="p-2 text-center">To Close</th>
-                <th className="p-2 text-center">Index</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedMarkets.map(market => {
-                const toOpenSecs = getTimeToOpen(market);
-                const sinceOpenSecs = getSinceOpen(market);
-                const toCloseSecs = getTimeToClose(market);
-                const rowBg = market.isOpen ? 'bg-[#0d3320]/50' : 'bg-[#1a1a2e]/50';
-                
-                return (
-                  <tr key={market.name} className={`${rowBg} border-b border-[#3d5a80]/30`}>
-                    <td className="p-2 text-center">
-                      <span className={market.isOpen ? 'text-terminal-green' : 'text-gray-500'}>
-                        {market.isOpen ? '●' : '○'}
-                      </span>
-                    </td>
-                    <td className={`p-2 font-mono ${market.isOpen ? 'text-white' : 'text-gray-500'}`}>
-                      {market.name}
-                    </td>
-                    <td className={`p-2 ${market.isOpen ? 'text-white' : 'text-gray-500'}`}>
-                      {market.flag} {market.fullName}
-                    </td>
-                    <td className={`p-2 text-center font-mono ${market.isOpen ? 'text-terminal-green' : 'text-gray-500'}`}>
-                      {formatTime(market.localHour, market.localMin, market.localSec)}
-                    </td>
-                    <td className="p-2 text-center text-white/40 font-mono">
-                      {formatTime(market.openHour, market.openMin)}
-                    </td>
-                    <td className="p-2 text-center font-mono">
-                      {market.isOpen ? (
-                        <span className="text-gray-500">—</span>
-                      ) : (
-                        <span className={toOpenSecs < 3600 ? 'text-yellow-400' : 'text-white/40'}>
-                          {formatDuration(toOpenSecs)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-2 text-center font-mono">
-                      {market.isOpen ? (
-                        <span className="text-terminal-green/70">{formatDuration(sinceOpenSecs)}</span>
-                      ) : (
-                        <span className="text-gray-500">—</span>
-                      )}
-                    </td>
-                    <td className="p-2 text-center font-mono">
-                      {market.isOpen ? (
-                        <span className={toCloseSecs < 3600 ? 'text-red-400' : 'text-yellow-400/70'}>
-                          {formatDuration(toCloseSecs)}
-                        </span>
-                      ) : (
-                        <span className="text-gray-500">—</span>
-                      )}
-                    </td>
-                    <td className="p-2 text-center text-white/40">
-                      {market.indexSymbol}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+          const dotSize = market.isOpen ? 6 : 4;
+          const color = market.isOpen ? '#00ff88' : '#ff6b6b';
+          const opacity = Math.max(0.3, (depth + 1) / 2);
+          
+          return (
+            <g key={market.name}>
+              {market.isOpen && (
+                <circle
+                  cx={globeCenterX + x}
+                  cy={globeCenterY - y}
+                  r={dotSize + 3}
+                  fill={color}
+                  opacity={0.2}
+                />
+              )}
+              <circle
+                cx={globeCenterX + x}
+                cy={globeCenterY - y}
+                r={dotSize}
+                fill={market.isOpen ? color : 'transparent'}
+                stroke={color}
+                strokeWidth="1.5"
+                opacity={opacity}
+              />
+            </g>
+          );
+        })}
+      </svg>
+      
+      <div className="text-center mt-2">
+        <p className={`text-xs ${openMarkets.length > 0 ? 'text-green-400' : 'text-red-400'}`}>
+          {openMarkets.length > 0 
+            ? `${openMarkets.length} MARKET${openMarkets.length > 1 ? 'S' : ''} OPEN` 
+            : 'ALL MARKETS CLOSED'}
+        </p>
+        <p className="text-[10px] text-muted-foreground">
+          UTC {formatTime(currentTime.getUTCHours(), currentTime.getUTCMinutes(), currentTime.getUTCSeconds())}
+        </p>
       </div>
     </div>
+  );
+
+  // Table Content
+  const TableContent = () => (
+    <ScrollArea className="h-64">
+      <table className="w-full text-[10px]">
+        <thead className="sticky top-0 bg-background border-b border-green-500/30">
+          <tr className="text-amber-400">
+            <th className="text-left py-1 px-1">Status</th>
+            <th className="text-left py-1 px-1">Exchange</th>
+            <th className="text-left py-1 px-1">Country</th>
+            <th className="text-center py-1 px-1">Local</th>
+            <th className="text-center py-1 px-1">To Open/Close</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sortedMarkets.map(market => {
+            const toOpenSecs = getTimeToOpen(market);
+            const toCloseSecs = getTimeToClose(market);
+            
+            return (
+              <tr key={market.name} className={`border-b border-border/10 ${market.isOpen ? 'bg-green-500/5' : ''}`}>
+                <td className="py-1 px-1 text-center">
+                  <span className={market.isOpen ? 'text-green-400' : 'text-muted-foreground'}>
+                    {market.isOpen ? '●' : '○'}
+                  </span>
+                </td>
+                <td className={`py-1 px-1 font-mono ${market.isOpen ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {market.name}
+                </td>
+                <td className={`py-1 px-1 ${market.isOpen ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {market.flag} {market.fullName}
+                </td>
+                <td className={`py-1 px-1 text-center font-mono ${market.isOpen ? 'text-green-400' : 'text-muted-foreground'}`}>
+                  {formatTime(market.localHour, market.localMin)}
+                </td>
+                <td className="py-1 px-1 text-center font-mono">
+                  {market.isOpen ? (
+                    <span className={toCloseSecs < 3600 ? 'text-red-400' : 'text-amber-400'}>
+                      ⏱ {formatDuration(toCloseSecs)}
+                    </span>
+                  ) : (
+                    <span className={toOpenSecs < 3600 ? 'text-yellow-400' : 'text-muted-foreground'}>
+                      ⏳ {formatDuration(toOpenSecs)}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </ScrollArea>
+  );
+
+  return (
+    <COTStyleWrapper
+      title="WORLD STOCK MARKETS"
+      icon="🌍"
+      tabs={[
+        {
+          id: 'globe',
+          label: 'Globe',
+          icon: <Globe className="w-3 h-3" />,
+          content: <GlobeContent />
+        },
+        {
+          id: 'table',
+          label: 'Table',
+          icon: <Table className="w-3 h-3" />,
+          content: <TableContent />
+        }
+      ]}
+      footerLeft={`Total: ${markets.length} exchanges`}
+      footerStats={[
+        { label: '🟢 Open', value: openMarkets.length },
+        { label: '🔴 Closed', value: closedMarkets.length }
+      ]}
+      footerRight={formatTime(currentTime.getUTCHours(), currentTime.getUTCMinutes())}
+    />
   );
 };
 

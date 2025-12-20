@@ -4,7 +4,7 @@ import {
   RefreshCw, Search, Flame, Clock, ExternalLink, Twitter, 
   MessageCircle, Globe, ChevronUp, Zap, Brain,
   TrendingUp, TrendingDown, Minus, Sparkles, Radio, Newspaper,
-  Settings, X, Key, AlertTriangle
+  Settings, X, Key, AlertTriangle, Table, BarChart3
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchGoldNews, GoldNewsItem } from '@/services/goldNewsService';
@@ -14,6 +14,9 @@ import {
   hasGroqApiKey, 
   clearGroqApiKey 
 } from '@/services/llmAnalysisService';
+import { COTStyleWrapper } from '@/components/ui/COTStyleWrapper';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 // ============ TYPES ============
 interface NewsItem {
@@ -34,7 +37,6 @@ interface NewsItem {
   imageUrl?: string;
   isBreaking?: boolean;
   relatedTickers?: string[];
-  // Hybrid analysis fields
   algoSentiment?: 'bullish' | 'bearish' | 'neutral';
   algoRelevance?: number;
   llmSentiment?: 'bullish' | 'bearish' | 'neutral';
@@ -47,13 +49,13 @@ interface NewsItem {
 
 // ============ CONFIG ============
 const NEWS_SOURCES = {
-  reddit: { name: 'Reddit', icon: MessageCircle, color: 'text-terminal-orange' },
-  hackernews: { name: 'HN', icon: Zap, color: 'text-terminal-amber' },
-  coingecko: { name: 'CoinGecko', icon: Globe, color: 'text-terminal-green' },
-  finnhub: { name: 'Finnhub', icon: TrendingUp, color: 'text-terminal-blue' },
-  gnews: { name: 'GNews', icon: Newspaper, color: 'text-terminal-cyan' },
-  news: { name: 'News', icon: Globe, color: 'text-terminal-cyan' },
-  twitter: { name: 'X', icon: Twitter, color: 'text-terminal-blue' }
+  reddit: { name: 'Reddit', icon: MessageCircle, color: 'text-orange-500' },
+  hackernews: { name: 'HN', icon: Zap, color: 'text-amber-400' },
+  coingecko: { name: 'CoinGecko', icon: Globe, color: 'text-green-400' },
+  finnhub: { name: 'Finnhub', icon: TrendingUp, color: 'text-blue-400' },
+  gnews: { name: 'GNews', icon: Newspaper, color: 'text-cyan-400' },
+  news: { name: 'News', icon: Globe, color: 'text-cyan-400' },
+  twitter: { name: 'X', icon: Twitter, color: 'text-blue-400' }
 };
 
 // ============ SENTIMENT ANALYSIS ============
@@ -251,11 +253,11 @@ const generateMockTwitter = (query: string): NewsItem[] => {
 };
 
 // ============ COMPONENTS ============
-const SentimentBadge = ({ sentiment, confidence }: { sentiment: string; confidence?: number }) => {
+const SentimentBadge = ({ sentiment }: { sentiment: string }) => {
   const config = {
-    bullish: { bg: 'bg-terminal-green/20', text: 'text-terminal-green', border: 'border-terminal-green/50' },
-    bearish: { bg: 'bg-terminal-red/20', text: 'text-terminal-red', border: 'border-terminal-red/50' },
-    neutral: { bg: 'bg-terminal-gray/20', text: 'text-terminal-gray', border: 'border-terminal-gray/50' }
+    bullish: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/50' },
+    bearish: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/50' },
+    neutral: { bg: 'bg-gray-500/20', text: 'text-gray-400', border: 'border-gray-500/50' }
   };
   
   const style = config[sentiment as keyof typeof config] || config.neutral;
@@ -263,14 +265,13 @@ const SentimentBadge = ({ sentiment, confidence }: { sentiment: string; confiden
   return (
     <span className={`${style.bg} ${style.text} ${style.border} border text-[10px] px-2 py-0.5 rounded font-mono`}>
       {sentiment.toUpperCase()}
-      {confidence !== undefined && <span className="ml-1 opacity-70">({Math.round(confidence * 100)}%)</span>}
     </span>
   );
 };
 
 const SourceIcon = ({ source }: { source: string }) => {
   const cfg = NEWS_SOURCES[source as keyof typeof NEWS_SOURCES];
-  if (!cfg) return <Globe className="w-3 h-3 text-terminal-gray" />;
+  if (!cfg) return <Globe className="w-3 h-3 text-gray-400" />;
   const Icon = cfg.icon;
   return <Icon className={`w-3 h-3 ${cfg.color}`} />;
 };
@@ -296,6 +297,8 @@ const TopNews = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [hasLLM, setHasLLM] = useState(hasGroqApiKey());
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   // Stats
   const sentimentStats = useMemo(() => {
@@ -310,7 +313,6 @@ const TopNews = () => {
     const results: NewsItem[] = [];
 
     if (view === 'gold') {
-      // Fetch gold-specific news
       const goldNews = await fetchGoldNews();
       const converted: NewsItem[] = goldNews.map((g: GoldNewsItem) => ({
         id: g.id,
@@ -329,7 +331,6 @@ const TopNews = () => {
       return converted;
     }
 
-    // Regular news aggregation
     const fetchers = await Promise.allSettled([
       fetchReddit(query),
       fetchHackerNews(query),
@@ -341,7 +342,6 @@ const TopNews = () => {
       if (r.status === 'fulfilled') results.push(...r.value);
     });
 
-    // Remove duplicates
     const seen = new Set<string>();
     const unique = results.filter(n => {
       const key = n.title.toLowerCase().substring(0, 50);
@@ -357,16 +357,17 @@ const TopNews = () => {
     if (!searchQuery.trim() && selectedView !== 'gold') return;
     
     setLoading(true);
+    setError(null);
     
     try {
       const aggregated = await aggregateNews(searchQuery, selectedView);
+      setLastUpdate(new Date());
       
       toast({
         title: '✅ อัพเดทข่าวแล้ว',
         description: `พบ ${aggregated.length} รายการ`
       });
 
-      // Apply hybrid analysis if LLM is available
       if (hasLLM) {
         setLlmLoading(true);
         try {
@@ -381,8 +382,9 @@ const TopNews = () => {
       } else {
         setNews(aggregated);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Fetch error:', e);
+      setError(e.message || 'Failed to fetch news');
       toast({ title: 'ผิดพลาด', description: 'ไม่สามารถดึงข่าวได้', variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -402,7 +404,6 @@ const TopNews = () => {
   const filteredNews = useMemo(() => {
     let filtered = [...news];
     
-    // Filter by view/category
     if (selectedView === 'crypto') {
       filtered = filtered.filter(n => 
         n.category?.toLowerCase().includes('crypto') || 
@@ -416,7 +417,6 @@ const TopNews = () => {
       );
     }
     
-    // Sort
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'time': return b.timestamp - a.timestamp;
@@ -439,273 +439,102 @@ const TopNews = () => {
     }
   };
 
-  const handleClearApiKey = () => {
-    clearGroqApiKey();
-    setHasLLM(false);
-    toast({ title: 'ลบ API Key แล้ว', description: 'ใช้ Algorithm Analysis เท่านั้น' });
-  };
-
-  return (
-    <div className="terminal-panel h-full flex flex-col text-[0.5rem] xs:text-[0.6rem] sm:text-xs md:text-sm">
-      {/* Header */}
-      <div className="panel-header flex items-center justify-between p-2 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Flame className="w-4 h-4 text-terminal-amber" />
-          <span className="text-terminal-amber font-bold text-xs sm:text-sm font-mono">TOP NEWS AGGREGATOR</span>
-          {hasLLM && (
-            <span className="text-[8px] bg-terminal-cyan/20 text-terminal-cyan px-1.5 py-0.5 rounded font-mono">
-              AI
-            </span>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <select 
-            value={selectedView}
-            onChange={(e) => setSelectedView(e.target.value as any)}
-            className="bg-background border border-border text-terminal-green text-[10px] sm:text-xs px-2 py-1 font-mono"
+  // News List Content
+  const NewsListContent = () => (
+    <ScrollArea className="h-full">
+      <div className="space-y-2 pr-2">
+        {filteredNews.map((item) => (
+          <a
+            key={item.id}
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block p-2 rounded border border-border/30 hover:bg-accent/50 transition-colors"
           >
-            <option value="all">All News</option>
-            <option value="gold">🥇 Gold & Commodities</option>
-            <option value="crypto">₿ Crypto</option>
-            <option value="forex">💱 Forex</option>
-          </select>
-          
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-1 hover:bg-background/50 rounded transition-colors"
-            title="Settings"
-          >
-            <Settings className="w-3 h-3 text-terminal-gray hover:text-terminal-amber" />
-          </button>
-        </div>
-      </div>
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="bg-background/95 border-b border-terminal-cyan/50 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Key className="w-3 h-3 text-terminal-amber" />
-              <span className="text-terminal-amber text-xs font-bold font-mono">Groq API (LLM Analysis)</span>
-            </div>
-            <button onClick={() => setShowSettings(false)}>
-              <X className="w-3 h-3 text-terminal-gray hover:text-terminal-red" />
-            </button>
-          </div>
-          
-          {hasLLM ? (
-            <div className="flex items-center gap-2">
-              <span className="text-terminal-green text-[10px] font-mono">✓ API Key configured</span>
-              <button
-                onClick={handleClearApiKey}
-                className="bg-terminal-red/20 border border-terminal-red/50 text-terminal-red text-[10px] px-2 py-0.5 rounded font-mono hover:bg-terminal-red/30"
-              >
-                Remove
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-terminal-gray text-[10px] font-mono">
-                Get free API key at <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-terminal-cyan underline">console.groq.com</a>
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="gsk_xxxxxxxx..."
-                  className="flex-1 bg-background border border-border text-terminal-white text-[10px] px-2 py-1 font-mono"
-                />
-                <button
-                  onClick={handleSaveApiKey}
-                  className="bg-terminal-green/20 border border-terminal-green/50 text-terminal-green text-[10px] px-3 py-1 rounded font-mono hover:bg-terminal-green/30"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Stats Summary Row */}
-      <div className="grid grid-cols-4 gap-2 p-2 border-b border-border/50">
-        <div className="bg-background/30 p-2 rounded">
-          <div className="text-[10px] text-terminal-amber mb-0.5 font-mono">Total</div>
-          <div className="text-sm sm:text-lg text-terminal-white font-bold font-mono">{news.length}</div>
-        </div>
-        <div className="bg-background/30 p-2 rounded">
-          <div className="text-[10px] text-terminal-amber mb-0.5 font-mono">Bullish</div>
-          <div className="text-sm sm:text-lg text-terminal-green font-bold font-mono">{sentimentStats.bullish}</div>
-        </div>
-        <div className="bg-background/30 p-2 rounded">
-          <div className="text-[10px] text-terminal-amber mb-0.5 font-mono">Bearish</div>
-          <div className="text-sm sm:text-lg text-terminal-red font-bold font-mono">{sentimentStats.bearish}</div>
-        </div>
-        <div className="bg-background/30 p-2 rounded">
-          <div className="text-[10px] text-terminal-amber mb-0.5 font-mono">AI Analyzed</div>
-          <div className="text-sm sm:text-lg text-terminal-cyan font-bold font-mono">
-            {llmLoading ? <Sparkles className="w-4 h-4 animate-pulse" /> : sentimentStats.aiAnalyzed}
-          </div>
-        </div>
-      </div>
-
-      {/* Search & Filters */}
-      <div className="flex gap-2 p-2 border-b border-border/50">
-        <div className="relative flex-1">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-terminal-gray" />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && fetchNews()}
-            placeholder="Search news..."
-            className="w-full bg-background border border-border text-terminal-white text-[10px] sm:text-xs pl-7 pr-2 py-1.5 font-mono"
-          />
-        </div>
-        <button
-          onClick={() => setAutoRefresh(!autoRefresh)}
-          className={`p-1.5 border rounded transition-colors ${
-            autoRefresh 
-              ? 'bg-terminal-green/20 border-terminal-green/50 text-terminal-green' 
-              : 'bg-background border-border text-terminal-gray'
-          }`}
-          title="Auto Refresh"
-        >
-          <Radio className={`w-3 h-3 ${autoRefresh ? 'animate-pulse' : ''}`} />
-        </button>
-        <button
-          onClick={fetchNews}
-          disabled={loading}
-          className="bg-terminal-amber/20 border border-terminal-amber/50 text-terminal-amber p-1.5 rounded hover:bg-terminal-amber/30 transition-colors"
-        >
-          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-        </button>
-      </div>
-
-      {/* Sort Buttons */}
-      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border/50">
-        <div className="flex gap-1">
-          {(['time', 'relevance', 'score', 'sentiment'] as const).map(s => (
-            <button
-              key={s}
-              onClick={() => setSortBy(s)}
-              className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded font-mono transition-colors ${
-                sortBy === s 
-                  ? 'bg-terminal-amber/20 text-terminal-amber border border-terminal-amber/50' 
-                  : 'text-terminal-gray hover:text-terminal-white'
-              }`}
-            >
-              {s === 'time' ? '🕐 Time' : s === 'relevance' ? '🎯 Relevance' : s === 'score' ? '⬆️ Score' : '📊 Sentiment'}
-            </button>
-          ))}
-        </div>
-        {hasLLM && (
-          <div className="flex items-center gap-1 text-[9px] text-terminal-cyan font-mono">
-            <Brain className="w-3 h-3" />
-            <span>Hybrid AI</span>
-          </div>
-        )}
-      </div>
-
-      {/* Table Header */}
-      <div className="grid grid-cols-12 gap-2 text-[9px] sm:text-[10px] text-terminal-amber border-b border-border p-2 font-mono">
-        <div className="col-span-1">Src</div>
-        <div className="col-span-5">Headline</div>
-        <div className="col-span-2 text-center">Sentiment</div>
-        <div className="col-span-2 text-center">{hasLLM ? 'AI Score' : 'Score'}</div>
-        <div className="col-span-2 text-right">Time</div>
-      </div>
-
-      {/* News List */}
-      <ScrollArea className="flex-1">
-        {loading && news.length === 0 ? (
-          <div className="flex items-center justify-center h-32">
-            <div className="text-center">
-              <RefreshCw className="w-6 h-6 animate-spin text-terminal-amber mx-auto mb-2" />
-              <p className="text-[10px] text-terminal-gray font-mono">กำลังดึงข่าว...</p>
-            </div>
-          </div>
-        ) : filteredNews.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-terminal-gray text-xs font-mono">
-            ไม่พบข่าว
-          </div>
-        ) : (
-          <div>
-            {filteredNews.map((item) => (
-              <div
-                key={item.id}
-                className="grid grid-cols-12 gap-2 text-[10px] sm:text-xs py-2 px-2 border-b border-border/20 hover:bg-background/50 cursor-pointer transition-colors group"
-                onClick={() => window.open(item.url, '_blank')}
-              >
-                {/* Source */}
-                <div className="col-span-1 flex items-center justify-center">
-                  <SourceIcon source={item.source} />
+            <div className="flex items-start gap-2">
+              <SourceIcon source={item.source} />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-foreground leading-tight line-clamp-2">
+                  {item.title}
                 </div>
-
-                {/* Headline */}
-                <div className="col-span-5 min-w-0">
-                  <p className="text-terminal-white font-mono truncate group-hover:text-terminal-cyan transition-colors">
-                    {item.title}
-                  </p>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    {item.author && (
-                      <span className="text-[8px] text-terminal-gray font-mono">{item.author}</span>
-                    )}
-                    {item.isLLMAnalyzed && item.llmSummary && (
-                      <span className="text-[8px] text-terminal-cyan font-mono ml-1" title={item.llmSummary}>
-                        💡
-                      </span>
-                    )}
-                    {item.relatedTickers?.slice(0, 2).map(t => (
-                      <span key={t} className="text-[8px] text-terminal-amber font-mono">${t}</span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Sentiment */}
-                <div className="col-span-2 flex items-center justify-center">
-                  <SentimentBadge 
-                    sentiment={item.llmSentiment || item.sentiment} 
-                    confidence={item.llmConfidence}
-                  />
-                </div>
-
-                {/* Score */}
-                <div className="col-span-2 flex items-center justify-center">
-                  {item.isLLMAnalyzed ? (
-                    <div className="flex items-center gap-1">
-                      <Sparkles className="w-2.5 h-2.5 text-terminal-cyan" />
-                      <span className="text-terminal-cyan font-mono font-bold">
-                        {item.finalScore || item.llmConfidence ? Math.round((item.llmConfidence || 0) * 100) : '-'}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-terminal-gray font-mono">
-                      {item.score > 0 ? item.score : item.relevance || '-'}
-                    </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] text-muted-foreground">{formatTimeAgo(item.timestamp)}</span>
+                  <SentimentBadge sentiment={item.sentiment} />
+                  {item.relatedTickers && item.relatedTickers.length > 0 && (
+                    <span className="text-[10px] text-amber-400">${item.relatedTickers[0]}</span>
                   )}
                 </div>
-
-                {/* Time */}
-                <div className="col-span-2 flex items-center justify-end gap-1">
-                  <span className="text-terminal-gray font-mono">{formatTimeAgo(item.timestamp)}</span>
-                  <ExternalLink className="w-2.5 h-2.5 text-terminal-gray opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
               </div>
-            ))}
-          </div>
-        )}
-      </ScrollArea>
+              <ExternalLink className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+            </div>
+          </a>
+        ))}
+      </div>
+    </ScrollArea>
+  );
 
-      {/* LLM Loading Indicator */}
-      {llmLoading && (
-        <div className="flex items-center justify-center gap-2 p-2 bg-terminal-cyan/10 border-t border-terminal-cyan/30">
-          <Brain className="w-3 h-3 text-terminal-cyan animate-pulse" />
-          <span className="text-[10px] text-terminal-cyan font-mono">กำลังวิเคราะห์ด้วย AI...</span>
+  // Stats Content
+  const StatsContent = () => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="p-3 rounded border border-green-500/30 bg-green-500/10">
+          <div className="text-[10px] text-muted-foreground">Bullish</div>
+          <div className="text-lg font-bold text-green-400">{sentimentStats.bullish}</div>
         </div>
-      )}
+        <div className="p-3 rounded border border-red-500/30 bg-red-500/10">
+          <div className="text-[10px] text-muted-foreground">Bearish</div>
+          <div className="text-lg font-bold text-red-400">{sentimentStats.bearish}</div>
+        </div>
+        <div className="p-3 rounded border border-gray-500/30 bg-gray-500/10">
+          <div className="text-[10px] text-muted-foreground">Neutral</div>
+          <div className="text-lg font-bold text-gray-400">{sentimentStats.neutral}</div>
+        </div>
+        <div className="p-3 rounded border border-cyan-500/30 bg-cyan-500/10">
+          <div className="text-[10px] text-muted-foreground">AI Analyzed</div>
+          <div className="text-lg font-bold text-cyan-400">{sentimentStats.aiAnalyzed}</div>
+        </div>
+      </div>
     </div>
+  );
+
+  return (
+    <COTStyleWrapper
+      title="TOP NEWS AGGREGATOR"
+      icon="🔥"
+      lastUpdate={lastUpdate}
+      selectOptions={[
+        { value: 'all', label: '🌐 All News' },
+        { value: 'gold', label: '🥇 Gold & Commodities' },
+        { value: 'crypto', label: '₿ Crypto' },
+        { value: 'forex', label: '💱 Forex' }
+      ]}
+      selectedValue={selectedView}
+      onSelectChange={(v) => setSelectedView(v as any)}
+      onRefresh={fetchNews}
+      loading={loading}
+      error={error}
+      onErrorDismiss={() => setError(null)}
+      tabs={[
+        {
+          id: 'news',
+          label: 'News Feed',
+          icon: <Newspaper className="w-3 h-3" />,
+          content: <NewsListContent />
+        },
+        {
+          id: 'stats',
+          label: 'Stats',
+          icon: <BarChart3 className="w-3 h-3" />,
+          content: <StatsContent />
+        }
+      ]}
+      footerLeft={`Total: ${filteredNews.length} items`}
+      footerStats={[
+        { label: '📈 Bullish', value: sentimentStats.bullish },
+        { label: '📉 Bearish', value: sentimentStats.bearish }
+      ]}
+      footerRight={hasLLM ? '🤖 AI Active' : ''}
+    />
   );
 };
 
