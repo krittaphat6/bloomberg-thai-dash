@@ -3,9 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { FirecrawlService } from '@/utils/FirecrawlService';
-import { Loader2, ExternalLink, Settings, Newspaper, Table } from 'lucide-react';
-import { COTStyleWrapper } from '@/components/ui/COTStyleWrapper';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Loader2, ExternalLink, Settings } from 'lucide-react';
 
 interface NewsItem {
   headline: string;
@@ -21,9 +19,8 @@ const BloombergNews = () => {
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
+  // Mock news data as fallback
   const mockNews: NewsItem[] = [
     { headline: "Fed Signals Rate Pause Amid Inflation Concerns", time: "15:45", summary: "Federal Reserve officials hint at maintaining current rates" },
     { headline: "Tech Stocks Rally on AI Investment Surge", time: "15:30", summary: "Major technology companies see significant gains" },
@@ -37,9 +34,8 @@ const BloombergNews = () => {
     const existingApiKey = FirecrawlService.getApiKey();
     setHasApiKey(!!existingApiKey);
     if (!existingApiKey) {
-      setNews(mockNews);
+      setNews(mockNews); // Show mock data when no API key
     }
-    setLastUpdate(new Date());
   }, []);
 
   const handleSaveApiKey = async () => {
@@ -64,7 +60,7 @@ const BloombergNews = () => {
         title: "Success",
         description: "API key saved successfully",
       });
-      fetchNews();
+      fetchNews(); // Load real news after API key is set
     } else {
       toast({
         title: "Error", 
@@ -78,16 +74,15 @@ const BloombergNews = () => {
   const fetchNews = async () => {
     if (!hasApiKey) {
       setNews(mockNews);
-      setLastUpdate(new Date());
       return;
     }
 
     setIsLoading(true);
-    setError(null);
     try {
       const result = await FirecrawlService.scrapeBloombergNews();
       
       if (result.success && result.data) {
+        // Parse the markdown content to extract news items
         const parsedNews = parseBloombergContent(result.data);
         setNews(parsedNews.length > 0 ? parsedNews : mockNews);
         toast({
@@ -101,10 +96,8 @@ const BloombergNews = () => {
           description: "Using sample news data",
         });
       }
-      setLastUpdate(new Date());
-    } catch (err: any) {
-      console.error('Error fetching news:', err);
-      setError(err.message || 'Failed to fetch news');
+    } catch (error) {
+      console.error('Error fetching news:', error);
       setNews(mockNews);
       toast({
         title: "Error",
@@ -116,6 +109,7 @@ const BloombergNews = () => {
   };
 
   const parseBloombergContent = (content: string): NewsItem[] => {
+    // Simple parsing logic for Bloomberg content
     const lines = content.split('\n');
     const newsItems: NewsItem[] = [];
     
@@ -134,102 +128,102 @@ const BloombergNews = () => {
   };
 
   const getNewsColor = (index: number) => {
-    const colors = ['text-amber-400', 'text-cyan-400', 'text-yellow-400', 'text-green-400', 'text-red-400', 'text-foreground'];
+    const colors = ['text-terminal-amber', 'text-terminal-cyan', 'text-terminal-yellow', 'text-terminal-green', 'text-terminal-red', 'text-terminal-white'];
     return colors[index % colors.length];
   };
 
-  // News Feed Content
-  const NewsFeedContent = () => (
-    <ScrollArea className="h-48">
-      <div className="space-y-2 pr-2">
-        {news.map((item, index) => (
-          <div key={index} className="border-l-2 border-cyan-500/30 pl-2 py-1">
-            <div className="flex items-start gap-2">
-              <span className="text-muted-foreground text-[10px] font-mono min-w-[3rem]">
-                {item.time}
-              </span>
-              <div className="flex-1">
-                <div className={`${getNewsColor(index)} text-xs font-medium leading-tight`}>
-                  {item.headline}
-                </div>
-                {item.summary && (
-                  <div className="text-muted-foreground text-[10px] mt-0.5 leading-tight">
-                    {item.summary}
-                  </div>
-                )}
-              </div>
-              {item.url && (
-                <ExternalLink className="w-3 h-3 text-muted-foreground hover:text-cyan-400 cursor-pointer flex-shrink-0" />
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </ScrollArea>
-  );
-
-  // Settings Content
-  const SettingsContent = () => (
-    <div className="space-y-3 p-2">
-      <div className="text-xs text-muted-foreground">
-        Configure your Firecrawl API key to fetch live Bloomberg news.
-      </div>
-      <div className="flex gap-2">
-        <Input
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder="Enter Firecrawl API key"
-          className="text-xs"
-        />
-        <Button
-          onClick={handleSaveApiKey}
-          disabled={isLoading}
-          size="sm"
-          className="text-xs"
-        >
-          {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-        </Button>
-      </div>
-      <div className="text-[10px] text-muted-foreground">
-        Get your API key at <a href="https://firecrawl.dev" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">firecrawl.dev</a>
-      </div>
-      {!hasApiKey && (
-        <div className="text-[10px] text-amber-400 mt-2">
-          📈 Currently showing sample data. Configure API key for live news.
+  if (showApiKeyInput) {
+    return (
+      <div className="bg-background/90 border border-terminal-cyan p-4 rounded backdrop-blur-sm">
+        <h3 className="text-terminal-amber text-sm font-bold mb-3">Configure Bloomberg News</h3>
+        <p className="text-terminal-cyan text-xs mb-3">
+          Enter your Firecrawl API key to fetch live Bloomberg news. You can get one at firecrawl.dev
+        </p>
+        <div className="flex gap-2">
+          <Input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="Enter Firecrawl API key"
+            className="bg-black/50 border-terminal-cyan text-terminal-white text-xs"
+          />
+          <Button
+            onClick={handleSaveApiKey}
+            disabled={isLoading}
+            className="bg-terminal-cyan text-black hover:bg-terminal-cyan/80 text-xs"
+          >
+            {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+          </Button>
+          <Button
+            onClick={() => setShowApiKeyInput(false)}
+            variant="outline"
+            className="border-terminal-cyan text-terminal-cyan text-xs"
+          >
+            Cancel
+          </Button>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
 
   return (
-    <COTStyleWrapper
-      title="BLOOMBERG FINANCIAL NEWS"
-      icon="📰"
-      lastUpdate={lastUpdate}
-      onRefresh={fetchNews}
-      loading={isLoading}
-      error={error}
-      onErrorDismiss={() => setError(null)}
-      tabs={[
-        {
-          id: 'news',
-          label: 'News Feed',
-          icon: <Newspaper className="w-3 h-3" />,
-          content: <NewsFeedContent />
-        },
-        {
-          id: 'settings',
-          label: 'Settings',
-          icon: <Settings className="w-3 h-3" />,
-          content: <SettingsContent />
-        }
-      ]}
-      footerLeft={`Total: ${news.length} articles`}
-      footerStats={[
-        { label: '📡 Source', value: hasApiKey ? 'Live' : 'Sample' }
-      ]}
-    />
+    <div className="bg-background/90 border border-terminal-cyan backdrop-blur-sm text-[0.6rem] sm:text-xs md:text-sm lg:text-base">
+      {/* Header */}
+      <div className="panel-header flex justify-between items-center border-b border-terminal-cyan text-[0.7rem] sm:text-sm md:text-base lg:text-lg">
+        <span className="text-terminal-amber font-bold">BLOOMBERG FINANCIAL NEWS</span>
+        <div className="flex gap-1">
+          <Button
+            onClick={fetchNews}
+            disabled={isLoading}
+            className="bg-transparent border border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-black text-[0.6rem] sm:text-xs px-1 sm:px-2 py-1"
+          >
+            {isLoading ? <Loader2 className="h-2 w-2 sm:h-3 sm:w-3 animate-spin" /> : 'REFRESH'}
+          </Button>
+          <Button
+            onClick={() => setShowApiKeyInput(true)}
+            className="bg-transparent border border-terminal-cyan text-terminal-cyan hover:bg-terminal-cyan hover:text-black text-[0.6rem] sm:text-xs px-1 sm:px-2 py-1"
+          >
+            <Settings className="h-2 w-2 sm:h-3 sm:w-3" />
+          </Button>
+        </div>
+      </div>
+
+      {/* News Content */}
+      <div className="p-3 max-h-40 overflow-y-auto">
+        <div className="space-y-2">
+          {news.map((item, index) => (
+            <div key={index} className="border-l-2 border-terminal-cyan/30 pl-2">
+              <div className="flex items-start gap-2">
+                <span className="text-terminal-gray text-[0.6rem] sm:text-xs font-mono min-w-[3rem] sm:min-w-[4rem]">
+                  {item.time}
+                </span>
+                <div className="flex-1">
+                  <div className={`${getNewsColor(index)} text-[0.6rem] sm:text-xs font-medium leading-tight`}>
+                    {item.headline}
+                  </div>
+                  {item.summary && (
+                    <div className="text-terminal-gray text-[0.6rem] sm:text-xs mt-1 leading-tight">
+                      {item.summary}
+                    </div>
+                  )}
+                </div>
+                {item.url && (
+                  <ExternalLink className="h-2 w-2 sm:h-3 sm:w-3 text-terminal-cyan/50 hover:text-terminal-cyan cursor-pointer" />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {!hasApiKey && (
+          <div className="mt-3 pt-2 border-t border-terminal-cyan/30">
+            <p className="text-terminal-yellow text-[0.6rem] sm:text-xs">
+              📈 Sample data shown. Configure API key for live Bloomberg news.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 

@@ -1,19 +1,16 @@
 import { useState, useEffect } from 'react';
-import { GoldDataService, goldDataService, GoldData, CentralBankData } from '@/services/GoldDataService';
-import { RefreshCw, Table, BarChart3, Globe } from 'lucide-react';
-import { COTStyleWrapper } from '@/components/ui/COTStyleWrapper';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { goldDataService, GoldData, CentralBankData } from '@/services/GoldDataService';
+import { RefreshCw } from 'lucide-react';
 
 const SPDRGoldData = () => {
   const [goldData, setGoldData] = useState<GoldData[]>([]);
   const [centralBankData, setCentralBankData] = useState<CentralBankData[]>([]);
+  const [selectedView, setSelectedView] = useState('spdr');
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const [prices, centralBanks] = await Promise.all([
         GoldDataService.fetchGLDData(),
@@ -22,9 +19,8 @@ const SPDRGoldData = () => {
       setGoldData(prices);
       setCentralBankData(centralBanks);
       setLastUpdate(new Date());
-    } catch (err: any) {
-      console.error('Error fetching gold data:', err);
-      setError(err.message || 'Failed to fetch gold data');
+    } catch (error) {
+      console.error('Error fetching gold data:', error);
     } finally {
       setLoading(false);
     }
@@ -37,9 +33,9 @@ const SPDRGoldData = () => {
   }, []);
 
   const getChangeColor = (change: number) => {
-    if (change > 0) return 'text-green-400';
-    if (change < 0) return 'text-red-400';
-    return 'text-amber-400';
+    if (change > 0) return 'text-terminal-green';
+    if (change < 0) return 'text-terminal-red';
+    return 'text-terminal-amber';
   };
 
   const formatNumber = (num: number) => {
@@ -48,163 +44,160 @@ const SPDRGoldData = () => {
 
   const latestGoldData = goldData[goldData.length - 1];
 
-  // SPDR Holdings Content
-  const SPDRContent = () => (
-    <div className="space-y-3">
-      {latestGoldData && (
-        <>
-          <div className="grid grid-cols-4 gap-2">
-            <div className="p-2 rounded border border-border bg-background/50">
-              <div className="text-[10px] text-amber-400">Gold Price (USD)</div>
-              <div className="text-sm font-bold text-foreground">${latestGoldData.priceUSD.toFixed(2)}</div>
-              <div className={`text-[10px] ${getChangeColor(latestGoldData.changePercent)}`}>
-                {latestGoldData.changePercent >= 0 ? '+' : ''}{latestGoldData.changePercent.toFixed(2)}%
+  return (
+    <div className="terminal-panel h-full text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm xl:text-base">
+      <div className="panel-header flex items-center justify-between text-[0.5rem] xs:text-[0.6rem] sm:text-[0.7rem] md:text-sm lg:text-base xl:text-lg">
+        <div className="flex items-center gap-2">
+          <span>GOLD MARKET DATA</span>
+          <button 
+            onClick={fetchData}
+            disabled={loading}
+            className="p-1 hover:bg-background/50 rounded transition-colors"
+          >
+            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          {lastUpdate && (
+            <span className="text-[0.5rem] text-terminal-gray">
+              {lastUpdate.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <select 
+            value={selectedView}
+            onChange={(e) => setSelectedView(e.target.value)}
+            className="bg-background border border-border text-terminal-green text-[0.6rem] sm:text-xs px-1 sm:px-2 py-1"
+          >
+            <option value="spdr">SPDR Gold Trust (GLD)</option>
+            <option value="centralbanks">Central Bank Holdings</option>
+            <option value="historical">Historical Data</option>
+          </select>
+        </div>
+      </div>
+      
+      <div className="panel-content">
+        {selectedView === 'spdr' && latestGoldData && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-4 gap-4 mb-4">
+              <div className="bg-background/30 p-2 sm:p-3 rounded">
+                <div className="text-[0.6rem] sm:text-xs text-terminal-amber mb-1">Gold Price (USD)</div>
+                <div className="text-sm sm:text-lg text-terminal-white font-bold">${latestGoldData.priceUSD.toFixed(2)}</div>
+                <div className={`text-[0.6rem] sm:text-xs ${getChangeColor(latestGoldData.changePercent)}`}>
+                  {latestGoldData.changePercent >= 0 ? '+' : ''}{latestGoldData.changePercent.toFixed(2)}%
+                </div>
+              </div>
+              <div className="bg-background/30 p-2 sm:p-3 rounded">
+                <div className="text-[0.6rem] sm:text-xs text-terminal-amber mb-1">Price (EUR)</div>
+                <div className="text-sm sm:text-lg text-terminal-white font-bold">€{latestGoldData.priceEUR.toFixed(2)}</div>
+                <div className="text-[0.6rem] sm:text-xs text-terminal-gray">per share</div>
+              </div>
+              <div className="bg-background/30 p-2 sm:p-3 rounded">
+                <div className="text-[0.6rem] sm:text-xs text-terminal-amber mb-1">Price (GBP)</div>
+                <div className="text-sm sm:text-lg text-terminal-white font-bold">£{latestGoldData.priceGBP.toFixed(2)}</div>
+                <div className="text-[0.6rem] sm:text-xs text-terminal-gray">per share</div>
+              </div>
+              <div className="bg-background/30 p-2 sm:p-3 rounded">
+                <div className="text-[0.6rem] sm:text-xs text-terminal-amber mb-1">Volume</div>
+                <div className="text-sm sm:text-lg text-terminal-white font-bold">{formatNumber(latestGoldData.volume)}</div>
+                <div className="text-[0.6rem] sm:text-xs text-terminal-gray">shares</div>
               </div>
             </div>
-            <div className="p-2 rounded border border-border bg-background/50">
-              <div className="text-[10px] text-amber-400">Price (EUR)</div>
-              <div className="text-sm font-bold text-foreground">€{latestGoldData.priceEUR.toFixed(2)}</div>
+
+            <div className="grid grid-cols-6 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs mb-2 text-terminal-amber border-b border-border pb-2">
+              <div>Date</div>
+              <div className="text-right">Price USD</div>
+              <div className="text-right">Price EUR</div>
+              <div className="text-right">Price GBP</div>
+              <div className="text-right">Volume</div>
+              <div className="text-right">Change %</div>
             </div>
-            <div className="p-2 rounded border border-border bg-background/50">
-              <div className="text-[10px] text-amber-400">Price (GBP)</div>
-              <div className="text-sm font-bold text-foreground">£{latestGoldData.priceGBP.toFixed(2)}</div>
-            </div>
-            <div className="p-2 rounded border border-border bg-background/50">
-              <div className="text-[10px] text-amber-400">Volume</div>
-              <div className="text-sm font-bold text-foreground">{formatNumber(latestGoldData.volume)}</div>
+            
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {goldData.slice(-10).reverse().map((item, index) => (
+                <div key={index} className="grid grid-cols-6 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs py-1 border-b border-border/20 hover:bg-background/30">
+                  <div className="text-terminal-white">{item.date}</div>
+                  <div className="text-right text-terminal-cyan">${item.priceUSD.toFixed(2)}</div>
+                  <div className="text-right text-terminal-gray">€{item.priceEUR.toFixed(2)}</div>
+                  <div className="text-right text-terminal-gray">£{item.priceGBP.toFixed(2)}</div>
+                  <div className="text-right text-terminal-gray">{formatNumber(item.volume)}</div>
+                  <div className={`text-right ${getChangeColor(item.changePercent)}`}>
+                    {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
+        )}
 
-          <ScrollArea className="h-48">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-background border-b border-green-500/30">
-                <tr className="text-amber-400">
-                  <th className="text-left py-1 px-2">Date</th>
-                  <th className="text-right py-1 px-2">USD</th>
-                  <th className="text-right py-1 px-2">EUR</th>
-                  <th className="text-right py-1 px-2">GBP</th>
-                  <th className="text-right py-1 px-2">Change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {goldData.slice(-10).reverse().map((item, index) => (
-                  <tr key={index} className="border-b border-border/10 hover:bg-accent/50">
-                    <td className="py-1 px-2 text-foreground">{item.date}</td>
-                    <td className="py-1 px-2 text-right text-cyan-400">${item.priceUSD.toFixed(2)}</td>
-                    <td className="py-1 px-2 text-right text-muted-foreground">€{item.priceEUR.toFixed(2)}</td>
-                    <td className="py-1 px-2 text-right text-muted-foreground">£{item.priceGBP.toFixed(2)}</td>
-                    <td className={`py-1 px-2 text-right ${getChangeColor(item.changePercent)}`}>
-                      {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ScrollArea>
-        </>
-      )}
+        {selectedView === 'centralbanks' && (
+          <div>
+            <div className="grid grid-cols-6 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs mb-2 text-terminal-amber border-b border-border pb-2">
+              <div>Country</div>
+              <div className="text-right">Gold Reserves (tonnes)</div>
+              <div className="text-right">Monthly Change</div>
+              <div className="text-right">Total Value (USD Mil)</div>
+              <div className="text-right">% of Total Reserves</div>
+              <div className="text-right">Rank</div>
+            </div>
+            
+            <div className="space-y-1">
+              {centralBankData.map((country, index) => (
+                <div key={index} className="grid grid-cols-6 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs py-1 sm:py-2 border-b border-border/20 hover:bg-background/30">
+                  <div className="text-terminal-white flex items-center gap-2">
+                    <span>{country.flag}</span>
+                    <span>{country.country}</span>
+                  </div>
+                  <div className="text-right text-terminal-cyan font-medium">{formatNumber(country.goldReserves)}</div>
+                  <div className={`text-right font-medium ${getChangeColor(country.monthlyChange)}`}>
+                    {country.monthlyChange >= 0 ? '+' : ''}{country.monthlyChange}
+                  </div>
+                  <div className="text-right text-terminal-white">{formatNumber(Math.round(country.totalValue))}</div>
+                  <div className="text-right text-terminal-gray">{country.percentOfReserves}%</div>
+                  <div className="text-right text-terminal-amber">#{index + 1}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {selectedView === 'historical' && (
+          <div>
+            <div className="grid grid-cols-5 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs mb-2 text-terminal-amber border-b border-border pb-2">
+              <div>Date</div>
+              <div className="text-right">USD</div>
+              <div className="text-right">EUR</div>
+              <div className="text-right">GBP</div>
+              <div className="text-right">Change</div>
+            </div>
+            
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {goldData.map((item, index) => (
+                <div key={index} className="grid grid-cols-5 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs py-1 border-b border-border/20 hover:bg-background/30">
+                  <div className="text-terminal-white">{item.date}</div>
+                  <div className="text-right text-terminal-cyan">${item.priceUSD.toFixed(2)}</div>
+                  <div className="text-right text-terminal-gray">€{item.priceEUR.toFixed(2)}</div>
+                  <div className="text-right text-terminal-gray">£{item.priceGBP.toFixed(2)}</div>
+                  <div className={`text-right ${getChangeColor(item.changePercent)}`}>
+                    {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {loading && goldData.length === 0 && (
+          <div className="flex items-center justify-center h-32 text-terminal-amber">
+            <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+            Loading gold data...
+          </div>
+        )}
+      </div>
     </div>
   );
-
-  // Central Bank Content
-  const CentralBankContent = () => (
-    <ScrollArea className="h-64">
-      <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-background border-b border-green-500/30">
-          <tr className="text-amber-400">
-            <th className="text-left py-1 px-2">Country</th>
-            <th className="text-right py-1 px-2">Reserves (t)</th>
-            <th className="text-right py-1 px-2">Change</th>
-            <th className="text-right py-1 px-2">Value (M)</th>
-            <th className="text-right py-1 px-2">% Reserves</th>
-          </tr>
-        </thead>
-        <tbody>
-          {centralBankData.map((country, index) => (
-            <tr key={index} className="border-b border-border/10 hover:bg-accent/50">
-              <td className="py-1 px-2 text-foreground">
-                <span className="mr-1">{country.flag}</span>
-                {country.country}
-              </td>
-              <td className="py-1 px-2 text-right text-cyan-400 font-medium">{formatNumber(country.goldReserves)}</td>
-              <td className={`py-1 px-2 text-right font-medium ${getChangeColor(country.monthlyChange)}`}>
-                {country.monthlyChange >= 0 ? '+' : ''}{country.monthlyChange}
-              </td>
-              <td className="py-1 px-2 text-right text-foreground">{formatNumber(Math.round(country.totalValue))}</td>
-              <td className="py-1 px-2 text-right text-muted-foreground">{country.percentOfReserves}%</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </ScrollArea>
-  );
-
-  // Historical Content
-  const HistoricalContent = () => (
-    <ScrollArea className="h-64">
-      <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-background border-b border-green-500/30">
-          <tr className="text-amber-400">
-            <th className="text-left py-1 px-2">Date</th>
-            <th className="text-right py-1 px-2">USD</th>
-            <th className="text-right py-1 px-2">EUR</th>
-            <th className="text-right py-1 px-2">GBP</th>
-            <th className="text-right py-1 px-2">Change</th>
-          </tr>
-        </thead>
-        <tbody>
-          {goldData.map((item, index) => (
-            <tr key={index} className="border-b border-border/10 hover:bg-accent/50">
-              <td className="py-1 px-2 text-foreground">{item.date}</td>
-              <td className="py-1 px-2 text-right text-cyan-400">${item.priceUSD.toFixed(2)}</td>
-              <td className="py-1 px-2 text-right text-muted-foreground">€{item.priceEUR.toFixed(2)}</td>
-              <td className="py-1 px-2 text-right text-muted-foreground">£{item.priceGBP.toFixed(2)}</td>
-              <td className={`py-1 px-2 text-right ${getChangeColor(item.changePercent)}`}>
-                {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </ScrollArea>
-  );
-
-  return (
-    <COTStyleWrapper
-      title="GOLD MARKET DATA"
-      icon="🥇"
-      lastUpdate={lastUpdate}
-      onRefresh={fetchData}
-      loading={loading}
-      error={error}
-      onErrorDismiss={() => setError(null)}
-      tabs={[
-        {
-          id: 'spdr',
-          label: 'SPDR GLD',
-          icon: <Table className="w-3 h-3" />,
-          content: <SPDRContent />
-        },
-        {
-          id: 'centralbanks',
-          label: 'Central Banks',
-          icon: <Globe className="w-3 h-3" />,
-          content: <CentralBankContent />
-        },
-        {
-          id: 'historical',
-          label: 'Historical',
-          icon: <BarChart3 className="w-3 h-3" />,
-          content: <HistoricalContent />
-        }
-      ]}
-      footerLeft={`Total: ${goldData.length} records`}
-      footerStats={[
-        { label: '💰 Price', value: latestGoldData ? `$${latestGoldData.priceUSD.toFixed(2)}` : '-' },
-        { label: '📊 Change', value: latestGoldData ? `${latestGoldData.changePercent >= 0 ? '+' : ''}${latestGoldData.changePercent.toFixed(2)}%` : '-' }
-      ]}
-    />
-  );
 };
+
+// Need to import the class for static method access
+import { GoldDataService } from '@/services/GoldDataService';
 
 export default SPDRGoldData;

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, TrendingUp, TrendingDown, Map, Table } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RefreshCw, TrendingUp, TrendingDown } from 'lucide-react';
 import { Treemap, ResponsiveContainer, Tooltip } from 'recharts';
-import { COTStyleWrapper } from '@/components/ui/COTStyleWrapper';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface CryptoData {
   id: string;
@@ -27,7 +28,6 @@ const CryptoMarketMap = () => {
   const [loading, setLoading] = useState(false);
   const [timeframe, setTimeframe] = useState('24h');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const getColorByChange = (change: number): string => {
     if (change > 5) return '#00ff41';
@@ -75,7 +75,6 @@ const CryptoMarketMap = () => {
 
   const fetchCryptoData = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const response = await fetch(
         'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false'
@@ -99,9 +98,8 @@ const CryptoMarketMap = () => {
       
       setCryptoData(treemapData);
       setLastUpdated(new Date());
-    } catch (err: any) {
-      console.error('Error fetching crypto data:', err);
-      setError(err.message || 'Failed to fetch data');
+    } catch (error) {
+      console.error('Error fetching crypto data:', error);
       setCryptoData(generateMockData());
       setLastUpdated(new Date());
     } finally {
@@ -119,15 +117,15 @@ const CryptoMarketMap = () => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-card border border-border p-2 rounded-lg shadow-xl text-xs">
-          <p className="text-amber-400 font-bold">{data.symbol}</p>
-          <p className="text-foreground">
+        <div className="bg-black/90 border border-terminal-amber/50 p-3 rounded-lg shadow-xl">
+          <p className="text-terminal-amber font-bold text-lg">{data.symbol}</p>
+          <p className="text-sm text-foreground">
             Price: <span className="font-mono">${data.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </p>
-          <p className={`font-semibold ${data.change > 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <p className={`text-sm font-semibold ${data.change > 0 ? 'text-green-400' : 'text-red-400'}`}>
             Change: {data.change >= 0 ? '+' : ''}{data.change.toFixed(2)}%
           </p>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Market Cap: ${(data.size / 1e9).toFixed(2)}B
           </p>
         </div>
@@ -136,111 +134,79 @@ const CryptoMarketMap = () => {
     return null;
   };
 
-  const gainers = cryptoData.filter(c => c.change > 0).sort((a, b) => b.change - a.change);
-  const losers = cryptoData.filter(c => c.change < 0).sort((a, b) => a.change - b.change);
-
-  // Map Content
-  const MapContent = () => (
-    <div className="h-full">
-      <ResponsiveContainer width="100%" height="90%">
-        <Treemap
-          data={cryptoData}
-          dataKey="size"
-          aspectRatio={4 / 3}
-          stroke="#1e293b"
-          content={<CustomizedContent />}
-        >
-          <Tooltip content={<CustomTooltip />} />
-        </Treemap>
-      </ResponsiveContainer>
-      
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-4 mt-2 text-[10px]">
-        <div className="flex items-center gap-1">
-          <TrendingUp className="w-3 h-3 text-green-500" />
-          <span className="text-muted-foreground">Positive</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 bg-green-600 rounded" />
-          <div className="w-2 h-2 bg-green-700 rounded" />
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 bg-red-700 rounded" />
-          <div className="w-2 h-2 bg-red-600 rounded" />
-        </div>
-        <div className="flex items-center gap-1">
-          <TrendingDown className="w-3 h-3 text-red-500" />
-          <span className="text-muted-foreground">Negative</span>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Table Content
-  const TableContent = () => (
-    <ScrollArea className="h-64">
-      <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-background border-b border-green-500/30">
-          <tr className="text-amber-400">
-            <th className="text-left py-1 px-2">Symbol</th>
-            <th className="text-right py-1 px-2">Price</th>
-            <th className="text-right py-1 px-2">Change</th>
-            <th className="text-right py-1 px-2">Market Cap</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cryptoData.sort((a, b) => b.size - a.size).map((coin, index) => (
-            <tr key={index} className="border-b border-border/10 hover:bg-accent/50">
-              <td className="py-1 px-2 font-bold text-foreground">{coin.symbol}</td>
-              <td className="py-1 px-2 text-right text-cyan-400">${coin.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-              <td className={`py-1 px-2 text-right font-bold ${coin.change > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {coin.change >= 0 ? '+' : ''}{coin.change.toFixed(2)}%
-              </td>
-              <td className="py-1 px-2 text-right text-muted-foreground">${(coin.size / 1e9).toFixed(2)}B</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </ScrollArea>
-  );
-
   return (
-    <COTStyleWrapper
-      title="CRYPTO MARKET MAP"
-      icon="🗺️"
-      lastUpdate={lastUpdated}
-      selectOptions={[
-        { value: '1h', label: '1H' },
-        { value: '24h', label: '24H' },
-        { value: '7d', label: '7D' },
-        { value: '30d', label: '30D' }
-      ]}
-      selectedValue={timeframe}
-      onSelectChange={setTimeframe}
-      onRefresh={fetchCryptoData}
-      loading={loading}
-      error={error}
-      onErrorDismiss={() => setError(null)}
-      tabs={[
-        {
-          id: 'map',
-          label: 'Heatmap',
-          icon: <Map className="w-3 h-3" />,
-          content: <MapContent />
-        },
-        {
-          id: 'table',
-          label: 'Table',
-          icon: <Table className="w-3 h-3" />,
-          content: <TableContent />
-        }
-      ]}
-      footerLeft={`Total: ${cryptoData.length} coins`}
-      footerStats={[
-        { label: '📈 Gainers', value: gainers.length },
-        { label: '📉 Losers', value: losers.length }
-      ]}
-    />
+    <Card className="w-full h-full bg-card border-terminal-green/30">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-terminal-green">
+            🗺️ CRYPTO MARKET MAP
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Select value={timeframe} onValueChange={setTimeframe}>
+              <SelectTrigger className="w-20 h-8 border-terminal-green/30 text-terminal-green text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1h">1H</SelectItem>
+                <SelectItem value="24h">24H</SelectItem>
+                <SelectItem value="7d">7D</SelectItem>
+                <SelectItem value="30d">30D</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              onClick={fetchCryptoData}
+              size="sm"
+              variant="outline"
+              className="border-terminal-green text-terminal-green hover:bg-terminal-green/10 h-8"
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+          <span>Live market cap heatmap • Size = Market Cap • Color = {timeframe} Change</span>
+          {lastUpdated && (
+            <span>Updated: {lastUpdated.toLocaleTimeString()}</span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="h-[calc(100%-100px)]">
+        <ResponsiveContainer width="100%" height="90%">
+          <Treemap
+            data={cryptoData}
+            dataKey="size"
+            aspectRatio={4 / 3}
+            stroke="#1e293b"
+            content={<CustomizedContent />}
+          >
+            <Tooltip content={<CustomTooltip />} />
+          </Treemap>
+        </ResponsiveContainer>
+        
+        {/* Legend */}
+        <div className="flex items-center justify-center gap-6 mt-2 text-xs">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-green-500" />
+            <span className="text-muted-foreground">Positive (+5% to +∞)</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-green-600 rounded" />
+            <div className="w-3 h-3 bg-green-700 rounded" />
+            <div className="w-3 h-3 bg-green-800 rounded" />
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-red-800 rounded" />
+            <div className="w-3 h-3 bg-red-700 rounded" />
+            <div className="w-3 h-3 bg-red-600 rounded" />
+          </div>
+          <div className="flex items-center gap-2">
+            <TrendingDown className="w-4 h-4 text-red-500" />
+            <span className="text-muted-foreground">Negative (-∞ to -5%)</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
@@ -263,18 +229,18 @@ const CustomizedContent = (props: any) => {
           strokeWidth: 2,
         }}
       />
-      {width > 50 && height > 35 && name && (
+      {width > 60 && height > 40 && name && (
         <text
           x={x + width / 2}
           y={y + height / 2}
           textAnchor="middle"
           fill="#fff"
-          fontSize={width > 80 ? 11 : 9}
+          fontSize={width > 100 ? 12 : 10}
           fontWeight="bold"
           style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
         >
           {name.split('\n').map((line: string, i: number) => (
-            <tspan key={i} x={x + width / 2} dy={i === 0 ? -5 : 12}>
+            <tspan key={i} x={x + width / 2} dy={i === 0 ? -6 : 14}>
               {line}
             </tspan>
           ))}

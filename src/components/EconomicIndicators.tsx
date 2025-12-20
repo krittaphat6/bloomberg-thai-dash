@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { EconomicDataService, CountryEconomicData } from '@/services/EconomicDataService';
-import { Table, BarChart3, Globe } from 'lucide-react';
-import COTStyleWrapper from '@/components/ui/COTStyleWrapper';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { RefreshCw } from 'lucide-react';
 
 const COUNTRIES = [
   { country: 'United States', countryCode: 'USA', flag: '🇺🇸' },
@@ -23,18 +21,15 @@ const EconomicIndicators = () => {
   const [data, setData] = useState<CountryEconomicData[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const results = await EconomicDataService.fetchAllCountries();
       setData(results);
       setLastUpdate(new Date());
-    } catch (err) {
-      console.error('Error fetching economic data:', err);
-      setError('Failed to fetch economic data');
+    } catch (error) {
+      console.error('Error fetching economic data:', error);
     } finally {
       setLoading(false);
     }
@@ -42,17 +37,17 @@ const EconomicIndicators = () => {
 
   useEffect(() => {
     fetchData();
+    // Update every 5 minutes (economic data doesn't change frequently)
     const interval = setInterval(fetchData, 300000);
     return () => clearInterval(interval);
   }, []);
 
   const selectedCountryData = data.find(d => d.country === selectedCountry);
-  const countryInfo = COUNTRIES.find(c => c.country === selectedCountry);
 
   const getChangeColor = (change: number) => {
-    if (change > 0) return 'text-emerald-400';
-    if (change < 0) return 'text-red-400';
-    return 'text-amber-400';
+    if (change > 0) return 'text-terminal-green';
+    if (change < 0) return 'text-terminal-red';
+    return 'text-terminal-amber';
   };
 
   const formatValue = (value: number | string | null) => {
@@ -63,107 +58,89 @@ const EconomicIndicators = () => {
     return value;
   };
 
-  const TableContent = () => (
-    <div className="space-y-1">
-      <div className="grid grid-cols-6 gap-1 text-xs mb-2 text-amber-400 border-b border-green-500/30 pb-2 sticky top-0 bg-background">
-        <div>Indicator</div>
-        <div className="text-right">Latest</div>
-        <div className="text-right">Previous</div>
-        <div className="text-right">Highest</div>
-        <div className="text-right">Lowest</div>
-        <div className="text-right">Date</div>
+  return (
+    <div className="terminal-panel h-full text-[0.4rem] xs:text-[0.5rem] sm:text-[0.6rem] md:text-xs lg:text-sm xl:text-base">
+      <div className="panel-header flex items-center justify-between text-[0.5rem] xs:text-[0.6rem] sm:text-[0.7rem] md:text-sm lg:text-base xl:text-lg">
+        <div className="flex items-center gap-2">
+          <span>ECONOMIC INDICATORS</span>
+          <button 
+            onClick={fetchData}
+            disabled={loading}
+            className="p-1 hover:bg-background/50 rounded transition-colors"
+          >
+            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          {lastUpdate && (
+            <span className="text-[0.5rem] text-terminal-gray">
+              {lastUpdate.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+        <select 
+          value={selectedCountry}
+          onChange={(e) => setSelectedCountry(e.target.value)}
+          className="bg-background border border-border text-terminal-green text-[0.6rem] sm:text-xs px-1 sm:px-2 py-1"
+        >
+          {COUNTRIES.map(country => (
+            <option key={country.countryCode} value={country.country}>
+              {country.flag} {country.country}
+            </option>
+          ))}
+        </select>
       </div>
       
-      {selectedCountryData?.indicators.map((indicator, index) => (
-        <div 
-          key={index} 
-          className="grid grid-cols-6 gap-1 text-xs py-1.5 border-b border-border/10 hover:bg-accent/50 transition-colors"
-        >
-          <div className="text-foreground">{indicator.name}</div>
-          <div className={`text-right ${getChangeColor(indicator.change)}`}>
-            {formatValue(indicator.last)}
-            {indicator.unit && <span className="text-muted-foreground text-[10px] ml-1">{indicator.unit}</span>}
+      <div className="panel-content">
+        {loading && data.length === 0 ? (
+          <div className="flex items-center justify-center h-32 text-terminal-amber">
+            <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+            Loading economic data...
           </div>
-          <div className="text-muted-foreground text-right">{formatValue(indicator.previous)}</div>
-          <div className="text-cyan-400 text-right">{formatValue(indicator.highest)}</div>
-          <div className="text-cyan-400 text-right">{formatValue(indicator.lowest)}</div>
-          <div className="text-muted-foreground text-right">{indicator.date}</div>
-        </div>
-      ))}
+        ) : selectedCountryData ? (
+          <div className="space-y-1">
+            <div className="grid grid-cols-6 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs mb-2 text-terminal-amber border-b border-border pb-1">
+              <div>Indicator</div>
+              <div className="text-right">Latest</div>
+              <div className="text-right">Previous</div>
+              <div className="text-right">Highest</div>
+              <div className="text-right">Lowest</div>
+              <div className="text-right">Date</div>
+            </div>
+            
+            {selectedCountryData.indicators.map((indicator, index) => (
+              <div key={index} className="grid grid-cols-6 gap-1 sm:gap-2 text-[0.6rem] sm:text-xs py-1 border-b border-border/20 hover:bg-background/50">
+                <div className="text-terminal-white">{indicator.name}</div>
+                <div className={`text-right ${getChangeColor(indicator.change)}`}>
+                  {formatValue(indicator.last)}
+                  {indicator.unit && <span className="text-terminal-gray text-[0.5rem] ml-1">{indicator.unit}</span>}
+                </div>
+                <div className="text-terminal-gray text-right">
+                  {formatValue(indicator.previous)}
+                </div>
+                <div className="text-terminal-cyan text-right">
+                  {formatValue(indicator.highest)}
+                </div>
+                <div className="text-terminal-cyan text-right">
+                  {formatValue(indicator.lowest)}
+                </div>
+                <div className="text-terminal-gray text-right text-[0.6rem] sm:text-xs">
+                  {indicator.date}
+                </div>
+              </div>
+            ))}
 
-      {(!selectedCountryData || selectedCountryData.indicators.length === 0) && (
-        <div className="text-center py-4 text-muted-foreground">
-          No data available for this country
-        </div>
-      )}
-    </div>
-  );
-
-  const ChartContent = () => {
-    const chartData = selectedCountryData?.indicators.slice(0, 8).map(i => ({
-      name: i.name.length > 10 ? i.name.substring(0, 10) + '...' : i.name,
-      value: typeof i.last === 'number' ? i.last : 0,
-      change: i.change
-    })) || [];
-
-    return (
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-            <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} width={80} />
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: 'hsl(var(--card))', 
-                border: '1px solid hsl(var(--border))',
-                borderRadius: '4px',
-                fontSize: '11px'
-              }}
-            />
-            <Bar dataKey="value" name="Value">
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.change >= 0 ? '#10b981' : '#ef4444'} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+            {selectedCountryData.indicators.length === 0 && (
+              <div className="text-center py-4 text-terminal-gray">
+                No data available for this country
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-4 text-terminal-gray">
+            Select a country to view economic indicators
+          </div>
+        )}
       </div>
-    );
-  };
-
-  return (
-    <COTStyleWrapper
-      title="ECONOMIC INDICATORS"
-      icon="📊"
-      lastUpdate={lastUpdate}
-      selectOptions={COUNTRIES.map(c => ({ value: c.country, label: `${c.flag} ${c.country}` }))}
-      selectedValue={selectedCountry}
-      onSelectChange={setSelectedCountry}
-      onRefresh={fetchData}
-      loading={loading}
-      error={error}
-      onErrorDismiss={() => setError(null)}
-      tabs={[
-        {
-          id: 'table',
-          label: 'Data',
-          icon: <Table className="w-3 h-3" />,
-          content: <TableContent />
-        },
-        {
-          id: 'chart',
-          label: 'Chart',
-          icon: <BarChart3 className="w-3 h-3" />,
-          content: <ChartContent />
-        }
-      ]}
-      footerLeft={`${countryInfo?.flag || ''} ${selectedCountry}`}
-      footerStats={[
-        { label: '📊 Indicators', value: selectedCountryData?.indicators.length || 0 }
-      ]}
-      footerRight={lastUpdate?.toLocaleDateString() || ''}
-    />
+    </div>
   );
 };
 
