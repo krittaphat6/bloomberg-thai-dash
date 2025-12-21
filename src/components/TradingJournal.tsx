@@ -89,6 +89,9 @@ export default function TradingJournal() {
     lotSize: 1,
     folderId: 'default'
   });
+  
+  // Active tab state for new tabbed interface
+  const [activeTab, setActiveTab] = useState('overview');
 
   // Folder/Room states
   const [folders, setFolders] = useState<TradingFolder[]>([
@@ -322,31 +325,51 @@ export default function TradingJournal() {
   const zellaScore = getZellaScore();
   const overallScore = zellaScore.length > 0 ? Math.round(zellaScore.reduce((sum, item) => sum + item.value, 0) / zellaScore.length) : 0;
 
+  // FIX: Assign folderId to all imported trades
   const handleImportTrades = (importedTrades: Trade[], replaceMode: boolean = false) => {
+    // Assign current selected folder to all imported trades
+    const tradesWithFolder = importedTrades.map(trade => ({
+      ...trade,
+      folderId: selectedFolderId === 'default' ? undefined : selectedFolderId
+    }));
+    
     if (replaceMode) {
-      // Replace all trades
-      setTrades(importedTrades);
+      // Replace only trades in current folder, keep others
+      if (selectedFolderId === 'default') {
+        setTrades(tradesWithFolder);
+      } else {
+        setTrades(prev => [
+          ...prev.filter(t => t.folderId !== selectedFolderId),
+          ...tradesWithFolder
+        ]);
+      }
       toast({
         title: "Trades Replaced!",
-        description: `Replaced all trades with ${importedTrades.length} new trades from CSV`
+        description: `Replaced trades in "${folders.find(f => f.id === selectedFolderId)?.name}" with ${importedTrades.length} new trades`
       });
     } else {
-      // Add to existing trades
-      setTrades(prev => [...prev, ...importedTrades]);
+      setTrades(prev => [...prev, ...tradesWithFolder]);
       toast({
         title: "Import Successful!",
-        description: `Added ${importedTrades.length} trades to existing ${trades.length} trades`
+        description: `Added ${importedTrades.length} trades to "${folders.find(f => f.id === selectedFolderId)?.name}"`
       });
     }
   };
 
+  // FIX: Clear only trades in current room (not all)
   const clearAllTrades = () => {
-    // Show confirmation dialog
-    if (window.confirm(`Are you sure you want to delete all ${trades.length} trades? This action cannot be undone.`)) {
-      setTrades([]);
+    const roomName = folders.find(f => f.id === selectedFolderId)?.name || 'All Trades';
+    const countToClear = selectedFolderId === 'default' ? trades.length : filteredTrades.length;
+    
+    if (window.confirm(`Are you sure you want to delete all ${countToClear} trades in "${roomName}"? This action cannot be undone.`)) {
+      if (selectedFolderId === 'default') {
+        setTrades([]);
+      } else {
+        setTrades(prev => prev.filter(t => t.folderId !== selectedFolderId));
+      }
       toast({
-        title: "All Trades Cleared",
-        description: `Successfully deleted ${trades.length} trades`
+        title: "Trades Cleared",
+        description: `Successfully deleted ${countToClear} trades from "${roomName}"`
       });
     }
   };
@@ -377,7 +400,8 @@ export default function TradingJournal() {
       notes: newTrade.notes,
       commission: newTrade.commission || 0,
       swap: newTrade.swap,
-      dividends: newTrade.dividends
+      dividends: newTrade.dividends,
+      folderId: selectedFolderId === 'default' ? undefined : selectedFolderId // FIX: Assign folderId
     };
 
     setTrades([...trades, trade]);
