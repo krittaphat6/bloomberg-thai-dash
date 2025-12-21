@@ -40,6 +40,7 @@ interface CSVImportDialogProps {
   onOpenChange: (open: boolean) => void;
   onImport: (trades: Trade[], replaceMode?: boolean) => void;
   existingTrades: Trade[];
+  targetFolderId?: string; // Pass selected room ID for import
 }
 
 interface ImportStep {
@@ -92,7 +93,7 @@ const TRADE_FIELD_OPTIONS = [
   { value: 'notes', label: 'Notes' }
 ];
 
-export default function CSVImportDialog({ open, onOpenChange, onImport, existingTrades }: CSVImportDialogProps) {
+export default function CSVImportDialog({ open, onOpenChange, onImport, existingTrades, targetFolderId }: CSVImportDialogProps) {
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState<ImportStep['step']>('upload');
   const [csvData, setCsvData] = useState<any[]>([]);
