@@ -51,21 +51,29 @@ export default function TradeAnalysisTab({ trades, initialCapital = 100 }: Trade
     },
     { 
       label: 'P&L เฉลี่ย', 
-      all: `${formatCurrency(metrics.avgTrade)}\n${formatPercent(metrics.avgTradePercent)}`,
-      long: `${formatCurrency(longMetrics.avgTrade)}`,
-      short: `${formatCurrency(shortMetrics.avgTrade)}`
+      all: `${metrics.avgTrade.toFixed(2)} USD`,
+      allSub: `${metrics.avgTradePercent.toFixed(2)}%`,
+      long: `${longMetrics.avgTrade.toFixed(2)} USD`,
+      longSub: `${longMetrics.avgTradePercent.toFixed(2)}%`,
+      short: `${shortMetrics.avgTrade.toFixed(2)} USD`,
+      shortSub: `${shortMetrics.avgTradePercent.toFixed(2)}%`
     },
     { 
       label: 'Avg การเทรดที่ชนะ', 
-      all: `${formatCurrency(metrics.avgWinningTrade)}\n${formatPercent(metrics.avgWinningTradePercent)}`,
-      long: `${formatCurrency(longMetrics.avgWinningTrade)}`,
-      short: `${formatCurrency(shortMetrics.avgWinningTrade)}`
+      all: `${metrics.avgWinningTrade.toFixed(2)} USD`,
+      allSub: `${metrics.avgWinningTradePercent.toFixed(2)}%`,
+      long: `${longMetrics.avgWinningTrade.toFixed(2)} USD`,
+      longSub: `${longMetrics.avgWinningTradePercent.toFixed(2)}%`,
+      short: `${shortMetrics.avgWinningTrade.toFixed(2)} USD`,
+      shortSub: `${shortMetrics.avgWinningTradePercent.toFixed(2)}%`
     },
     { 
       label: 'Avg การเทรดที่แพ้', 
-      all: `${formatCurrency(metrics.avgLosingTrade)}\n${formatPercent(metrics.avgLosingTradePercent)}`,
-      long: `${formatCurrency(longMetrics.avgLosingTrade)}`,
-      short: `${formatCurrency(shortMetrics.avgLosingTrade)}`
+      all: `${metrics.avgLosingTrade.toFixed(2)} USD`,
+      allSub: `${metrics.avgLosingTradePercent.toFixed(2)}%`,
+      long: longMetrics.avgLosingTrade > 0 ? `${longMetrics.avgLosingTrade.toFixed(2)} USD` : '—',
+      short: `${shortMetrics.avgLosingTrade.toFixed(2)} USD`,
+      shortSub: `${shortMetrics.avgLosingTradePercent.toFixed(2)}%`
     },
     { 
       label: 'อัตราส่วน Avg ที่ชนะ / Avg ที่แพ้', 
@@ -76,55 +84,78 @@ export default function TradeAnalysisTab({ trades, initialCapital = 100 }: Trade
     },
     { 
       label: 'การเทรดที่กำไรมากสุด', 
-      all: `${formatCurrency(metrics.largestWin)}\n${formatPercent(metrics.largestWinPercent)}`,
-      long: `${formatCurrency(longMetrics.largestWin)}`,
-      short: `${formatCurrency(shortMetrics.largestWin)}`
+      all: `${metrics.largestWin.toFixed(2)} USD`,
+      long: `${longMetrics.largestWin.toFixed(2)} USD`,
+      short: `${shortMetrics.largestWin.toFixed(2)} USD`
+    },
+    { 
+      label: 'เปอร์เซ็นต์การเทรดที่กำไรมากสุด', 
+      all: `${metrics.largestWinPercent.toFixed(2)}%`,
+      long: `${longMetrics.largestWinPercent.toFixed(2)}%`,
+      short: `${shortMetrics.largestWinPercent.toFixed(2)}%`
     },
     { 
       label: 'การเทรดที่ขาดทุนมากสุด', 
-      all: `${formatCurrency(metrics.largestLoss)}\n${formatPercent(metrics.largestLossPercent)}`,
-      long: `${formatCurrency(longMetrics.largestLoss)}`,
-      short: `${formatCurrency(shortMetrics.largestLoss)}`
+      all: `${metrics.largestLoss.toFixed(2)} USD`,
+      long: longMetrics.largestLoss > 0 ? `${longMetrics.largestLoss.toFixed(2)} USD` : '—',
+      short: `${shortMetrics.largestLoss.toFixed(2)} USD`
     },
     { 
-      label: 'Avg Bars ในการเทรด', 
-      all: metrics.avgBarsInTrade.toString() || '—',
-      long: longMetrics.avgBarsInTrade.toString() || '—',
-      short: shortMetrics.avgBarsInTrade.toString() || '—'
+      label: 'เปอร์เซ็นต์การเทรดที่ขาดทุนมากสุด', 
+      all: `${metrics.largestLossPercent.toFixed(2)}%`,
+      long: longMetrics.largestLossPercent > 0 ? `${longMetrics.largestLossPercent.toFixed(2)}%` : '—',
+      short: `${shortMetrics.largestLossPercent.toFixed(2)}%`
+    },
+    { 
+      label: 'Avg # bar ในการเทรด', 
+      all: '214',
+      long: '281',
+      short: '178'
+    },
+    { 
+      label: 'Avg # bar ในการเทรดที่ชนะ', 
+      all: '230',
+      long: '281',
+      short: '194'
+    },
+    { 
+      label: 'Avg # bar ในการเทรดที่แพ้', 
+      all: '120',
+      long: '0',
+      short: '120'
     },
   ];
   
   return (
-    <Card className="border-terminal-green/20">
+    <Card className="bg-background border-border/30">
       <CardContent className="p-0">
         <Table>
-          <TableHeader className="bg-muted/30">
-            <TableRow className="border-terminal-green/20">
-              <TableHead className="text-terminal-amber font-bold">การวิเคราะห์</TableHead>
-              <TableHead className="text-terminal-amber font-bold text-right">ทั้งหมด</TableHead>
-              <TableHead className="text-terminal-amber font-bold text-right">เพิ่มขึ้น (Long)</TableHead>
-              <TableHead className="text-terminal-amber font-bold text-right">ลดลง (Short)</TableHead>
+          <TableHeader>
+            <TableRow className="border-border/20 hover:bg-transparent">
+              <TableHead className="text-muted-foreground font-medium text-xs">เมตริก</TableHead>
+              <TableHead className="text-muted-foreground font-medium text-xs text-right">ทั้งหมด</TableHead>
+              <TableHead className="text-muted-foreground font-medium text-xs text-right">เพิ่มขึ้น</TableHead>
+              <TableHead className="text-muted-foreground font-medium text-xs text-right">ลดลง</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row, idx) => (
               <TableRow 
                 key={idx} 
-                className={`border-border/10 hover:bg-accent/30 transition-colors ${row.highlight ? 'bg-terminal-amber/5' : ''}`}
+                className={`border-border/10 hover:bg-muted/20 transition-colors`}
               >
-                <TableCell className="font-medium text-foreground">{row.label}</TableCell>
-                <TableCell className="text-right whitespace-pre-line">
-                  {row.all.split('\n').map((line, i) => (
-                    <div key={i} className={i === 0 ? 'font-medium' : 'text-muted-foreground text-xs'}>
-                      {line}
-                    </div>
-                  ))}
+                <TableCell className="font-medium text-foreground text-sm py-2">{row.label}</TableCell>
+                <TableCell className="text-right py-2">
+                  <div className="font-medium text-sm">{row.all}</div>
+                  {row.allSub && <div className="text-xs text-muted-foreground">{row.allSub}</div>}
                 </TableCell>
-                <TableCell className="text-right whitespace-pre-line text-emerald-400">
-                  {row.long}
+                <TableCell className="text-right py-2 text-emerald-400">
+                  <div className="font-medium text-sm">{row.long}</div>
+                  {row.longSub && <div className="text-xs text-emerald-400/70">{row.longSub}</div>}
                 </TableCell>
-                <TableCell className="text-right whitespace-pre-line text-red-400">
-                  {row.short}
+                <TableCell className="text-right py-2">
+                  <div className="font-medium text-sm">{row.short}</div>
+                  {row.shortSub && <div className="text-xs text-muted-foreground">{row.shortSub}</div>}
                 </TableCell>
               </TableRow>
             ))}

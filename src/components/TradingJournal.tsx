@@ -814,290 +814,57 @@ export default function TradingJournal() {
           </div>
         </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
-        <Card className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border-emerald-500/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs sm:text-sm text-muted-foreground">Net P&L</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 sm:pt-2">
-            <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${stats.totalPnL >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-              ${Math.abs(stats.totalPnL) >= 1000 ? 
-                `${stats.totalPnL >= 0 ? '+' : '-'}${(Math.abs(stats.totalPnL)/1000).toFixed(1)}k` : 
-                stats.totalPnL.toFixed(2)
-              }
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Last updated: {new Date().toLocaleDateString()}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs sm:text-sm text-muted-foreground">Trade Expectancy</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 sm:pt-2">
-            <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-blue-400">
-              ${((stats.avgWin * stats.winRate/100) - (stats.avgLoss * (100-stats.winRate)/100)).toFixed(2)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">Per trade</div>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs sm:text-sm text-muted-foreground">Profit Factor</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 sm:pt-2">
-            <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-purple-400">{stats.profitFactor.toFixed(2)}</div>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 border-emerald-500 relative">
-                <div 
-                  className="absolute top-0 left-0 w-full h-full rounded-full bg-emerald-500"
-                  style={{ 
-                    clipPath: `polygon(50% 50%, 50% 0%, ${50 + (stats.winRate * 0.5)}% 0%, ${50 + (stats.winRate * 0.5)}% 100%, 50% 100%)`
-                  }}
-                ></div>
-              </div>
-              <span className="text-xs text-muted-foreground">{stats.winRate.toFixed(0)}% win rate</span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs sm:text-sm text-muted-foreground">Avg Win/Loss Trade</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 sm:pt-2">
-            <div className="text-sm sm:text-base lg:text-lg font-bold text-amber-400">
-              ${stats.avgWin.toFixed(0)} / ${stats.avgLoss.toFixed(0)}
-            </div>
-            <div className="flex justify-between text-xs mt-2">
-              <span className="text-emerald-500">${stats.largestWin.toFixed(0)}</span>
-              <span className="text-red-500">${stats.largestLoss.toFixed(0)}</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Dashboard Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-6 mb-4 sm:mb-6">
-        {/* Zella Score */}
-        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20 min-h-0">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Zella Score</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="h-32 sm:h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={zellaScore}>
-                  <PolarGrid stroke="#374151" />
-                  <PolarAngleAxis 
-                    dataKey="metric" 
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    className="text-xs"
-                  />
-                  <Radar
-                    dataKey="value"
-                    stroke="#A855F7"
-                    fill="#A855F7"
-                    fillOpacity={0.3}
-                    strokeWidth={2}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-2 sm:mt-4">
-              <div className="text-xs text-muted-foreground mb-2">YOUR ZELLA SCORE</div>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="text-lg sm:text-2xl font-bold text-purple-400">{overallScore}</div>
-                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-red-500 via-amber-500 to-emerald-500 transition-all duration-500"
-                    style={{ width: `${overallScore}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Daily Net Cumulative P&L */}
-        <Card className="lg:col-span-2 min-h-0">
-          <CardHeader>
-            <CardTitle className="text-base sm:text-lg">Daily Net Cumulative P&L</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-48 sm:h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={getDailyCumulativePnL()}>
-                  <defs>
-                    <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#EF4444" stopOpacity={0.1}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    axisLine={{ stroke: '#4B5563' }}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    axisLine={{ stroke: '#4B5563' }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1F2937', 
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#F3F4F6'
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="pnl"
-                    stroke="#10B981"
-                    strokeWidth={2}
-                    fill="url(#pnlGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Enhanced Trading Calendar */}
-        <Card className="min-h-0">
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-3 sm:gap-0 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-                  <span className="truncate">Trading Calendar</span>
-                </CardTitle>
-                <div className="text-xs sm:text-sm text-muted-foreground">Daily P&L Overview</div>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-4 justify-center sm:justify-end">
-                <Button variant="outline" size="sm" onClick={() => navigateMonth('prev')} className="px-2 sm:px-3">
-                  ←
-                </Button>
-                <div className="font-semibold text-sm sm:text-base lg:text-lg min-w-[120px] sm:min-w-[140px] text-center">
-                  {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                </div>
-                <Button variant="outline" size="sm" onClick={() => navigateMonth('next')} className="px-2 sm:px-3">
-                  →
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6">
-            {/* Days of week header */}
-            <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                <div key={day} className="text-center text-xs sm:text-sm font-medium text-muted-foreground py-1 sm:py-2">
-                  {day}
-                </div>
-              ))}
-            </div>
-            
-            {/* Calendar grid */}
-            <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
-              {generateCalendarData().map((day, idx) => (
-                <div 
-                  key={idx} 
-                  className={`
-                    relative aspect-square p-1 sm:p-2 text-center rounded-md sm:rounded-lg border transition-all duration-200 cursor-pointer hover:shadow-md min-h-[40px] sm:min-h-[60px]
-                    ${!day.isCurrentMonth 
-                      ? 'bg-muted/30 text-muted-foreground/50 border-border/30' 
-                      : day.trades > 0 
-                        ? day.pnl >= 0 
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100' 
-                          : 'bg-red-50 border-red-200 text-red-900 hover:bg-red-100'
-                        : 'bg-background border-border hover:bg-muted/50'
-                    }
-                  `}
-                  title={day.isCurrentMonth ? `${day.trades} trades, $${day.pnl.toFixed(2)} P&L` : ''}
-                >
-                  <div className="text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1">{day.date}</div>
-                  {day.isCurrentMonth && day.trades > 0 && (
-                    <div className="space-y-0.5">
-                      <div className={`text-[9px] sm:text-xs font-bold leading-tight ${
-                        day.pnl >= 0 ? 'text-emerald-700' : 'text-red-700'
-                      }`}>
-                        ${day.pnl >= 0 ? '+' : ''}${Math.abs(day.pnl) >= 1000 ? (day.pnl/1000).toFixed(1) + 'k' : day.pnl.toFixed(0)}
-                      </div>
-                      <div className="text-[8px] sm:text-[10px] text-muted-foreground leading-tight">
-                        {day.trades} trade{day.trades !== 1 ? 's' : ''}
-                      </div>
-                    </div>
+        {/* New Tabbed Interface */}
+        <div className="flex-1">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="w-full h-auto flex flex-wrap gap-1 bg-transparent border-b border-border/30 pb-2 mb-4">
+              {[
+                { id: 'overview', label: 'ภาพรวม' },
+                { id: 'performance', label: 'ประสิทธิภาพ' },
+                { id: 'analysis', label: 'การวิเคราะห์การซื้อขาย' },
+                { id: 'risk', label: 'อัตราส่วน ความเสี่ยง/ผลตอบแทน' },
+                { id: 'trades', label: 'รายการของการซื้อขาย' },
+              ].map(tab => (
+                <TabsTrigger
+                  key={tab.id}
+                  value={tab.id}
+                  className={cn(
+                    "px-3 py-1.5 text-xs rounded-md transition-all border",
+                    "data-[state=active]:bg-terminal-green/20 data-[state=active]:text-terminal-green data-[state=active]:border-terminal-green/50",
+                    "data-[state=inactive]:bg-muted/30 data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-transparent",
+                    "hover:bg-muted/50"
                   )}
-                </div>
+                >
+                  {tab.label}
+                </TabsTrigger>
               ))}
-            </div>
-            
-            {/* Legend */}
-            <div className="flex flex-wrap justify-center gap-3 sm:gap-6 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-emerald-100 border border-emerald-200"></div>
-                <span className="text-xs sm:text-sm text-muted-foreground">Profit</span>
-              </div>
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-red-100 border border-red-200"></div>
-                <span className="text-xs sm:text-sm text-muted-foreground">Loss</span>
-              </div>
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-background border border-border"></div>
-                <span className="text-xs sm:text-sm text-muted-foreground">No trades</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </TabsList>
 
-      {/* Advanced Trading Analysis */}
-      <div className="mb-6">
-        <h3 className="text-xl font-bold text-primary mb-4 flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
-          Advanced Trading Analysis
-        </h3>
-        <TradeAnalysisPanel trades={trades} />
-      </div>
+            <TabsContent value="overview" className="mt-0">
+              <OverviewTabComponent trades={filteredTrades} initialCapital={100} />
+            </TabsContent>
 
-      {/* Net Daily P&L Chart */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-lg">Net Daily P&L</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={getDailyCumulativePnL()}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis 
-                  dataKey="date" 
-                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                  axisLine={{ stroke: '#4B5563' }}
-                />
-                <YAxis 
-                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                  axisLine={{ stroke: '#4B5563' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1F2937', 
-                    border: '1px solid #374151',
-                    borderRadius: '8px',
-                    color: '#F3F4F6'
-                  }}
-                />
-                <Bar 
-                  dataKey="dailyPnL" 
-                  radius={[2, 2, 0, 0]}
-                  fill="#10B981"
-                />
+            <TabsContent value="performance" className="mt-0">
+              <PerformanceTabComponent trades={filteredTrades} initialCapital={100} />
+            </TabsContent>
+
+            <TabsContent value="analysis" className="mt-0">
+              <TradeAnalysisTabComponent trades={filteredTrades} initialCapital={100} />
+            </TabsContent>
+
+            <TabsContent value="risk" className="mt-0">
+              <RiskRewardTabComponent trades={filteredTrades} initialCapital={100} />
+            </TabsContent>
+
+            <TabsContent value="trades" className="mt-0">
+              <TradeListTabComponent 
+                trades={filteredTrades}
+                onDeleteTrade={(id) => setTrades(prev => prev.filter(t => t.id !== id))}
+                onCloseTrade={handleCloseTrade}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
               </BarChart>
             </ResponsiveContainer>
           </div>
