@@ -1,28 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Edit3, TrendingUp, TrendingDown, Calendar, Upload, Webhook, RefreshCw, FolderPlus, Folder, FolderOpen, Settings2, ChevronRight, Download } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Plus, Trash2, TrendingUp, TrendingDown, Upload, Webhook, RefreshCw, FolderPlus, Folder, Settings2, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/use-toast';
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, ScatterChart, Scatter, ComposedChart, Line, ReferenceLine } from 'recharts';
-import TradeAnalysisPanel from './TradeAnalysisPanel';
-import { SectorBubbleChart } from './SectorBubbleChart';
-import { D3Surface } from './D3Surface';
-import { EnhancedRiskRewardChart } from './EnhancedRiskRewardChart';
-import { EnhancedProfitFactorChart } from './EnhancedProfitFactorChart';
-import { EnhancedSectorAnalysis } from './EnhancedSectorAnalysis';
-import { EnhancedWinRateChart } from './EnhancedWinRateChart';
 import CSVImportDialog from './CSVImportDialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import OverviewTab from './TradingJournal/OverviewTab';
+import PerformanceTab from './TradingJournal/PerformanceTab';
+import TradeAnalysisTab from './TradingJournal/TradeAnalysisTab';
+import RiskRewardTab from './TradingJournal/RiskRewardTab';
+import TradeListTab from './TradingJournal/TradeListTab';
 
 // Folder/Room interface
 interface TradingFolder {
@@ -57,26 +53,16 @@ interface Trade {
   swap?: number;
   dividends?: number;
   entryTime?: string;
-  folderId?: string; // Added for folder organization
-}
-
-interface TradingStats {
-  totalTrades: number;
-  winRate: number;
-  totalPnL: number;
-  avgWin: number;
-  avgLoss: number;
-  profitFactor: number;
-  largestWin: number;
-  largestLoss: number;
+  folderId?: string;
 }
 
 export default function TradingJournal() {
   const { toast } = useToast();
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isAddingTrade, setIsAddingTrade] = useState(false);
-  const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
   const [showCSVImport, setShowCSVImport] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+  
   const [newTrade, setNewTrade] = useState<Partial<Trade>>({
     date: new Date().toISOString().split('T')[0],
     side: 'LONG',
@@ -89,9 +75,6 @@ export default function TradingJournal() {
     lotSize: 1,
     folderId: 'default'
   });
-  
-  // Active tab state for new tabbed interface
-  const [activeTab, setActiveTab] = useState('overview');
 
   // Folder/Room states
   const [folders, setFolders] = useState<TradingFolder[]>([
@@ -156,7 +139,6 @@ export default function TradingJournal() {
   const handleDeleteFolder = (folderId: string) => {
     if (folderId === 'default') return;
     
-    // Move trades to default folder
     setTrades(prev => prev.map(t => 
       t.folderId === folderId ? { ...t, folderId: 'default' } : t
     ));
@@ -174,9 +156,10 @@ export default function TradingJournal() {
   };
 
   // Filter trades by folder
-  const filteredTrades = selectedFolderId === 'default' 
-    ? trades 
-    : trades.filter(t => t.folderId === selectedFolderId);
+  const filteredTrades = useMemo(() => {
+    if (selectedFolderId === 'default') return trades;
+    return trades.filter(t => t.folderId === selectedFolderId);
+  }, [trades, selectedFolderId]);
 
   // Get folder trade count
   const getFolderTradeCount = (folderId: string) => {
@@ -184,157 +167,14 @@ export default function TradingJournal() {
     return trades.filter(t => t.folderId === folderId).length;
   };
 
-  // Calculate stats from filtered trades (not all trades)
-  const calculateStats = (): TradingStats => {
-    const closedTrades = filteredTrades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined);
-    const wins = closedTrades.filter(t => t.pnl! > 0);
-    const losses = closedTrades.filter(t => t.pnl! < 0);
-    
-    const totalPnL = closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-    const totalWins = wins.reduce((sum, t) => sum + (t.pnl || 0), 0);
-    const totalLosses = Math.abs(losses.reduce((sum, t) => sum + (t.pnl || 0), 0));
-    
-    return {
-      totalTrades: closedTrades.length,
-      winRate: closedTrades.length > 0 ? (wins.length / closedTrades.length) * 100 : 0,
-      totalPnL,
-      avgWin: wins.length > 0 ? totalWins / wins.length : 0,
-      avgLoss: losses.length > 0 ? totalLosses / losses.length : 0,
-      profitFactor: totalLosses > 0 ? totalWins / totalLosses : 0,
-      largestWin: wins.length > 0 ? Math.max(...wins.map(t => t.pnl || 0)) : 0,
-      largestLoss: losses.length > 0 ? Math.min(...losses.map(t => t.pnl || 0)) : 0
-    };
-  };
-
-  // Use filteredTrades for monthly stats
-  const getTradesByMonth = () => {
-    const months = [];
-    const now = new Date();
-    for (let i = 0; i < 6; i++) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthTrades = filteredTrades.filter(t => {
-        const tradeDate = new Date(t.date);
-        return tradeDate.getMonth() === date.getMonth() && 
-               tradeDate.getFullYear() === date.getFullYear() &&
-               t.status === 'CLOSED';
-      });
-      const monthPnL = monthTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-      months.push({
-        month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        trades: monthTrades.length,
-        pnl: monthPnL
-      });
-    }
-    return months.reverse();
-  };
-
-  const [calendarMonth, setCalendarMonth] = useState(new Date());
-  
-  const generateCalendarData = () => {
-    const year = calendarMonth.getFullYear();
-    const month = calendarMonth.getMonth();
-    
-    // Get first day of month and adjust to start from Sunday
-    const firstDay = new Date(year, month, 1);
-    const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - firstDay.getDay());
-    
-    // Get last day of month and adjust to end on Saturday  
-    const lastDay = new Date(year, month + 1, 0);
-    const endDate = new Date(lastDay);
-    endDate.setDate(endDate.getDate() + (6 - lastDay.getDay()));
-    
-    const calendarData = [];
-    const current = new Date(startDate);
-    
-    while (current <= endDate) {
-      const dateStr = current.toISOString().split('T')[0];
-      const dayTrades = filteredTrades.filter(t => t.date === dateStr && t.status === 'CLOSED');
-      const dayPnL = dayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-      const isCurrentMonth = current.getMonth() === month;
-      
-      calendarData.push({
-        date: current.getDate(),
-        trades: dayTrades.length,
-        pnl: dayPnL,
-        dateStr,
-        isCurrentMonth
-      });
-      
-      current.setDate(current.getDate() + 1);
-    }
-    
-    return calendarData;
-  };
-
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    setCalendarMonth(prev => {
-      const newDate = new Date(prev);
-      if (direction === 'prev') {
-        newDate.setMonth(newDate.getMonth() - 1);
-      } else {
-        newDate.setMonth(newDate.getMonth() + 1);
-      }
-      return newDate;
-    });
-  };
-
-  const getZellaScore = () => {
-    const closedTrades = filteredTrades.filter(t => t.status === 'CLOSED');
-    if (closedTrades.length === 0) return [];
-    
-    const profitFactor = Math.min(stats.profitFactor * 20, 100);
-    const winRate = stats.winRate;
-    const avgRisk = 85; // Simulated - would calculate from position sizing
-    const discipline = Math.min((stats.totalTrades / 30) * 100, 100); // More trades = more discipline
-    const resilience = Math.max(100 - (Math.abs(stats.largestLoss) / 1000 * 100), 0);
-    
-    return [
-      { metric: 'Profit Factor', value: profitFactor },
-      { metric: 'Risk', value: avgRisk },
-      { metric: 'Discipline', value: discipline },
-      { metric: 'Resilience', value: resilience },
-      { metric: 'Win %', value: winRate }
-    ];
-  };
-
-  const getDailyCumulativePnL = () => {
-    const last30Days = [];
-    const now = new Date();
-    let cumulativePnL = 0;
-    
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      
-      const dayTrades = filteredTrades.filter(t => t.date === dateStr && t.status === 'CLOSED');
-      const dayPnL = dayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-      cumulativePnL += dayPnL;
-      
-      last30Days.push({
-        date: date.getDate(),
-        pnl: cumulativePnL,
-        dailyPnL: dayPnL
-      });
-    }
-    return last30Days;
-  };
-
-  const stats = calculateStats();
-  const zellaScore = getZellaScore();
-  const overallScore = zellaScore.length > 0 ? Math.round(zellaScore.reduce((sum, item) => sum + item.value, 0) / zellaScore.length) : 0;
-
-  // FIX: Assign folderId to all imported trades
+  // Import trades with folder assignment
   const handleImportTrades = (importedTrades: Trade[], replaceMode: boolean = false) => {
-    // Assign current selected folder to all imported trades
     const tradesWithFolder = importedTrades.map(trade => ({
       ...trade,
       folderId: selectedFolderId === 'default' ? undefined : selectedFolderId
     }));
     
     if (replaceMode) {
-      // Replace only trades in current folder, keep others
       if (selectedFolderId === 'default') {
         setTrades(tradesWithFolder);
       } else {
@@ -345,23 +185,23 @@ export default function TradingJournal() {
       }
       toast({
         title: "Trades Replaced!",
-        description: `Replaced trades in "${folders.find(f => f.id === selectedFolderId)?.name}" with ${importedTrades.length} new trades`
+        description: `Replaced trades with ${importedTrades.length} new trades`
       });
     } else {
       setTrades(prev => [...prev, ...tradesWithFolder]);
       toast({
         title: "Import Successful!",
-        description: `Added ${importedTrades.length} trades to "${folders.find(f => f.id === selectedFolderId)?.name}"`
+        description: `Added ${importedTrades.length} trades`
       });
     }
   };
 
-  // FIX: Clear only trades in current room (not all)
+  // Clear trades in current room only
   const clearAllTrades = () => {
     const roomName = folders.find(f => f.id === selectedFolderId)?.name || 'All Trades';
     const countToClear = selectedFolderId === 'default' ? trades.length : filteredTrades.length;
     
-    if (window.confirm(`Are you sure you want to delete all ${countToClear} trades in "${roomName}"? This action cannot be undone.`)) {
+    if (window.confirm(`Delete all ${countToClear} trades in "${roomName}"?`)) {
       if (selectedFolderId === 'default') {
         setTrades([]);
       } else {
@@ -369,7 +209,7 @@ export default function TradingJournal() {
       }
       toast({
         title: "Trades Cleared",
-        description: `Successfully deleted ${countToClear} trades from "${roomName}"`
+        description: `Deleted ${countToClear} trades`
       });
     }
   };
@@ -401,7 +241,7 @@ export default function TradingJournal() {
       commission: newTrade.commission || 0,
       swap: newTrade.swap,
       dividends: newTrade.dividends,
-      folderId: selectedFolderId === 'default' ? undefined : selectedFolderId // FIX: Assign folderId
+      folderId: selectedFolderId === 'default' ? undefined : selectedFolderId
     };
 
     setTrades([...trades, trade]);
@@ -431,9 +271,8 @@ export default function TradingJournal() {
         let pnlPercentage = 0;
         
         if (trade.type === 'CFD') {
-          // CFD P&L calculation with lot size and contract size
           const lotSize = trade.lotSize || 1;
-          const contractSize = trade.contractSize || 100000; // Default for forex
+          const contractSize = trade.contractSize || 100000;
           const pointValue = contractSize * lotSize;
           
           if (trade.side === 'LONG') {
@@ -442,15 +281,12 @@ export default function TradingJournal() {
             pnl = (trade.entryPrice - exitPrice) * pointValue;
           }
           
-          // Add swap and commission for CFD
           pnl -= (trade.commission || 0);
           pnl += (trade.swap || 0);
           
-          // Calculate percentage based on margin used (with leverage)
           const marginUsed = (trade.entryPrice * pointValue) / (trade.leverage || 1);
           pnlPercentage = marginUsed > 0 ? (pnl / marginUsed) * 100 : 0;
         } else {
-          // Stock P&L calculation
           if (trade.side === 'LONG') {
             pnl = (exitPrice - trade.entryPrice) * trade.quantity;
           } else {
@@ -460,7 +296,6 @@ export default function TradingJournal() {
           pnl -= (trade.commission || 0);
           pnl += (trade.dividends || 0);
           
-          // Calculate percentage based on total investment
           const totalInvestment = trade.entryPrice * trade.quantity;
           pnlPercentage = totalInvestment > 0 ? (pnl / totalInvestment) * 100 : 0;
         }
@@ -477,211 +312,20 @@ export default function TradingJournal() {
     }));
   };
 
-  // Calculate profit factor by symbols (use filteredTrades)
-  const getProfitFactorBySymbols = () => {
-    const symbolStats = new Map();
-    
-    filteredTrades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined).forEach(trade => {
-      const symbol = trade.symbol;
-      if (!symbolStats.has(symbol)) {
-        symbolStats.set(symbol, {
-          symbol,
-          type: trade.type,
-          totalWins: 0,
-          totalLosses: 0,
-          winCount: 0,
-          lossCount: 0,
-          totalTrades: 0
-        });
-      }
-      
-      const stats = symbolStats.get(symbol);
-      stats.totalTrades++;
-      
-      if (trade.pnl! > 0) {
-        stats.totalWins += trade.pnl!;
-        stats.winCount++;
-      } else {
-        stats.totalLosses += Math.abs(trade.pnl!);
-        stats.lossCount++;
-      }
-    });
-    
-    return Array.from(symbolStats.values()).map(stats => ({
-      ...stats,
-      profitFactor: stats.totalLosses > 0 ? stats.totalWins / stats.totalLosses : stats.totalWins > 0 ? 999 : 0,
-      winRate: stats.totalTrades > 0 ? (stats.winCount / stats.totalTrades) * 100 : 0
-    })).sort((a, b) => b.profitFactor - a.profitFactor);
-  };
-
-  // Get Long vs Short breakdown (use filteredTrades)
-  const getLongShortBreakdown = () => {
-    const closedTrades = filteredTrades.filter(t => t.status === 'CLOSED');
-    const longTrades = closedTrades.filter(t => t.side === 'LONG');
-    const shortTrades = closedTrades.filter(t => t.side === 'SHORT');
-    
-    return {
-      long: {
-        count: longTrades.length,
-        percentage: closedTrades.length > 0 ? (longTrades.length / closedTrades.length) * 100 : 0,
-        pnl: longTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
-      },
-      short: {
-        count: shortTrades.length,
-        percentage: closedTrades.length > 0 ? (shortTrades.length / closedTrades.length) * 100 : 0,
-        pnl: shortTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
-      }
-    };
-  };
-
-  // Get asset grouping with CFD/Stock breakdown
-  const getAssetGrouping = () => {
-    const groups = new Map();
-    
-    trades.forEach(trade => {
-      const baseSymbol = trade.symbol.replace(/[0-9]/g, ''); // Remove numbers for grouping
-      if (!groups.has(baseSymbol)) {
-        groups.set(baseSymbol, {
-          symbol: baseSymbol,
-          cfd: { count: 0, pnl: 0, trades: [] },
-          stock: { count: 0, pnl: 0, trades: [] }
-        });
-      }
-      
-      const group = groups.get(baseSymbol);
-      if (trade.type === 'CFD') {
-        group.cfd.count++;
-        group.cfd.pnl += trade.pnl || 0;
-        group.cfd.trades.push(trade);
-      } else {
-        group.stock.count++;
-        group.stock.pnl += trade.pnl || 0;
-        group.stock.trades.push(trade);
-      }
-    });
-    
-    return Array.from(groups.values());
-  };
-
-  const loadSampleData = () => {
-    const sampleTrades: Trade[] = [
-      // Forex CFD Trades
-      { id: '1', date: '2024-08-15', symbol: 'EURUSD', side: 'LONG', type: 'CFD', entryPrice: 1.0950, exitPrice: 1.1020, quantity: 1, lotSize: 1, contractSize: 100000, leverage: 100, pnl: 700, pnlPercentage: 6.39, status: 'CLOSED', strategy: 'Scalping', commission: 5 },
-      { id: '2', date: '2024-08-16', symbol: 'GBPJPY', side: 'SHORT', type: 'CFD', entryPrice: 186.50, exitPrice: 185.20, quantity: 1, lotSize: 0.5, contractSize: 100000, leverage: 50, pnl: 650, pnlPercentage: 3.49, status: 'CLOSED', strategy: 'Swing', commission: 8 },
-      { id: '3', date: '2024-08-20', symbol: 'XAUUSD', side: 'LONG', type: 'CFD', entryPrice: 2380, exitPrice: 2360, quantity: 1, lotSize: 0.1, contractSize: 100, leverage: 200, pnl: -200, pnlPercentage: -1.68, status: 'CLOSED', strategy: 'Day Trading', commission: 3 },
-      
-      // Stock Trades
-      { id: '4', date: '2024-09-02', symbol: 'AAPL', side: 'LONG', type: 'STOCK', entryPrice: 175.50, exitPrice: 182.30, quantity: 50, pnl: 340, pnlPercentage: 3.87, status: 'CLOSED', strategy: 'Position', commission: 15 },
-      { id: '5', date: '2024-09-05', symbol: 'TSLA', side: 'SHORT', type: 'STOCK', entryPrice: 245.80, exitPrice: 238.90, quantity: 20, pnl: 138, pnlPercentage: 2.81, status: 'CLOSED', strategy: 'Swing', commission: 10 },
-      { id: '6', date: '2024-09-10', symbol: 'NVDA', side: 'LONG', type: 'STOCK', entryPrice: 420.00, exitPrice: 395.50, quantity: 15, pnl: -367.50, pnlPercentage: -5.83, status: 'CLOSED', strategy: 'Day Trading', commission: 12 },
-      
-      // More Recent Trades  
-      { id: '7', date: '2024-09-12', symbol: 'EURUSD', side: 'SHORT', type: 'CFD', entryPrice: 1.1080, exitPrice: 1.1020, quantity: 1, lotSize: 1.5, contractSize: 100000, leverage: 100, pnl: 900, pnlPercentage: 5.42, status: 'CLOSED', strategy: 'Scalping', commission: 6 },
-      { id: '8', date: '2024-09-14', symbol: 'MSFT', side: 'LONG', type: 'STOCK', entryPrice: 340.20, exitPrice: 348.75, quantity: 25, pnl: 213.75, pnlPercentage: 2.51, status: 'CLOSED', strategy: 'Position', commission: 8 },
-      { id: '9', date: '2024-09-15', symbol: 'USDJPY', side: 'LONG', type: 'CFD', entryPrice: 142.80, exitPrice: 144.20, quantity: 1, lotSize: 0.8, contractSize: 100000, leverage: 100, pnl: 1120, pnlPercentage: 9.80, status: 'CLOSED', strategy: 'Day Trading', commission: 4 },
-      { id: '10', date: '2024-09-16', symbol: 'GOOGL', side: 'SHORT', type: 'STOCK', entryPrice: 155.30, exitPrice: 148.90, quantity: 30, pnl: 192, pnlPercentage: 4.12, status: 'CLOSED', strategy: 'Swing', commission: 12 },
-      
-      // More diverse trades for better visualization
-      { id: '11', date: '2024-09-17', symbol: 'USDCAD', side: 'SHORT', type: 'CFD', entryPrice: 1.3520, exitPrice: 1.3480, quantity: 1, lotSize: 1, contractSize: 100000, leverage: 50, pnl: 400, pnlPercentage: 1.48, status: 'CLOSED', strategy: 'Scalping', commission: 5 },
-      { id: '12', date: '2024-09-18', symbol: 'AMD', side: 'LONG', type: 'STOCK', entryPrice: 95.20, exitPrice: 102.15, quantity: 40, pnl: 278, pnlPercentage: 7.30, status: 'CLOSED', strategy: 'Day Trading', commission: 14 },
-      { id: '13', date: '2024-09-19', symbol: 'AUDUSD', side: 'LONG', type: 'CFD', entryPrice: 0.6850, exitPrice: 0.6780, quantity: 1, lotSize: 2, contractSize: 100000, leverage: 100, pnl: -1400, pnlPercentage: -10.22, status: 'CLOSED', strategy: 'Position', commission: 8 },
-      { id: '14', date: '2024-09-20', symbol: 'SPY', side: 'LONG', type: 'STOCK', entryPrice: 445.20, exitPrice: 452.80, quantity: 20, pnl: 152, pnlPercentage: 1.71, status: 'CLOSED', strategy: 'Swing', commission: 6 },
-      
-      // August trades for more monthly data
-      { id: '15', date: '2024-08-05', symbol: 'NZDUSD', side: 'SHORT', type: 'CFD', entryPrice: 0.6120, exitPrice: 0.6080, quantity: 1, lotSize: 1, contractSize: 100000, leverage: 100, pnl: 400, pnlPercentage: 6.54, status: 'CLOSED', strategy: 'Day Trading', commission: 4 },
-      { id: '16', date: '2024-08-10', symbol: 'META', side: 'LONG', type: 'STOCK', entryPrice: 385.50, exitPrice: 398.20, quantity: 15, pnl: 190.50, pnlPercentage: 3.29, status: 'CLOSED', strategy: 'Position', commission: 9 },
-      { id: '17', date: '2024-08-25', symbol: 'EURCHF', side: 'LONG', type: 'CFD', entryPrice: 0.9650, exitPrice: 0.9720, quantity: 1, lotSize: 0.5, contractSize: 100000, leverage: 100, pnl: 350, pnlPercentage: 7.25, status: 'CLOSED', strategy: 'Swing', commission: 3 },
-      
-      // July trades
-      { id: '18', date: '2024-07-12', symbol: 'QQQ', side: 'SHORT', type: 'STOCK', entryPrice: 465.80, exitPrice: 458.30, quantity: 25, pnl: 187.50, pnlPercentage: 1.61, status: 'CLOSED', strategy: 'Day Trading', commission: 8 },
-      { id: '19', date: '2024-07-18', symbol: 'GBPUSD', side: 'LONG', type: 'CFD', entryPrice: 1.2980, exitPrice: 1.3040, quantity: 1, lotSize: 1.2, contractSize: 100000, leverage: 100, pnl: 720, pnlPercentage: 4.62, status: 'CLOSED', strategy: 'Scalping', commission: 6 },
-      { id: '20', date: '2024-07-22', symbol: 'CRM', side: 'LONG', type: 'STOCK', entryPrice: 245.60, exitPrice: 238.90, quantity: 18, pnl: -120.60, pnlPercentage: -2.73, status: 'CLOSED', strategy: 'Position', commission: 11 }
-    ];
-    
-    setTrades(sampleTrades);
-    toast({
-      title: "Sample Data Loaded",
-      description: "20 sample trades have been added to demonstrate the features"
-    });
-  };
-
   const handleDeleteTrade = (tradeId: string) => {
-    setTrades(trades.filter(t => t.id !== tradeId));
+    setTrades(prev => prev.filter(t => t.id !== tradeId));
     toast({
       title: "Trade Deleted",
-      description: "Trade has been removed from journal"
+      description: "Trade has been removed"
     });
   };
 
-  // Load webhook rooms for import
-  const loadWebhookRooms = async () => {
-    try {
-      const { data: rooms, error } = await supabase
-        .from('chat_rooms')
-        .select('*')
-        .eq('type', 'webhook')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setWebhookRooms(rooms || []);
-    } catch (error) {
-      console.error('Error loading webhook rooms:', error);
-    }
-  };
-
-  // Import trades from webhook room
-  const importFromWebhook = async (roomId: string) => {
-    setIsLoadingWebhook(true);
-    try {
-      const { data: messages, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('message_type', 'webhook')
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
-      const importedTrades: Trade[] = messages?.map((msg, index) => {
-        const webhookData = (msg.webhook_data as Record<string, any>) || {};
-        
-        return {
-          id: `webhook-${Date.now()}-${index}`,
-          date: new Date(msg.created_at).toISOString().split('T')[0],
-          symbol: (webhookData.ticker || webhookData.symbol || 'UNKNOWN') as string,
-          side: ((webhookData.action as string)?.toUpperCase() === 'BUY' || 
-                 (webhookData.action as string)?.toUpperCase() === 'LONG') ? 'LONG' as const : 'SHORT' as const,
-          type: 'CFD' as const,
-          entryPrice: parseFloat(String(webhookData.price || webhookData.close || '0')),
-          quantity: 1,
-          lotSize: parseFloat(String(webhookData.lots || '1')),
-          contractSize: 100000,
-          leverage: 100,
-          status: 'OPEN' as const,
-          strategy: (webhookData.strategy || 'TradingView Signal') as string,
-          notes: (webhookData.message || '') as string,
-          commission: 0
-        };
-      }) || [];
-
-      setTrades(prev => [...prev, ...importedTrades]);
-      
-      toast({
-        title: "Import Successful!",
-        description: `Imported ${importedTrades.length} trades from webhook signals`
-      });
-      
-      setShowWebhookImport(false);
-      setSelectedWebhookRoom(null);
-    } catch (error: any) {
-      toast({
-        title: "Import Failed",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoadingWebhook(false);
-    }
+  const handleEditTrade = (trade: Trade) => {
+    // For now, just show a toast - full edit modal can be added later
+    toast({
+      title: "Edit Trade",
+      description: `Editing ${trade.symbol} trade`
+    });
   };
 
   return (
@@ -778,25 +422,14 @@ export default function TradingJournal() {
               </Select>
             </div>
             
-            {trades.length === 0 && (
-              <Button onClick={loadSampleData} variant="outline" size="sm">
-                Load Sample
-              </Button>
-            )}
-            {trades.length > 0 && (
-              <Button onClick={clearAllTrades} variant="destructive" size="sm">
-                <Trash2 className="h-3 w-3 mr-1" />
-                Clear ({trades.length})
-              </Button>
-            )}
             <Button 
-              onClick={() => { loadWebhookRooms(); setShowWebhookImport(true); }} 
+              onClick={clearAllTrades} 
               variant="outline" 
               size="sm"
-              className="bg-blue-600/20 text-blue-400 hover:bg-blue-600/30"
+              className="bg-red-500/20 text-red-400 hover:bg-red-500/30"
             >
-              <Webhook className="h-3 w-3 mr-1" />
-              Webhook
+              <Trash2 className="h-3 w-3 mr-1" />
+              Clear
             </Button>
             <Button 
               onClick={() => setShowCSVImport(true)} 
@@ -814,7 +447,7 @@ export default function TradingJournal() {
           </div>
         </div>
 
-        {/* New Tabbed Interface */}
+        {/* Tabbed Interface */}
         <div className="flex-1">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="w-full h-auto flex flex-wrap gap-1 bg-transparent border-b border-border/30 pb-2 mb-4">
@@ -841,524 +474,45 @@ export default function TradingJournal() {
             </TabsList>
 
             <TabsContent value="overview" className="mt-0">
-              <OverviewTabComponent trades={filteredTrades} initialCapital={100} />
+              <OverviewTab trades={filteredTrades} initialCapital={100} />
             </TabsContent>
 
             <TabsContent value="performance" className="mt-0">
-              <PerformanceTabComponent trades={filteredTrades} initialCapital={100} />
+              <PerformanceTab trades={filteredTrades} initialCapital={100} />
             </TabsContent>
 
             <TabsContent value="analysis" className="mt-0">
-              <TradeAnalysisTabComponent trades={filteredTrades} initialCapital={100} />
+              <TradeAnalysisTab trades={filteredTrades} initialCapital={100} />
             </TabsContent>
 
             <TabsContent value="risk" className="mt-0">
-              <RiskRewardTabComponent trades={filteredTrades} initialCapital={100} />
+              <RiskRewardTab trades={filteredTrades} initialCapital={100} />
             </TabsContent>
 
             <TabsContent value="trades" className="mt-0">
-              <TradeListTabComponent 
+              <TradeListTab 
                 trades={filteredTrades}
-                onDeleteTrade={(id) => setTrades(prev => prev.filter(t => t.id !== id))}
+                onEditTrade={handleEditTrade}
+                onDeleteTrade={handleDeleteTrade}
                 onCloseTrade={handleCloseTrade}
               />
             </TabsContent>
           </Tabs>
         </div>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* New Comparison Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Win Rate vs Profit Factor Scatter Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Win Rate vs Profit Factor Analysis</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart
-                  data={getProfitFactorBySymbols().map(item => ({
-                    symbol: item.symbol,
-                    winRate: item.winRate,
-                    profitFactor: item.profitFactor,
-                    totalTrades: item.totalTrades
-                  }))}
-                  margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis 
-                    dataKey="winRate" 
-                    type="number" 
-                    domain={[0, 100]}
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    label={{ value: 'Win Rate (%)', position: 'insideBottom', offset: -10, style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
-                  />
-                  <YAxis 
-                    dataKey="profitFactor" 
-                    type="number"
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    label={{ value: 'Profit Factor', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1F2937', 
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#F3F4F6'
-                    }}
-                    formatter={(value: any, name: string) => [
-                      name === 'profitFactor' ? value.toFixed(2) : `${value.toFixed(1)}%`,
-                      name === 'profitFactor' ? 'Profit Factor' : 'Win Rate'
-                    ]}
-                    labelFormatter={(label, payload) => 
-                      payload?.[0]?.payload ? `${payload[0].payload.symbol} (${payload[0].payload.totalTrades} trades)` : ''
-                    }
-                  />
-                  <Scatter dataKey="profitFactor" fill="#10B981" />
-                </ScatterChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Time-based Performance Heatmap */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Trading Performance by Time</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              {(() => {
-                const timePerformance = Array.from({ length: 24 }, (_, hour) => {
-                  const hourTrades = trades.filter(t => {
-                    const tradeHour = new Date(t.date + 'T' + (t.entryTime || '09:00')).getHours();
-                    return tradeHour === hour;
-                  });
-                  
-                  const totalPnL = hourTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-                  const tradeCount = hourTrades.length;
-                  
-                  return {
-                    hour: hour.toString().padStart(2, '0') + ':00',
-                    pnl: totalPnL,
-                    trades: tradeCount,
-                    avgPnL: tradeCount > 0 ? totalPnL / tradeCount : 0
-                  };
-                }).filter(item => item.trades > 0);
-
-                return (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={timePerformance}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis 
-                        dataKey="hour" 
-                        tick={{ fontSize: 9, fill: '#9CA3AF' }}
-                        interval={1}
-                      />
-                      <YAxis 
-                        tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                        label={{ value: 'P&L ($)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#1F2937', 
-                          border: '1px solid #374151',
-                          borderRadius: '8px',
-                          color: '#F3F4F6'
-                        }}
-                        formatter={(value: any, name) => [
-                          name === 'pnl' ? `$${value.toFixed(2)}` : value,
-                          name === 'pnl' ? 'Total P&L' : 'Trades'
-                        ]}
-                      />
-                      <Bar 
-                        dataKey="pnl" 
-                        fill="#10B981"
-                        radius={[2, 2, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                );
-              })()}
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* Analytics Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4 sm:gap-6 mb-4 sm:mb-6">
-        {/* Profit Factor by Symbols Chart - Circular */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Profit Factor by Symbols</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              {(() => {
-                const symbolData = getProfitFactorBySymbols().slice(0, 8);
-                const maxProfitFactor = Math.max(...symbolData.map(d => d.profitFactor), 1);
-                const centerX = 120;
-                const centerY = 120;
-                const maxRadius = 80;
-                
-                return (
-                  <div className="relative w-full h-full flex items-center justify-center">
-                    <svg width="240" height="240" viewBox="0 0 240 240">
-                      {/* Background circles */}
-                      {[20, 40, 60, 80].map((radius, i) => (
-                        <circle
-                          key={i}
-                          cx={centerX}
-                          cy={centerY}
-                          r={radius}
-                          fill="none"
-                          stroke="hsl(var(--border))"
-                          strokeWidth="1"
-                          opacity="0.3"
-                        />
-                      ))}
-                      
-                      {/* Data points */}
-                      {symbolData.map((item, index) => {
-                        const angle = (index / symbolData.length) * 2 * Math.PI - Math.PI / 2;
-                        const radius = (item.profitFactor / maxProfitFactor) * maxRadius;
-                        const x = centerX + Math.cos(angle) * radius;
-                        const y = centerY + Math.sin(angle) * radius;
-                        const color = item.profitFactor > 1 ? '#10B981' : '#EF4444';
-                        
-                        return (
-                          <g key={index}>
-                            {/* Line from center */}
-                            <line
-                              x1={centerX}
-                              y1={centerY}
-                              x2={x}
-                              y2={y}
-                              stroke={color}
-                              strokeWidth="2"
-                              opacity="0.6"
-                            />
-                            {/* Data point */}
-                            <circle
-                              cx={x}
-                              cy={y}
-                              r="6"
-                              fill={color}
-                              stroke="white"
-                              strokeWidth="2"
-                            />
-                            {/* Symbol label */}
-                            <text
-                              x={centerX + Math.cos(angle) * (maxRadius + 15)}
-                              y={centerY + Math.sin(angle) * (maxRadius + 15)}
-                              textAnchor="middle"
-                              dominantBaseline="middle"
-                              fontSize="10"
-                              fill="hsl(var(--muted-foreground))"
-                              fontWeight="medium"
-                            >
-                              {item.symbol}
-                            </text>
-                          </g>
-                        );
-                      })}
-                      
-                      {/* Center point */}
-                      <circle
-                        cx={centerX}
-                        cy={centerY}
-                        r="4"
-                        fill="hsl(var(--primary))"
-                      />
-                      
-                      {/* Radial labels */}
-                      {[0.5, 1.0, 1.5, 2.0].map((value, i) => (
-                        <text
-                          key={i}
-                          x={centerX + 5}
-                          y={centerY - (value / maxProfitFactor) * maxRadius}
-                          fontSize="8"
-                          fill="hsl(var(--muted-foreground))"
-                        >
-                          {value}
-                        </text>
-                      ))}
-                    </svg>
-                    
-                    {/* Legend */}
-                    <div className="absolute bottom-0 left-0 text-xs">
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>Profitable</span>
-                      </div>
-                      <div className="flex items-center gap-1 mt-1">
-                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                        <span>Loss</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Monthly P&L Trend */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Monthly P&L</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={getTradesByMonth()}>
-                  <defs>
-                    <linearGradient id="monthlyPnlGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis 
-                    dataKey="month" 
-                    tick={{ fontSize: 9, fill: '#9CA3AF' }}
-                    axisLine={{ stroke: '#4B5563' }}
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    axisLine={{ stroke: '#4B5563' }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1F2937', 
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#F3F4F6'
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="pnl"
-                    stroke="#3B82F6"
-                    strokeWidth={2}
-                    fill="url(#monthlyPnlGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Enhanced Win Rate Analysis */}
-        <EnhancedWinRateChart trades={trades} />
-
-        {/* Enhanced Sector Attribution Analysis */}
-        <EnhancedSectorAnalysis trades={trades} />
-
-        {/* D3 Portfolio Analytics */}
-        <D3Surface trades={trades} />
-      </div>
-
-      {/* Performance Summary Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        {/* Enhanced Profit Factor by Symbols */}
-        <EnhancedProfitFactorChart trades={trades} />
-
-        {/* CFD vs Stock Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">CFD vs Stock</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const cfdTrades = trades.filter(t => t.type === 'CFD');
-              const stockTrades = trades.filter(t => t.type === 'STOCK');
-              const total = trades.length;
-              const cfdPercentage = total > 0 ? (cfdTrades.length / total) * 100 : 0;
-              
-              return (
-                <div className="space-y-4">
-                  {/* Simple Donut Chart */}
-                  <div className="flex justify-center">
-                    <div className="relative w-32 h-32">
-                      <svg className="w-32 h-32 transform -rotate-90">
-                        <circle
-                          cx="64"
-                          cy="64"
-                          r="56"
-                          fill="none"
-                          stroke="#374151"
-                          strokeWidth="12"
-                        />
-                        <circle
-                          cx="64"
-                          cy="64"
-                          r="56"
-                          fill="none"
-                          stroke="#10B981"
-                          strokeWidth="12"
-                          strokeDasharray={`${(cfdPercentage * 352) / 100} 352`}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-primary">{total}</div>
-                          <div className="text-xs text-muted-foreground">Total</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Legend */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-emerald-500 rounded"></div>
-                        <span className="text-sm">CFD</span>
-                      </div>
-                      <div className="text-sm font-medium">
-                        {cfdTrades.length} ({cfdPercentage.toFixed(1)}%)
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-gray-500 rounded"></div>
-                        <span className="text-sm">Stock</span>
-                      </div>
-                      <div className="text-sm font-medium">
-                        {stockTrades.length} ({(100 - cfdPercentage).toFixed(1)}%)
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-
-        {/* Top 5 Assets */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Top Assets</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {getAssetGrouping()
-                .map(group => ({
-                  ...group,
-                  totalPnL: group.cfd.pnl + group.stock.pnl,
-                  totalTrades: group.cfd.count + group.stock.count
-                }))
-                .sort((a, b) => b.totalPnL - a.totalPnL)
-                .slice(0, 5)
-                .map((group, index) => (
-                  <div key={group.symbol} className="flex items-center justify-between p-2 rounded bg-muted/20">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${
-                        index === 0 ? 'bg-yellow-500 text-black' :
-                        index === 1 ? 'bg-gray-400 text-black' :
-                        index === 2 ? 'bg-amber-600 text-white' :
-                        'bg-muted text-muted-foreground'
-                      }`}>
-                        {index + 1}
-                      </div>
-                      <span className="font-medium">{group.symbol}</span>
-                    </div>
-                    <div className="text-right">
-                      <div className={`font-bold text-sm ${
-                        group.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
-                      }`}>
-                        ${group.totalPnL >= 0 ? '+' : ''}{group.totalPnL.toFixed(2)}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {group.totalTrades} trades
-                      </div>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Additional Comparison Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Monthly Performance Comparison */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Monthly Performance Comparison</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={getTradesByMonth()}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis 
-                    dataKey="month" 
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                  />
-                  <YAxis 
-                    yAxisId="left"
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    label={{ value: 'P&L ($)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
-                  />
-                  <YAxis 
-                    yAxisId="right" 
-                    orientation="right"
-                    tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                    label={{ value: 'Trade Count', angle: 90, position: 'insideRight', style: { textAnchor: 'middle', fontSize: 10, fill: '#9CA3AF' } }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1F2937', 
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#F3F4F6'
-                    }}
-                  />
-                  <Bar 
-                    yAxisId="left"
-                    dataKey="pnl" 
-                    fill="#10B981" 
-                    name="Monthly P&L"
-                    opacity={0.7}
-                  />
-                  <Line 
-                    yAxisId="right"
-                    type="monotone" 
-                    dataKey="trades" 
-                    stroke="#F59E0B" 
-                    strokeWidth={3}
-                    name="Trade Count"
-                    dot={{ fill: '#F59E0B', strokeWidth: 2, r: 4 }}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Enhanced Risk vs Reward Analysis */}
-        <EnhancedRiskRewardChart trades={trades} />
-      </div>
-
-      {/* Add Trade Form */}
-      {isAddingTrade && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Add New Trade</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Add Trade Dialog */}
+      <Dialog open={isAddingTrade} onOpenChange={setIsAddingTrade}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-terminal-green">Add New Trade</DialogTitle>
+            <DialogDescription>
+              Add a new trade to "{folders.find(f => f.id === selectedFolderId)?.name}"
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="date">Date</Label>
                 <Input
@@ -1391,7 +545,7 @@ export default function TradingJournal() {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="side">Side</Label>
                 <Select value={newTrade.side} onValueChange={(value: 'LONG' | 'SHORT') => setNewTrade({...newTrade, side: value})}>
@@ -1425,9 +579,8 @@ export default function TradingJournal() {
               </div>
             </div>
 
-            {/* CFD-specific fields */}
             {newTrade.type === 'CFD' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
+              <div className="grid grid-cols-3 gap-4 p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
                 <div>
                   <Label htmlFor="lotSize">Lot Size</Label>
                   <Input
@@ -1444,7 +597,7 @@ export default function TradingJournal() {
                   <Input
                     id="leverage"
                     type="number"
-                    placeholder="1:100"
+                    placeholder="100"
                     value={newTrade.leverage || ''}
                     onChange={(e) => setNewTrade({...newTrade, leverage: parseInt(e.target.value)})}
                   />
@@ -1462,12 +615,12 @@ export default function TradingJournal() {
               </div>
             )}
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="strategy">Strategy</Label>
                 <Input
                   id="strategy"
-                  placeholder="Breakout, Support/Resistance, etc."
+                  placeholder="Breakout, Scalping, etc."
                   value={newTrade.strategy || ''}
                   onChange={(e) => setNewTrade({...newTrade, strategy: e.target.value})}
                 />
@@ -1495,241 +648,24 @@ export default function TradingJournal() {
               />
             </div>
             
-            <div className="flex gap-2">
-              <Button onClick={handleAddTrade}>Add Trade</Button>
+            <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setIsAddingTrade(false)}>Cancel</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Bulk Actions Toolbar */}
-      {trades.length > 0 && (
-        <Card className="mb-4">
-          <CardContent className="py-3">
-            <div className="flex justify-between items-center">
-              <div className="text-sm text-muted-foreground">
-                Total: {trades.length} trades | 
-                Showing: {Math.min(trades.length, 50)} trades per page
-              </div>
-              
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline">
-                  Export CSV
-                </Button>
-                <Button size="sm" variant="outline">
-                  Select All
-                </Button>
-                <Button size="sm" variant="destructive" onClick={clearAllTrades}>
-                  Clear All
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Trades Table */}
-      <Card className="flex-1">
-        <CardHeader>
-          <CardTitle>Trade History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Symbol</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Side</TableHead>
-                <TableHead>Entry</TableHead>
-                <TableHead>Exit</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>P&L</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Strategy</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {trades.map((trade) => (
-                <TableRow key={trade.id}>
-                  <TableCell>{trade.date}</TableCell>
-                  <TableCell className="font-medium">{trade.symbol}</TableCell>
-                  <TableCell>
-                    <Badge variant={trade.type === 'CFD' ? 'default' : 'secondary'} className="text-xs">
-                      {trade.type || 'STOCK'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={trade.side === 'LONG' ? 'default' : 'secondary'}>
-                      {trade.side === 'LONG' ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
-                      {trade.side}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>${trade.entryPrice.toFixed(2)}</TableCell>
-                  <TableCell>
-                    {trade.status === 'CLOSED' ? (
-                      `$${trade.exitPrice?.toFixed(2)}`
-                    ) : (
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="Exit price"
-                        className="w-24"
-                        onBlur={(e) => {
-                          const exitPrice = parseFloat(e.target.value);
-                          if (exitPrice > 0) {
-                            handleCloseTrade(trade.id, exitPrice);
-                          }
-                        }}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {trade.type === 'CFD' ? (
-                      <div className="text-xs">
-                        <div>Lot: {trade.lotSize || 1}</div>
-                        {trade.leverage && <div>Lev: 1:{trade.leverage}</div>}
-                      </div>
-                    ) : (
-                      trade.quantity
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {trade.pnl !== undefined ? (
-                      <span className={trade.pnl >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        ${trade.pnl.toFixed(2)} ({trade.pnlPercentage?.toFixed(1)}%)
-                      </span>
-                    ) : (
-                      '-'
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={trade.status === 'OPEN' ? 'destructive' : 'default'}>
-                      {trade.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{trade.strategy}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteTrade(trade.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          
-          {trades.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              No trades recorded yet. Add your first trade to get started!
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Bulk Actions Toolbar */}
-      {trades.length > 0 && (
-        <Card className="mb-4">
-          <CardContent className="py-3">
-            <div className="flex justify-between items-center">
-              <div className="text-sm text-muted-foreground">
-                Total: {trades.length} trades | 
-                Showing: {Math.min(trades.length, 50)} trades per page
-              </div>
-              
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline">
-                  Export CSV
-                </Button>
-                <Button size="sm" variant="outline">
-                  Select All
-                </Button>
-                <Button size="sm" variant="destructive" onClick={clearAllTrades}>
-                  Clear All
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      <CSVImportDialog
-        open={showCSVImport}
-        onOpenChange={setShowCSVImport}
-        onImport={handleImportTrades}
-        existingTrades={trades}
-      />
-      
-      {/* Webhook Import Dialog */}
-      <Dialog open={showWebhookImport} onOpenChange={setShowWebhookImport}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Webhook className="h-5 w-5" />
-              Import from Webhook Room
-            </DialogTitle>
-            <DialogDescription>
-              Select a webhook room to import TradingView signals as trades
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            {webhookRooms.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Webhook className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No webhook rooms found</p>
-                <p className="text-xs mt-1">Create a webhook room in MESSENGER first</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {webhookRooms.map(room => (
-                  <Button
-                    key={room.id}
-                    variant={selectedWebhookRoom === room.id ? "default" : "outline"}
-                    className="w-full justify-start"
-                    onClick={() => setSelectedWebhookRoom(room.id)}
-                  >
-                    <Webhook className="h-4 w-4 mr-2" />
-                    {room.name || 'Webhook Room'}
-                    <Badge variant="secondary" className="ml-auto">
-                      {new Date(room.created_at).toLocaleDateString()}
-                    </Badge>
-                  </Button>
-                ))}
-              </div>
-            )}
-            
-            <div className="flex gap-2 justify-end pt-4 border-t">
-              <Button variant="outline" onClick={() => setShowWebhookImport(false)}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={() => selectedWebhookRoom && importFromWebhook(selectedWebhookRoom)}
-                disabled={!selectedWebhookRoom || isLoadingWebhook}
-              >
-                {isLoadingWebhook ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Importing...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4 mr-2" />
-                    Import Trades
-                  </>
-                )}
+              <Button onClick={handleAddTrade} className="bg-terminal-green hover:bg-terminal-green/90 text-black">
+                Add Trade
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* CSV Import Dialog */}
+      <CSVImportDialog
+        open={showCSVImport}
+        onOpenChange={setShowCSVImport}
+        onImport={handleImportTrades}
+        existingTrades={trades}
+        targetFolderId={selectedFolderId}
+      />
 
       {/* Folder Manager Dialog */}
       <Dialog open={showFolderManager} onOpenChange={setShowFolderManager}>
@@ -1842,7 +778,6 @@ export default function TradingJournal() {
           </div>
         </DialogContent>
       </Dialog>
-      </div>
     </div>
   );
 }
