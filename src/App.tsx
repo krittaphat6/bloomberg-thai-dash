@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,13 +8,15 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ResponsiveProvider } from "@/contexts/ResponsiveContext";
 import { MCPProvider } from "@/contexts/MCPContext";
 import { AuthScreen } from "@/components/AuthScreen";
-import Index from "./pages/Index";
-import NotesAndVisualization from "./pages/NotesAndVisualization";
-import RelationshipDashboard from "./pages/RelationshipDashboard";
-import IntelligencePlatform from "./pages/IntelligencePlatform";
-import NotFound from "./pages/NotFound";
-import OptionsSurfacePlot from "./components/OptionsSurfacePlot";
-import { PacManGame } from "./components/PacManGame";
+
+// Lazy load page components to reduce initial bundle size
+const Index = lazy(() => import("./pages/Index"));
+const NotesAndVisualization = lazy(() => import("./pages/NotesAndVisualization"));
+const RelationshipDashboard = lazy(() => import("./pages/RelationshipDashboard"));
+const IntelligencePlatform = lazy(() => import("./pages/IntelligencePlatform"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const OptionsSurfacePlot = lazy(() => import("./components/OptionsSurfacePlot"));
+const PacManGame = lazy(() => import("./components/PacManGame").then(m => ({ default: m.PacManGame })));
 
 const queryClient = new QueryClient();
 
@@ -24,6 +26,15 @@ const initializeTheme = () => {
   document.documentElement.classList.remove('theme-dark', 'theme-gray', 'theme-light-gray', 'theme-bright', 'theme-cot');
   document.documentElement.classList.add(`theme-${savedTheme === 'cot' ? 'cot' : savedTheme}`);
 };
+
+// Loading fallback for lazy-loaded components
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="text-terminal-amber animate-pulse font-mono text-lg">
+      Loading...
+    </div>
+  </div>
+);
 
 // Protected App Content
 const AppContent = () => {
@@ -45,16 +56,18 @@ const AppContent = () => {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/notes" element={<NotesAndVisualization />} />
-        <Route path="/relationship-dashboard" element={<RelationshipDashboard />} />
-        <Route path="/intelligence" element={<IntelligencePlatform />} />
-        <Route path="/options" element={<OptionsSurfacePlot />} />
-        <Route path="/pacman" element={<PacManGame />} />
-        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/notes" element={<NotesAndVisualization />} />
+          <Route path="/relationship-dashboard" element={<RelationshipDashboard />} />
+          <Route path="/intelligence" element={<IntelligencePlatform />} />
+          <Route path="/options" element={<OptionsSurfacePlot />} />
+          <Route path="/pacman" element={<PacManGame />} />
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 };
