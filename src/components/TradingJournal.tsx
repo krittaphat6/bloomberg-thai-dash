@@ -383,140 +383,110 @@ export default function TradingJournal() {
         return;
       }
 
-      // Parse webhook messages into trades
+      // Parse webhook messages into trades by pairing BUY->SELL (LONG) or SELL->BUY (SHORT)
       const importedTrades: Trade[] = [];
-      const openPositions: Map<string, Trade> = new Map();
-
+      
+      // Group messages by symbol
+      const messagesBySymbol: Map<string, any[]> = new Map();
+      
       for (const msg of messages) {
         const webhookData = msg.webhook_data as any;
         if (!webhookData) continue;
-
-        // Support both old and new formats
-        let signal: any;
-        if (webhookData.parsed_trade) {
-          signal = webhookData.parsed_trade;
-        } else {
-          // Parse from raw webhook data (old format)
-          const actionStr = (webhookData.action || '').toString().toLowerCase();
-          let action: string = 'BUY';
-          let side: 'LONG' | 'SHORT' = 'LONG';
-          
-          if (actionStr.includes('sell') || actionStr.includes('short')) {
-            action = 'SELL';
-            side = 'SHORT';
-          } else if (actionStr.includes('buy') || actionStr.includes('long')) {
-            action = 'BUY';
-            side = 'LONG';
-          } else if (actionStr.includes('close') || actionStr.includes('exit')) {
-            action = 'CLOSE';
-          }
-          
-          signal = {
-            id: `wh-${msg.id}`,
-            date: new Date(msg.created_at).toISOString().split('T')[0],
-            symbol: webhookData.ticker || webhookData.symbol || 'UNKNOWN',
-            side: side,
-            type: 'CFD',
-            action: action,
-            price: parseFloat(webhookData.price || webhookData.close || 0),
-            quantity: parseFloat(webhookData.quantity || webhookData.qty || 1),
-            lotSize: parseFloat(webhookData.lot || webhookData.lotSize || 1),
-            strategy: webhookData.strategy || 'TradingView',
-            message: webhookData.message
-          };
+        
+        const symbol = webhookData.ticker || webhookData.symbol || 'UNKNOWN';
+        const actionStr = (webhookData.action || '').toString().toLowerCase();
+        const price = parseFloat(webhookData.price || webhookData.close || 0);
+        const time = webhookData.time || msg.created_at;
+        
+        if (!messagesBySymbol.has(symbol)) {
+          messagesBySymbol.set(symbol, []);
         }
-
-        const positionKey = `${signal.symbol}-${signal.side}`;
-
-        // Determine action type
-        const actionUpper = (signal.action || '').toString().toUpperCase();
-        const isOpenAction = ['OPEN', 'BUY', 'SELL'].includes(actionUpper);
-        const isCloseAction = ['CLOSE', 'TAKE_PROFIT', 'STOP_LOSS', 'TP', 'SL', 'EXIT'].includes(actionUpper);
-
-        if (isOpenAction) {
-          // Create new open position
+        
+        messagesBySymbol.get(symbol)!.push({
+          id: msg.id,
+          action: actionStr,
+          price,
+          time,
+          date: new Date(time).toISOString().split('T')[0],
+          quantity: parseFloat(webhookData.quantity || webhookData.qty || 1),
+          lotSize: parseFloat(webhookData.lot || webhookData.lotSize || 1),
+          message: webhookData.message
+        });
+      }
+      
+      // Process each symbol - pair BUY with next SELL (LONG trade) or SELL with next BUY (SHORT trade)
+      for (const [symbol, signals] of messagesBySymbol) {
+        // Sort by time ascending
+        signals.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+        
+        let i = 0;
+        while (i < signals.length) {
+          const entry = signals[i];
+          const isBuy = entry.action.includes('buy') || entry.action.includes('long');
+          const isSell = entry.action.includes('sell') || entry.action.includes('short');
+          
+          if (!isBuy && !isSell) {
+            i++;
+            continue;
+          }
+          
+          // Look for the opposite action to close this trade
+          const oppositeAction = isBuy ? 'sell' : 'buy';
+          let exitSignal = null;
+          let exitIndex = -1;
+          
+          for (let j = i + 1; j < signals.length; j++) {
+            const nextAction = signals[j].action;
+            if ((oppositeAction === 'sell' && (nextAction.includes('sell') || nextAction.includes('short'))) ||
+                (oppositeAction === 'buy' && (nextAction.includes('buy') || nextAction.includes('long')))) {
+              exitSignal = signals[j];
+              exitIndex = j;
+              break;
+            }
+          }
+          
           const trade: Trade = {
-            id: signal.id || `wh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            date: signal.date || new Date(msg.created_at).toISOString().split('T')[0],
-            symbol: signal.symbol,
-            side: signal.side || 'LONG',
-            type: signal.type || 'CFD',
-            entryPrice: signal.price,
-            quantity: signal.quantity || 1,
-            lotSize: signal.lotSize,
+            id: `wh-${entry.id}`,
+            date: entry.date,
+            symbol: symbol,
+            side: isBuy ? 'LONG' : 'SHORT',
+            type: 'CFD',
+            entryPrice: entry.price,
+            quantity: entry.quantity,
+            lotSize: entry.lotSize,
+            strategy: 'TradingView Webhook',
+            notes: entry.message,
+            folderId: selectedFolderId === 'default' ? undefined : selectedFolderId,
             status: 'OPEN',
-            strategy: signal.strategy || 'TradingView Webhook',
-            notes: signal.message,
-            folderId: selectedFolderId === 'default' ? undefined : selectedFolderId
+            exitPrice: undefined,
+            pnl: undefined,
+            pnlPercentage: undefined
           };
           
-          openPositions.set(positionKey, trade);
-          importedTrades.push(trade);
-        } else if (isCloseAction) {
-          // Find matching open position
-          const matchingTrade = openPositions.get(positionKey);
-          
-          if (matchingTrade) {
-            // Close the position
-            matchingTrade.exitPrice = signal.price;
-            matchingTrade.status = 'CLOSED';
+          if (exitSignal) {
+            trade.exitPrice = exitSignal.price;
+            trade.status = 'CLOSED';
             
-            // Calculate PnL
-            if (signal.pnl !== undefined) {
-              matchingTrade.pnl = signal.pnl;
-              matchingTrade.pnlPercentage = signal.pnlPercentage;
-            } else {
-              // Calculate PnL based on entry/exit
-              const priceDiff = matchingTrade.side === 'LONG' 
-                ? (signal.price - matchingTrade.entryPrice)
-                : (matchingTrade.entryPrice - signal.price);
-              
-              matchingTrade.pnl = priceDiff * (matchingTrade.quantity || 1) * (matchingTrade.lotSize || 1);
-              const investment = matchingTrade.entryPrice * (matchingTrade.quantity || 1);
-              matchingTrade.pnlPercentage = investment > 0 ? (matchingTrade.pnl / investment) * 100 : 0;
-            }
+            // Calculate P&L
+            const priceDiff = isBuy 
+              ? (exitSignal.price - entry.price)  // LONG: sell - buy
+              : (entry.price - exitSignal.price); // SHORT: entry - exit
             
-            // Add close note
-            matchingTrade.notes = `${matchingTrade.notes || ''} | Closed: ${signal.action}`.trim();
+            trade.pnl = priceDiff * trade.quantity * trade.lotSize;
+            const investment = entry.price * trade.quantity;
+            trade.pnlPercentage = investment > 0 ? (trade.pnl / investment) * 100 : 0;
             
-            // Remove from open positions
-            openPositions.delete(positionKey);
-          } else {
-            // No matching open position - create a closed trade directly
-            const closedTrade: Trade = {
-              id: signal.id || `wh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              date: signal.date || new Date(msg.created_at).toISOString().split('T')[0],
-              symbol: signal.symbol,
-              side: signal.side,
-              type: signal.type || 'CFD',
-              entryPrice: signal.price,
-              exitPrice: signal.price,
-              quantity: signal.quantity || 1,
-              lotSize: signal.lotSize,
-              status: 'CLOSED',
-              strategy: signal.strategy || 'TradingView Webhook',
-              pnl: signal.pnl,
-              pnlPercentage: signal.pnlPercentage,
-              notes: `Closed trade: ${signal.action}`,
-              folderId: selectedFolderId === 'default' ? undefined : selectedFolderId
-            };
-            importedTrades.push(closedTrade);
+            // Remove the exit signal so it's not used again
+            signals.splice(exitIndex, 1);
           }
+          
+          importedTrades.push(trade);
+          i++;
         }
       }
 
       // Merge with existing trades (avoid duplicates by ID)
       const existingIds = new Set(trades.map(t => t.id));
-      const newTrades = importedTrades.filter(t => !existingIds.has(t.id));
-      
-      // Update existing trades that might have been closed
-      const updatedTrades = trades.map(existingTrade => {
-        const matchingImport = importedTrades.find(t => t.id === existingTrade.id);
-        return matchingImport || existingTrade;
-      });
-
-      // Simple mode: just add all trades without complex matching
-      // Since the webhook data shows BUY/SELL signals, we'll treat each as a trade entry
       const allNewTrades = importedTrades.filter(t => !existingIds.has(t.id));
       
       setTrades(prev => [...prev, ...allNewTrades]);
@@ -667,9 +637,9 @@ export default function TradingJournal() {
           </div>
         </div>
 
-        {/* Tabbed Interface */}
-        <div className="flex-1">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        {/* Tabbed Interface - Full Height */}
+        <div className="flex-1 flex flex-col min-h-0">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col">
             <TabsList className="w-full h-auto flex flex-wrap gap-1 bg-transparent border-b border-border/30 pb-2 mb-4">
               {[
                 { id: 'overview', label: 'ภาพรวม' },
@@ -693,23 +663,23 @@ export default function TradingJournal() {
               ))}
             </TabsList>
 
-            <TabsContent value="overview" className="mt-0">
+            <TabsContent value="overview" className="mt-0 flex-1 overflow-auto">
               <OverviewTab trades={filteredTrades} initialCapital={100} />
             </TabsContent>
 
-            <TabsContent value="performance" className="mt-0">
+            <TabsContent value="performance" className="mt-0 flex-1 overflow-auto">
               <PerformanceTab trades={filteredTrades} initialCapital={100} />
             </TabsContent>
 
-            <TabsContent value="analysis" className="mt-0">
+            <TabsContent value="analysis" className="mt-0 flex-1 overflow-auto">
               <TradeAnalysisTab trades={filteredTrades} initialCapital={100} />
             </TabsContent>
 
-            <TabsContent value="risk" className="mt-0">
+            <TabsContent value="risk" className="mt-0 flex-1 overflow-auto">
               <RiskRewardTab trades={filteredTrades} initialCapital={100} />
             </TabsContent>
 
-            <TabsContent value="trades" className="mt-0">
+            <TabsContent value="trades" className="mt-0 flex-1 overflow-auto">
               <TradeListTab 
                 trades={filteredTrades}
                 onEditTrade={handleEditTrade}
