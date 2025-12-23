@@ -7,6 +7,9 @@ import {
   BarChart, Bar, ComposedChart, ReferenceLine, Legend
 } from 'recharts';
 import { calculateMetrics, calculatePnLDistribution, Trade, formatCurrency, formatPercent } from '@/utils/tradingMetrics';
+import CalendarView from './CalendarView';
+import ZellaScoreRadar from './ZellaScoreRadar';
+import Portfolio3DVisualization from './Portfolio3DVisualization';
 
 interface OverviewTabProps {
   trades: Trade[];
@@ -18,7 +21,6 @@ export default function OverviewTab({ trades, initialCapital = 100 }: OverviewTa
   
   const metrics = useMemo(() => calculateMetrics(trades, initialCapital), [trades, initialCapital]);
   const pnlDistribution = useMemo(() => calculatePnLDistribution(trades, 0.1), [trades]);
-  
   return (
     <div className="space-y-4">
       {/* Top Stats Cards - Dark theme matching reference */}
@@ -294,6 +296,15 @@ export default function OverviewTab({ trades, initialCapital = 100 }: OverviewTa
           </CardContent>
         </Card>
       </div>
+      
+      {/* Calendar View */}
+      <CalendarView trades={trades} />
+      
+      {/* Zella Score Radar Chart */}
+      <ZellaScoreRadar trades={trades} initialCapital={initialCapital} />
+      
+      {/* 3D Portfolio Visualization */}
+      <Portfolio3DVisualization trades={trades} initialCapital={initialCapital} />
     </div>
   );
 }
