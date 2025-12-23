@@ -217,43 +217,67 @@ export default function CursorStyleEditor() {
   useEffect(() => {
     if (editorMode !== 'python' || !editorReady || pyodideReady || pyodideLoading) return;
     
+    let isMounted = true;
+    
     const initPyodide = async () => {
       setPyodideLoading(true);
       try {
-        addTerminalOutput('info', '🐍 Loading Python runtime...');
+        addTerminalOutput('info', '🐍 Loading Python runtime (Pyodide)...');
         
-        if ((window as any).loadPyodide) {
-          await loadPyodideRuntime();
+        // Check if already loaded
+        if ((window as any).loadPyodide && pyodideRef.current) {
+          setPyodideReady(true);
+          setPyodideLoading(false);
+          addTerminalOutput('info', '✅ Python runtime already loaded!');
           return;
         }
         
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
+        // Load Pyodide script if not already present
+        if (!(window as any).loadPyodide) {
+          await new Promise<void>((resolve, reject) => {
+            const existingScript = document.querySelector('script[src*="pyodide.js"]');
+            if (existingScript) {
+              resolve();
+              return;
+            }
+            
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
+            script.async = true;
+            
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load Pyodide script'));
+            
+            document.head.appendChild(script);
+          });
+        }
         
-        script.onload = loadPyodideRuntime;
-        script.onerror = () => {
-          addTerminalOutput('error', '❌ Failed to load Pyodide script');
-          setPyodideLoading(false);
-        };
+        if (!isMounted) return;
         
-        document.head.appendChild(script);
-      } catch (err) {
-        addTerminalOutput('error', `Error loading Pyodide: ${err}`);
-        setPyodideLoading(false);
-      }
-    };
-
-    const loadPyodideRuntime = async () => {
-      try {
+        addTerminalOutput('info', '📦 Initializing Python environment...');
+        
         // @ts-ignore
-        const pyodide = await window.loadPyodide({
+        const pyodide = await (window as any).loadPyodide({
           indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/'
         });
         
-        addTerminalOutput('info', '📦 Installing packages...');
-        await pyodide.loadPackage(['numpy', 'pandas', 'matplotlib', 'micropip']);
+        if (!isMounted) return;
         
-        await pyodide.runPythonAsync(`
+        addTerminalOutput('info', '📦 Installing packages (numpy, pandas)...');
+        
+        try {
+          await pyodide.loadPackage(['numpy', 'pandas']);
+        } catch (pkgErr) {
+          console.warn('Some packages failed to load:', pkgErr);
+          addTerminalOutput('info', '⚠️ Some packages may not be available');
+        }
+        
+        if (!isMounted) return;
+        
+        // Setup matplotlib if available
+        try {
+          await pyodide.loadPackage(['matplotlib', 'micropip']);
+          await pyodide.runPythonAsync(`
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -268,20 +292,37 @@ def show_plot():
     buf.close()
     plt.close()
     return img_data
-        `);
+          `);
+        } catch (matplotErr) {
+          console.warn('Matplotlib setup failed:', matplotErr);
+        }
+        
+        if (!isMounted) return;
         
         pyodideRef.current = pyodide;
         setPyodideReady(true);
         setPyodideLoading(false);
-        addTerminalOutput('info', '✅ Python runtime ready!');
+        addTerminalOutput('info', '✅ Python runtime ready! You can now run Python code.');
+        toast.success('Python runtime loaded successfully!');
         
-      } catch (err) {
-        addTerminalOutput('error', `Failed to initialize Python: ${err}`);
-        setPyodideLoading(false);
+      } catch (err: any) {
+        console.error('Pyodide initialization error:', err);
+        if (isMounted) {
+          addTerminalOutput('error', `❌ Failed to load Python: ${err.message || err}`);
+          addTerminalOutput('info', '💡 Try refreshing the page or check your internet connection');
+          setPyodideLoading(false);
+          toast.error('Failed to load Python runtime');
+        }
       }
     };
 
-    initPyodide();
+    // Delay slightly to ensure DOM is ready
+    const timer = setTimeout(initPyodide, 500);
+    
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
   }, [editorMode, editorReady, pyodideReady, pyodideLoading, addTerminalOutput]);
 
   // Handle editor mount
