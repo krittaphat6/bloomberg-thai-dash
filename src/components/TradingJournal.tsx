@@ -383,7 +383,9 @@ export default function TradingJournal() {
         return;
       }
 
-      // Parse webhook messages into trades by pairing BUY->SELL (LONG) or SELL->BUY (SHORT)
+      // Parse webhook messages using state machine logic
+      // BUY = Open Long OR Close Short
+      // SELL = Open Short OR Close Long
       const importedTrades: Trade[] = [];
       
       // Group messages by symbol
@@ -414,74 +416,75 @@ export default function TradingJournal() {
         });
       }
       
-      // Process each symbol - pair BUY with next SELL (LONG trade) or SELL with next BUY (SHORT trade)
+      // Process each symbol using state machine
       for (const [symbol, signals] of messagesBySymbol) {
         // Sort by time ascending
         signals.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
         
-        let i = 0;
-        while (i < signals.length) {
-          const entry = signals[i];
-          const isBuy = entry.action.includes('buy') || entry.action.includes('long');
-          const isSell = entry.action.includes('sell') || entry.action.includes('short');
+        // State machine: track current open position
+        let currentPosition: Trade | null = null;
+        
+        for (const signal of signals) {
+          const isBuy = signal.action.includes('buy') || signal.action.includes('long');
+          const isSell = signal.action.includes('sell') || signal.action.includes('short');
           
-          if (!isBuy && !isSell) {
-            i++;
-            continue;
-          }
+          if (!isBuy && !isSell) continue;
           
-          // Look for the opposite action to close this trade
-          const oppositeAction = isBuy ? 'sell' : 'buy';
-          let exitSignal = null;
-          let exitIndex = -1;
-          
-          for (let j = i + 1; j < signals.length; j++) {
-            const nextAction = signals[j].action;
-            if ((oppositeAction === 'sell' && (nextAction.includes('sell') || nextAction.includes('short'))) ||
-                (oppositeAction === 'buy' && (nextAction.includes('buy') || nextAction.includes('long')))) {
-              exitSignal = signals[j];
-              exitIndex = j;
-              break;
+          if (currentPosition === null) {
+            // No position open - this signal opens a new position
+            currentPosition = {
+              id: `wh-${signal.id}`,
+              date: signal.date,
+              symbol: symbol,
+              side: isBuy ? 'LONG' : 'SHORT',
+              type: 'CFD',
+              entryPrice: signal.price,
+              quantity: signal.quantity,
+              lotSize: signal.lotSize,
+              strategy: 'TradingView Webhook',
+              notes: signal.message,
+              folderId: selectedFolderId === 'default' ? undefined : selectedFolderId,
+              status: 'OPEN',
+              exitPrice: undefined,
+              pnl: undefined,
+              pnlPercentage: undefined
+            };
+          } else {
+            // Position is open - check if this closes it
+            const isLong = currentPosition.side === 'LONG';
+            const closesPosition = (isLong && isSell) || (!isLong && isBuy);
+            
+            if (closesPosition) {
+              // Close the current position
+              currentPosition.exitPrice = signal.price;
+              currentPosition.status = 'CLOSED';
+              
+              // Calculate P&L
+              const priceDiff = isLong 
+                ? (signal.price - currentPosition.entryPrice)  // LONG: sell - buy
+                : (currentPosition.entryPrice - signal.price); // SHORT: entry - exit
+              
+              currentPosition.pnl = priceDiff * currentPosition.quantity * (currentPosition.lotSize || 1);
+              const investment = currentPosition.entryPrice * currentPosition.quantity;
+              currentPosition.pnlPercentage = investment > 0 ? (currentPosition.pnl / investment) * 100 : 0;
+              
+              // Add to trades and reset
+              importedTrades.push(currentPosition);
+              currentPosition = null;
+            } else {
+              // Same direction signal - could be pyramiding (add to position)
+              // For simplicity, treat as averaging into position
+              const totalQty = currentPosition.quantity + signal.quantity;
+              const totalCost = (currentPosition.entryPrice * currentPosition.quantity) + (signal.price * signal.quantity);
+              currentPosition.entryPrice = totalCost / totalQty;
+              currentPosition.quantity = totalQty;
             }
           }
-          
-          const trade: Trade = {
-            id: `wh-${entry.id}`,
-            date: entry.date,
-            symbol: symbol,
-            side: isBuy ? 'LONG' : 'SHORT',
-            type: 'CFD',
-            entryPrice: entry.price,
-            quantity: entry.quantity,
-            lotSize: entry.lotSize,
-            strategy: 'TradingView Webhook',
-            notes: entry.message,
-            folderId: selectedFolderId === 'default' ? undefined : selectedFolderId,
-            status: 'OPEN',
-            exitPrice: undefined,
-            pnl: undefined,
-            pnlPercentage: undefined
-          };
-          
-          if (exitSignal) {
-            trade.exitPrice = exitSignal.price;
-            trade.status = 'CLOSED';
-            
-            // Calculate P&L
-            const priceDiff = isBuy 
-              ? (exitSignal.price - entry.price)  // LONG: sell - buy
-              : (entry.price - exitSignal.price); // SHORT: entry - exit
-            
-            trade.pnl = priceDiff * trade.quantity * trade.lotSize;
-            const investment = entry.price * trade.quantity;
-            trade.pnlPercentage = investment > 0 ? (trade.pnl / investment) * 100 : 0;
-            
-            // Remove the exit signal so it's not used again
-            signals.splice(exitIndex, 1);
-          }
-          
-          importedTrades.push(trade);
-          i++;
+        }
+        
+        // If there's still an open position, add it as OPEN
+        if (currentPosition !== null) {
+          importedTrades.push(currentPosition);
         }
       }
 
