@@ -55,7 +55,7 @@ export const LoadingScreen = ({ onLoadingComplete }: LoadingScreenProps) => {
   }));
 
   return (
-    <div className="fixed inset-0 bg-black flex items-center justify-center z-50 overflow-hidden contain-layout">
+    <div className="fixed inset-0 bg-black flex items-center justify-center z-50 overflow-hidden" style={{ contain: 'layout style paint' }}>
       {/* Bloomberg Terminal Background Pattern */}
       <div className="absolute inset-0 opacity-5" aria-hidden="true">
         <div 
@@ -65,8 +65,7 @@ export const LoadingScreen = ({ onLoadingComplete }: LoadingScreenProps) => {
               linear-gradient(0deg, transparent 24px, hsl(var(--terminal-amber)) 25px, hsl(var(--terminal-amber)) 26px, transparent 27px),
               linear-gradient(90deg, transparent 24px, hsl(var(--terminal-amber)) 25px, hsl(var(--terminal-amber)) 26px, transparent 27px)
             `,
-            backgroundSize: '25px 25px',
-            willChange: 'auto'
+            backgroundSize: '25px 25px'
           }}
         />
       </div>
@@ -86,11 +85,23 @@ export const LoadingScreen = ({ onLoadingComplete }: LoadingScreenProps) => {
         ))}
       </div>
 
-      <div className="relative z-10 flex flex-col items-center space-y-6 max-w-md mx-auto px-4">
+      {/* Main content with fixed dimensions to prevent CLS */}
+      <div 
+        className="relative z-10 flex flex-col items-center max-w-md mx-auto px-4"
+        style={{ 
+          width: '100%',
+          maxWidth: '448px',
+          height: '320px',
+          contain: 'layout'
+        }}
+      >
 
         {/* Terminal Header - Fixed dimensions */}
-        <div className="text-center space-y-2 bg-black border border-terminal-amber/30 px-6 py-4 w-full" style={{ minHeight: '100px' }}>
-          <div className="flex items-center justify-center space-x-2 text-terminal-amber text-xs font-mono">
+        <div 
+          className="text-center bg-black border border-terminal-amber/30 px-6 py-4 w-full" 
+          style={{ height: '100px', contain: 'layout' }}
+        >
+          <div className="flex items-center justify-center space-x-2 text-terminal-amber text-xs font-mono mb-2">
             <div className="flex space-x-1">
               <div className="w-2 h-2 bg-terminal-green rounded-full"></div>
               <div className="w-2 h-2 bg-terminal-amber rounded-full"></div>
@@ -101,32 +112,34 @@ export const LoadingScreen = ({ onLoadingComplete }: LoadingScreenProps) => {
           <h1 className="text-3xl font-bold text-terminal-amber font-mono tracking-wider">
             ABLE TERMINAL
           </h1>
-          <div className="text-terminal-cyan text-xs font-mono tracking-wide border-t border-terminal-amber/20 pt-2">
+          <div className="text-terminal-cyan text-xs font-mono tracking-wide border-t border-terminal-amber/20 pt-2 mt-2">
             PROFESSIONAL TRADING PLATFORM v2.1
           </div>
         </div>
 
-        {/* Progress Section - Fixed height to prevent layout shift */}
-        <div className="w-full bg-black border border-terminal-amber/30 p-4" style={{ minHeight: '120px' }}>
-          {/* System Status */}
+        {/* Progress Section - Fixed height */}
+        <div 
+          className="w-full bg-black border border-terminal-amber/30 p-4 mt-4" 
+          style={{ height: '120px', contain: 'layout' }}
+        >
           <div className="flex justify-between items-center text-xs font-mono mb-3">
             <span className="text-terminal-green">SYSTEM STATUS:</span>
             <span className="text-terminal-amber">ONLINE</span>
           </div>
           
-          {/* Progress Bar - Fixed dimensions */}
+          {/* Progress Bar */}
           <div className="relative h-3 bg-black border border-terminal-amber/30 mb-3 overflow-hidden">
             <div 
               className="absolute left-0 top-0 h-full bg-gradient-to-r from-terminal-green to-terminal-amber"
-              style={{ width: `${progress}%`, transition: 'width 200ms ease-out' }}
+              style={{ width: `${progress}%`, transform: 'translateZ(0)' }}
             />
           </div>
           
-          {/* Loading Details - Fixed height */}
-          <div className="space-y-1" style={{ minHeight: '40px' }}>
+          {/* Loading Details */}
+          <div style={{ height: '40px' }}>
             <div className="flex justify-between items-center text-xs font-mono">
-              <span className="text-terminal-cyan truncate max-w-[200px]">&gt; {loadingText}</span>
-              <span className="text-terminal-amber w-12 text-right">[{Math.round(progress)}%]</span>
+              <span className="text-terminal-cyan truncate" style={{ maxWidth: '200px' }}>&gt; {loadingText}</span>
+              <span className="text-terminal-amber" style={{ width: '48px', textAlign: 'right' }}>[{Math.round(progress)}%]</span>
             </div>
             <div className="flex justify-between items-center text-xs font-mono text-terminal-green/70">
               <span>MEMORY: 2.1GB / 8GB</span>
@@ -136,7 +149,10 @@ export const LoadingScreen = ({ onLoadingComplete }: LoadingScreenProps) => {
         </div>
 
         {/* Terminal Command Line */}
-        <div className="flex items-center space-x-2 font-mono text-terminal-green bg-black border border-terminal-green/30 px-4 py-2 w-full">
+        <div 
+          className="flex items-center space-x-2 font-mono text-terminal-green bg-black border border-terminal-green/30 px-4 py-2 w-full mt-4"
+          style={{ height: '40px' }}
+        >
           <span className="text-terminal-amber">able@terminal:~$</span>
           <span className="text-terminal-green">initializing</span>
           <span className="text-terminal-amber">_</span>
