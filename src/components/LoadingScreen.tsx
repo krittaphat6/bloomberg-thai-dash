@@ -21,7 +21,7 @@ export const LoadingScreen = ({ onLoadingComplete }: LoadingScreenProps) => {
     let currentProgress = 0;
 
     const interval = setInterval(() => {
-      currentProgress += Math.random() * 15 + 5;
+      currentProgress += Math.random() * 25 + 15; // Faster progress
       
       if (currentProgress >= 100) {
         currentProgress = 100;
@@ -30,7 +30,7 @@ export const LoadingScreen = ({ onLoadingComplete }: LoadingScreenProps) => {
         
         setTimeout(() => {
           onLoadingComplete();
-        }, 800);
+        }, 300); // Reduced delay
         
         clearInterval(interval);
       } else {
@@ -42,7 +42,7 @@ export const LoadingScreen = ({ onLoadingComplete }: LoadingScreenProps) => {
           setLoadingText(loadingMessages[messageIndex]);
         }
       }
-    }, 200);
+    }, 100); // Faster interval
 
     return () => clearInterval(interval);
   }, [onLoadingComplete]);
