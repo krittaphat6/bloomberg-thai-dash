@@ -328,6 +328,177 @@ export default function TradingJournal() {
     });
   };
 
+  // Fetch webhook rooms from Messenger
+  const fetchWebhookRooms = async () => {
+    setIsLoadingWebhook(true);
+    try {
+      const { data: rooms, error } = await supabase
+        .from('chat_rooms')
+        .select('*')
+        .eq('type', 'webhook');
+      
+      if (error) throw error;
+      
+      setWebhookRooms(rooms || []);
+      setShowWebhookImport(true);
+    } catch (error) {
+      console.error('Error fetching webhook rooms:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch webhook rooms",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingWebhook(false);
+    }
+  };
+
+  // Import trades from webhook room
+  const importWebhookTrades = async () => {
+    if (!selectedWebhookRoom) {
+      toast({
+        title: "Error",
+        description: "Please select a webhook room",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoadingWebhook(true);
+    try {
+      const { data: messages, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('room_id', selectedWebhookRoom)
+        .eq('message_type', 'webhook')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      if (!messages || messages.length === 0) {
+        toast({
+          title: "No Trades",
+          description: "No webhook trades found in this room"
+        });
+        return;
+      }
+
+      // Track open positions for matching
+      const openPositions: Map<string, Trade> = new Map();
+      const importedTrades: Trade[] = [];
+
+      for (const msg of messages) {
+        const webhookData = msg.webhook_data as any;
+        if (!webhookData?.parsed_trade) continue;
+
+        const signal = webhookData.parsed_trade;
+        const positionKey = `${signal.symbol}-${signal.side}`;
+
+        // Check if this is an opening or closing action
+        const isOpenAction = ['OPEN', 'BUY', 'SELL'].includes(signal.action);
+        const isCloseAction = ['CLOSE', 'TAKE_PROFIT', 'STOP_LOSS'].includes(signal.action);
+
+        if (isOpenAction) {
+          // Create new open position
+          const trade: Trade = {
+            id: signal.id || `wh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            date: signal.date || new Date(msg.created_at).toISOString().split('T')[0],
+            symbol: signal.symbol,
+            side: signal.side,
+            type: signal.type || 'CFD',
+            entryPrice: signal.price,
+            quantity: signal.quantity || 1,
+            lotSize: signal.lotSize,
+            status: 'OPEN',
+            strategy: signal.strategy || 'TradingView Webhook',
+            notes: signal.message,
+            folderId: selectedFolderId === 'default' ? undefined : selectedFolderId
+          };
+          
+          openPositions.set(positionKey, trade);
+          importedTrades.push(trade);
+        } else if (isCloseAction) {
+          // Find matching open position
+          const matchingTrade = openPositions.get(positionKey);
+          
+          if (matchingTrade) {
+            // Close the position
+            matchingTrade.exitPrice = signal.price;
+            matchingTrade.status = 'CLOSED';
+            
+            // Calculate PnL
+            if (signal.pnl !== undefined) {
+              matchingTrade.pnl = signal.pnl;
+              matchingTrade.pnlPercentage = signal.pnlPercentage;
+            } else {
+              // Calculate PnL based on entry/exit
+              const priceDiff = matchingTrade.side === 'LONG' 
+                ? (signal.price - matchingTrade.entryPrice)
+                : (matchingTrade.entryPrice - signal.price);
+              
+              matchingTrade.pnl = priceDiff * (matchingTrade.quantity || 1) * (matchingTrade.lotSize || 1);
+              const investment = matchingTrade.entryPrice * (matchingTrade.quantity || 1);
+              matchingTrade.pnlPercentage = investment > 0 ? (matchingTrade.pnl / investment) * 100 : 0;
+            }
+            
+            // Add close note
+            matchingTrade.notes = `${matchingTrade.notes || ''} | Closed: ${signal.action}`.trim();
+            
+            // Remove from open positions
+            openPositions.delete(positionKey);
+          } else {
+            // No matching open position - create a closed trade directly
+            const closedTrade: Trade = {
+              id: signal.id || `wh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              date: signal.date || new Date(msg.created_at).toISOString().split('T')[0],
+              symbol: signal.symbol,
+              side: signal.side,
+              type: signal.type || 'CFD',
+              entryPrice: signal.price,
+              exitPrice: signal.price,
+              quantity: signal.quantity || 1,
+              lotSize: signal.lotSize,
+              status: 'CLOSED',
+              strategy: signal.strategy || 'TradingView Webhook',
+              pnl: signal.pnl,
+              pnlPercentage: signal.pnlPercentage,
+              notes: `Closed trade: ${signal.action}`,
+              folderId: selectedFolderId === 'default' ? undefined : selectedFolderId
+            };
+            importedTrades.push(closedTrade);
+          }
+        }
+      }
+
+      // Merge with existing trades (avoid duplicates by ID)
+      const existingIds = new Set(trades.map(t => t.id));
+      const newTrades = importedTrades.filter(t => !existingIds.has(t.id));
+      
+      // Update existing trades that might have been closed
+      const updatedTrades = trades.map(existingTrade => {
+        const matchingImport = importedTrades.find(t => t.id === existingTrade.id);
+        return matchingImport || existingTrade;
+      });
+
+      setTrades([...updatedTrades, ...newTrades.filter(t => !updatedTrades.find(u => u.id === t.id))]);
+      setShowWebhookImport(false);
+      
+      toast({
+        title: "Import Successful!",
+        description: `Imported ${newTrades.length} new trades, updated ${importedTrades.length - newTrades.length} existing`
+      });
+    } catch (error) {
+      console.error('Error importing webhook trades:', error);
+      toast({
+        title: "Error",
+        description: "Failed to import webhook trades",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingWebhook(false);
+    }
+  };
+
   return (
     <div className="w-full min-h-screen flex bg-background text-xs">
       {/* Folder Sidebar */}
@@ -430,6 +601,15 @@ export default function TradingJournal() {
             >
               <Trash2 className="h-3 w-3 mr-1" />
               Clear
+            </Button>
+            <Button 
+              onClick={() => fetchWebhookRooms()} 
+              variant="outline" 
+              size="sm"
+              className="bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+            >
+              <Webhook className="h-3 w-3 mr-1" />
+              Webhook
             </Button>
             <Button 
               onClick={() => setShowCSVImport(true)} 
@@ -775,6 +955,78 @@ export default function TradingJournal() {
                 </Button>
               </div>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Webhook Import Dialog */}
+      <Dialog open={showWebhookImport} onOpenChange={setShowWebhookImport}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-400">
+              <Webhook className="h-5 w-5" />
+              Import from Webhook Room
+            </DialogTitle>
+            <DialogDescription>
+              Import trades from TradingView webhook signals
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {isLoadingWebhook ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin text-blue-400" />
+                <span className="ml-2 text-muted-foreground">Loading...</span>
+              </div>
+            ) : webhookRooms.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Webhook className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No webhook rooms found</p>
+                <p className="text-xs mt-2">Create a webhook room in MESSENGER first</p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <Label>Select Webhook Room</Label>
+                  <Select value={selectedWebhookRoom || ''} onValueChange={setSelectedWebhookRoom}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select a webhook room..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {webhookRooms.map(room => (
+                        <SelectItem key={room.id} value={room.id}>
+                          🔗 {room.name || `Webhook Room ${room.id.slice(0, 8)}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20 text-sm">
+                  <p className="font-medium text-blue-400 mb-2">📊 How it works:</p>
+                  <ul className="space-y-1 text-muted-foreground text-xs">
+                    <li>• Fetches all webhook signals from the selected room</li>
+                    <li>• Matches OPEN/BUY/SELL with CLOSE/TP/SL actions</li>
+                    <li>• Calculates P&L based on entry/exit prices</li>
+                    <li>• Imports trades into current Trading Room</li>
+                  </ul>
+                </div>
+
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setShowWebhookImport(false)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={importWebhookTrades}
+                    disabled={!selectedWebhookRoom || isLoadingWebhook}
+                    className="bg-blue-500 hover:bg-blue-600 text-white"
+                  >
+                    <Webhook className="h-4 w-4 mr-2" />
+                    Import Trades
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
