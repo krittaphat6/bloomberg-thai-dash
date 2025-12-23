@@ -4,10 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { ExtractedRow } from './BloombergProcessor';
+import { ParsedBloombergRow } from './BloombergOCREngine';
 
 interface ResultsPreviewProps {
-  results: ExtractedRow[];
+  results: ParsedBloombergRow[];
   onEdit: (rowIndex: number, column: string, newValue: string) => void;
   lowConfidenceCells: Array<{
     row: number;
@@ -27,20 +27,28 @@ export const ResultsPreview: React.FC<ResultsPreviewProps> = ({
   const [hoveredCell, setHoveredCell] = useState<{ row: number; column: string } | null>(null);
 
   const columns = [
-    'NO', 'Security', 'Ticker', 'Source', 'Position', 'Pos Chg', '% Out', 'Curr MV', 'Filing Date'
+    { key: 'rank', label: 'Rk' },
+    { key: 'security', label: 'Security' },
+    { key: 'ticker', label: 'Ticker' },
+    { key: 'source', label: 'Source' },
+    { key: 'position', label: 'Position' },
+    { key: 'posChg', label: 'Pos Chg' },
+    { key: 'pctOut', label: '% Out' },
+    { key: 'currMV', label: 'Curr MV' },
+    { key: 'filingDate', label: 'Filing Date' }
   ];
 
-  const isLowConfidence = (row: number, column: string): boolean => {
-    return lowConfidenceCells.some(c => c.row === row && c.column === column);
+  const isLowConfidence = (rowIdx: number, column: string): boolean => {
+    return lowConfidenceCells.some(c => c.row === rowIdx && c.column === column);
   };
 
-  const getConfidence = (row: number, column: string): number | undefined => {
-    const cell = lowConfidenceCells.find(c => c.row === row && c.column === column);
+  const getConfidence = (rowIdx: number, column: string): number | undefined => {
+    const cell = lowConfidenceCells.find(c => c.row === rowIdx && c.column === column);
     return cell?.confidence;
   };
 
-  const handleStartEdit = (rowNumber: number, column: string, currentValue: string) => {
-    setEditingCell({ row: rowNumber, column });
+  const handleStartEdit = (rowIdx: number, column: string, currentValue: string) => {
+    setEditingCell({ row: rowIdx, column });
     setEditValue(currentValue);
   };
 
@@ -57,26 +65,27 @@ export const ResultsPreview: React.FC<ResultsPreviewProps> = ({
     setEditValue('');
   };
 
-  const getCellValue = (row: ExtractedRow, column: string): string => {
-    const cell = row.cells.find(c => c.column === column);
-    return cell?.value || '';
+  const getCellValue = (row: ParsedBloombergRow, key: string): string => {
+    return (row as any)[key] || '';
   };
 
-  const getCellColor = (row: ExtractedRow, column: string): string => {
-    const cell = row.cells.find(c => c.column === column);
-    const color = cell?.originalColor;
+  const getCellColor = (row: ParsedBloombergRow, key: string): string => {
+    const value = getCellValue(row, key);
     
-    if (color === 'green') return 'text-terminal-green';
-    if (color === 'red') return 'text-destructive';
-    if (color === 'yellow') return 'text-terminal-amber';
+    // Color positive/negative values
+    if (key === 'posChg') {
+      if (value.startsWith('+')) return 'text-terminal-green';
+      if (value.startsWith('-')) return 'text-destructive';
+    }
+    
     return 'text-foreground';
   };
 
   // Calculate stats
   const totalCells = results.length * columns.length;
-  const avgConfidence = lowConfidenceCells.length > 0
-    ? Math.round((1 - (lowConfidenceCells.length / totalCells)) * 100)
-    : 95;
+  const avgConfidence = results.length > 0
+    ? Math.round(results.reduce((sum, r) => sum + r.confidence, 0) / results.length * 100)
+    : 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -84,7 +93,7 @@ export const ResultsPreview: React.FC<ResultsPreviewProps> = ({
       <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
         <div className="flex items-center gap-4 text-xs">
           <span className="text-terminal-amber">
-            แสดง {Math.min(results.length, 10)} จาก {results.length} แถว
+            แสดง {Math.min(results.length, 50)} จาก {results.length} แถว
           </span>
           <span className="text-terminal-cyan">
             • {avgConfidence}% ความแม่นยำเฉลี่ย
@@ -100,45 +109,46 @@ export const ResultsPreview: React.FC<ResultsPreviewProps> = ({
 
       {/* Table */}
       <ScrollArea className="flex-1">
-        <div className="min-w-[800px]">
+        <div className="min-w-[900px]">
           {/* Table Header */}
           <div className="grid grid-cols-9 gap-1 px-2 py-2 bg-terminal-amber/10 border-b border-border sticky top-0">
             {columns.map(col => (
               <div 
-                key={col} 
+                key={col.key} 
                 className="text-[10px] font-bold text-terminal-amber truncate px-1"
               >
-                {col}
+                {col.label}
               </div>
             ))}
           </div>
 
           {/* Table Body */}
           <div className="divide-y divide-border/30">
-            {results.slice(0, 50).map((row) => (
+            {results.slice(0, 50).map((row, rowIdx) => (
               <div 
-                key={row.rowNumber}
+                key={rowIdx}
                 className="grid grid-cols-9 gap-1 px-2 py-1.5 hover:bg-muted/30 transition-colors"
               >
-                {columns.map(column => {
-                  const value = getCellValue(row, column);
-                  const isEditing = editingCell?.row === row.rowNumber && editingCell?.column === column;
-                  const isLow = isLowConfidence(row.rowNumber, column);
-                  const confidence = getConfidence(row.rowNumber, column);
-                  const isHovered = hoveredCell?.row === row.rowNumber && hoveredCell?.column === column;
+                {columns.map(({ key, label }) => {
+                  const value = getCellValue(row, key);
+                  const isEditing = editingCell?.row === rowIdx && editingCell?.column === key;
+                  const isLow = isLowConfidence(rowIdx, key);
+                  const confidence = getConfidence(rowIdx, key);
+                  const isHovered = hoveredCell?.row === rowIdx && hoveredCell?.column === key;
                   
                   return (
                     <div
-                      key={column}
+                      key={key}
                       className={cn(
                         'relative text-[11px] px-1 py-0.5 rounded truncate',
                         isLow && 'bg-terminal-amber/20 border border-terminal-amber/30',
                         !isLow && 'hover:bg-muted/50',
-                        getCellColor(row, column)
+                        getCellColor(row, key)
                       )}
-                      onMouseEnter={() => setHoveredCell({ row: row.rowNumber, column })}
+                      onMouseEnter={() => setHoveredCell({ row: rowIdx, column: key })}
                       onMouseLeave={() => setHoveredCell(null)}
-                      onDoubleClick={() => handleStartEdit(row.rowNumber, column, value)}
+                      onDoubleClick={() => handleStartEdit(rowIdx, key, value)}
+                      title={value}
                     >
                       {isEditing ? (
                         <div className="flex items-center gap-1">
