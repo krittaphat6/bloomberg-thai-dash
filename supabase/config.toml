@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.send-calendar-reminder]
 verify_jwt = false
+
+[functions.economic-calendar]
+verify_jwt = false
+
+[functions.news-aggregator]
+verify_jwt = false

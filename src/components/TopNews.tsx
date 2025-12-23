@@ -4,7 +4,7 @@ import {
   RefreshCw, Search, Flame, Clock, ExternalLink, Twitter, 
   MessageCircle, Globe, ChevronUp, Zap, Brain,
   TrendingUp, TrendingDown, Minus, Sparkles, Radio, Newspaper,
-  Settings, X, Key, AlertTriangle
+  Settings, X, Key, AlertTriangle, Database
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchGoldNews, GoldNewsItem } from '@/services/goldNewsService';
@@ -14,6 +14,7 @@ import {
   hasGroqApiKey, 
   clearGroqApiKey 
 } from '@/services/llmAnalysisService';
+import { supabase } from '@/integrations/supabase/client';
 
 // ============ TYPES ============
 interface NewsItem {
@@ -53,7 +54,16 @@ const NEWS_SOURCES = {
   finnhub: { name: 'Finnhub', icon: TrendingUp, color: 'text-terminal-blue' },
   gnews: { name: 'GNews', icon: Newspaper, color: 'text-terminal-cyan' },
   news: { name: 'News', icon: Globe, color: 'text-terminal-cyan' },
-  twitter: { name: 'X', icon: Twitter, color: 'text-terminal-blue' }
+  twitter: { name: 'X', icon: Twitter, color: 'text-terminal-blue' },
+  CryptoCompare: { name: 'CryptoCompare', icon: Globe, color: 'text-terminal-green' },
+  'r/cryptocurrency': { name: 'r/crypto', icon: MessageCircle, color: 'text-terminal-orange' },
+  'r/stocks': { name: 'r/stocks', icon: MessageCircle, color: 'text-terminal-orange' },
+  'r/wallstreetbets': { name: 'WSB', icon: MessageCircle, color: 'text-terminal-orange' },
+  'r/investing': { name: 'r/invest', icon: MessageCircle, color: 'text-terminal-orange' },
+  'r/Forex': { name: 'r/forex', icon: MessageCircle, color: 'text-terminal-orange' },
+  'r/Gold': { name: 'r/gold', icon: MessageCircle, color: 'text-terminal-amber' },
+  'r/Economics': { name: 'r/econ', icon: MessageCircle, color: 'text-terminal-orange' },
+  'Hacker News': { name: 'HN', icon: Zap, color: 'text-terminal-amber' },
 };
 
 // ============ SENTIMENT ANALYSIS ============
@@ -310,7 +320,6 @@ const TopNews = () => {
     const results: NewsItem[] = [];
 
     if (view === 'gold') {
-      // Fetch gold-specific news
       const goldNews = await fetchGoldNews();
       const converted: NewsItem[] = goldNews.map((g: GoldNewsItem) => ({
         id: g.id,
@@ -329,7 +338,44 @@ const TopNews = () => {
       return converted;
     }
 
-    // Regular news aggregation
+    // Try backend news aggregator first
+    try {
+      const categoryMap: Record<string, string> = {
+        'all': 'all',
+        'crypto': 'crypto', 
+        'forex': 'forex',
+        'stocks': 'stocks'
+      };
+      
+      const { data, error } = await supabase.functions.invoke('news-aggregator', {
+        body: { category: categoryMap[view] || 'all', query, useAI: true }
+      });
+      
+      if (!error && data?.success && data.news?.length > 0) {
+        return data.news.map((n: any) => ({
+          id: n.id,
+          title: n.title,
+          source: n.source as NewsItem['source'],
+          url: n.url,
+          timestamp: new Date(n.publishedAt).getTime(),
+          score: 0,
+          sentiment: n.sentiment || 'neutral',
+          sentimentScore: n.sentiment === 'bullish' ? 50 : n.sentiment === 'bearish' ? -50 : 0,
+          relevance: n.importance === 'high' ? 90 : n.importance === 'medium' ? 60 : 30,
+          author: n.source,
+          category: n.category,
+          summary: n.description,
+          imageUrl: n.imageUrl,
+          relatedTickers: extractTickers(n.title),
+          isLLMAnalyzed: !!n.description,
+          llmSummary: n.description,
+        }));
+      }
+    } catch (e) {
+      console.error('Backend news error:', e);
+    }
+
+    // Fallback to direct fetching
     const fetchers = await Promise.allSettled([
       fetchReddit(query),
       fetchHackerNews(query),
@@ -341,7 +387,6 @@ const TopNews = () => {
       if (r.status === 'fulfilled') results.push(...r.value);
     });
 
-    // Remove duplicates
     const seen = new Set<string>();
     const unique = results.filter(n => {
       const key = n.title.toLowerCase().substring(0, 50);
