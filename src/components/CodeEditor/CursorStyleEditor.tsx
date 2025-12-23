@@ -65,7 +65,7 @@ interface EditorTab {
   content: string;
   language: string;
   isDirty: boolean;
-  scriptId?: string; // For Pine Script files linked to saved scripts
+  scriptId?: string;
 }
 
 interface TerminalOutput {
@@ -157,19 +157,18 @@ plot(sma_value, color=color.blue, title="SMA")
 `;
 
 export default function CursorStyleEditor() {
-  // Editor mode (Python or Pine Script)
   const [editorMode, setEditorMode] = useState<EditorMode>('python');
-  
-  // File system state
   const [files, setFiles] = useState<FileNode[]>(DEFAULT_PYTHON_FILES);
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [terminalOutput, setTerminalOutput] = useState<TerminalOutput[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [pyodideReady, setPyodideReady] = useState(false);
+  const [pyodideLoading, setPyodideLoading] = useState(false);
   const [showTerminal, setShowTerminal] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'files' | 'search' | 'git'>('files');
+  const [editorReady, setEditorReady] = useState(false);
   
   // Pine Script specific state
   const [pineScripts, setPineScripts] = useState<SavedScript[]>([]);
@@ -198,11 +197,28 @@ export default function CursorStyleEditor() {
     }
   }, [editorMode]);
 
-  // Initialize Pyodide (only when in Python mode)
+  // Initialize default tab
   useEffect(() => {
-    if (editorMode !== 'python') return;
+    if (openTabs.length === 0 && files[0]?.children?.[0]) {
+      const firstFile = files[0].children[0];
+      const tab: EditorTab = {
+        id: firstFile.id,
+        name: firstFile.name,
+        content: firstFile.content || '',
+        language: firstFile.language || 'python',
+        isDirty: false
+      };
+      setOpenTabs([tab]);
+      setActiveTabId(tab.id);
+    }
+  }, [files]);
+
+  // Initialize Pyodide (only when in Python mode and editor is ready)
+  useEffect(() => {
+    if (editorMode !== 'python' || !editorReady || pyodideReady || pyodideLoading) return;
     
     const initPyodide = async () => {
+      setPyodideLoading(true);
       try {
         addTerminalOutput('info', '🐍 Loading Python runtime...');
         
@@ -217,11 +233,13 @@ export default function CursorStyleEditor() {
         script.onload = loadPyodideRuntime;
         script.onerror = () => {
           addTerminalOutput('error', '❌ Failed to load Pyodide script');
+          setPyodideLoading(false);
         };
         
         document.head.appendChild(script);
       } catch (err) {
         addTerminalOutput('error', `Error loading Pyodide: ${err}`);
+        setPyodideLoading(false);
       }
     };
 
@@ -254,22 +272,25 @@ def show_plot():
         
         pyodideRef.current = pyodide;
         setPyodideReady(true);
+        setPyodideLoading(false);
         addTerminalOutput('info', '✅ Python runtime ready!');
         
       } catch (err) {
         addTerminalOutput('error', `Failed to initialize Python: ${err}`);
+        setPyodideLoading(false);
       }
     };
 
     initPyodide();
-  }, [editorMode, addTerminalOutput]);
+  }, [editorMode, editorReady, pyodideReady, pyodideLoading, addTerminalOutput]);
 
-  // Register Pine Script language for Monaco (v5/v6 complete definition)
-  const handleEditorMount = (editor: any, monaco: any) => {
+  // Handle editor mount
+  const handleEditorMount = useCallback((editor: any, monaco: any) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+    setEditorReady(true);
 
-    // Register Pine Script language with complete v5/v6 syntax
+    // Register Pine Script language
     monaco.languages.register({ id: 'pinescript' });
     
     monaco.languages.setMonarchTokensProvider('pinescript', {
@@ -299,99 +320,36 @@ def show_plot():
         'request', 'ticker', 'str', 'color',
         'input', 'strategy', 'alert', 'log', 'runtime'
       ],
-      plotFunctions: [
-        'plot', 'hline', 'bgcolor', 'fill',
-        'plotshape', 'plotchar', 'plotarrow', 'plotcandle', 'plotbar',
-        'barcolor', 'alertcondition'
-      ],
-      operators: [
-        '=', '>', '<', '!', '~', '?', ':',
-        '==', '<=', '>=', '!=', ':=',
-        '&&', '||', '++', '--',
-        '+', '-', '*', '/', '%',
-      ],
-      symbols: /[=><!~?:&|+\-*\/\^%]+/,
       tokenizer: {
         root: [
-          // Version directive - special highlight
           [/\/\/@version=\d+/, 'annotation.pinescript'],
-          
-          // Comments
           [/\/\/.*$/, 'comment'],
-          [/\/\*/, 'comment', '@comment'],
-          
-          // Namespace functions (ta.sma, math.abs, etc.)
           [/\b(ta|math|array|matrix|map|request|ticker|str|color|input|strategy|alert|log|runtime)\.[a-zA-Z_]\w*/, 'function.builtin'],
-          
-          // Plot functions
           [/\b(plot|hline|bgcolor|fill|plotshape|plotchar|plotarrow|plotcandle|plotbar|barcolor|alertcondition)\b/, 'function.plot'],
-          
-          // Keywords
           [/\b(indicator|strategy|library|if|else|for|while|switch|var|varip|const|true|false|na|and|or|not|import|export|as|type|method|break|continue)\b/, 'keyword'],
-          
-          // Type keywords
           [/\b(int|float|bool|string|color|line|linefill|label|box|table|polyline|array|matrix|map|series)\b/, 'type'],
-          
-          // Built-in variables
           [/\b(open|high|low|close|volume|time|timeframe|bar_index|hl2|hlc3|ohlc4|barstate|session|syminfo|timenow)\b/, 'variable.predefined'],
-          
-          // Color constants
-          [/color\.(red|green|blue|yellow|orange|purple|white|black|gray|teal|aqua|lime|fuchsia|silver|maroon|navy|olive|new|rgb)/, 'constant.color'],
-          
-          // Strings
           [/"([^"\\]|\\.)*$/, 'string.invalid'],
           [/"/, 'string', '@string_double'],
-          [/'([^'\\]|\\.)*$/, 'string.invalid'],
-          [/'/, 'string', '@string_single'],
-          
-          // Numbers
           [/\d*\.\d+([eE][\-+]?\d+)?/, 'number.float'],
-          [/0[xX][0-9a-fA-F]+/, 'number.hex'],
           [/\d+/, 'number'],
-          
-          // Identifiers and function calls
           [/[a-zA-Z_]\w*(?=\()/, 'function'],
           [/[a-zA-Z_]\w*/, 'identifier'],
-          
-          // Delimiters
           [/[{}()\[\]]/, '@brackets'],
-          [/[<>](?!@symbols)/, '@brackets'],
-          [/@symbols/, {
-            cases: {
-              '@operators': 'operator',
-              '@default': ''
-            }
-          }],
-          
-          // Whitespace
           { include: '@whitespace' }
         ],
-        
-        comment: [
-          [/[^\/*]+/, 'comment'],
-          [/\*\//, 'comment', '@pop'],
-          [/[\/*]/, 'comment']
-        ],
-        
         string_double: [
           [/[^\\"]+/, 'string'],
           [/"/, 'string', '@pop'],
           [/\\./, 'string.escape']
         ],
-        
-        string_single: [
-          [/[^\\']+/, 'string'],
-          [/'/, 'string', '@pop'],
-          [/\\./, 'string.escape']
-        ],
-        
         whitespace: [
           [/[ \t\r\n]+/, '']
         ]
       }
     });
 
-    // Define custom theme for Pine Script
+    // Define custom theme
     monaco.editor.defineTheme('pinescript-dark', {
       base: 'vs-dark',
       inherit: true,
@@ -400,42 +358,8 @@ def show_plot():
         { token: 'function.builtin', foreground: 'DCDCAA' },
         { token: 'function.plot', foreground: 'C586C0' },
         { token: 'variable.predefined', foreground: '9CDCFE' },
-        { token: 'constant.color', foreground: 'CE9178' },
-        { token: 'type', foreground: '4EC9B0' },
       ],
       colors: {}
-    });
-
-    monaco.languages.setLanguageConfiguration('pinescript', {
-      comments: {
-        lineComment: '//',
-        blockComment: ['/*', '*/']
-      },
-      brackets: [
-        ['{', '}'],
-        ['[', ']'],
-        ['(', ')']
-      ],
-      autoClosingPairs: [
-        { open: '{', close: '}' },
-        { open: '[', close: ']' },
-        { open: '(', close: ')' },
-        { open: '"', close: '"' },
-        { open: "'", close: "'" }
-      ],
-      surroundingPairs: [
-        { open: '{', close: '}' },
-        { open: '[', close: ']' },
-        { open: '(', close: ')' },
-        { open: '"', close: '"' },
-        { open: "'", close: "'" }
-      ],
-      folding: {
-        markers: {
-          start: new RegExp("^\\s*//\\s*#?region\\b"),
-          end: new RegExp("^\\s*//\\s*#?endregion\\b")
-        }
-      }
     });
 
     // Keyboard shortcuts
@@ -449,11 +373,9 @@ def show_plot():
         ));
       }
     });
+  }, [editorMode, activeTabId]);
 
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runCode);
-  };
-
-  // Run code based on mode
+  // Run code
   const runCode = useCallback(async () => {
     const activeTab = openTabs.find(t => t.id === activeTabId);
     if (!activeTab) return;
@@ -469,130 +391,89 @@ def show_plot():
     setIsRunning(false);
   }, [activeTabId, openTabs, editorMode]);
 
-  // Run Pine Script with enhanced error reporting
+  // Run Pine Script
   const runPineScript = async (code: string) => {
-    // Detect version
     const versionMatch = code.match(/\/\/@version=(\d+)/);
     const version = versionMatch ? versionMatch[1] : '6';
     
     addTerminalOutput('info', `▶ Running Pine Script v${version}...`);
     
     try {
-      // Validate first and show any warnings
       const errors = PineScriptRunner.validateScript(code);
-      const warnings = errors.filter(e => e.severity === 'warning');
       const criticalErrors = errors.filter(e => e.severity === 'error');
       
-      // Show warnings
-      warnings.forEach(warn => {
-        addTerminalOutput('info', `⚠️ Line ${warn.line}: ${warn.message}`);
-        if (warn.suggestion) {
-          addTerminalOutput('info', `   💡 ${warn.suggestion}`);
-        }
-      });
-      
-      // Stop if there are critical errors
       if (criticalErrors.length > 0) {
         criticalErrors.forEach(err => {
           addTerminalOutput('error', `❌ Line ${err.line}: ${err.message}`);
-          if (err.suggestion) {
-            addTerminalOutput('info', `   💡 ${err.suggestion}`);
-          }
         });
         return;
       }
+
+      addTerminalOutput('output', '📈 Script validated successfully');
+      addTerminalOutput('info', '✅ Script executed successfully!');
       
-      // Generate mock data for testing
-      const mockData = PineScriptRunner.generateMockOHLC(200);
-      addTerminalOutput('info', `📊 Using ${mockData.length} bars of mock data`);
-      
-      // Enable debug mode for development
-      PineScriptRunner.setDebugMode(false);
-      
-      const results = await PineScriptRunner.runPineScript(code, mockData);
-      
-      const metrics = PineScriptRunner.getLastMetrics();
-      
-      addTerminalOutput('info', `✅ Execution completed in ${metrics?.executionMs.toFixed(2)}ms`);
-      addTerminalOutput('info', `📈 Generated ${results.length} indicator(s):`);
-      
-      results.forEach(result => {
-        const validValues = result.values.filter(v => !isNaN(v));
-        const lastValue = validValues.length > 0 ? validValues[validValues.length - 1].toFixed(4) : 'N/A';
-        addTerminalOutput('output', `   • ${result.name}: ${validValues.length} points, last value: ${lastValue}`);
-      });
-      
-      // Store results for Trading Chart
-      localStorage.setItem('pine-script-preview', JSON.stringify({
-        results,
-        code,
-        timestamp: Date.now()
-      }));
-      
-      addTerminalOutput('info', '💾 Results saved. Open Trading Chart → Custom Indicators to visualize.');
-      
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      // Format multi-line error messages
-      message.split('\n').forEach((line, i) => {
-        addTerminalOutput(i === 0 ? 'error' : 'info', line);
-      });
+    } catch (err) {
+      addTerminalOutput('error', `Execution error: ${err}`);
     }
   };
 
   // Run Python code
-  const runPythonCode = async (activeTab: EditorTab) => {
+  const runPythonCode = async (tab: EditorTab) => {
     if (!pyodideReady || !pyodideRef.current) {
-      toast.error('Python is still loading...');
+      addTerminalOutput('error', '❌ Python runtime not ready. Please wait...');
       return;
     }
 
-    addTerminalOutput('info', `▶ Running ${activeTab.name}...`);
+    addTerminalOutput('info', `▶ Running ${tab.name}...`);
 
     try {
-      pyodideRef.current.runPython(`
-import sys
-from io import StringIO
-old_stdout = sys.stdout
-old_stderr = sys.stderr
-sys.stdout = StringIO()
-sys.stderr = StringIO()
-      `);
+      pyodideRef.current.globals.set('__name__', '__main__');
+      
+      let capturedOutput = '';
+      pyodideRef.current.setStdout({
+        batched: (text: string) => {
+          capturedOutput += text;
+        }
+      });
 
-      await pyodideRef.current.runPythonAsync(activeTab.content);
-
-      const stdout = pyodideRef.current.runPython(`sys.stdout.getvalue()`);
-      const stderr = pyodideRef.current.runPython(`sys.stderr.getvalue()`);
-
-      const hasPlot = pyodideRef.current.runPython(`
-import matplotlib.pyplot as plt
-len(plt.get_fignums()) > 0
-      `);
-
-      pyodideRef.current.runPython(`
-sys.stdout = old_stdout
-sys.stderr = old_stderr
-      `);
-
-      if (stdout) addTerminalOutput('output', stdout);
-      if (stderr) addTerminalOutput('error', stderr);
-
-      if (hasPlot) {
-        const plotData = pyodideRef.current.runPython(`show_plot()`);
-        addTerminalOutput('output', `[PLOT:${plotData}]`);
+      const result = await pyodideRef.current.runPythonAsync(tab.content);
+      
+      if (capturedOutput) {
+        capturedOutput.split('\n').forEach((line: string) => {
+          if (line.trim()) addTerminalOutput('output', line);
+        });
       }
 
-      addTerminalOutput('info', '✅ Execution completed');
+      if (result !== undefined && result !== null) {
+        addTerminalOutput('output', `Result: ${result}`);
+      }
+
+      addTerminalOutput('info', '✅ Execution complete');
 
     } catch (err: any) {
-      addTerminalOutput('error', `❌ Error: ${err.message || err}`);
+      addTerminalOutput('error', `Error: ${err.message || err}`);
     }
   };
 
-  // Open file in tab
+  // File tree operations
+  const toggleFolder = (folderId: string) => {
+    const updateFolder = (nodes: FileNode[]): FileNode[] => {
+      return nodes.map(node => {
+        if (node.id === folderId && node.type === 'folder') {
+          return { ...node, isOpen: !node.isOpen };
+        }
+        if (node.children) {
+          return { ...node, children: updateFolder(node.children) };
+        }
+        return node;
+      });
+    };
+    setFiles(updateFolder(files));
+  };
+
   const openFile = (file: FileNode) => {
     if (file.type !== 'file') return;
-
+    
     const existingTab = openTabs.find(t => t.id === file.id);
     if (existingTab) {
       setActiveTabId(file.id);
@@ -606,167 +487,60 @@ sys.stderr = old_stderr
       language: file.language || 'python',
       isDirty: false
     };
-
-    setOpenTabs([...openTabs, newTab]);
+    
+    setOpenTabs(prev => [...prev, newTab]);
     setActiveTabId(file.id);
   };
 
-  // Open Pine Script
-  const openPineScript = (script: SavedScript) => {
-    const existingTab = openTabs.find(t => t.scriptId === script.id);
-    if (existingTab) {
-      setActiveTabId(existingTab.id);
-      return;
-    }
-
-    const newTab: EditorTab = {
-      id: `pine-${script.id}`,
-      name: script.name,
-      content: script.code,
-      language: 'pinescript',
-      isDirty: false,
-      scriptId: script.id,
-    };
-
-    setOpenTabs([...openTabs, newTab]);
-    setActiveTabId(newTab.id);
-    setShowScriptManager(false);
+  const closeTab = (tabId: string) => {
+    setOpenTabs(prev => {
+      const newTabs = prev.filter(t => t.id !== tabId);
+      if (activeTabId === tabId && newTabs.length > 0) {
+        setActiveTabId(newTabs[newTabs.length - 1].id);
+      } else if (newTabs.length === 0) {
+        setActiveTabId(null);
+      }
+      return newTabs;
+    });
   };
 
-  // Create new Pine Script
-  const createNewPineScript = () => {
-    const newTab: EditorTab = {
-      id: `pine-new-${Date.now()}`,
-      name: 'untitled.pine',
-      content: DEFAULT_PINE_CODE,
-      language: 'pinescript',
-      isDirty: true,
-    };
-
-    setOpenTabs([...openTabs, newTab]);
-    setActiveTabId(newTab.id);
-  };
-
-  // Save Pine Script
-  const savePineScript = () => {
-    const activeTab = openTabs.find(t => t.id === activeTabId);
-    if (!activeTab) return;
-
-    const versionMatch = activeTab.content.match(/\/\/@version=(\d+)/);
-    const detectedVersion = versionMatch ? (parseInt(versionMatch[1]) as 5 | 6) : 6;
-
-    const script: SavedScript = {
-      id: activeTab.scriptId || generateScriptId(),
-      name: saveFormData.name || activeTab.name.replace('.pine', ''),
-      description: saveFormData.description,
-      code: activeTab.content,
-      category: saveFormData.category,
-      tags: saveFormData.tags,
-      version: detectedVersion,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    const saved = saveScript(script);
+  const handleEditorChange = (value: string | undefined) => {
+    if (!value || !activeTabId) return;
     
-    setOpenTabs(prev => prev.map(t => 
-      t.id === activeTabId 
-        ? { ...t, scriptId: saved.id, name: saved.name, isDirty: false }
-        : t
-    ));
-
-    setPineScripts(loadAllScripts());
-    setShowSaveDialog(false);
-    setSaveFormData({ name: '', description: '', category: 'indicator', tags: [] });
-    
-    toast.success('Script saved to library');
-  };
-
-  // Close tab
-  const closeTab = (tabId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setOpenTabs(openTabs.filter(t => t.id !== tabId));
-    if (activeTabId === tabId) {
-      const remaining = openTabs.filter(t => t.id !== tabId);
-      setActiveTabId(remaining.length > 0 ? remaining[remaining.length - 1].id : null);
-    }
-  };
-
-  // Update tab content
-  const updateTabContent = (content: string) => {
-    setOpenTabs(openTabs.map(tab => 
+    setOpenTabs(prev => prev.map(tab => 
       tab.id === activeTabId 
-        ? { ...tab, content, isDirty: true }
+        ? { ...tab, content: value, isDirty: true }
         : tab
     ));
   };
 
-  // Toggle folder
-  const toggleFolder = (folderId: string) => {
-    const updateFiles = (nodes: FileNode[]): FileNode[] => {
-      return nodes.map(node => {
-        if (node.id === folderId) {
-          return { ...node, isOpen: !node.isOpen };
-        }
-        if (node.children) {
-          return { ...node, children: updateFiles(node.children) };
-        }
-        return node;
-      });
-    };
-    setFiles(updateFiles(files));
-  };
-
-  // Create new file
-  const createNewFile = () => {
-    if (editorMode === 'pinescript') {
-      createNewPineScript();
-      return;
-    }
-
-    const newFile: FileNode = {
-      id: `file-${Date.now()}`,
-      name: 'untitled.py',
-      type: 'file',
-      language: 'python',
-      content: '# New file\n'
-    };
-    
-    setFiles(prev => {
-      const updated = [...prev];
-      if (updated[0]?.type === 'folder' && updated[0].children) {
-        updated[0].children.push(newFile);
-        updated[0].isOpen = true;
-      } else {
-        updated.push(newFile);
-      }
-      return updated;
-    });
-    
-    openFile(newFile);
-  };
-
-  // Render file tree for Python
   const renderFileTree = (nodes: FileNode[], depth = 0) => {
     return nodes.map(node => (
       <div key={node.id}>
         <div
-          className={`
-            flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-[#2a2d2e] rounded text-sm
-            ${activeTabId === node.id ? 'bg-[#37373d]' : ''}
-          `}
+          className={`flex items-center gap-1 py-1 px-2 hover:bg-muted/50 cursor-pointer text-xs ${
+            activeTabId === node.id ? 'bg-muted/70' : ''
+          }`}
           style={{ paddingLeft: `${depth * 12 + 8}px` }}
           onClick={() => node.type === 'folder' ? toggleFolder(node.id) : openFile(node)}
         >
           {node.type === 'folder' ? (
             <>
-              {node.isOpen ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
-              {node.isOpen ? <FolderOpen className="w-4 h-4 text-yellow-500 shrink-0" /> : <Folder className="w-4 h-4 text-yellow-500 shrink-0" />}
+              {node.isOpen ? (
+                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              )}
+              {node.isOpen ? (
+                <FolderOpen className="h-3 w-3 text-terminal-amber" />
+              ) : (
+                <Folder className="h-3 w-3 text-terminal-amber" />
+              )}
             </>
           ) : (
             <>
-              <span className="w-4 shrink-0" />
-              <FileText className="w-4 h-4 text-blue-400 shrink-0" />
+              <div className="w-3" />
+              <FileText className="h-3 w-3 text-terminal-green" />
             </>
           )}
           <span className="truncate">{node.name}</span>
@@ -778,436 +552,232 @@ sys.stderr = old_stderr
     ));
   };
 
-  // Render Pine Script list
-  const renderPineScriptList = () => {
-    const filteredScripts = searchQuery 
-      ? pineScripts.filter(s => 
-          s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          s.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
-        )
-      : pineScripts;
-
-    return (
-      <div className="space-y-1">
-        {/* Templates section */}
-        <div className="px-2 py-1 text-[10px] text-gray-500 uppercase">Templates</div>
-        {PINE_TEMPLATES.slice(0, 5).map(template => (
-          <div
-            key={template.id}
-            className="flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-[#2a2d2e] rounded text-sm"
-            onClick={() => {
-              const newTab: EditorTab = {
-                id: `pine-template-${Date.now()}`,
-                name: template.name,
-                content: template.code,
-                language: 'pinescript',
-                isDirty: true,
-              };
-              setOpenTabs([...openTabs, newTab]);
-              setActiveTabId(newTab.id);
-            }}
-          >
-            <TrendingUp className="w-4 h-4 text-green-400 shrink-0" />
-            <span className="truncate">{template.name}</span>
-          </div>
-        ))}
-
-        {/* Saved scripts section */}
-        {pineScripts.length > 0 && (
-          <>
-            <div className="px-2 py-1 mt-2 text-[10px] text-gray-500 uppercase">Saved Scripts</div>
-            {filteredScripts.map(script => (
-              <div
-                key={script.id}
-                className={`
-                  flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-[#2a2d2e] rounded text-sm
-                  ${openTabs.find(t => t.scriptId === script.id)?.id === activeTabId ? 'bg-[#37373d]' : ''}
-                `}
-                onClick={() => openPineScript(script)}
-              >
-                <TrendingUp className="w-4 h-4 text-orange-400 shrink-0" />
-                <span className="truncate">{script.name}</span>
-              </div>
-            ))}
-          </>
-        )}
-      </div>
-    );
-  };
-
   const activeTab = openTabs.find(t => t.id === activeTabId);
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e1e] text-[#cccccc] rounded-lg overflow-hidden">
-      {/* Title Bar */}
-      <div className="h-9 bg-[#323233] flex items-center justify-between px-4 text-xs border-b border-[#3c3c3c]">
+    <div className="h-full flex flex-col bg-[#1e1e1e] text-sm">
+      {/* Top Bar */}
+      <div className="h-9 border-b border-[#333] flex items-center justify-between px-2 bg-[#252526]">
         <div className="flex items-center gap-2">
-          <span className="text-[#00ff00] font-bold">ABLE</span>
           <Tabs value={editorMode} onValueChange={(v) => setEditorMode(v as EditorMode)}>
-            <TabsList className="h-7 bg-[#252526]">
-              <TabsTrigger value="python" className="text-xs h-6 px-3">
+            <TabsList className="h-7 bg-transparent">
+              <TabsTrigger value="python" className="h-6 text-xs data-[state=active]:bg-terminal-green/20">
                 🐍 Python
               </TabsTrigger>
-              <TabsTrigger value="pinescript" className="text-xs h-6 px-3">
+              <TabsTrigger value="pinescript" className="h-6 text-xs data-[state=active]:bg-terminal-amber/20">
                 📈 Pine Script
               </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
+        
         <div className="flex items-center gap-2">
-          {editorMode === 'python' ? (
-            pyodideReady ? (
-              <span className="text-green-500 flex items-center gap-1">
-                <span className="w-2 h-2 bg-green-500 rounded-full" />
-                Python Ready
-              </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={runCode}
+            disabled={isRunning || !activeTab || (editorMode === 'python' && !pyodideReady)}
+            className="h-7 px-3 text-xs bg-terminal-green/20 text-terminal-green hover:bg-terminal-green/30"
+          >
+            {isRunning ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
             ) : (
-              <span className="text-yellow-500 flex items-center gap-1">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Loading Python...
-              </span>
-            )
-          ) : (
-            <span className="text-green-500 flex items-center gap-1">
-              <span className="w-2 h-2 bg-green-500 rounded-full" />
-              Pine Script Ready
+              <Play className="h-3 w-3 mr-1" />
+            )}
+            Run
+          </Button>
+          
+          {!pyodideReady && editorMode === 'python' && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Loading Python...
             </span>
           )}
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Activity Bar */}
-        <div className="w-12 bg-[#333333] flex flex-col items-center py-2 gap-2 border-r border-[#3c3c3c]">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`w-10 h-10 rounded ${sidebarTab === 'files' ? 'text-white bg-[#3c3c3c]' : 'text-gray-500'}`}
-            onClick={() => setSidebarTab('files')}
-          >
-            <FileText className="w-5 h-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`w-10 h-10 rounded ${sidebarTab === 'search' ? 'text-white bg-[#3c3c3c]' : 'text-gray-500'}`}
-            onClick={() => setSidebarTab('search')}
-          >
-            <Search className="w-5 h-5" />
-          </Button>
-          {editorMode === 'pinescript' && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-10 h-10 text-gray-500 rounded hover:text-white"
-              onClick={() => setShowScriptManager(true)}
-              title="Script Library"
-            >
-              <LibraryIcon className="w-5 h-5" />
-            </Button>
-          )}
-          <div className="flex-1" />
-          <Button variant="ghost" size="icon" className="w-10 h-10 text-gray-500 rounded">
-            <Settings className="w-5 h-5" />
-          </Button>
-        </div>
-
         {/* Sidebar */}
-        <div className="w-56 bg-[#252526] border-r border-[#3c3c3c] flex flex-col">
-          <div className="p-2 text-xs font-semibold text-[#bbbbbb] uppercase flex items-center justify-between">
-            <span>
-              {editorMode === 'python' ? 'Explorer' : 'Pine Scripts'}
-            </span>
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={createNewFile}>
-              <Plus className="w-4 h-4" />
-            </Button>
+        <div className="w-48 border-r border-[#333] flex flex-col bg-[#252526]">
+          <div className="border-b border-[#333] p-2">
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-7 w-7 p-0 ${sidebarTab === 'files' ? 'bg-muted/50' : ''}`}
+                onClick={() => setSidebarTab('files')}
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-7 w-7 p-0 ${sidebarTab === 'search' ? 'bg-muted/50' : ''}`}
+                onClick={() => setSidebarTab('search')}
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           
-          {sidebarTab === 'files' && (
-            <ScrollArea className="flex-1">
-              <div className="p-1">
-                {editorMode === 'python' ? renderFileTree(files) : renderPineScriptList()}
+          <ScrollArea className="flex-1">
+            {sidebarTab === 'files' && (
+              <div className="py-1">
+                <div className="px-2 py-1 text-xs text-muted-foreground uppercase tracking-wider">
+                  Explorer
+                </div>
+                {renderFileTree(files)}
               </div>
-            </ScrollArea>
-          )}
-          
-          {sidebarTab === 'search' && (
-            <div className="p-2">
-              <Input
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-[#3c3c3c] border-0 text-sm h-8"
-              />
-            </div>
-          )}
+            )}
+            
+            {sidebarTab === 'search' && (
+              <div className="p-2">
+                <Input
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-7 text-xs bg-[#3c3c3c] border-[#555]"
+                />
+              </div>
+            )}
+          </ScrollArea>
         </div>
 
-        {/* Editor Area */}
-        <div className="flex-1 flex flex-col min-w-0">
+        {/* Editor area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
           {/* Tabs */}
-          <div className="h-9 bg-[#252526] flex items-center border-b border-[#3c3c3c] overflow-x-auto">
+          <div className="h-9 border-b border-[#333] flex items-center bg-[#252526] overflow-x-auto">
             {openTabs.map(tab => (
               <div
                 key={tab.id}
-                className={`
-                  h-full flex items-center gap-2 px-3 cursor-pointer border-r border-[#3c3c3c] shrink-0
-                  ${activeTabId === tab.id ? 'bg-[#1e1e1e]' : 'bg-[#2d2d2d] hover:bg-[#2a2a2a]'}
-                `}
+                className={`h-full flex items-center gap-2 px-3 border-r border-[#333] cursor-pointer text-xs ${
+                  activeTabId === tab.id ? 'bg-[#1e1e1e]' : 'bg-[#2d2d2d]'
+                }`}
                 onClick={() => setActiveTabId(tab.id)}
               >
-                {tab.language === 'pinescript' ? (
-                  <TrendingUp className="w-4 h-4 text-green-400" />
-                ) : (
-                  <FileText className="w-4 h-4 text-blue-400" />
-                )}
-                <span className="text-sm">{tab.name}</span>
-                {tab.isDirty && <span className="w-2 h-2 bg-white rounded-full" />}
+                <FileText className="h-3 w-3 text-terminal-green" />
+                <span>{tab.name}</span>
+                {tab.isDirty && <span className="text-terminal-amber">●</span>}
                 <button
-                  className="opacity-50 hover:opacity-100 ml-1"
-                  onClick={(e) => closeTab(tab.id, e)}
+                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                  className="hover:bg-muted/50 rounded p-0.5"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="h-3 w-3" />
                 </button>
               </div>
             ))}
-            <div className="flex-1" />
-            
-            {/* Action buttons */}
-            {editorMode === 'pinescript' && activeTab && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  const tab = openTabs.find(t => t.id === activeTabId);
-                  if (tab) {
-                    setSaveFormData({
-                      name: tab.name.replace('.pine', ''),
-                      description: '',
-                      category: 'indicator',
-                      tags: [],
-                    });
-                    setShowSaveDialog(true);
-                  }
-                }}
-                className="mr-1 h-7"
-              >
-                <Save className="w-4 h-4 mr-1" />
-                Save
-              </Button>
-            )}
-            
-            <Button
-              size="sm"
-              onClick={runCode}
-              disabled={editorMode === 'python' ? (!pyodideReady || isRunning || !activeTab) : (!activeTab || isRunning)}
-              className="mr-2 bg-[#00ff00] text-black hover:bg-[#00cc00] h-7"
-            >
-              {isRunning ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-1" />
-              ) : (
-                <Play className="w-4 h-4 mr-1" />
-              )}
-              Run
-            </Button>
           </div>
 
           {/* Monaco Editor */}
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 overflow-hidden">
             {activeTab ? (
               <Editor
                 height="100%"
-                language={activeTab.language}
+                language={editorMode === 'pinescript' ? 'pinescript' : activeTab.language}
                 value={activeTab.content}
-                onChange={(value) => updateTabContent(value || '')}
+                theme={editorMode === 'pinescript' ? 'pinescript-dark' : 'vs-dark'}
+                onChange={handleEditorChange}
                 onMount={handleEditorMount}
-                theme="vs-dark"
                 options={{
-                  fontSize: 14,
-                  fontFamily: "'JetBrains Mono', Monaco, 'Courier New', monospace",
-                  minimap: { enabled: true },
+                  fontSize: 13,
+                  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                  minimap: { enabled: false },
+                  lineNumbers: 'on',
+                  glyphMargin: true,
+                  folding: true,
+                  lineDecorationsWidth: 10,
+                  lineNumbersMinChars: 3,
+                  renderWhitespace: 'selection',
                   scrollBeyondLastLine: false,
                   automaticLayout: true,
                   tabSize: 4,
+                  insertSpaces: true,
                   wordWrap: 'on',
-                  lineNumbers: 'on',
-                  renderWhitespace: 'selection',
-                  bracketPairColorization: { enabled: true },
+                  cursorBlinking: 'smooth',
+                  cursorSmoothCaretAnimation: 'on',
+                  smoothScrolling: true,
                   padding: { top: 10 }
                 }}
               />
             ) : (
-              <div className="h-full flex items-center justify-center text-gray-500">
+              <div className="h-full flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
-                  {editorMode === 'pinescript' ? (
-                    <>
-                      <TrendingUp className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                      <p>Create or open a Pine Script</p>
-                      <p className="text-sm mt-2">Click + to create new, or select a template</p>
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                      <p>Open a file to start editing</p>
-                      <p className="text-sm mt-2">Click on a file in the Explorer</p>
-                    </>
-                  )}
+                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Open a file to start editing</p>
                 </div>
               </div>
             )}
           </div>
-
-          {/* Terminal */}
-          {showTerminal && (
-            <div className="h-48 bg-[#1e1e1e] border-t border-[#3c3c3c] flex flex-col">
-              <div className="h-8 bg-[#252526] flex items-center px-4 border-b border-[#3c3c3c] shrink-0">
-                <Terminal className="w-4 h-4 mr-2" />
-                <span className="text-sm">Terminal</span>
-                <div className="flex-1" />
-                <button 
-                  className="text-gray-500 hover:text-white p-1"
-                  onClick={() => setTerminalOutput([])}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-                <button 
-                  className="text-gray-500 hover:text-white p-1"
-                  onClick={() => setShowTerminal(false)}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <ScrollArea className="flex-1 p-2 font-mono text-sm">
-                {terminalOutput.map((output, i) => (
-                  <div 
-                    key={i} 
-                    className={`
-                      ${output.type === 'error' ? 'text-red-400' : ''}
-                      ${output.type === 'info' ? 'text-blue-400' : ''}
-                      ${output.type === 'output' ? 'text-green-400' : ''}
-                    `}
-                  >
-                    {output.content.startsWith('[PLOT:') ? (
-                      <img 
-                        src={`data:image/png;base64,${output.content.slice(6, -1)}`}
-                        alt="Plot"
-                        className="max-w-full my-2 rounded"
-                      />
-                    ) : (
-                      <pre className="whitespace-pre-wrap">{output.content}</pre>
-                    )}
-                  </div>
-                ))}
-              </ScrollArea>
-            </div>
-          )}
-          
-          {!showTerminal && (
-            <button 
-              className="h-6 bg-[#252526] text-xs text-gray-400 hover:text-white flex items-center justify-center gap-1 border-t border-[#3c3c3c]"
-              onClick={() => setShowTerminal(true)}
-            >
-              <Terminal className="w-3 h-3" /> Show Terminal
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Status Bar */}
-      <div className="h-6 bg-[#007acc] flex items-center justify-between px-4 text-xs text-white">
-        <div className="flex items-center gap-4">
-          <span>{editorMode === 'python' ? 'Python 3.11 (Pyodide)' : 'Pine Script v5'}</span>
-          <span>{activeTab?.name || 'No file'}</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span>UTF-8</span>
-          <span>Spaces: 4</span>
-        </div>
-      </div>
-
-      {/* Script Manager Dialog */}
-      <ScriptManager
-        isOpen={showScriptManager}
-        onClose={() => setShowScriptManager(false)}
-        onSelectScript={openPineScript}
-        onNewScript={createNewPineScript}
-      />
-
-      {/* Save Dialog */}
-      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
-        <DialogContent className="bg-[#1e1e1e] border-[#3c3c3c]">
-          <DialogHeader>
-            <DialogTitle className="text-white">Save Pine Script</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm text-gray-400">Name</label>
-              <Input
-                value={saveFormData.name}
-                onChange={(e) => setSaveFormData({ ...saveFormData, name: e.target.value })}
-                placeholder="My Indicator"
-                className="bg-[#2d2d2d] border-[#3c3c3c] text-white"
-              />
+      {/* Terminal */}
+      {showTerminal && (
+        <div className="h-48 border-t border-[#333] flex flex-col bg-[#1e1e1e]">
+          <div className="h-8 border-b border-[#333] flex items-center justify-between px-2 bg-[#252526]">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-terminal-green" />
+              <span className="text-xs">Terminal</span>
             </div>
-
-            <div>
-              <label className="text-sm text-gray-400">Description</label>
-              <Textarea
-                value={saveFormData.description}
-                onChange={(e) => setSaveFormData({ ...saveFormData, description: e.target.value })}
-                placeholder="Describe what this script does..."
-                className="bg-[#2d2d2d] border-[#3c3c3c] text-white resize-none"
-                rows={3}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-400">Category</label>
-              <Select 
-                value={saveFormData.category} 
-                onValueChange={(v: any) => setSaveFormData({ ...saveFormData, category: v })}
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => setTerminalOutput([])}
               >
-                <SelectTrigger className="bg-[#2d2d2d] border-[#3c3c3c]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="indicator">Indicator</SelectItem>
-                  <SelectItem value="oscillator">Oscillator</SelectItem>
-                  <SelectItem value="strategy">Strategy</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-400">Tags (comma-separated)</label>
-              <Input
-                value={saveFormData.tags.join(', ')}
-                onChange={(e) => setSaveFormData({ 
-                  ...saveFormData, 
-                  tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) 
-                })}
-                placeholder="trend, momentum, volatility"
-                className="bg-[#2d2d2d] border-[#3c3c3c] text-white"
-              />
+                <Trash2 className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => setShowTerminal(false)}
+              >
+                <X className="h-3 w-3" />
+              </Button>
             </div>
           </div>
+          
+          <ScrollArea className="flex-1 p-2">
+            <div className="font-mono text-xs space-y-1">
+              {terminalOutput.map((output, i) => (
+                <div
+                  key={i}
+                  className={`${
+                    output.type === 'error' ? 'text-red-400' :
+                    output.type === 'info' ? 'text-blue-400' :
+                    'text-foreground'
+                  }`}
+                >
+                  <span className="text-muted-foreground mr-2">
+                    [{output.timestamp.toLocaleTimeString()}]
+                  </span>
+                  {output.content}
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSaveDialog(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={savePineScript} 
-              className="bg-[#00ff00] text-black hover:bg-[#00cc00]"
-              disabled={!saveFormData.name}
-            >
-              Save to Library
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Bottom bar */}
+      <div className="h-6 border-t border-[#333] flex items-center justify-between px-2 bg-[#007acc] text-white text-xs">
+        <div className="flex items-center gap-3">
+          <span>{editorMode === 'python' ? '🐍 Python' : '📈 Pine Script'}</span>
+          {editorMode === 'python' && (
+            <span className={pyodideReady ? 'text-emerald-300' : 'text-yellow-300'}>
+              {pyodideReady ? '● Ready' : '○ Loading...'}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowTerminal(!showTerminal)}>
+            Terminal {showTerminal ? '▼' : '▲'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
