@@ -46,23 +46,62 @@
     --terminal-panel: 0 0% 10%;
   }
 
-  /* Dark Terminal Theme */
+  /* Dark Terminal Theme (COT Data Style) */
   .theme-dark {
     --background: 0 0% 3%;
-    --foreground: 120 100% 50%;
+    --foreground: 0 0% 90%;
     --card: 0 0% 5%;
-    --card-foreground: 120 100% 50%;
-    --primary: 120 100% 25%;
-    --primary-foreground: 0 0% 100%;
+    --card-foreground: 0 0% 90%;
+    --primary: 120 100% 40%;
+    --primary-foreground: 0 0% 0%;
     --secondary: 0 0% 8%;
-    --secondary-foreground: 120 100% 50%;
+    --secondary-foreground: 0 0% 90%;
     --accent: 120 100% 15%;
     --accent-foreground: 0 0% 100%;
-    --border: 120 100% 15%;
+    --border: 120 100% 20%;
     --input: 0 0% 8%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 55%;
     --terminal-panel: 0 0% 5%;
     --bloomberg-header: 0 0% 8%;
     --bloomberg-black: 0 0% 3%;
+    
+    /* COT Data specific */
+    --terminal-green: 120 100% 45%;
+    --terminal-amber: 45 100% 55%;
+    --terminal-cyan: 180 100% 60%;
+    --terminal-red: 0 100% 50%;
+  }
+
+  /* COT Theme - Official dark trading terminal */
+  .theme-cot {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 88%;
+    --card: 0 0% 6%;
+    --card-foreground: 0 0% 88%;
+    --primary: 120 100% 42%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 85%;
+    --accent: 45 100% 50%;
+    --accent-foreground: 0 0% 0%;
+    --border: 120 100% 25%;
+    --input: 0 0% 10%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 50%;
+    --terminal-panel: 0 0% 6%;
+    --bloomberg-header: 0 0% 10%;
+    --bloomberg-black: 0 0% 4%;
+    
+    /* COT Colors */
+    --terminal-green: 120 100% 45%;
+    --terminal-amber: 45 100% 55%;
+    --terminal-cyan: 180 100% 60%;
+    --terminal-red: 0 100% 50%;
+    --terminal-yellow: 60 100% 55%;
+    --terminal-blue: 210 100% 55%;
+    --terminal-orange: 25 100% 50%;
+    --terminal-white: 0 0% 90%;
   }
 
   /* Claude Gray Theme */

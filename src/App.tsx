@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -16,6 +17,13 @@ import OptionsSurfacePlot from "./components/OptionsSurfacePlot";
 import { PacManGame } from "./components/PacManGame";
 
 const queryClient = new QueryClient();
+
+// Initialize COT theme on app load
+const initializeTheme = () => {
+  const savedTheme = localStorage.getItem('able-theme') || 'cot';
+  document.documentElement.classList.remove('theme-dark', 'theme-gray', 'theme-light-gray', 'theme-bright', 'theme-cot');
+  document.documentElement.classList.add(`theme-${savedTheme === 'cot' ? 'cot' : savedTheme}`);
+};
 
 // Protected App Content
 const AppContent = () => {
@@ -52,6 +60,10 @@ const AppContent = () => {
 };
 
 const App = () => {
+  useEffect(() => {
+    initializeTheme();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

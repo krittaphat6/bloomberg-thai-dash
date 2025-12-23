@@ -383,20 +383,55 @@ export default function TradingJournal() {
         return;
       }
 
-      // Track open positions for matching
-      const openPositions: Map<string, Trade> = new Map();
+      // Parse webhook messages into trades
       const importedTrades: Trade[] = [];
+      const openPositions: Map<string, Trade> = new Map();
 
       for (const msg of messages) {
         const webhookData = msg.webhook_data as any;
-        if (!webhookData?.parsed_trade) continue;
+        if (!webhookData) continue;
 
-        const signal = webhookData.parsed_trade;
+        // Support both old and new formats
+        let signal: any;
+        if (webhookData.parsed_trade) {
+          signal = webhookData.parsed_trade;
+        } else {
+          // Parse from raw webhook data (old format)
+          const actionStr = (webhookData.action || '').toString().toLowerCase();
+          let action: string = 'BUY';
+          let side: 'LONG' | 'SHORT' = 'LONG';
+          
+          if (actionStr.includes('sell') || actionStr.includes('short')) {
+            action = 'SELL';
+            side = 'SHORT';
+          } else if (actionStr.includes('buy') || actionStr.includes('long')) {
+            action = 'BUY';
+            side = 'LONG';
+          } else if (actionStr.includes('close') || actionStr.includes('exit')) {
+            action = 'CLOSE';
+          }
+          
+          signal = {
+            id: `wh-${msg.id}`,
+            date: new Date(msg.created_at).toISOString().split('T')[0],
+            symbol: webhookData.ticker || webhookData.symbol || 'UNKNOWN',
+            side: side,
+            type: 'CFD',
+            action: action,
+            price: parseFloat(webhookData.price || webhookData.close || 0),
+            quantity: parseFloat(webhookData.quantity || webhookData.qty || 1),
+            lotSize: parseFloat(webhookData.lot || webhookData.lotSize || 1),
+            strategy: webhookData.strategy || 'TradingView',
+            message: webhookData.message
+          };
+        }
+
         const positionKey = `${signal.symbol}-${signal.side}`;
 
-        // Check if this is an opening or closing action
-        const isOpenAction = ['OPEN', 'BUY', 'SELL'].includes(signal.action);
-        const isCloseAction = ['CLOSE', 'TAKE_PROFIT', 'STOP_LOSS'].includes(signal.action);
+        // Determine action type
+        const actionUpper = (signal.action || '').toString().toUpperCase();
+        const isOpenAction = ['OPEN', 'BUY', 'SELL'].includes(actionUpper);
+        const isCloseAction = ['CLOSE', 'TAKE_PROFIT', 'STOP_LOSS', 'TP', 'SL', 'EXIT'].includes(actionUpper);
 
         if (isOpenAction) {
           // Create new open position
@@ -404,7 +439,7 @@ export default function TradingJournal() {
             id: signal.id || `wh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             date: signal.date || new Date(msg.created_at).toISOString().split('T')[0],
             symbol: signal.symbol,
-            side: signal.side,
+            side: signal.side || 'LONG',
             type: signal.type || 'CFD',
             entryPrice: signal.price,
             quantity: signal.quantity || 1,
@@ -480,12 +515,17 @@ export default function TradingJournal() {
         return matchingImport || existingTrade;
       });
 
-      setTrades([...updatedTrades, ...newTrades.filter(t => !updatedTrades.find(u => u.id === t.id))]);
+      // Simple mode: just add all trades without complex matching
+      // Since the webhook data shows BUY/SELL signals, we'll treat each as a trade entry
+      const allNewTrades = importedTrades.filter(t => !existingIds.has(t.id));
+      
+      setTrades(prev => [...prev, ...allNewTrades]);
       setShowWebhookImport(false);
+      setSelectedWebhookRoom(null);
       
       toast({
         title: "Import Successful!",
-        description: `Imported ${newTrades.length} new trades, updated ${importedTrades.length - newTrades.length} existing`
+        description: `Imported ${allNewTrades.length} trades from webhook`
       });
     } catch (error) {
       console.error('Error importing webhook trades:', error);
