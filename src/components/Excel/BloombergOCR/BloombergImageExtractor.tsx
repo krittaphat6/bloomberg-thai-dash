@@ -3,13 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Camera, RefreshCw, Check, X, AlertTriangle, FileSpreadsheet, Upload, Loader2 } from 'lucide-react';
+import { Camera, RefreshCw, Check, X, AlertTriangle, FileSpreadsheet, Upload, Loader2, Bug, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ImageUploadSlot } from './ImageUploadSlot';
 import { ResultsPreview } from './ResultsPreview';
-import { BloombergProcessor, ExtractedRow, ValidationReport, DebugInfo } from './BloombergProcessor';
-import { OCRDebugger } from './OCRDebugger';
+import { BloombergOCREngine, ParsedBloombergRow, BloombergOCRResult } from './BloombergOCREngine';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface ImageSlot {
   slot: number;
@@ -17,6 +17,8 @@ interface ImageSlot {
   dataUrl: string;
   status: 'empty' | 'ready' | 'processing' | 'done' | 'error';
   progress: number;
+  processedImageUrl?: string;
+  rawText?: string;
 }
 
 interface BloombergImageExtractorProps {
@@ -29,7 +31,7 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
   onClose
 }) => {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'upload' | 'preview'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'preview' | 'debug'>('upload');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentUploadSlot, setCurrentUploadSlot] = useState<number | null>(null);
   
@@ -46,17 +48,24 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
   
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
-  const [overallProgress, setOverallProgress] = useState({ current: 0, total: 0 });
+  const [overallProgress, setOverallProgress] = useState(0);
   const [processingStatus, setProcessingStatus] = useState('');
   
   // Results state
-  const [results, setResults] = useState<ExtractedRow[]>([]);
-  const [validation, setValidation] = useState<ValidationReport | null>(null);
-  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
+  const [results, setResults] = useState<ParsedBloombergRow[]>([]);
+  const [rawOCRText, setRawOCRText] = useState<string>('');
+  const [debugImageUrl, setDebugImageUrl] = useState<string>('');
+  const [ocrConfidence, setOcrConfidence] = useState(0);
   
   // Stats
   const uploadedCount = imageSlots.filter(s => s.file !== null).length;
   const processedCount = imageSlots.filter(s => s.status === 'done').length;
+  const lowConfidenceCells = results.filter(r => r.confidence < 0.5).map((r, idx) => ({
+    row: idx,
+    column: 'security',
+    value: r.security,
+    confidence: r.confidence
+  }));
   
   const handleImageUpload = useCallback((slotIndex: number, file: File) => {
     const reader = new FileReader();
@@ -106,7 +115,8 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
     
     setIsProcessing(true);
     setResults([]);
-    setValidation(null);
+    setRawOCRText('');
+    setDebugImageUrl('');
     
     // Update all ready slots to processing
     setImageSlots(prev => prev.map(slot => 
@@ -114,41 +124,49 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
     ));
     
     try {
-      const processor = new BloombergProcessor((progress) => {
-        setOverallProgress({ current: progress.current, total: progress.total });
-        setProcessingStatus(progress.status);
+      const engine = new BloombergOCREngine();
+      const allRows: ParsedBloombergRow[] = [];
+      let allRawText = '';
+      let lastDebugUrl = '';
+      let totalConfidence = 0;
+      
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const slot = filesToProcess[i];
+        setProcessingStatus(`กำลังประมวลผลรูปที่ ${i + 1}/${filesToProcess.length}...`);
         
-        // Update individual slot progress
-        if (progress.currentImage > 0) {
-          setImageSlots(prev => prev.map((slot, i) => {
-            const slotsWithFiles = prev.filter(s => s.file !== null);
-            const currentIndex = progress.currentImage - 1;
-            if (slotsWithFiles[currentIndex] && slot.slot === slotsWithFiles[currentIndex].slot) {
-              return { ...slot, progress: progress.current };
-            }
-            return slot;
-          }));
-        }
-      });
+        const result = await engine.processImage(slot.file!, (progress) => {
+          const overallPct = Math.round(((i + progress.progress / 100) / filesToProcess.length) * 100);
+          setOverallProgress(overallPct);
+          setProcessingStatus(progress.message);
+          
+          // Update individual slot
+          setImageSlots(prev => prev.map((s, idx) => 
+            s.slot === slot.slot ? { ...s, progress: progress.progress } : s
+          ));
+        });
+        
+        allRows.push(...result.rows);
+        allRawText += `\n--- รูปที่ ${i + 1} (ความแม่นยำ: ${Math.round(result.confidence)}%) ---\n${result.text}\n`;
+        lastDebugUrl = result.debugImageUrl || '';
+        totalConfidence += result.confidence;
+        
+        // Mark slot as done
+        setImageSlots(prev => prev.map(s => 
+          s.slot === slot.slot 
+            ? { ...s, status: 'done' as const, progress: 100, processedImageUrl: result.processedImageUrl, rawText: result.text } 
+            : s
+        ));
+      }
       
-      const files = filesToProcess.map(s => s.file!);
-      const extractedRows = await processor.processMultipleImages(files);
-      
-      // Mark all as done
-      setImageSlots(prev => prev.map(slot => 
-        slot.file ? { ...slot, status: 'done' as const, progress: 100 } : slot
-      ));
-      
-      // Validate results
-      const validationReport = processor.validateResults(extractedRows);
-      
-      setResults(extractedRows);
-      setValidation(validationReport);
+      setResults(allRows);
+      setRawOCRText(allRawText);
+      setDebugImageUrl(lastDebugUrl);
+      setOcrConfidence(Math.round(totalConfidence / filesToProcess.length));
       setActiveTab('preview');
       
       toast({
         title: "ประมวลผลเสร็จสิ้น!",
-        description: `พบ ${extractedRows.length} แถว จาก ${filesToProcess.length} รูป`,
+        description: `พบ ${allRows.length} แถว จาก ${filesToProcess.length} รูป (ความแม่นยำเฉลี่ย: ${Math.round(totalConfidence / filesToProcess.length)}%)`,
       });
       
     } catch (error) {
@@ -170,27 +188,12 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
     }
   };
   
-  const handleEditCell = (rowNumber: number, column: string, newValue: string) => {
-    setResults(prev => prev.map(row => 
-      row.rowNumber === rowNumber
-        ? {
-            ...row,
-            cells: row.cells.map(cell => 
-              cell.column === column ? { ...cell, value: newValue, confidence: 1 } : cell
-            )
-          }
+  const handleEditCell = (rowIdx: number, column: string, newValue: string) => {
+    setResults(prev => prev.map((row, idx) => 
+      idx === rowIdx
+        ? { ...row, [column]: newValue, confidence: 1 }
         : row
     ));
-    
-    // Update validation
-    if (validation) {
-      setValidation({
-        ...validation,
-        lowConfidenceCells: validation.lowConfidenceCells.filter(
-          c => !(c.row === rowNumber && c.column === column)
-        )
-      });
-    }
   };
   
   const handleInsertToSheet = () => {
@@ -203,8 +206,7 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
       return;
     }
     
-    const processor = new BloombergProcessor();
-    const excelData = processor.convertToExcelData(results);
+    const excelData = BloombergOCREngine.toExcelData(results);
     
     onInsertData(excelData);
     
@@ -223,7 +225,8 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
       progress: 0
     })));
     setResults([]);
-    setValidation(null);
+    setRawOCRText('');
+    setDebugImageUrl('');
     setActiveTab('upload');
   };
   
@@ -243,15 +246,15 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
         <DialogHeader className="px-4 py-3 border-b border-border bg-card">
           <DialogTitle className="flex items-center gap-2 text-terminal-green">
             <Camera className="h-5 w-5 text-terminal-amber" />
-            Bloomberg Image to Excel (Tesseract OCR - ฟรี!)
+            Bloomberg OCR Engine (Enhanced)
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
-            แปลงรูปภาพ Bloomberg Terminal เป็นข้อมูลตาราง Excel โดยใช้ OCR
+            แปลงรูปภาพ Bloomberg Terminal เป็นข้อมูลตาราง Excel - ปรับปรุงใหม่สำหรับภาพถ่ายหน้าจอ
           </p>
         </DialogHeader>
         
         {/* Stats Summary */}
-        <div className="grid grid-cols-4 gap-3 p-3 border-b border-border bg-muted/20">
+        <div className="grid grid-cols-5 gap-3 p-3 border-b border-border bg-muted/20">
           <div className="bg-background/50 p-2 rounded border border-border">
             <div className="text-[10px] text-terminal-amber mb-0.5">รูปที่อัพโหลด</div>
             <div className="text-lg font-bold text-foreground">{uploadedCount}</div>
@@ -265,24 +268,36 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
             <div className="text-lg font-bold text-terminal-cyan">{results.length}</div>
           </div>
           <div className="bg-background/50 p-2 rounded border border-border">
+            <div className="text-[10px] text-terminal-amber mb-0.5">ความแม่นยำ OCR</div>
+            <div className={cn(
+              "text-lg font-bold",
+              ocrConfidence >= 70 ? "text-terminal-green" : ocrConfidence >= 50 ? "text-terminal-amber" : "text-destructive"
+            )}>
+              {ocrConfidence}%
+            </div>
+          </div>
+          <div className="bg-background/50 p-2 rounded border border-border">
             <div className="text-[10px] text-terminal-amber mb-0.5">ต้องตรวจสอบ</div>
             <div className={cn(
               "text-lg font-bold",
-              validation?.lowConfidenceCells.length ? "text-terminal-amber" : "text-terminal-green"
+              lowConfidenceCells.length > 0 ? "text-terminal-amber" : "text-terminal-green"
             )}>
-              {validation?.lowConfidenceCells.length || 0}
+              {lowConfidenceCells.length}
             </div>
           </div>
         </div>
         
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="mx-3 mt-2 grid w-[300px] grid-cols-2">
+          <TabsList className="mx-3 mt-2 grid w-[450px] grid-cols-3">
             <TabsTrigger value="upload" className="text-xs">
               📁 อัพโหลดรูป
             </TabsTrigger>
             <TabsTrigger value="preview" className="text-xs" disabled={results.length === 0}>
-              📊 ตัวอย่างผลลัพธ์ {results.length > 0 && `(${results.length})`}
+              📊 ผลลัพธ์ {results.length > 0 && `(${results.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="debug" className="text-xs" disabled={!rawOCRText}>
+              🔧 Debug OCR
             </TabsTrigger>
           </TabsList>
           
@@ -291,7 +306,7 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
             <div className="mb-4 p-3 bg-terminal-cyan/10 border border-terminal-cyan/30 rounded">
               <h3 className="text-sm font-bold text-terminal-cyan mb-1">📁 อัพโหลดรูป Bloomberg (1-10 รูป)</h3>
               <p className="text-xs text-muted-foreground">
-                คลิกที่ช่องหรือลากรูปภาพมาวาง • รองรับรูป PNG, JPG • ขนาดแนะนำ: ความกว้างอย่างน้อย 800px
+                คลิกที่ช่องหรือลากรูปภาพมาวาง • รองรับรูป PNG, JPG • ใช้ได้กับภาพถ่ายหน้าจอและ screenshot
               </p>
             </div>
             
@@ -320,41 +335,61 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
                     กำลังประมวลผล...
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {overallProgress.current}%
+                    {overallProgress}%
                   </span>
                 </div>
                 <Progress 
-                  value={overallProgress.current} 
+                  value={overallProgress} 
                   className="h-2"
                 />
                 <p className="text-xs text-muted-foreground mt-1">{processingStatus}</p>
               </div>
             )}
-            
-            {/* Validation Warnings */}
-            {validation && validation.warnings.length > 0 && (
-              <div className="mt-4 p-3 bg-terminal-amber/10 border border-terminal-amber/30 rounded">
-                <h4 className="text-sm font-bold text-terminal-amber flex items-center gap-1 mb-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  คำเตือน
-                </h4>
-                <ul className="text-xs text-muted-foreground space-y-1">
-                  {validation.warnings.map((warning, i) => (
-                    <li key={i}>• {warning}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </TabsContent>
           
           <TabsContent value="preview" className="flex-1 overflow-hidden">
-            {results.length > 0 && validation && (
+            {results.length > 0 && (
               <ResultsPreview
                 results={results}
                 onEdit={handleEditCell}
-                lowConfidenceCells={validation.lowConfidenceCells}
+                lowConfidenceCells={lowConfidenceCells}
               />
             )}
+          </TabsContent>
+          
+          <TabsContent value="debug" className="flex-1 overflow-hidden p-3">
+            <div className="h-full flex flex-col gap-3">
+              <div className="text-sm font-bold text-terminal-amber flex items-center gap-2">
+                <Bug className="h-4 w-4" />
+                Debug OCR - ดู Raw Text และ Processed Image
+              </div>
+              
+              <div className="flex-1 grid grid-cols-2 gap-3 min-h-0">
+                {/* Processed Image */}
+                <div className="flex flex-col border border-border rounded overflow-hidden">
+                  <div className="px-2 py-1 bg-muted text-xs font-bold border-b border-border">
+                    Processed Image (What OCR Sees)
+                  </div>
+                  <div className="flex-1 overflow-auto p-2 bg-white">
+                    {debugImageUrl && (
+                      <img src={debugImageUrl} alt="Processed" className="max-w-full" />
+                    )}
+                  </div>
+                </div>
+                
+                {/* Raw OCR Text */}
+                <div className="flex flex-col border border-border rounded overflow-hidden">
+                  <div className="px-2 py-1 bg-muted text-xs font-bold border-b border-border">
+                    Raw OCR Text (ความแม่นยำ: {ocrConfidence}%)
+                  </div>
+                  <ScrollArea className="flex-1 p-2">
+                    <pre className="text-[10px] whitespace-pre-wrap font-mono text-muted-foreground">
+                      {rawOCRText || 'ยังไม่มีข้อมูล'}
+                    </pre>
+                  </ScrollArea>
+                </div>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
         
@@ -387,8 +422,8 @@ export const BloombergImageExtractor: React.FC<BloombergImageExtractorProps> = (
                   </>
                 ) : (
                   <>
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    ประมวลผลทั้งหมด ({uploadedCount})
+                    <Eye className="h-4 w-4 mr-1" />
+                    ประมวลผล OCR ({uploadedCount})
                   </>
                 )}
               </Button>
