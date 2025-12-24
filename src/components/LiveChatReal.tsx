@@ -6,10 +6,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { User, Friendship, ChatRoom, Message, Webhook as WebhookType, FriendNickname } from '@/types/chat';
-import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2, Share2, Loader2, RefreshCw, Volume2, VolumeX } from 'lucide-react';
+import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2, Share2, Loader2, RefreshCw, Volume2, VolumeX, PlugZap } from 'lucide-react';
 import { useCurrentTheme } from '@/hooks/useCurrentTheme';
 import { getThemeColors } from '@/utils/themeColors';
 import { VideoCall } from './VideoCall';
+import { APIBridgePanel } from './chat/APIBridgePanel';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Notification sounds - 5 options using Web Audio API
@@ -64,6 +65,7 @@ const LiveChatReal = () => {
   const [showRoomSettings, setShowRoomSettings] = useState(false);
   const [showInviteToGroup, setShowInviteToGroup] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
+  const [showAPIBridge, setShowAPIBridge] = useState(false);
   const [friendUsername, setFriendUsername] = useState('');
   
   // Mobile responsive state
@@ -1527,6 +1529,18 @@ const LiveChatReal = () => {
                   </Button>
                 )}
                 
+                {currentRoom?.type === 'webhook' && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => setShowAPIBridge(true)}
+                    title="API Bridge - Connect to Broker"
+                    className="text-purple-500 hover:text-purple-400"
+                  >
+                    <PlugZap className="w-4 h-4" />
+                  </Button>
+                )}
+                
                 <Button
                   variant="ghost"
                   size="icon"
@@ -2200,6 +2214,19 @@ const LiveChatReal = () => {
           currentUser={currentUser}
           onClose={() => setShowVideoCall(false)}
         />
+      )}
+
+      {/* API Bridge Panel */}
+      {showAPIBridge && currentRoomId && currentUser && (
+        <Dialog open={showAPIBridge} onOpenChange={setShowAPIBridge}>
+          <DialogContent className="max-w-md p-0 h-[80vh] overflow-hidden">
+            <APIBridgePanel
+              roomId={currentRoomId}
+              userId={currentUser.id}
+              onClose={() => setShowAPIBridge(false)}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
