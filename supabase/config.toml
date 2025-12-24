@@ -11,3 +11,15 @@ verify_jwt = false
 
 [functions.news-aggregator]
 verify_jwt = false
+
+[functions.broker-connect]
+verify_jwt = false
+
+[functions.broker-status]
+verify_jwt = false
+
+[functions.broker-order]
+verify_jwt = false
+
+[functions.broker-disconnect]
+verify_jwt = false

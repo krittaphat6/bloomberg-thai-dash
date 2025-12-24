@@ -86,6 +86,71 @@ export type Database = {
         }
         Relationships: []
       }
+      api_forward_logs: {
+        Row: {
+          action: string
+          broker_type: string
+          connection_id: string | null
+          created_at: string | null
+          error_message: string | null
+          executed_at: string | null
+          id: string
+          latency_ms: number | null
+          message_id: string | null
+          order_id: string | null
+          price: number | null
+          quantity: number
+          response_data: Json | null
+          room_id: string
+          status: string
+          symbol: string
+        }
+        Insert: {
+          action: string
+          broker_type: string
+          connection_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          latency_ms?: number | null
+          message_id?: string | null
+          order_id?: string | null
+          price?: number | null
+          quantity: number
+          response_data?: Json | null
+          room_id: string
+          status?: string
+          symbol: string
+        }
+        Update: {
+          action?: string
+          broker_type?: string
+          connection_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          latency_ms?: number | null
+          message_id?: string | null
+          order_id?: string | null
+          price?: number | null
+          quantity?: number
+          response_data?: Json | null
+          room_id?: string
+          status?: string
+          symbol?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_forward_logs_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "broker_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_usage_logs: {
         Row: {
           api_name: string
@@ -115,6 +180,74 @@ export type Database = {
           timestamp?: string | null
         }
         Relationships: []
+      }
+      broker_connections: {
+        Row: {
+          avg_latency_ms: number | null
+          broker_type: string
+          created_at: string | null
+          credentials: Json
+          failed_orders: number | null
+          id: string
+          is_active: boolean | null
+          is_connected: boolean | null
+          last_connected_at: string | null
+          last_error: string | null
+          max_position_size: number | null
+          room_id: string | null
+          session_data: Json | null
+          successful_orders: number | null
+          total_orders_sent: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          avg_latency_ms?: number | null
+          broker_type: string
+          created_at?: string | null
+          credentials?: Json
+          failed_orders?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_connected?: boolean | null
+          last_connected_at?: string | null
+          last_error?: string | null
+          max_position_size?: number | null
+          room_id?: string | null
+          session_data?: Json | null
+          successful_orders?: number | null
+          total_orders_sent?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          avg_latency_ms?: number | null
+          broker_type?: string
+          created_at?: string | null
+          credentials?: Json
+          failed_orders?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_connected?: boolean | null
+          last_connected_at?: string | null
+          last_error?: string | null
+          max_position_size?: number | null
+          room_id?: string | null
+          session_data?: Json | null
+          successful_orders?: number | null
+          total_orders_sent?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broker_connections_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       chat_rooms: {
         Row: {
