@@ -1,19 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import { BrokerAPI, BrokerConnection, TradovateCredentials, SettradeCredentials, MT5Credentials } from '@/services/brokers/BrokerAPIClient';
+import { MT5CockpitDashboard } from './MT5CockpitDashboard';
 import { 
   Plug, 
   PlugZap, 
   Activity, 
-  Settings2, 
   Loader2, 
   CheckCircle, 
   XCircle,
@@ -107,7 +105,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
     loadConnection();
   }, [roomId, userId, brokerType]);
 
-  const refreshStatus = async (connId?: string) => {
+  const refreshStatus = useCallback(async (connId?: string) => {
     const id = connId || connection?.id;
     if (!id) return;
 
@@ -124,7 +122,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
     } finally {
       setIsLoadingStatus(false);
     }
-  };
+  }, [connection?.id]);
 
   const handleConnect = async () => {
     setIsConnecting(true);
@@ -384,89 +382,54 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
               </div>
             )}
 
-            {/* MT5 Form */}
+            {/* MT5 Cockpit Dashboard */}
             {brokerType === 'mt5' && (
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Account Number</Label>
-                  <Input
-                    value={mt5Credentials.account}
-                    onChange={e => setMt5Credentials(p => ({ ...p, account: e.target.value }))}
-                    placeholder="e.g., 12345678"
-                    className="mt-1"
-                  />
-                </div>
-                
-                <div>
-                  <Label className="text-xs text-muted-foreground">Server</Label>
-                  <Input
-                    value={mt5Credentials.server}
-                    onChange={e => setMt5Credentials(p => ({ ...p, server: e.target.value }))}
-                    placeholder="e.g., MetaQuotes-Demo"
-                    className="mt-1"
-                  />
-                </div>
-                
-                <div>
-                  <Label className="text-xs text-muted-foreground">Password (Optional - for reference)</Label>
-                  <Input
-                    type="password"
-                    value={mt5Credentials.password || ''}
-                    onChange={e => setMt5Credentials(p => ({ ...p, password: e.target.value }))}
-                    placeholder="••••••••"
-                    className="mt-1"
-                  />
-                </div>
-                
-                <div>
-                  <Label className="text-xs text-muted-foreground">Magic Number</Label>
-                  <Input
-                    type="number"
-                    value={mt5Credentials.magic_number}
-                    onChange={e => setMt5Credentials(p => ({ ...p, magic_number: parseInt(e.target.value) || 888888 }))}
-                    placeholder="888888"
-                    className="mt-1"
-                  />
-                </div>
-
-                <div className="p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground">
-                  <p className="font-medium mb-1">📊 MT5 Bridge Mode</p>
-                  <p>ใช้ EA ใน MT5 เพื่อ poll commands จาก server และส่ง orders โดยอัตโนมัติ</p>
-                </div>
-              </div>
+              <MT5CockpitDashboard
+                connection={connection}
+                mt5Credentials={mt5Credentials}
+                onCredentialsChange={setMt5Credentials}
+                onConnect={handleConnect}
+                onDisconnect={handleDisconnect}
+                onRefreshStatus={refreshStatus}
+                status={status}
+                isConnecting={isConnecting}
+                isLoadingStatus={isLoadingStatus}
+              />
             )}
 
-            {/* Connect/Disconnect Button */}
-            <div className="pt-4">
-              {connection?.is_connected ? (
-                <Button 
-                  variant="destructive" 
-                  className="w-full"
-                  onClick={handleDisconnect}
-                >
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Disconnect
-                </Button>
-              ) : (
-                <Button 
-                  className="w-full"
-                  onClick={handleConnect}
-                  disabled={isConnecting}
-                >
-                  {isConnecting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Connecting...
-                    </>
-                  ) : (
-                    <>
-                      <Plug className="w-4 h-4 mr-2" />
-                      Connect
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
+            {/* Connect/Disconnect Button - Only for non-MT5 */}
+            {brokerType !== 'mt5' && (
+              <div className="pt-4">
+                {connection?.is_connected ? (
+                  <Button 
+                    variant="destructive" 
+                    className="w-full"
+                    onClick={handleDisconnect}
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button 
+                    className="w-full"
+                    onClick={handleConnect}
+                    disabled={isConnecting}
+                  >
+                    {isConnecting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : (
+                      <>
+                        <Plug className="w-4 h-4 mr-2" />
+                        Connect
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </TabsContent>
 
