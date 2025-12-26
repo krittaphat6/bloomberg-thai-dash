@@ -461,6 +461,77 @@ export type Database = {
           },
         ]
       }
+      mt5_commands: {
+        Row: {
+          command_type: string
+          comment: string | null
+          connection_id: string
+          created_at: string | null
+          deviation: number | null
+          error_code: number | null
+          error_message: string | null
+          executed_at: string | null
+          executed_price: number | null
+          executed_volume: number | null
+          id: string
+          price: number | null
+          sl: number | null
+          status: string | null
+          symbol: string | null
+          ticket_id: number | null
+          tp: number | null
+          volume: number | null
+        }
+        Insert: {
+          command_type: string
+          comment?: string | null
+          connection_id: string
+          created_at?: string | null
+          deviation?: number | null
+          error_code?: number | null
+          error_message?: string | null
+          executed_at?: string | null
+          executed_price?: number | null
+          executed_volume?: number | null
+          id?: string
+          price?: number | null
+          sl?: number | null
+          status?: string | null
+          symbol?: string | null
+          ticket_id?: number | null
+          tp?: number | null
+          volume?: number | null
+        }
+        Update: {
+          command_type?: string
+          comment?: string | null
+          connection_id?: string
+          created_at?: string | null
+          deviation?: number | null
+          error_code?: number | null
+          error_message?: string | null
+          executed_at?: string | null
+          executed_price?: number | null
+          executed_volume?: number | null
+          id?: string
+          price?: number | null
+          sl?: number | null
+          status?: string | null
+          symbol?: string | null
+          ticket_id?: number | null
+          tp?: number | null
+          volume?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mt5_commands_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "broker_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_members: {
         Row: {
           id: string

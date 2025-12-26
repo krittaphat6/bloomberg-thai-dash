@@ -9,9 +9,11 @@ import {
   RefreshCw, 
   Wifi, 
   WifiOff,
-  Loader2
+  Loader2,
+  Send
 } from 'lucide-react';
 import { MT5Credentials, BrokerConnection } from '@/services/brokers/BrokerAPIClient';
+import { MT5TestOrderPanel } from './MT5TestOrderPanel';
 
 interface MT5CockpitDashboardProps {
   connection: BrokerConnection | null;
@@ -41,6 +43,7 @@ export const MT5CockpitDashboard: React.FC<MT5CockpitDashboardProps> = ({
 }) => {
   const [showKey, setShowKey] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
+  const [showTestOrder, setShowTestOrder] = useState(false);
   
   const isConnected = status?.connected || connection?.is_connected;
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -225,15 +228,24 @@ export const MT5CockpitDashboard: React.FC<MT5CockpitDashboardProps> = ({
           Refresh
         </Button>
         {isConnected ? (
-          <Button 
-            variant="destructive" 
-            className="flex-1" 
-            onClick={onDisconnect}
-            disabled={isConnecting}
-          >
-            <WifiOff className="w-4 h-4 mr-2" />
-            Disconnect
-          </Button>
+          <>
+            <Button 
+              variant="secondary"
+              className="flex-1" 
+              onClick={() => setShowTestOrder(true)}
+            >
+              <Send className="w-4 h-4 mr-2" />
+              Test Order
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={onDisconnect}
+              disabled={isConnecting}
+              size="icon"
+            >
+              <WifiOff className="w-4 h-4" />
+            </Button>
+          </>
         ) : (
           <Button 
             className="flex-1" 
@@ -249,6 +261,13 @@ export const MT5CockpitDashboard: React.FC<MT5CockpitDashboardProps> = ({
           </Button>
         )}
       </div>
+
+      {/* Test Order Panel */}
+      <MT5TestOrderPanel
+        connectionId={connection?.id || ''}
+        isOpen={showTestOrder}
+        onClose={() => setShowTestOrder(false)}
+      />
     </div>
   );
 };
