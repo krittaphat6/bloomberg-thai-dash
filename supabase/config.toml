@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.broker-disconnect]
 verify_jwt = false
+
+[functions.mt5-poll]
+verify_jwt = false
