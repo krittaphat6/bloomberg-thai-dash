@@ -84,14 +84,21 @@ export interface SettradeCredentials {
   env: 'uat' | 'prod';
 }
 
+export interface MT5Credentials {
+  account: string;
+  server: string;
+  password?: string;
+  magic_number: number;
+}
+
 export const BrokerAPI = {
   /**
    * Connect to broker
    */
   async connect(
     connectionId: string, 
-    credentials: TradovateCredentials | SettradeCredentials, 
-    brokerType: 'tradovate' | 'settrade'
+    credentials: TradovateCredentials | SettradeCredentials | MT5Credentials, 
+    brokerType: 'tradovate' | 'settrade' | 'mt5'
   ): Promise<{ success: boolean; error?: string; session?: unknown }> {
     return callEdgeFunction('broker-connect', {
       connectionId,
@@ -137,7 +144,7 @@ export const BrokerAPI = {
   async getOrCreateConnection(
     roomId: string, 
     userId: string, 
-    brokerType: 'tradovate' | 'settrade'
+    brokerType: 'tradovate' | 'settrade' | 'mt5'
   ): Promise<BrokerConnection> {
     // Check existing
     const { data: existing } = await supabase
@@ -186,7 +193,7 @@ export const BrokerAPI = {
    */
   async updateCredentials(
     connectionId: string, 
-    credentials: TradovateCredentials | SettradeCredentials
+    credentials: TradovateCredentials | SettradeCredentials | MT5Credentials
   ): Promise<void> {
     // Cast to any to satisfy Supabase's Json type
     const { error } = await supabase

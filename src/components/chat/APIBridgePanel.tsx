@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { BrokerAPI, BrokerConnection, TradovateCredentials, SettradeCredentials } from '@/services/brokers/BrokerAPIClient';
+import { BrokerAPI, BrokerConnection, TradovateCredentials, SettradeCredentials, MT5Credentials } from '@/services/brokers/BrokerAPIClient';
 import { 
   Plug, 
   PlugZap, 
@@ -32,7 +32,7 @@ interface APIBridgePanelProps {
 }
 
 export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, onClose }) => {
-  const [brokerType, setBrokerType] = useState<'tradovate' | 'settrade'>('tradovate');
+  const [brokerType, setBrokerType] = useState<'tradovate' | 'settrade' | 'mt5'>('tradovate');
   const [connection, setConnection] = useState<BrokerConnection | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
@@ -64,6 +64,14 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
     env: 'uat'
   });
 
+  // MT5 credentials
+  const [mt5Credentials, setMt5Credentials] = useState<MT5Credentials>({
+    account: '',
+    server: '',
+    password: '',
+    magic_number: 888888
+  });
+
   // Load existing connection
   useEffect(() => {
     const loadConnection = async () => {
@@ -78,6 +86,8 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
             setTradovateCredentials(creds as TradovateCredentials);
           } else if (brokerType === 'settrade' && (creds as SettradeCredentials).appId) {
             setSettradeCredentials(creds as SettradeCredentials);
+          } else if (brokerType === 'mt5' && (creds as MT5Credentials).account) {
+            setMt5Credentials(creds as MT5Credentials);
           }
         }
 
@@ -125,13 +135,17 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         setConnection(conn);
       }
 
-      const credentials = brokerType === 'tradovate' ? tradovateCredentials : settradeCredentials;
+      const credentials = brokerType === 'tradovate' 
+        ? tradovateCredentials 
+        : brokerType === 'settrade' 
+          ? settradeCredentials 
+          : mt5Credentials;
       
       // Update credentials first
-      await BrokerAPI.updateCredentials(conn.id, credentials);
+      await BrokerAPI.updateCredentials(conn.id, credentials as TradovateCredentials | SettradeCredentials | MT5Credentials);
 
       // Call edge function to connect
-      const result = await BrokerAPI.connect(conn.id, credentials, brokerType);
+      const result = await BrokerAPI.connect(conn.id, credentials as TradovateCredentials | SettradeCredentials | MT5Credentials, brokerType);
 
       if (!result.success) {
         toast({
@@ -213,20 +227,27 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         <TabsContent value="connect" className="flex-1 p-4">
           <div className="space-y-4">
             {/* Broker Selector */}
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <Button
                 variant={brokerType === 'tradovate' ? 'default' : 'outline'}
-                className="flex-1"
                 onClick={() => setBrokerType('tradovate')}
+                size="sm"
               >
                 Tradovate
               </Button>
               <Button
                 variant={brokerType === 'settrade' ? 'default' : 'outline'}
-                className="flex-1"
                 onClick={() => setBrokerType('settrade')}
+                size="sm"
               >
                 Settrade
+              </Button>
+              <Button
+                variant={brokerType === 'mt5' ? 'default' : 'outline'}
+                onClick={() => setBrokerType('mt5')}
+                size="sm"
+              >
+                MT5
               </Button>
             </div>
 
@@ -359,6 +380,58 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
                     placeholder="Trading PIN"
                     className="mt-1"
                   />
+                </div>
+              </div>
+            )}
+
+            {/* MT5 Form */}
+            {brokerType === 'mt5' && (
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Account Number</Label>
+                  <Input
+                    value={mt5Credentials.account}
+                    onChange={e => setMt5Credentials(p => ({ ...p, account: e.target.value }))}
+                    placeholder="e.g., 12345678"
+                    className="mt-1"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="text-xs text-muted-foreground">Server</Label>
+                  <Input
+                    value={mt5Credentials.server}
+                    onChange={e => setMt5Credentials(p => ({ ...p, server: e.target.value }))}
+                    placeholder="e.g., MetaQuotes-Demo"
+                    className="mt-1"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="text-xs text-muted-foreground">Password (Optional - for reference)</Label>
+                  <Input
+                    type="password"
+                    value={mt5Credentials.password || ''}
+                    onChange={e => setMt5Credentials(p => ({ ...p, password: e.target.value }))}
+                    placeholder="••••••••"
+                    className="mt-1"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="text-xs text-muted-foreground">Magic Number</Label>
+                  <Input
+                    type="number"
+                    value={mt5Credentials.magic_number}
+                    onChange={e => setMt5Credentials(p => ({ ...p, magic_number: parseInt(e.target.value) || 888888 }))}
+                    placeholder="888888"
+                    className="mt-1"
+                  />
+                </div>
+
+                <div className="p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground">
+                  <p className="font-medium mb-1">📊 MT5 Bridge Mode</p>
+                  <p>ใช้ EA ใน MT5 เพื่อ poll commands จาก server และส่ง orders โดยอัตโนมัติ</p>
                 </div>
               </div>
             )}
