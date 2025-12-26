@@ -42,6 +42,14 @@ serve(async (req) => {
       const result = await connectSettrade(credentials)
       session = result.session
       error = result.error
+    } else if (brokerType === 'mt5') {
+      // MT5 uses polling mechanism - just mark as active
+      session = {
+        account: credentials.account,
+        server: credentials.server,
+        magic_number: credentials.magic_number || 888888,
+        bridge_mode: 'api'
+      }
     } else {
       return new Response(
         JSON.stringify({ success: false, error: 'Invalid broker type' }),
