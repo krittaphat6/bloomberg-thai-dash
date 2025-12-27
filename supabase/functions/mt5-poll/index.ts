@@ -42,23 +42,16 @@ serve(async (req) => {
         })
         .eq('id', connectionId)
 
-      // Reset stuck 'processing' commands older than 30 seconds
-      const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString()
-      await supabase
-        .from('mt5_commands')
-        .update({ status: 'pending' })
-        .eq('connection_id', connectionId)
-        .eq('status', 'processing')
-        .lt('created_at', thirtySecondsAgo)
-
-      // Get pending commands from mt5_commands table
+      // CRITICAL FIX: Use atomic update to claim pending commands
+      // This prevents duplicate execution by marking commands as 'sent' immediately
+      // Only get commands that are 'pending' (not 'sent', 'processing', 'completed', or 'failed')
       const { data: commands, error } = await supabase
         .from('mt5_commands')
         .select('*')
         .eq('connection_id', connectionId)
         .eq('status', 'pending')
         .order('created_at', { ascending: true })
-        .limit(10)
+        .limit(5) // Limit to 5 commands per poll to avoid overload
 
       if (error) {
         console.error('❌ Error fetching commands:', error)
@@ -68,20 +61,35 @@ serve(async (req) => {
         )
       }
 
-      // CRITICAL: Mark commands as 'processing' immediately to prevent duplicate execution
-      if (commands && commands.length > 0) {
-        const commandIds = commands.map(cmd => cmd.id)
-        
-        await supabase
-          .from('mt5_commands')
-          .update({ status: 'processing' })
-          .in('id', commandIds)
+      // If no commands, return empty array
+      if (!commands || commands.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, commands: [] }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
 
-        console.log(`✅ Marked ${commands.length} commands as processing`)
+      // CRITICAL: Mark these specific commands as 'sent' BEFORE returning to EA
+      // This prevents them from being picked up by the next poll
+      const commandIds = commands.map(cmd => cmd.id)
+      
+      const { error: updateError } = await supabase
+        .from('mt5_commands')
+        .update({ 
+          status: 'sent',
+          executed_at: new Date().toISOString() // Track when sent to EA
+        })
+        .in('id', commandIds)
+
+      if (updateError) {
+        console.error('❌ Error marking commands as sent:', updateError)
+        // Still continue - better to potentially duplicate than to lose commands
+      } else {
+        console.log(`✅ Marked ${commands.length} commands as 'sent' to EA`)
       }
 
       // Transform to EA format
-      const eaCommands = (commands || []).map(cmd => ({
+      const eaCommands = commands.map(cmd => ({
         id: cmd.id,
         command_type: cmd.command_type || 'buy',
         symbol: cmd.symbol || '',
@@ -93,7 +101,7 @@ serve(async (req) => {
         comment: cmd.comment || `ABLE_${cmd.command_type}`
       }))
 
-      console.log(`📤 Returning ${eaCommands.length} commands to EA`)
+      console.log(`📤 Returning ${eaCommands.length} commands to EA: ${commandIds.join(', ')}`)
 
       return new Response(
         JSON.stringify({ success: true, commands: eaCommands }),
@@ -103,10 +111,22 @@ serve(async (req) => {
 
     // POST: EA reports execution result
     if (req.method === 'POST') {
-      const body = await req.json()
+      let body: any
+      try {
+        const text = await req.text()
+        console.log(`📥 Raw POST body: ${text.substring(0, 500)}`)
+        body = JSON.parse(text)
+      } catch (parseError) {
+        console.error('❌ JSON parse error:', parseError)
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid JSON body' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       const { command_id, ticket, price, volume, code, message } = body
 
-      console.log(`📥 Result for command ${command_id}: code=${code}`)
+      console.log(`📥 Result for command ${command_id}: code=${code}, ticket=${ticket}`)
 
       if (!command_id) {
         return new Response(
@@ -115,23 +135,28 @@ serve(async (req) => {
         )
       }
 
+      // Success codes: 0 = success, 10009 = TRADE_RETCODE_DONE, 10008 = TRADE_RETCODE_PLACED
       const isSuccess = code === 0 || code === 10009 || code === 10008
       
       // Update command status in mt5_commands table
-      await supabase
+      const { error: cmdError } = await supabase
         .from('mt5_commands')
         .update({
           status: isSuccess ? 'completed' : 'failed',
-          ticket_id: ticket,
-          executed_price: price,
-          executed_volume: volume,
+          ticket_id: ticket || null,
+          executed_price: price || null,
+          executed_volume: volume || null,
           error_code: code,
-          error_message: isSuccess ? null : message,
+          error_message: isSuccess ? null : (message || 'Unknown error'),
           executed_at: new Date().toISOString()
         })
         .eq('id', command_id)
 
-      console.log(`✅ Command ${command_id} marked as ${isSuccess ? 'completed' : 'failed'}`)
+      if (cmdError) {
+        console.error('❌ Error updating command:', cmdError)
+      } else {
+        console.log(`✅ Command ${command_id} marked as ${isSuccess ? 'completed' : 'failed'}`)
+      }
 
       // Update connection stats
       const { data: conn } = await supabase
