@@ -126,7 +126,7 @@ const dilateImage = (imageData: ImageData, iterations: number): ImageData => {
   return new ImageData(current, width, height);
 };
 
-// Preprocess image for better OCR results on Bloomberg terminal
+// Preprocess image for better OCR results on Bloomberg terminal - Optimized for WisdomTree Holdings layout
 const preprocessImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
@@ -134,8 +134,8 @@ const preprocessImage = (file: File): Promise<string> => {
     const img = new Image();
     
     img.onload = () => {
-      // Scale up 3x for better OCR
-      const scale = 3;
+      // Scale up 4x for better OCR on fine Bloomberg text
+      const scale = 4;
       canvas.width = img.width * scale;
       canvas.height = img.height * scale;
       
@@ -157,7 +157,7 @@ const preprocessImage = (file: File): Promise<string> => {
       const processedData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = processedData.data;
       
-      // Bloomberg terminal color detection - Enhanced thresholds
+      // Bloomberg terminal color detection - Optimized for WisdomTree Holdings screen
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
@@ -165,25 +165,34 @@ const preprocessImage = (file: File): Promise<string> => {
         
         const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
         
-        // Enhanced text color detection
-        const isGreen = g > 80 && g > r * 1.3 && g > b * 1.3;
-        const isYellow = r > 150 && g > 150 && b < 120 && Math.abs(r - g) < 60;
-        const isOrange = r > 180 && g > 100 && g < 200 && b < 80;
-        const isAmber = r > 200 && g > 140 && g < 220 && b < 100;
-        const isWhite = r > 150 && g > 150 && b > 150;
-        const isRed = r > 150 && r > g * 1.5 && r > b * 1.5;
-        const isCyan = b > 100 && g > 100 && r < 120;
-        const isLightBlue = b > 150 && g > 150 && r < 180;
+        // Enhanced text color detection for Bloomberg terminal
+        // Yellow/Orange text (Security names, headers): r>180, g>120, b<100
+        const isYellow = r > 180 && g > 120 && b < 120;
+        const isOrange = r > 200 && g > 100 && g < 180 && b < 80;
+        const isAmber = r > 180 && g > 140 && b < 100;
         
-        const isText = isGreen || isYellow || isOrange || isAmber || 
-                       isWhite || isRed || isCyan || isLightBlue || 
-                       brightness > 100;
+        // Green text (Positive changes): g>120, g>r*1.2, g>b*1.3
+        const isGreen = g > 100 && g > r * 1.1 && g > b * 1.2;
+        
+        // Red text (Negative changes): r>150, r>g*1.3, r>b*1.5
+        const isRed = r > 140 && r > g * 1.3 && r > b * 1.4;
+        
+        // White/Light gray text (General data): high brightness
+        const isWhite = r > 140 && g > 140 && b > 140 && brightness > 150;
+        
+        // Cyan/Light blue (Links, special text)
+        const isCyan = b > 120 && g > 120 && r < 140 && (b + g) > r * 2;
+        
+        // Check if this pixel is text
+        const isText = isYellow || isOrange || isAmber || isGreen || isRed || isWhite || isCyan || brightness > 120;
         
         if (isText) {
+          // Black text on white background for OCR
           data[i] = 0;
           data[i + 1] = 0;
           data[i + 2] = 0;
         } else {
+          // White background
           data[i] = 255;
           data[i + 1] = 255;
           data[i + 2] = 255;
@@ -192,7 +201,7 @@ const preprocessImage = (file: File): Promise<string> => {
       
       ctx.putImageData(processedData, 0, 0);
       
-      // Apply dilation to thicken text
+      // Apply dilation to thicken text - helps with thin Bloomberg fonts
       const finalData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const dilated = dilateImage(finalData, 1);
       ctx.putImageData(dilated, 0, 0);
@@ -235,7 +244,7 @@ const isHeaderLine = (line: string): boolean => {
   return false;
 };
 
-// Parse OCR text into structured table rows - Enhanced version
+// Parse OCR text into structured table rows - Optimized for WisdomTree Holdings layout
 const parseOCRText = (text: string): Array<{
   rank: string;
   name: string;
@@ -259,21 +268,34 @@ const parseOCRText = (text: string): Array<{
     filingDate: string;
   }> = [];
   
-  const lines = text.split('\n').filter(line => line.trim());
+  // Apply OCR correction first
+  const correctedText = correctOCRText(text);
+  const lines = correctedText.split('\n').filter(line => line.trim());
   
-  // Expanded ticker patterns including Treasury and special tickers
+  // Expanded ticker patterns for Bloomberg terminal data
   const tickerPatterns = [
-    // Standard tickers: MSFT US, NVDA US, etc.
-    /([A-Z]{2,5})\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB)\b/i,
-    // Japanese tickers: 7203 JP
-    /(\d{4})\s+(JP)\b/i,
-    // Treasury/Float tickers: TF Float 0..., TF Float 1...
+    // Standard tickers: MSFT US, NVDA US, AAPL US, etc.
+    /([A-Z]{2,6})\s+(US|JP|HK|LN|GY|GR|FP|CN|IN|AU|SP|TB|SS|SW|TT|NA|KS|SM|IM|PW)\b/i,
+    // Slash tickers: BA/ LN, BP/ LN, RR/ LN
+    /([A-Z]{2,5})\/\s*(LN|US|JP)\b/i,
+    // Japanese numeric tickers: 7203 JP, 8750 JP
+    /(\d{4,6})\s+(JP|HK|TT|KS)\b/i,
+    // Korean tickers: 005930 KS
+    /(\d{6})\s+(KS)\b/i,
+    // Treasury/Float tickers: TF Float 0..., TF Float 1..., TYH6 COMB
     /TF\s*Float\s*[\d\.]+/i,
-    // Bond tickers: B 0 02/05...
+    /[TFU][YUV]H\d\s+COMB/i,
+    /UXYH\d\s+CO/i,
+    // Bond tickers: B 0 02/05..., B 0 05/14...
     /B\s+\d+\s+\d{2}\/\d{2}/i,
+    // Indian tickers: RELIANCE ..., HDFCB IN
+    /RELIANCE\s*\.{2,}/i,
+    /[A-Z]{5,8}\s+IN\b/i,
+    // Special patterns: GFNORTEO...
+    /GFNORTE[O\d]+/i,
   ];
   
-  // Date pattern
+  // Date pattern - Bloomberg uses MM/DD/YY format
   const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
   
   // Number patterns
@@ -281,13 +303,25 @@ const parseOCRText = (text: string): Array<{
   const posChgPattern = /([+-]\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?)/;
   const mvPattern = /([\d,.]+)\s*(BLN|MLN|M|B)\b/i;
   
-  // Security names keywords to look for
+  // Security names - common patterns from WisdomTree data
   const securityKeywords = [
-    'TREASURY', 'FRN', 'BILL',
-    'Microsoft', 'NVIDIA', 'Apple', 'Alphabet', 'Google',
-    'Exxon', 'Meta', 'Broadcom', 'Home Depot', 'JPMorgan',
+    'TREASURY', 'FRN', 'BILL', 'NOTE', 'BOND',
+    'Microsoft', 'NVIDIA', 'Apple', 'Alphabet', 'Google', 'Meta',
+    'Exxon', 'Mobil', 'Broadcom', 'Home Depot', 'JPMorgan', 'Chase',
     'Chevron', 'UnitedHealth', 'Coca-Cola', 'AbbVie', 'Toyota', 'Oracle',
-    'Corp', 'Inc', 'Ltd', 'Co', 'Class', 'Common', 'Mobil', 'Procter', 'Gamble'
+    'Corp', 'Inc', 'Ltd', 'Co', 'Class', 'Common', 'Shares', 'Stock',
+    'BAE Systems', 'Rheinmetall', 'Visa', 'Walmart', 'T-Mobile',
+    'McDonald', 'Merck', 'Safran', 'Airbus', 'Procter', 'Gamble',
+    'Abbott', 'LVMH', 'Verizon', 'Rolls-Royce', 'Leonardo', 'AT&T',
+    'Amazon', 'Taiwan Semiconductor', 'Mitsubishi', 'Samsung',
+    'Reliance', 'HDFC', 'Tata', 'Infosys', 'Caterpillar', 'Bank',
+    'Mastercard', 'American Express', 'Berkshire', 'Booking',
+    'Texas Instruments', 'Palantir', 'ServiceNow', 'Salesforce',
+    'Philip Morris', 'Delta Air', 'Southwest', 'Honeywell',
+    'Pfizer', 'Regeneron', 'Amgen', 'Gilead', 'Bristol-Myers',
+    'Costco', 'TJX', 'Best Buy', 'Stryker', 'Sumitomo', 'Takeda',
+    'Panasonic', 'Nippon Steel', 'Fast Retailing', 'Ping An',
+    'Alibaba', 'Tencent', 'SK hynix', 'Quanta', 'ASML', 'SAP'
   ];
   
   let rowCounter = 1;
@@ -312,8 +346,8 @@ const parseOCRText = (text: string): Array<{
       filingDate: ''
     };
     
-    // Extract row number (at start of line)
-    const rowNumMatch = trimmedLine.match(/^(\d{1,2})[\s\)\.\]]+/);
+    // Extract row number (at start of line) - handles 1), 2), 10), 100) etc.
+    const rowNumMatch = trimmedLine.match(/^(\d{1,3})[\s\)\.\]]+/);
     if (rowNumMatch) {
       rowData.rank = rowNumMatch[1];
     }
