@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { TrendingUp, TrendingDown, Send, X, Target, Shield } from 'lucide-react';
+import { TrendingUp, TrendingDown, Send, X, Target, Shield, Loader2 } from 'lucide-react';
 
 interface MT5TestOrderPanelProps {
   connectionId: string;
@@ -20,7 +20,7 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
   isOpen,
   onClose
 }) => {
-  const [orderType, setOrderType] = useState<'market' | 'limit' | 'stop' | 'close'>('market');
+  const [orderType, setOrderType] = useState<'market' | 'limit' | 'stop' | 'close' | 'modify'>('market');
   const [action, setAction] = useState<'buy' | 'sell'>('buy');
   const [symbol, setSymbol] = useState('XAUUSD');
   const [volume, setVolume] = useState(0.01);
@@ -30,13 +30,54 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
   const [deviation, setDeviation] = useState(20);
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastSubmitTime, setLastSubmitTime] = useState(0);
 
   const popularSymbols = [
-    'XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF',
-    'AUDUSD', 'USDCAD', 'NZDUSD', 'EURJPY', 'GBPJPY'
+    'XAUUSD',   // Gold
+    'BTCUSD',   // Bitcoin
+    'ETHUSD',   // Ethereum
+    'EURUSD',   // Euro
+    'GBPUSD',   // Pound
+    'USDJPY',   // Yen
+    'USDCHF',   // Swiss Franc
+    'AUDUSD',   // Aussie
+    'USDCAD',   // Canadian
+    'NZDUSD',   // Kiwi
+    'EURJPY',   // Euro/Yen
+    'GBPJPY',   // Pound/Yen
+    'XAGUSD',   // Silver
+    'US30',     // Dow Jones
+    'NAS100',   // Nasdaq
+    'SPX500',   // S&P 500
   ];
 
+  const getCommandType = (): string => {
+    if (orderType === 'close') return 'close';
+    if (orderType === 'modify') return 'modify_sl_tp';
+    
+    if (orderType === 'market') {
+      return action === 'buy' ? 'buy' : 'sell';
+    } else if (orderType === 'limit') {
+      return action === 'buy' ? 'buy_limit' : 'sell_limit';
+    } else if (orderType === 'stop') {
+      return action === 'buy' ? 'buy_stop' : 'sell_stop';
+    }
+    
+    return 'buy';
+  };
+
   const handleSubmit = async () => {
+    const now = Date.now();
+    
+    // Prevent double submission with 2 second debounce
+    if (isSubmitting || (now - lastSubmitTime < 2000)) {
+      toast({
+        title: '⏳ Please wait',
+        description: 'Order is being processed...',
+      });
+      return;
+    }
+
     if (!connectionId) {
       toast({
         title: 'Error',
@@ -47,51 +88,53 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
     }
 
     setIsSubmitting(true);
+    setLastSubmitTime(now);
+
+    // Warning for crypto symbols
+    if (['BTCUSD', 'ETHUSD'].includes(symbol.toUpperCase())) {
+      toast({
+        title: '⚠️ Crypto Symbol Notice',
+        description: 'Make sure this symbol exists in your MT5. It might be named BTCUSDT, BTC/USD, or not available.',
+      });
+    }
     
     try {
-      let commandType = '';
-      
-      if (orderType === 'market') {
-        commandType = action === 'buy' ? 'buy' : 'sell';
-      } else if (orderType === 'limit') {
-        commandType = action === 'buy' ? 'buy_limit' : 'sell_limit';
-      } else if (orderType === 'stop') {
-        commandType = action === 'buy' ? 'buy_stop' : 'sell_stop';
-      } else if (orderType === 'close') {
-        commandType = 'close_all';
-      }
+      const commandType = getCommandType();
+
+      const payload = {
+        connection_id: connectionId,
+        command_type: commandType,
+        symbol: symbol.toUpperCase(),
+        volume: volume,
+        price: price ? Number(price) : 0,
+        sl: stopLoss ? Number(stopLoss) : 0,
+        tp: takeProfit ? Number(takeProfit) : 0,
+        deviation: deviation,
+        comment: comment || `ABLE_${commandType}`
+      };
 
       const { data, error } = await supabase
         .from('mt5_commands')
-        .insert({
-          connection_id: connectionId,
-          command_type: commandType,
-          symbol: symbol.toUpperCase(),
-          volume: volume,
-          price: price ? Number(price) : null,
-          sl: stopLoss ? Number(stopLoss) : null,
-          tp: takeProfit ? Number(takeProfit) : null,
-          deviation: deviation,
-          comment: comment || `Test order from web`,
-          status: 'pending'
-        })
+        .insert(payload)
         .select()
         .single();
 
       if (error) throw error;
 
       toast({
-        title: '✅ Order Queued',
-        description: `${commandType.toUpperCase()} ${volume} lots ${symbol} - Waiting for MT5 EA`,
+        title: '✅ Order Sent to MT5',
+        description: `${commandType.toUpperCase()} ${volume} lots ${symbol}`,
       });
-      onClose();
+
+      // Keep isSubmitting true for 2 seconds to prevent double-click
+      setTimeout(() => setIsSubmitting(false), 2000);
+      setTimeout(() => onClose(), 1000);
     } catch (error: any) {
       toast({
         title: '❌ Error',
         description: error.message,
         variant: 'destructive',
       });
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -109,11 +152,12 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
         <div className="space-y-4">
           {/* Order Type Tabs */}
           <Tabs value={orderType} onValueChange={(v) => setOrderType(v as any)}>
-            <TabsList className="grid grid-cols-4 w-full">
-              <TabsTrigger value="market">Market</TabsTrigger>
-              <TabsTrigger value="limit">Limit</TabsTrigger>
-              <TabsTrigger value="stop">Stop</TabsTrigger>
-              <TabsTrigger value="close">Close</TabsTrigger>
+            <TabsList className="grid grid-cols-5 w-full">
+              <TabsTrigger value="market" className="text-xs">Market</TabsTrigger>
+              <TabsTrigger value="limit" className="text-xs">Limit</TabsTrigger>
+              <TabsTrigger value="stop" className="text-xs">Stop</TabsTrigger>
+              <TabsTrigger value="close" className="text-xs">Close</TabsTrigger>
+              <TabsTrigger value="modify" className="text-xs">Modify</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -215,7 +259,7 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
           )}
 
           {/* Stop Loss */}
-          {['market', 'limit', 'stop'].includes(orderType) && (
+          {['market', 'limit', 'stop', 'modify'].includes(orderType) && (
             <div className="space-y-2">
               <Label className="text-muted-foreground flex items-center gap-2">
                 <Shield className="w-4 h-4 text-red-500" />
@@ -232,7 +276,7 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
           )}
 
           {/* Take Profit */}
-          {['market', 'limit', 'stop'].includes(orderType) && (
+          {['market', 'limit', 'stop', 'modify'].includes(orderType) && (
             <div className="space-y-2">
               <Label className="text-muted-foreground flex items-center gap-2">
                 <Target className="w-4 h-4 text-green-500" />
@@ -293,19 +337,27 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
             </div>
           </div>
 
+          {/* Tip for crypto symbols */}
+          <p className="text-xs text-muted-foreground">
+            💡 Tip: Check MT5 Market Watch for exact symbol name
+          </p>
+
           {/* Action Buttons */}
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" onClick={onClose} className="flex-1">
+            <Button variant="outline" onClick={onClose} className="flex-1" disabled={isSubmitting}>
               <X className="w-4 h-4 mr-2" />
               Cancel
             </Button>
             <Button 
               onClick={handleSubmit} 
               disabled={isSubmitting}
-              className="flex-1"
+              className={`flex-1 ${action === 'buy' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
             >
               {isSubmitting ? (
-                'Sending...'
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Sending...
+                </>
               ) : (
                 <>
                   <Send className="w-4 h-4 mr-2" />

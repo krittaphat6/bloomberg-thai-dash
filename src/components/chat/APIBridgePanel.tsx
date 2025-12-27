@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { BrokerAPI, BrokerConnection, TradovateCredentials, SettradeCredentials, MT5Credentials } from '@/services/brokers/BrokerAPIClient';
 import { MT5CockpitDashboard } from './MT5CockpitDashboard';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Plug, 
   PlugZap, 
@@ -20,7 +21,8 @@ import {
   TrendingUp,
   TrendingDown,
   Clock,
-  Zap
+  Zap,
+  Terminal
 } from 'lucide-react';
 
 interface APIBridgePanelProps {
@@ -35,6 +37,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
   const [forwardLogs, setForwardLogs] = useState<any[]>([]);
+  const [expertsLog, setExpertsLog] = useState<any[]>([]);
   
   // Status
   const [status, setStatus] = useState<{
@@ -104,6 +107,95 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
 
     loadConnection();
   }, [roomId, userId, brokerType]);
+
+  // Load Experts Log (MT5 commands)
+  const loadExpertsLog = useCallback(async () => {
+    if (!connection?.id) return;
+    
+    try {
+      const { data: commands } = await supabase
+        .from('mt5_commands')
+        .select('*')
+        .eq('connection_id', connection.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      if (!commands) return;
+      
+      // Convert to log format
+      const logs = commands.flatMap(cmd => {
+        const logEntries = [];
+        
+        // Command received
+        logEntries.push({
+          id: `${cmd.id}_received`,
+          timestamp: cmd.created_at,
+          type: 'info',
+          message: `📥 Command received: ${cmd.command_type} ${cmd.symbol} ${cmd.volume}`
+        });
+        
+        // Command status
+        if (cmd.status === 'completed') {
+          logEntries.push({
+            id: `${cmd.id}_success`,
+            timestamp: cmd.executed_at || cmd.created_at,
+            type: 'success',
+            message: `✅ Order executed: Ticket #${cmd.ticket_id} @ ${cmd.executed_price}`,
+            details: `Volume: ${cmd.executed_volume} lots, SL: ${cmd.sl || 'None'}, TP: ${cmd.tp || 'None'}`
+          });
+        } else if (cmd.status === 'failed') {
+          logEntries.push({
+            id: `${cmd.id}_error`,
+            timestamp: cmd.executed_at || cmd.created_at,
+            type: 'error',
+            message: `❌ OrderSend failed: ${cmd.error_code} - ${cmd.error_message || 'Unknown error'}`,
+            details: `Command: ${cmd.command_type} ${cmd.symbol} ${cmd.volume} lots`
+          });
+        } else {
+          logEntries.push({
+            id: `${cmd.id}_pending`,
+            timestamp: cmd.created_at,
+            type: 'info',
+            message: `⏳ Order pending: ${cmd.command_type} ${cmd.symbol} ${cmd.volume} lots`
+          });
+        }
+        
+        return logEntries;
+      });
+      
+      setExpertsLog(logs);
+    } catch (error) {
+      console.error('Failed to load experts log:', error);
+    }
+  }, [connection?.id]);
+
+  // Auto-refresh experts log with real-time subscription
+  useEffect(() => {
+    if (connection?.id) {
+      loadExpertsLog();
+      
+      // Subscribe to real-time updates
+      const subscription = supabase
+        .channel(`mt5_commands_${connection.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'mt5_commands',
+            filter: `connection_id=eq.${connection.id}`
+          },
+          () => {
+            loadExpertsLog();
+          }
+        )
+        .subscribe();
+      
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, [connection?.id, loadExpertsLog]);
 
   const refreshStatus = useCallback(async (connId?: string) => {
     const id = connId || connection?.id;
@@ -219,6 +311,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
           <TabsTrigger value="connect">Connect</TabsTrigger>
           <TabsTrigger value="status">Status</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
+          <TabsTrigger value="experts">Experts</TabsTrigger>
         </TabsList>
 
         {/* Connect Tab */}
@@ -600,6 +693,62 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
                       {log.error_message && (
                         <div className="mt-1 text-red-400 text-[10px]">
                           ❌ {log.error_message}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+        </TabsContent>
+
+        {/* Experts Tab - MT5 Command Logs */}
+        <TabsContent value="experts" className="flex-1 p-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Terminal className="w-4 h-4" />
+                MT5 Experts Log
+              </h3>
+              <Button 
+                size="sm" 
+                variant="ghost"
+                onClick={loadExpertsLog}
+              >
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <ScrollArea className="h-[300px]">
+              {expertsLog.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Terminal className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No commands sent yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2 font-mono text-xs">
+                  {expertsLog.map((log, index) => (
+                    <div 
+                      key={log.id || index}
+                      className={`p-2 rounded border ${
+                        log.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
+                        log.type === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-400' :
+                        log.type === 'info' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' :
+                        'bg-muted/50 border-border'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-muted-foreground shrink-0">
+                          {new Date(log.timestamp).toLocaleTimeString()}
+                        </span>
+                        <span className="flex-1 whitespace-pre-wrap break-all">
+                          {log.message}
+                        </span>
+                      </div>
+                      {log.details && (
+                        <div className="mt-1 pl-20 text-xs text-muted-foreground">
+                          {log.details}
                         </div>
                       )}
                     </div>
