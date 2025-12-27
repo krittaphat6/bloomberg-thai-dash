@@ -314,7 +314,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         <Button variant="ghost" size="sm" onClick={onClose}>✕</Button>
       </div>
 
-      <Tabs defaultValue="connect" className="flex-1 flex flex-col">
+      <Tabs defaultValue="connect" className="flex-1 flex flex-col min-h-0">
         <TabsList className="mx-4 mt-2">
           <TabsTrigger value="connect">Connect</TabsTrigger>
           <TabsTrigger value="status">Status</TabsTrigger>
@@ -323,7 +323,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         </TabsList>
 
         {/* Connect Tab */}
-        <TabsContent value="connect" className="flex-1 p-4">
+        <TabsContent value="connect" className="flex-1 p-4 overflow-auto">
           <div className="space-y-4">
             {/* Broker Selector */}
             <div className="grid grid-cols-3 gap-2">
@@ -535,7 +535,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         </TabsContent>
 
         {/* Status Tab */}
-        <TabsContent value="status" className="flex-1 p-4">
+        <TabsContent value="status" className="flex-1 p-4 overflow-auto">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">Connection Status</h3>
@@ -642,7 +642,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         </TabsContent>
 
         {/* Logs Tab */}
-        <TabsContent value="logs" className="flex-1 p-4">
+        <TabsContent value="logs" className="flex-1 p-4 overflow-auto">
           <div className="space-y-2">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold">Forward Logs</h3>
@@ -712,7 +712,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         </TabsContent>
 
         {/* Experts Tab - MT5 Command Logs */}
-        <TabsContent value="experts" className="flex-1 p-4">
+        <TabsContent value="experts" className="flex-1 p-4 overflow-auto">
           <div className="space-y-2">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold flex items-center gap-2">
