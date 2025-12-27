@@ -37,11 +37,14 @@ const ABLE3AI = () => {
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [selectedModel, setSelectedModel] = useState('llama3');
   const [isConnecting, setIsConnecting] = useState(false);
+  const [bridgeUrl, setBridgeUrl] = useState(OllamaService.getBridgeUrl());
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Check Ollama connection on mount
+  // Check Ollama connection on mount if bridge URL exists
   useEffect(() => {
-    handleConnect();
+    if (OllamaService.getBridgeUrl()) {
+      handleConnect();
+    }
   }, []);
 
   // Initial greeting
@@ -67,26 +70,60 @@ const ABLE3AI = () => {
     }
   }, [messages]);
 
+  const handleSaveBridgeUrl = () => {
+    OllamaService.setBridgeUrl(bridgeUrl);
+    toast({
+      title: "✅ Bridge URL saved",
+      description: "Attempting to connect...",
+    });
+    handleConnect();
+  };
+
   const handleConnect = async () => {
     setIsConnecting(true);
-    try {
-      const isAvailable = await OllamaService.isAvailable();
-      setOllamaConnected(isAvailable);
+    
+    // Check if bridge URL is set
+    if (!OllamaService.getBridgeUrl()) {
+      toast({
+        title: "❌ Bridge URL not set",
+        description: "Please enter your localhost.run URL in Settings",
+        variant: "destructive",
+      });
+      setIsConnecting(false);
+      return;
+    }
 
-      if (isAvailable) {
-        const models = await OllamaService.getModels();
-        setOllamaModels(models);
-        if (models.length > 0 && !models.find(m => m.name === selectedModel)) {
-          setSelectedModel(models[0].name);
+    try {
+      // Check Bridge API
+      const bridgeOk = await OllamaService.isAvailable();
+      if (!bridgeOk) {
+        toast({
+          title: "❌ Bridge API ไม่ตอบสนอง",
+          description: "ตรวจสอบว่า API Server รันอยู่บน Mac และ localhost.run ทำงาน",
+          variant: "destructive",
+        });
+        setOllamaConnected(false);
+        setIsConnecting(false);
+        return;
+      }
+
+      // Check Ollama via Bridge
+      const status = await OllamaService.getOllamaStatus();
+      if (status.connected) {
+        setOllamaConnected(true);
+        setOllamaModels(status.models);
+        if (status.models.length > 0 && !status.models.find(m => m.name === selectedModel)) {
+          setSelectedModel(status.models[0].name);
         }
         toast({
-          title: "✅ Connected to Ollama",
-          description: `Found ${models.length} model(s): ${models.map(m => m.name).join(', ')}`,
+          title: "✅ เชื่อมต่อสำเร็จ!",
+          description: `Found ${status.models.length} model(s)`,
         });
       } else {
+        setOllamaConnected(false);
         toast({
-          title: "❌ Cannot connect to Ollama",
-          description: "Make sure Ollama is running: ollama serve",
+          title: "❌ Ollama ไม่ทำงาน",
+          description: "Bridge เชื่อมต่อได้ แต่ Ollama ไม่ตอบสนอง",
           variant: "destructive",
         });
       }
@@ -94,7 +131,7 @@ const ABLE3AI = () => {
       setOllamaConnected(false);
       toast({
         title: "❌ Connection failed",
-        description: "Check if Ollama is installed and running",
+        description: "Check your Bridge URL and API Server",
         variant: "destructive",
       });
     } finally {
@@ -170,15 +207,16 @@ const ABLE3AI = () => {
           aiResponse = response.text;
           model = response.model;
         } else {
-          // Ollama not connected
-          aiResponse = '❌ Ollama ไม่ได้เชื่อมต่อ\n\n' +
-            'กรุณาเริ่ม Ollama ก่อน:\n' +
-            '1. เปิด Terminal\n' +
-            '2. รัน: `ollama serve`\n' +
-            '3. กดปุ่ม "Connect Ollama"\n\n' +
-            'หากยังไม่ได้ติดตั้ง:\n' +
-            '- Mac/Linux: `curl https://ollama.com/install.sh | sh`\n' +
-            '- Windows: ดาวน์โหลดจาก ollama.com';
+          // Not connected via Bridge
+          aiResponse = '❌ ยังไม่ได้เชื่อมต่อ Bridge API\n\n' +
+            '**ขั้นตอนการตั้งค่า:**\n' +
+            '1. รัน API Server บน Mac\n' +
+            '2. ใช้ localhost.run เพื่อได้ URL\n' +
+            '3. กดปุ่ม ⚙️ Settings\n' +
+            '4. ใส่ Bridge URL แล้วกด Save\n' +
+            '5. กดปุ่ม Connect\n\n' +
+            '**ตัวอย่าง URL:**\n' +
+            '`https://xxxx.localhost.run`';
           model = 'System';
         }
       }
@@ -337,22 +375,47 @@ const ABLE3AI = () => {
         {/* Settings Panel */}
         {showSettings && (
           <div className="mt-3 p-4 bg-black/70 rounded-lg border border-green-500/30 space-y-4">
+            {/* Bridge URL */}
+            <div>
+              <h3 className="font-bold text-green-400 text-base mb-2 flex items-center gap-2">
+                🔗 Bridge URL (จาก localhost.run)
+              </h3>
+              <div className="flex gap-2">
+                <Input
+                  value={bridgeUrl}
+                  onChange={(e) => setBridgeUrl(e.target.value)}
+                  placeholder="https://xxxx.localhost.run"
+                  className="h-10 text-sm bg-black/50 border-green-500/50 text-white flex-1"
+                />
+                <Button 
+                  onClick={handleSaveBridgeUrl} 
+                  size="sm"
+                  className="h-10 bg-green-600 hover:bg-green-700"
+                >
+                  Save
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                รัน API Server บน Mac แล้วใช้ localhost.run เพื่อได้ URL
+              </p>
+            </div>
+
             {/* Ollama Status */}
             <div>
               <h3 className="font-bold text-green-400 text-base mb-2 flex items-center gap-2">
                 <Wifi className="w-4 h-4" />
-                Ollama Connection
+                Bridge Connection
               </h3>
               <Badge 
                 className={`text-sm px-3 py-1 ${ollamaConnected 
                   ? 'bg-green-500 text-white font-bold' 
                   : 'bg-red-500 text-white font-bold'}`}
               >
-                {ollamaConnected ? '🟢 Connected' : '🔴 Disconnected'}
+                {ollamaConnected ? '🟢 Connected via Bridge' : '🔴 Disconnected'}
               </Badge>
-              {!ollamaConnected && (
+              {!ollamaConnected && bridgeUrl && (
                 <p className="text-red-300 text-sm mt-2">
-                  Run in terminal: <code className="bg-black/50 px-2 py-1 rounded text-green-300">ollama serve</code>
+                  ตรวจสอบ: API Server + localhost.run + Ollama serve
                 </p>
               )}
             </div>
