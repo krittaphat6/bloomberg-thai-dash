@@ -27,7 +27,6 @@ import COTData from './COTData';
 import SPDRGoldData from './SPDRGoldData';
 import RealMarketData from './RealMarketData';
 import ABLE3AI from './ABLE3AI';
-import ABLE3AIEnhanced from './ABLE3AIEnhanced';
 import BitcoinMempool from './BitcoinMempool';
 import LiveUAMap from './LiveUAMap';
 import USDebtClock from './USDebtClock';
@@ -336,20 +335,12 @@ const MarketData = () => {
     },
     { 
       id: 'able3ai', 
-      title: '🤖 ABLE3 AI', 
+      title: '🤖 ABLE AI', 
       component: <ABLE3AI />,
       category: 'intelligence',
-      description: 'Advanced AI assistant for trading',
-      tags: ['ai', 'assistant', 'trading', 'chatbot']
-    },
-    { 
-      id: 'able3ai-enhanced', 
-      title: '🧠 ABLE3 AI PRO', 
-      component: <ABLE3AIEnhanced />,
-      category: 'intelligence',
       icon: <Brain className="w-5 h-5" />,
-      description: 'Enhanced AI with MCP tools (Free, No API key required)',
-      tags: ['ai', 'mcp', 'free', 'assistant', 'tools']
+      description: 'Local AI powered by Ollama - Full access to all app data',
+      tags: ['ai', 'ollama', 'local', 'mcp', 'trading']
     },
     
     // Utilities
