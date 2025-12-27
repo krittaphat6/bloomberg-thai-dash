@@ -17,6 +17,7 @@ const IntelligencePlatform = lazy(() => import("./pages/IntelligencePlatform"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const OptionsSurfacePlot = lazy(() => import("./components/OptionsSurfacePlot"));
 const PacManGame = lazy(() => import("./components/PacManGame").then(m => ({ default: m.PacManGame })));
+const GlobalMap = lazy(() => import("./pages/GlobalMap"));
 
 const queryClient = new QueryClient();
 
@@ -64,6 +65,7 @@ const AppContent = () => {
           <Route path="/intelligence" element={<IntelligencePlatform />} />
           <Route path="/options" element={<OptionsSurfacePlot />} />
           <Route path="/pacman" element={<PacManGame />} />
+          <Route path="/map" element={<GlobalMap />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
