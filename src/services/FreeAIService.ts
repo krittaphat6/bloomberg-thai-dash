@@ -1,4 +1,4 @@
-// Ollama AI Service - Local LLM Only
+// ABLE AI Bridge Service - Connect to Mac API Server
 
 export interface AIMessage {
   role: 'user' | 'assistant' | 'system';
@@ -17,82 +17,29 @@ export interface OllamaModel {
 }
 
 export class OllamaService {
-  private static baseUrl = 'http://localhost:11434';
-
-  // Chat with Ollama
-  static async chat(
-    message: string,
-    history: AIMessage[] = [],
-    model: string = 'llama3',
-    systemPrompt?: string
-  ): Promise<AIResponse> {
-    try {
-      const messages: AIMessage[] = [];
-
-      // Add system prompt for trading assistant
-      if (systemPrompt) {
-        messages.push({ role: 'system', content: systemPrompt });
-      } else {
-        messages.push({
-          role: 'system',
-          content: `You are ABLE AI, a professional financial trading assistant. 
-You have access to these tools: COT data, trading journal, notes, market data, economic calendar.
-Always respond in the same language as the user (Thai or English).
-Be concise, accurate, and helpful.
-When analyzing data, provide clear insights and actionable recommendations.`
-        });
-      }
-
-      // Add history
-      messages.push(...history);
-
-      // Add current message
-      messages.push({ role: 'user', content: message });
-
-      const response = await fetch(`${this.baseUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages,
-          stream: false
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Ollama error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return {
-        text: data.message?.content || 'No response from Ollama',
-        model: `Ollama (${model})`
-      };
-    } catch (error) {
-      console.error('Ollama chat error:', error);
-      return {
-        text: '❌ ไม่สามารถเชื่อมต่อ Ollama ได้\n\n' +
-          '**กรุณาตรวจสอบ:**\n' +
-          '1. ติดตั้ง Ollama แล้ว (ollama.com)\n' +
-          '2. รัน: `ollama serve`\n' +
-          '3. ดาวน์โหลด model: `ollama pull llama3`\n\n' +
-          '**Windows/Mac/Linux:**\n' +
-          '```bash\n' +
-          'curl https://ollama.com/install.sh | sh\n' +
-          'ollama pull llama3\n' +
-          'ollama serve\n' +
-          '```',
-        model: 'Error'
-      };
-    }
+  // User sets this URL from settings (localhost.run URL)
+  private static bridgeUrl = localStorage.getItem('able_bridge_url') || '';
+  
+  static setBridgeUrl(url: string) {
+    // Remove trailing slash
+    const cleanUrl = url.replace(/\/$/, '');
+    localStorage.setItem('able_bridge_url', cleanUrl);
+    this.bridgeUrl = cleanUrl;
+  }
+  
+  static getBridgeUrl(): string {
+    return this.bridgeUrl || localStorage.getItem('able_bridge_url') || '';
   }
 
-  // Check Ollama connection
+  // Check connection to Bridge API
   static async isAvailable(): Promise<boolean> {
+    const url = this.getBridgeUrl();
+    if (!url) return false;
+    
     try {
-      const response = await fetch(`${this.baseUrl}/api/tags`, {
+      const response = await fetch(`${url}/health`, {
         method: 'GET',
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(5000)
       });
       return response.ok;
     } catch {
@@ -100,15 +47,79 @@ When analyzing data, provide clear insights and actionable recommendations.`
     }
   }
 
-  // Get installed models
-  static async getModels(): Promise<OllamaModel[]> {
+  // Get Ollama status via Bridge
+  static async getOllamaStatus(): Promise<{ connected: boolean; models: OllamaModel[] }> {
+    const url = this.getBridgeUrl();
+    if (!url) return { connected: false, models: [] };
+    
     try {
-      const response = await fetch(`${this.baseUrl}/api/tags`);
-      if (!response.ok) return [];
+      const response = await fetch(`${url}/ollama/status`);
       const data = await response.json();
-      return data.models || [];
+      return {
+        connected: data.connected || false,
+        models: data.models || []
+      };
+    } catch {
+      return { connected: false, models: [] };
+    }
+  }
+
+  // Get available models
+  static async getModels(): Promise<OllamaModel[]> {
+    const url = this.getBridgeUrl();
+    if (!url) return [];
+    
+    try {
+      const response = await fetch(`${url}/ollama/models`);
+      const data = await response.json();
+      return Array.isArray(data) ? data : (data.models || []);
     } catch {
       return [];
+    }
+  }
+
+  // Chat with Ollama via Bridge
+  static async chat(
+    message: string,
+    history: AIMessage[] = [],
+    model: string = 'llama3',
+    systemPrompt?: string
+  ): Promise<AIResponse> {
+    const url = this.getBridgeUrl();
+    
+    if (!url) {
+      return {
+        text: '❌ ยังไม่ได้ตั้งค่า Bridge URL\n\nไปที่ Settings → ใส่ URL จาก localhost.run',
+        model: 'Error'
+      };
+    }
+
+    try {
+      const response = await fetch(`${url}/ollama/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [...history, { role: 'user', content: message }],
+          system: systemPrompt || 'คุณคือ ABLE AI ผู้เชี่ยวชาญการเทรดและการเงิน ตอบเป็นภาษาไทย'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        return {
+          text: data.message,
+          model: `Ollama (${data.model})`
+        };
+      } else {
+        throw new Error(data.error || 'Unknown error from Bridge API');
+      }
+    } catch (error: any) {
+      return {
+        text: `❌ เชื่อมต่อไม่ได้: ${error.message}\n\nตรวจสอบ:\n1. API Server รันอยู่บน Mac\n2. localhost.run ยังทำงาน\n3. URL ถูกต้อง`,
+        model: 'Error'
+      };
     }
   }
 
@@ -163,7 +174,6 @@ When analyzing data, provide clear insights and actionable recommendations.`
 
     // Add Trade
     if (lowerMsg.includes('add trade') || lowerMsg.includes('เพิ่มเทรด')) {
-      // Extract trade info from message
       const symbolMatch = message.match(/symbol[:\s]+(\w+)/i) || message.match(/(\w{3,6}USD[T]?)/i);
       const directionMatch = message.match(/(long|short|buy|sell)/i);
       const entryMatch = message.match(/entry[:\s]+([\d.]+)/i) || message.match(/at\s+([\d.]+)/i);
