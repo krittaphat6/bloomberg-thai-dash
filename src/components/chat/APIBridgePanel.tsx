@@ -323,7 +323,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         </TabsList>
 
         {/* Connect Tab */}
-        <TabsContent value="connect" className="flex-1 p-4 overflow-auto">
+        <TabsContent value="connect" className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain touch-pan-y">
           <div className="space-y-4">
             {/* Broker Selector */}
             <div className="grid grid-cols-3 gap-2">
@@ -535,7 +535,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         </TabsContent>
 
         {/* Status Tab */}
-        <TabsContent value="status" className="flex-1 p-4 overflow-auto">
+        <TabsContent value="status" className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain touch-pan-y">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">Connection Status</h3>
@@ -642,7 +642,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         </TabsContent>
 
         {/* Logs Tab */}
-        <TabsContent value="logs" className="flex-1 p-4 overflow-auto">
+        <TabsContent value="logs" className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain touch-pan-y">
           <div className="space-y-2">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold">Forward Logs</h3>
@@ -712,7 +712,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         </TabsContent>
 
         {/* Experts Tab - MT5 Command Logs */}
-        <TabsContent value="experts" className="flex-1 p-4 overflow-auto">
+        <TabsContent value="experts" className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain touch-pan-y">
           <div className="space-y-2">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold flex items-center gap-2">

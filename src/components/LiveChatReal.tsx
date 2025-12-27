@@ -2259,7 +2259,7 @@ const LiveChatReal = () => {
       {/* API Bridge Panel */}
       {showAPIBridge && currentRoomId && currentUser && (
         <Dialog open={showAPIBridge} onOpenChange={setShowAPIBridge}>
-          <DialogContent className="max-w-md p-0 h-[80vh] overflow-hidden">
+          <DialogContent className="max-w-md p-0 w-[calc(100vw-1.5rem)] sm:w-full max-h-[90vh] h-[90vh] sm:h-[80vh] overflow-hidden flex flex-col min-h-0">
             <APIBridgePanel
               roomId={currentRoomId}
               userId={currentUser.id}
