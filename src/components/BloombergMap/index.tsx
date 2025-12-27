@@ -8,11 +8,11 @@ import {
 } from 'react-simple-maps';
 import { cn } from '@/lib/utils';
 import { useEarthquakeData } from '@/hooks/useEarthquakeData';
-import { useMarketMapData, useCentralBanks, usePorts, useOilGas, useWildfires } from '@/hooks/useMarketMapData';
+import { useMarketMapData, useCentralBanks, usePorts, useOilGas, useWildfires, useShips } from '@/hooks/useMarketMapData';
 import { MapLayers, DEFAULT_LAYERS, LayerConfig } from './MapLayers';
 import { DataPanel } from './DataPanel';
 import { MarkerPopup } from './MarkerPopup';
-import { MarketData, EarthquakeFeature, BankingFeature } from '@/services/GeoDataService';
+import { MarketData, EarthquakeFeature, BankingFeature, ShipFeature } from '@/services/GeoDataService';
 import { 
   Search, 
   Maximize2, 
@@ -48,6 +48,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
   const { data: ports = [] } = usePorts();
   const { data: oilGas = [] } = useOilGas();
   const { data: wildfires = [] } = useWildfires();
+  const { data: ships = [], isLoading: loadingShips, refetch: refetchShips } = useShips();
 
   const isLayerEnabled = useCallback((layerId: string) => {
     return layers.find(l => l.id === layerId)?.enabled ?? false;
@@ -74,8 +75,9 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
   const handleRefresh = useCallback(() => {
     refetchEQ();
     refetchMarkets();
+    refetchShips();
     toast.success('Data refreshed');
-  }, [refetchEQ, refetchMarkets]);
+  }, [refetchEQ, refetchMarkets, refetchShips]);
 
   const handleScreenshot = useCallback(() => {
     toast.info('Screenshot feature coming soon');
@@ -98,27 +100,27 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
 
   return (
     <div className={cn(
-      "flex flex-col bg-[#0a1628] text-white overflow-hidden",
+      "flex flex-col bg-background text-foreground overflow-hidden",
       isFullscreen ? "fixed inset-0 z-50" : "h-full",
       className
     )}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#1a2744] border-b border-[#2d4a6f]">
+      <div className="flex items-center justify-between px-4 py-2 bg-card border-b border-border">
         <div className="flex items-center gap-4">
-          <h1 className="text-[#ff6600] font-bold text-sm">BLOOMBERG GLOBAL MAP</h1>
+          <h1 className="text-terminal-orange font-bold text-sm">BLOOMBERG GLOBAL MAP</h1>
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-white/50" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
             <Input
               placeholder="Search location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-48 h-7 pl-7 text-xs bg-[#0a1628] border-[#2d4a6f] text-white"
+              className="w-48 h-7 pl-7 text-xs bg-background border-border"
             />
           </div>
         </div>
         
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-[10px] text-white/60">
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
             <Clock className="w-3 h-3" />
             {new Date().toLocaleTimeString()}
           </div>
@@ -127,7 +129,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
             variant="ghost"
             size="sm"
             onClick={handleRefresh}
-            className="h-7 px-2 text-white/70 hover:text-white hover:bg-white/10"
+            className="h-7 px-2 text-muted-foreground hover:text-foreground hover:bg-accent"
           >
             <RefreshCw className={cn("w-3 h-3", (loadingEQ || loadingMarkets) && "animate-spin")} />
           </Button>
@@ -136,7 +138,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
             variant="ghost"
             size="sm"
             onClick={handleScreenshot}
-            className="h-7 px-2 text-white/70 hover:text-white hover:bg-white/10"
+            className="h-7 px-2 text-muted-foreground hover:text-foreground hover:bg-accent"
           >
             <Camera className="w-3 h-3" />
           </Button>
@@ -145,7 +147,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
             variant="ghost"
             size="sm"
             onClick={onToggleFullscreen}
-            className="h-7 px-2 text-white/70 hover:text-white hover:bg-white/10"
+            className="h-7 px-2 text-muted-foreground hover:text-foreground hover:bg-accent"
           >
             {isFullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
           </Button>
@@ -155,7 +157,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Map */}
-        <div className="flex-1 relative bg-[#0a1628]">
+        <div className="flex-1 relative bg-background">
           <ComposableMap
             projection="geoMercator"
             projectionConfig={{ scale: 100 }}
@@ -172,12 +174,12 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
                     <Geography
                       key={geo.rsmKey}
                       geography={geo}
-                      fill="#1a2744"
-                      stroke="#2d4a6f"
+                      fill="hsl(var(--card))"
+                      stroke="hsl(var(--border))"
                       strokeWidth={0.5}
                       style={{
                         default: { outline: 'none' },
-                        hover: { fill: '#2d4a6f', outline: 'none' },
+                        hover: { fill: 'hsl(var(--accent))', outline: 'none' },
                         pressed: { outline: 'none' },
                       }}
                     />
@@ -307,7 +309,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
               variant="outline"
               size="sm"
               onClick={handleZoomIn}
-              className="w-8 h-8 p-0 bg-[#1a2744] border-[#2d4a6f] text-white hover:bg-[#2d4a6f]"
+              className="w-8 h-8 p-0 bg-card border-border hover:bg-accent"
             >
               <ZoomIn className="w-4 h-4" />
             </Button>
@@ -315,7 +317,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
               variant="outline"
               size="sm"
               onClick={handleZoomOut}
-              className="w-8 h-8 p-0 bg-[#1a2744] border-[#2d4a6f] text-white hover:bg-[#2d4a6f]"
+              className="w-8 h-8 p-0 bg-card border-border hover:bg-accent"
             >
               <ZoomOut className="w-4 h-4" />
             </Button>
@@ -326,13 +328,13 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
         </div>
 
         {/* Sidebar - Layer Controls */}
-        <div className="w-56 bg-[#1a2744] border-l border-[#2d4a6f]">
+        <div className="w-56 bg-card border-l border-border">
           <MapLayers layers={layers} onToggleLayer={handleToggleLayer} />
         </div>
       </div>
 
       {/* Bottom Panel */}
-      <div className="h-24 bg-[#1a2744] border-t border-[#2d4a6f]">
+      <div className="h-24 bg-card border-t border-border">
         <DataPanel 
           markets={markets} 
           earthquakes={earthquakes} 

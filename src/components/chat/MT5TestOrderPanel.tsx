@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,7 +30,9 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
   const [deviation, setDeviation] = useState(20);
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [lastSubmitTime, setLastSubmitTime] = useState(0);
+  
+  // Use ref to prevent duplicate submissions - more reliable than state
+  const isSubmittingRef = useRef(false);
 
   const popularSymbols = [
     'XAUUSD',   // Gold
@@ -67,13 +69,11 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
   };
 
   const handleSubmit = async () => {
-    const now = Date.now();
-    
-    // Prevent double submission with 2 second debounce
-    if (isSubmitting || (now - lastSubmitTime < 2000)) {
+    // Guard against duplicate submissions using ref (synchronous check)
+    if (isSubmittingRef.current) {
       toast({
         title: '⏳ Please wait',
-        description: 'Order is being processed...',
+        description: 'Order is already being processed...',
       });
       return;
     }
@@ -87,8 +87,9 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
       return;
     }
 
+    // Set both ref and state immediately
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
-    setLastSubmitTime(now);
 
     // Warning for crypto symbols
     if (['BTCUSD', 'ETHUSD'].includes(symbol.toUpperCase())) {
@@ -126,15 +127,19 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
         description: `${commandType.toUpperCase()} ${volume} lots ${symbol}`,
       });
 
-      // Keep isSubmitting true for 2 seconds to prevent double-click
-      setTimeout(() => setIsSubmitting(false), 2000);
-      setTimeout(() => onClose(), 1000);
+      // Close dialog and reset after short delay
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+        setIsSubmitting(false);
+        onClose();
+      }, 1500);
     } catch (error: any) {
       toast({
         title: '❌ Error',
         description: error.message,
         variant: 'destructive',
       });
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
