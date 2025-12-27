@@ -6,8 +6,10 @@ import {
   OIL_GAS_LOCATIONS,
   updateMarketData,
   fetchWildfires,
+  fetchShips,
   MarketData,
-  WildfireFeature
+  WildfireFeature,
+  ShipFeature
 } from '@/services/GeoDataService';
 
 export const useMarketMapData = () => {
@@ -49,5 +51,14 @@ export const useWildfires = () => {
     queryFn: fetchWildfires,
     refetchInterval: 15 * 60 * 1000, // Refetch every 15 minutes
     staleTime: 10 * 60 * 1000,
+  });
+};
+
+export const useShips = () => {
+  return useQuery<ShipFeature[]>({
+    queryKey: ['ships'],
+    queryFn: fetchShips,
+    refetchInterval: 30 * 1000, // Refetch every 30 seconds for more real-time feel
+    staleTime: 15 * 1000,
   });
 };
