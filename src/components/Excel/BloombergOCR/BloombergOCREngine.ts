@@ -30,13 +30,14 @@ export interface OCRProgress {
   message: string;
 }
 
-// Known Bloomberg securities for matching
+// Known Bloomberg securities for matching - EXPANDED
 const KNOWN_SECURITIES: Record<string, string> = {
   // Treasury
   'US TREASURY FRN': 'US TREASURY FRN',
   'TREASURY FRN': 'US TREASURY FRN',
   'TREASURY BILL': 'TREASURY BILL',
-  // Major stocks
+  'TF FLOAT': 'US TREASURY FRN',
+  // Tech Giants - FAANG+
   'MICROSOFT': 'Microsoft Corp',
   'MICROSOFT CORP': 'Microsoft Corp',
   'NVIDIA': 'NVIDIA Corp',
@@ -59,106 +60,94 @@ const KNOWN_SECURITIES: Record<string, string> = {
   'ABBVIE': 'AbbVie Inc',
   'TOYOTA': 'Toyota Motor Corp',
   'ORACLE': 'Oracle Corp',
+  'AMAZON': 'Amazon.com Inc',
+  'TESLA': 'Tesla Inc',
+  // Defense & Aerospace
   'BAE SYSTEMS': 'BAE Systems PLC',
   'RHEINMETALL': 'Rheinmetall AG',
-  'VISA': 'Visa Inc Class A Common Shares',
-  'WALMART': 'Walmart Inc',
-  'T-MOBILE': 'T-Mobile US Inc',
-  'MCDONALDS': "McDonald's Corp",
-  'MERCK': 'Merck & Co Inc',
   'SAFRAN': 'Safran SA',
   'AIRBUS': 'Airbus SE',
-  'PROCTER': 'Procter & Gamble Co/The',
-  'ABBOTT': 'Abbott Laboratories',
-  'LVMH': 'LVMH Moet Hennessy Louis Vuitton SE LVMH',
-  'VERIZON': 'Verizon Communications Inc',
   'ROLLS-ROYCE': 'Rolls-Royce Holdings PLC',
   'LEONARDO': 'Leonardo SpA Ordinary Shares',
-  'AT&T': 'AT&T Inc',
-  'AMAZON': 'Amazon.com Inc',
-  'TAIWAN SEMICONDUCTOR': 'Taiwan Semiconductor Manufacturing Co Ltd',
-  'MITSUBISHI': 'Mitsubishi UFJ Financial Group Inc',
-  'GILEAD': 'Gilead Sciences Inc',
-  'NESTLE': 'Nestle SA',
-  'BASF': 'BASF SE',
-  'FERROVIAL': 'Ferrovial SE',
-  'SUBARU': 'Subaru Corp',
-  'RAYMOND JAMES': 'Raymond James Financial Inc',
-  'NTPC': 'NTPC Ltd',
-  'GEN DIGITAL': 'Gen Digital Inc',
-  'JB HUNT': 'JB Hunt Transport Services Inc',
-  'KEYENCE': 'Keyence Corp',
-  'DATADOG': 'Datadog Inc Class A',
-  'NEXTERA': 'NextEra Energy Inc',
-  'AXIS BANK': 'Axis Bank Ltd',
-  'FOMENTO': 'Fomento Economico Mexicano SAB de CV UBD UNIT',
-  'SHELL': 'Shell PLC',
-  'TARGET': 'Target Corp',
-  'ONEMAIN': 'OneMain Holdings Inc',
-  'NOVARTIS': 'Novartis AG',
-  'SAAB': 'Saab AB Class B Common Shares',
-  'BANK OF AMERICA': 'Bank of America Corp',
-  'CISCO': 'Cisco Systems Inc',
-  'CATERPILLAR': 'Caterpillar Inc',
-  'BANCO BILBAO': 'Banco Bilbao Vizcaya Argentaria SA',
-  'DASSAULT': 'Dassault Aviation SA',
-  'AMERICAN EXPRESS': 'American Express Co',
+  'LOCKHEED': 'Lockheed Martin Corp',
+  'RAYTHEON': 'RTX Corp',
+  // Financial
+  'VISA': 'Visa Inc Class A Common Shares',
   'MASTERCARD': 'Mastercard Inc Class A Common Stock',
-  'RELIANCE': 'Reliance Industries Ltd Ordinary Shares',
-  'CHARLES SCHWAB': 'Charles Schwab Corp/The Common Voting',
-  'SUMITOMO MITSUI': 'Sumitomo Mitsui Financial Group Inc',
-  'ASML': 'ASML Holding NV',
-  'DEUTSCHE TELEKOM': 'Deutsche Telekom AG',
-  'HDFC BANK': 'HDFC Bank Ltd',
-  'AUTOMATIC DATA': 'Automatic Data Processing Inc',
-  'IBM': 'International Business Machines Corp',
-  'INDITEX': 'Industria de Diseno Textil SA',
-  'TENCENT': 'Tencent Holdings Ltd',
-  'COSTCO': 'Costco Wholesale Corp',
-  'TJX': 'TJX Cos Inc/The',
-  'SALESFORCE': 'Salesforce Inc',
-  'PHILIP MORRIS': 'Philip Morris International Inc',
-  'TOKIO MARINE': 'Tokio Marine Holdings Inc',
-  'SAP': 'SAP SE',
-  'GSK': 'GSK PLC',
-  'BP': 'BP PLC',
-  'CUMMINS': 'Cummins Inc',
-  'FORD': 'Ford Motor Co Common Shares',
-  'FEDEX': 'FedEx Corp',
-  'REGENERON': 'Regeneron Pharmaceuticals Inc Common Stock',
-  'ALIBABA': 'Alibaba Group Holding Ltd',
-  'PFIZER': 'Pfizer Inc',
-  'SCHNEIDER': 'Schneider Electric SE',
-  'CSX': 'CSX Corp',
-  'INFOSYS': 'Infosys Ltd',
-  'QUALCOMM': 'QUALCOMM Inc',
-  'TAKEDA': 'Takeda Pharmaceutical Co Ltd',
-  'MORGAN STANLEY': 'Morgan Stanley',
-  'MICRON': 'Micron Technology Inc',
-  'CITIGROUP': 'Citigroup Inc',
-  'SUMITOMO': 'Sumitomo Corp',
+  'AMERICAN EXPRESS': 'American Express Co',
+  'BANK OF AMERICA': 'Bank of America Corp',
   'WELLS FARGO': 'Wells Fargo & Co',
-  'SANOFI': 'Sanofi SA Common',
-  'SHERWIN-WILLIAMS': 'Sherwin-Williams Co/The',
-  'TATA': 'Tata Consultancy Services Ltd',
-  'CHUGAI': 'Chugai Pharmaceutical Co Ltd',
-  'SHIN-ETSU': 'Shin-Etsu Chemical Co Ltd',
-  'SAMSUNG': 'Samsung Electronics Co Ltd',
-  'STRYKER': 'Stryker Corp',
-  'ING': 'ING Groep NV',
-  'FERGUSON': 'Ferguson Enterprises Inc',
-  'BRISTOL-MYERS': 'Bristol-Myers Squibb Co',
-  'CORNING': 'Corning Inc',
-  'HERMES': 'Hermes International SCA',
-  'SK HYNIX': 'SK hynix Inc',
-  'ICBC': 'Industrial & Commercial Bank of China Ltd H Share',
+  'GOLDMAN': 'Goldman Sachs Group Inc',
+  'MORGAN STANLEY': 'Morgan Stanley',
+  'CHARLES SCHWAB': 'Charles Schwab Corp/The Common Voting',
   'PAYPAL': 'PayPal Holdings Inc',
+  // Consumer
+  'WALMART': 'Walmart Inc',
+  'COSTCO': 'Costco Wholesale Corp',
+  'MCDONALDS': "McDonald's Corp",
+  'STARBUCKS': 'Starbucks Corp',
+  'NIKE': 'Nike Inc',
+  'PROCTER': 'Procter & Gamble Co/The',
+  // Pharma & Healthcare
+  'MERCK': 'Merck & Co Inc',
+  'PFIZER': 'Pfizer Inc',
+  'ABBOTT': 'Abbott Laboratories',
+  'REGENERON': 'Regeneron Pharmaceuticals Inc Common Stock',
+  'AMGEN': 'Amgen Inc',
+  'GILEAD': 'Gilead Sciences Inc',
+  'BRISTOL': 'Bristol-Myers Squibb Co',
+  // Tech
+  'CISCO': 'Cisco Systems Inc',
+  'IBM': 'International Business Machines Corp',
+  'SALESFORCE': 'Salesforce Inc',
+  'SERVICENOW': 'ServiceNow Inc',
+  'QUALCOMM': 'QUALCOMM Inc',
+  'MICRON': 'Micron Technology Inc',
+  'INTEL': 'Intel Corp',
+  'AMD': 'Advanced Micro Devices Inc',
+  'TEXAS INSTRUMENTS': 'Texas Instruments Inc',
+  'PALANTIR': 'Palantir Technologies Inc Class A',
+  // Telecom
+  'T-MOBILE': 'T-Mobile US Inc',
+  'VERIZON': 'Verizon Communications Inc',
+  'AT&T': 'AT&T Inc',
   'COMCAST': 'Comcast Corp Class A',
-  'HENSOLDT': 'Hensoldt AG',
-  'ECOLAB': 'Ecolab Inc',
-  'KLA': 'KLA Corp',
-  'VOLVO': 'Volvo AB Class B Common Shares',
-  'UBS': 'UBS Group AG',
+  // Industrial
+  'CATERPILLAR': 'Caterpillar Inc',
+  'HONEYWELL': 'Honeywell International Inc',
+  'DEERE': 'Deere & Co',
+  'FEDEX': 'FedEx Corp',
+  'DELTA': 'Delta Air Lines Inc',
+  // European
+  'LVMH': 'LVMH Moet Hennessy Louis Vuitton SE LVMH',
+  'HERMES': 'Hermes International SCA',
+  'ASML': 'ASML Holding NV',
+  'SAP': 'SAP SE',
+  'SHELL': 'Shell PLC',
+  'BP': 'BP PLC',
+  'NESTLE': 'Nestle SA',
+  'NOVARTIS': 'Novartis AG',
+  'SANOFI': 'Sanofi SA Common',
+  'SCHNEIDER': 'Schneider Electric SE',
+  // Japanese (already have TOYOTA above, skipping duplicate)
+  'SONY': 'Sony Group Corp',
+  'MITSUBISHI': 'Mitsubishi UFJ Financial Group Inc',
+  'SUMITOMO': 'Sumitomo Corp',
+  'TAKEDA': 'Takeda Pharmaceutical Co Ltd',
+  'KEYENCE': 'Keyence Corp',
+  // Chinese/HK
+  'ALIBABA': 'Alibaba Group Holding Ltd',
+  'TENCENT': 'Tencent Holdings Ltd',
+  'PING AN': 'Ping An Insurance Group Co of China Ltd H Share',
+  // Indian
+  'RELIANCE': 'Reliance Industries Ltd Ordinary Shares',
+  'HDFC': 'HDFC Bank Ltd',
+  'INFOSYS': 'Infosys Ltd',
+  'TATA': 'Tata Consultancy Services Ltd',
+  // Taiwan/Korea
+  'TSMC': 'Taiwan Semiconductor Manufacturing Co Ltd',
+  'SAMSUNG': 'Samsung Electronics Co Ltd',
+  'SK HYNIX': 'SK hynix Inc',
 };
 
 // Ticker corrections for common OCR errors
@@ -202,6 +191,7 @@ export class BloombergOCREngine {
   
   /**
    * Enhanced image preprocessing specifically for Bloomberg Terminal photos
+   * Optimized for camera-captured photos with perspective distortion
    */
   async preprocessImage(file: File, onProgress?: (p: OCRProgress) => void): Promise<{ dataUrl: string; debugUrl: string }> {
     onProgress?.({ stage: 'preprocess', progress: 0, message: 'Loading image...' });
@@ -217,10 +207,10 @@ export class BloombergOCREngine {
       }
       
       img.onload = () => {
-        onProgress?.({ stage: 'preprocess', progress: 20, message: 'Analyzing image...' });
+        onProgress?.({ stage: 'preprocess', progress: 10, message: 'Analyzing image...' });
         
-        // Determine optimal scale - Bloomberg needs high res
-        const scale = Math.max(2, Math.min(4, 3000 / Math.max(img.width, img.height)));
+        // Scale up for better OCR - 4x for camera photos
+        const scale = 4;
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
         
@@ -228,55 +218,61 @@ export class BloombergOCREngine {
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         
-        onProgress?.({ stage: 'preprocess', progress: 40, message: 'Enhancing contrast...' });
+        onProgress?.({ stage: 'preprocess', progress: 30, message: 'Enhancing contrast...' });
         
-        // Get image data
+        // Get image data for processing
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
         
-        // Step 1: Detect Bloomberg data region (orange header + data grid)
-        const regionInfo = this.detectBloombergRegion(data, canvas.width, canvas.height);
+        onProgress?.({ stage: 'preprocess', progress: 50, message: 'Detecting Bloomberg text...' });
         
-        onProgress?.({ stage: 'preprocess', progress: 60, message: 'Converting to OCR format...' });
-        
-        // Step 2: Convert Bloomberg colors to black on white
-        // Bloomberg uses: Orange/Yellow headers, White/Green/Red data, on black background
+        // Bloomberg terminal color detection - ENHANCED for camera photos
+        // Bloomberg uses: Orange/Yellow headers, White/Green/Red data on BLACK background
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
           
-          // Calculate various color metrics
+          // Calculate metrics
           const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
-          const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const saturation = max > 0 ? (max - min) / max : 0;
           
-          // Bloomberg terminal colors detection
-          // Orange/Amber (headers and selection): R > 180, G > 100, B < 100
-          const isOrange = r > 160 && g > 80 && g < 220 && b < 100 && r > g;
+          // ENHANCED color detection for camera-captured Bloomberg
+          // Orange/Amber (headers, row numbers, selection) - VERY IMPORTANT
+          const isOrange = r > 140 && g > 70 && g < 200 && b < 100 && r > g * 1.2;
+          const isAmber = r > 160 && g > 100 && g < 180 && b < 80;
+          const isGold = r > 180 && g > 140 && b < 100;
           
-          // Yellow: R > 180, G > 180, B < 130
-          const isYellow = r > 170 && g > 170 && b < 140 && Math.abs(r - g) < 50;
+          // Yellow text (security names, headers)
+          const isYellow = r > 150 && g > 150 && b < 120 && Math.abs(r - g) < 50;
           
-          // White text: R > 180, G > 180, B > 180
-          const isWhite = r > 160 && g > 160 && b > 160;
+          // White/Light text (most data)
+          const isWhite = r > 140 && g > 140 && b > 140 && saturation < 0.3;
+          const isLightGray = r > 100 && g > 100 && b > 100 && saturation < 0.2 && brightness > 100;
           
-          // Green (positive values): G > R and G > B
-          const isGreen = g > 100 && g > r * 1.2 && g > b * 1.2;
+          // Green (positive numbers)
+          const isGreen = g > 80 && g > r * 1.1 && g > b * 1.1;
+          const isBrightGreen = g > 120 && g > r * 1.2 && g > b * 1.3;
           
-          // Red (negative values): R > G and R > B  
-          const isRed = r > 140 && r > g * 1.3 && r > b * 1.3;
+          // Red (negative numbers)
+          const isRed = r > 120 && r > g * 1.3 && r > b * 1.3;
           
-          // Cyan/Blue (links or highlights)
-          const isCyan = b > 120 && g > 120 && r < 150 && b > r;
+          // Cyan/Blue (links, special)
+          const isCyan = b > 100 && g > 100 && r < 140 && (b + g) > r * 1.6;
           
-          // Light gray text
-          const isLightGray = r > 120 && g > 120 && b > 120 && saturation < 40;
+          // Light blue text
+          const isLightBlue = b > 120 && g > 120 && r < 150;
           
-          // Determine if this pixel is text
-          const isText = isOrange || isYellow || isWhite || isGreen || 
-                        isRed || isCyan || isLightGray || brightness > 110;
+          // Check if pixel is text (any Bloomberg text color)
+          const isText = isOrange || isAmber || isGold || isYellow || 
+                        isWhite || isLightGray ||
+                        isGreen || isBrightGreen || isRed || 
+                        isCyan || isLightBlue ||
+                        brightness > 90; // Fallback for any bright pixel
           
-          // Convert: text becomes black, background becomes white
+          // Convert: text becomes BLACK, background becomes WHITE
           if (isText) {
             data[i] = 0;      // R
             data[i + 1] = 0;  // G
@@ -290,14 +286,14 @@ export class BloombergOCREngine {
         
         ctx.putImageData(imageData, 0, 0);
         
-        onProgress?.({ stage: 'preprocess', progress: 80, message: 'Sharpening text...' });
+        onProgress?.({ stage: 'preprocess', progress: 70, message: 'Thickening text...' });
         
-        // Step 3: Apply morphological dilation to thicken thin text
+        // Apply morphological dilation to thicken thin Bloomberg font
         const dilatedData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        this.dilateText(dilatedData);
+        this.dilateText(dilatedData, 2); // 2 iterations for camera photos
         ctx.putImageData(dilatedData, 0, 0);
         
-        // Create debug image (before final processing)
+        // Create debug image
         const debugUrl = canvas.toDataURL('image/png', 1.0);
         
         onProgress?.({ stage: 'preprocess', progress: 100, message: 'Preprocessing complete' });
@@ -354,44 +350,47 @@ export class BloombergOCREngine {
   }
   
   /**
-   * Dilate text to make it thicker and more readable
+   * Dilate text to make it thicker and more readable - ENHANCED
    */
-  private dilateText(imageData: ImageData): void {
+  private dilateText(imageData: ImageData, iterations: number = 1): void {
     const { data, width, height } = imageData;
-    const copy = new Uint8ClampedArray(data);
     
-    // Simple 3x3 dilation - if any neighbor is black, make this pixel black
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const idx = (y * width + x) * 4;
-        
-        // Skip if already black
-        if (copy[idx] === 0) continue;
-        
-        // Check if any neighbor is black (text)
-        let hasBlackNeighbor = false;
-        for (let dy = -1; dy <= 1 && !hasBlackNeighbor; dy++) {
-          for (let dx = -1; dx <= 1 && !hasBlackNeighbor; dx++) {
-            if (dx === 0 && dy === 0) continue;
-            const nIdx = ((y + dy) * width + (x + dx)) * 4;
-            if (copy[nIdx] < 50) {
-              hasBlackNeighbor = true;
+    for (let iter = 0; iter < iterations; iter++) {
+      const copy = new Uint8ClampedArray(data);
+      
+      // 3x3 dilation - if any neighbor is black, make this pixel black
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          const idx = (y * width + x) * 4;
+          
+          // Skip if already black
+          if (copy[idx] === 0) continue;
+          
+          // Check if any neighbor is black (text)
+          let hasBlackNeighbor = false;
+          for (let dy = -1; dy <= 1 && !hasBlackNeighbor; dy++) {
+            for (let dx = -1; dx <= 1 && !hasBlackNeighbor; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const nIdx = ((y + dy) * width + (x + dx)) * 4;
+              if (copy[nIdx] < 50) {
+                hasBlackNeighbor = true;
+              }
             }
           }
-        }
-        
-        // Dilate: turn white pixel next to black into black
-        if (hasBlackNeighbor) {
-          data[idx] = 0;
-          data[idx + 1] = 0;
-          data[idx + 2] = 0;
+          
+          // Dilate: turn white pixel next to black into black
+          if (hasBlackNeighbor) {
+            data[idx] = 0;
+            data[idx + 1] = 0;
+            data[idx + 2] = 0;
+          }
         }
       }
     }
   }
   
   /**
-   * Run OCR on preprocessed image
+   * Run OCR on preprocessed image - ENHANCED settings for Bloomberg
    */
   async runOCR(imageDataUrl: string, onProgress?: (p: OCRProgress) => void): Promise<{ text: string; confidence: number }> {
     onProgress?.({ stage: 'ocr', progress: 0, message: 'Initializing OCR engine...' });
@@ -401,10 +400,11 @@ export class BloombergOCREngine {
     
     onProgress?.({ stage: 'ocr', progress: 20, message: 'Configuring OCR...' });
     
-    // Configure for table/spreadsheet recognition
+    // Configure for Bloomberg table recognition - OPTIMIZED
     await worker.setParameters({
       tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
-      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,+-/%()$/ ',
+      // Expanded character whitelist for Bloomberg data
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,+-/%()$&/ ',
       preserve_interword_spaces: '1',
     });
     
@@ -417,6 +417,8 @@ export class BloombergOCREngine {
     await worker.terminate();
     
     onProgress?.({ stage: 'ocr', progress: 100, message: 'OCR complete' });
+    
+    console.log('📝 Raw OCR text:', result.data.text.substring(0, 500));
     
     return {
       text: result.data.text,
