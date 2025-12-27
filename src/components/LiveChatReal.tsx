@@ -1109,24 +1109,53 @@ const LiveChatReal = () => {
     }
   };
 
-  // Delete webhook room
-  const handleDeleteWebhookRoom = async (roomId: string) => {
-    if (!roomId || !confirm('ต้องการลบ Webhook Room นี้หรือไม่?')) return;
+  // Delete any chat room (with cascade)
+  const handleDeleteRoom = async (roomId: string) => {
+    if (!roomId || !confirm('Delete this room and all its data? This action cannot be undone!')) return;
 
     try {
-      await supabase.from('webhooks').delete().eq('room_id', roomId);
+      // Delete messages
       await supabase.from('messages').delete().eq('room_id', roomId);
+      
+      // Delete room members
       await supabase.from('room_members').delete().eq('room_id', roomId);
+      
+      // Delete webhooks
+      await supabase.from('webhooks').delete().eq('room_id', roomId);
+      
+      // Get broker connections for this room
+      const { data: connections } = await supabase
+        .from('broker_connections')
+        .select('id')
+        .eq('room_id', roomId);
+      
+      // Delete MT5 commands for those connections
+      if (connections && connections.length > 0) {
+        const connectionIds = connections.map(c => c.id);
+        await supabase.from('mt5_commands').delete().in('connection_id', connectionIds);
+      }
+      
+      // Delete broker connections
+      await supabase.from('broker_connections').delete().eq('room_id', roomId);
+      
+      // Delete the room
       await supabase.from('chat_rooms').delete().eq('id', roomId);
 
-      toast({ title: 'Deleted', description: 'Webhook room deleted successfully' });
-      setCurrentRoomId(null);
+      toast({ title: '✅ Room Deleted', description: 'Chat room and all data permanently deleted' });
       
+      if (currentRoomId === roomId) {
+        setCurrentRoomId(null);
+        setMessages([]);
+        setRooms(prev => prev.filter(r => r.id !== roomId));
+      }
     } catch (error: any) {
-      console.error('Error deleting webhook room:', error);
+      console.error('Error deleting room:', error);
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     }
   };
+
+  // Keep old function for backward compatibility
+  const handleDeleteWebhookRoom = handleDeleteRoom;
 
   // Load and show webhook info
   const loadAndShowWebhookInfo = async () => {
@@ -1549,6 +1578,17 @@ const LiveChatReal = () => {
                   style={{ color: colors.foreground }}
                 >
                   <Video className="w-4 h-4" />
+                </Button>
+
+                {/* Delete Room Button - Available for all room types */}
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => handleDeleteRoom(currentRoomId)}
+                  title="Delete Room"
+                  className="text-red-500 hover:text-red-400"
+                >
+                  <Trash2 className="w-4 h-4" />
                 </Button>
                 
                 {currentRoom?.type === 'group' && (
