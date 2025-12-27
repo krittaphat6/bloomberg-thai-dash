@@ -31,6 +31,21 @@ serve(async (req) => {
     if (req.method === 'GET') {
       console.log(`MT5 Poll: Fetching commands for connection ${connectionId}`)
       
+      // First, reset any stuck 'processing' commands older than 30 seconds
+      const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString()
+      const { data: stuckCommands } = await supabase
+        .from('mt5_commands')
+        .update({ status: 'pending' })
+        .eq('connection_id', connectionId)
+        .eq('status', 'processing')
+        .lt('created_at', thirtySecondsAgo)
+        .select('id')
+
+      if (stuckCommands && stuckCommands.length > 0) {
+        console.log(`MT5 Poll: Reset ${stuckCommands.length} stuck processing commands`)
+      }
+
+      // Fetch pending commands for this connection
       const { data: commands, error } = await supabase
         .from('mt5_commands')
         .select('*')
@@ -44,6 +59,23 @@ serve(async (req) => {
         throw error
       }
 
+      // CRITICAL FIX: Mark fetched commands as 'processing' immediately
+      // This prevents the same command from being fetched again on next poll
+      if (commands && commands.length > 0) {
+        const commandIds = commands.map(cmd => cmd.id)
+        
+        const { error: updateError } = await supabase
+          .from('mt5_commands')
+          .update({ status: 'processing' })
+          .in('id', commandIds)
+
+        if (updateError) {
+          console.error('MT5 Poll: Error marking commands as processing', updateError)
+        } else {
+          console.log(`MT5 Poll: Marked ${commands.length} commands as processing`)
+        }
+      }
+
       // Update connection last poll time
       await supabase
         .from('broker_connections')
@@ -53,7 +85,7 @@ serve(async (req) => {
         })
         .eq('id', connectionId)
 
-      console.log(`MT5 Poll: Found ${commands?.length || 0} pending commands`)
+      console.log(`MT5 Poll: Returning ${commands?.length || 0} commands to EA`)
 
       return new Response(
         JSON.stringify({
@@ -90,6 +122,8 @@ serve(async (req) => {
         console.error('MT5 Poll: Error updating command', error)
         throw error
       }
+
+      console.log(`MT5 Poll: Command ${command_id} marked as ${isSuccess ? 'completed' : 'failed'}`)
 
       // Update broker connection stats
       if (isSuccess) {

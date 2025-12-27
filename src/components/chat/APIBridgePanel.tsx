@@ -151,12 +151,20 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
             message: `❌ OrderSend failed: ${cmd.error_code} - ${cmd.error_message || 'Unknown error'}`,
             details: `Command: ${cmd.command_type} ${cmd.symbol} ${cmd.volume} lots`
           });
+        } else if (cmd.status === 'processing') {
+          logEntries.push({
+            id: `${cmd.id}_processing`,
+            timestamp: cmd.created_at,
+            type: 'info',
+            message: `🔄 Processing: ${cmd.command_type} ${cmd.symbol} ${cmd.volume} lots`,
+            details: 'Waiting for MT5 EA to execute...'
+          });
         } else {
           logEntries.push({
             id: `${cmd.id}_pending`,
             timestamp: cmd.created_at,
             type: 'info',
-            message: `⏳ Order pending: ${cmd.command_type} ${cmd.symbol} ${cmd.volume} lots`
+            message: `⏳ Queued: ${cmd.command_type} ${cmd.symbol} ${cmd.volume} lots`
           });
         }
         
