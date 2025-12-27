@@ -44,21 +44,16 @@ serve(async (req) => {
 
       // Reset stuck 'processing' commands older than 30 seconds
       const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString()
-      const { data: stuckCommands } = await supabase
-        .from('api_forward_logs')
+      await supabase
+        .from('mt5_commands')
         .update({ status: 'pending' })
         .eq('connection_id', connectionId)
         .eq('status', 'processing')
         .lt('created_at', thirtySecondsAgo)
-        .select('id')
 
-      if (stuckCommands && stuckCommands.length > 0) {
-        console.log(`🔄 Reset ${stuckCommands.length} stuck commands`)
-      }
-
-      // Get pending commands from api_forward_logs
+      // Get pending commands from mt5_commands table
       const { data: commands, error } = await supabase
-        .from('api_forward_logs')
+        .from('mt5_commands')
         .select('*')
         .eq('connection_id', connectionId)
         .eq('status', 'pending')
@@ -78,7 +73,7 @@ serve(async (req) => {
         const commandIds = commands.map(cmd => cmd.id)
         
         await supabase
-          .from('api_forward_logs')
+          .from('mt5_commands')
           .update({ status: 'processing' })
           .in('id', commandIds)
 
@@ -88,14 +83,14 @@ serve(async (req) => {
       // Transform to EA format
       const eaCommands = (commands || []).map(cmd => ({
         id: cmd.id,
-        command_type: cmd.action?.toLowerCase() || 'buy',
+        command_type: cmd.command_type || 'buy',
         symbol: cmd.symbol || '',
-        volume: parseFloat(cmd.quantity) || 0.01,
+        volume: parseFloat(cmd.volume) || 0.01,
         price: parseFloat(cmd.price) || 0,
-        sl: cmd.response_data?.sl || 0,
-        tp: cmd.response_data?.tp || 0,
-        deviation: 20,
-        comment: `ABLE_${cmd.action}`
+        sl: parseFloat(cmd.sl) || 0,
+        tp: parseFloat(cmd.tp) || 0,
+        deviation: cmd.deviation || 20,
+        comment: cmd.comment || `ABLE_${cmd.command_type}`
       }))
 
       console.log(`📤 Returning ${eaCommands.length} commands to EA`)
@@ -122,19 +117,21 @@ serve(async (req) => {
 
       const isSuccess = code === 0 || code === 10009 || code === 10008
       
-      // Update command status in api_forward_logs
+      // Update command status in mt5_commands table
       await supabase
-        .from('api_forward_logs')
+        .from('mt5_commands')
         .update({
-          status: isSuccess ? 'success' : 'failed',
-          order_id: ticket?.toString(),
+          status: isSuccess ? 'completed' : 'failed',
+          ticket_id: ticket,
+          executed_price: price,
+          executed_volume: volume,
+          error_code: code,
           error_message: isSuccess ? null : message,
-          executed_at: new Date().toISOString(),
-          response_data: { ticket, price, volume, code, message }
+          executed_at: new Date().toISOString()
         })
         .eq('id', command_id)
 
-      console.log(`✅ Command ${command_id} marked as ${isSuccess ? 'success' : 'failed'}`)
+      console.log(`✅ Command ${command_id} marked as ${isSuccess ? 'completed' : 'failed'}`)
 
       // Update connection stats
       const { data: conn } = await supabase

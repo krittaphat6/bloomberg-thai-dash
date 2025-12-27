@@ -101,8 +101,8 @@ export class TesseractOCR {
       const img = new Image();
       
       img.onload = () => {
-        // Scale up 3x for better OCR accuracy
-        const scale = 3;
+        // Scale up 4x for better OCR accuracy on Bloomberg text
+        const scale = 4;
         canvas.width = img.width * scale;
         canvas.height = img.height * scale;
         
@@ -125,28 +125,44 @@ export class TesseractOCR {
         const data = processedData.data;
         
         // Bloomberg terminal: colored text on dark background
-        // Convert to black text on white background for OCR
+        // Enhanced detection for camera-captured Bloomberg screens
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
           
-          // Calculate brightness
+          // Calculate brightness and saturation
           const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const saturation = max > 0 ? (max - min) / max : 0;
           
-          // Enhanced Bloomberg text color detection
-          const isGreen = g > 80 && g > r * 1.3 && g > b * 1.3;
-          const isYellow = r > 150 && g > 150 && b < 120 && Math.abs(r - g) < 60;
-          const isOrange = r > 180 && g > 100 && g < 200 && b < 80;
-          const isAmber = r > 200 && g > 140 && g < 220 && b < 100;
-          const isWhite = r > 150 && g > 150 && b > 150;
-          const isRed = r > 150 && r > g * 1.5 && r > b * 1.5;
-          const isCyan = b > 100 && g > 100 && r < 120;
-          const isLightBlue = b > 150 && g > 150 && r < 180;
+          // Bloomberg-specific color detection (more aggressive for camera photos)
+          // Yellow/Orange/Amber text (Security names, headers)
+          const isYellow = r > 140 && g > 100 && b < 130 && r > b * 1.5;
+          const isOrange = r > 160 && g > 80 && g < 180 && b < 100;
+          const isAmber = r > 150 && g > 110 && b < 120;
+          const isGold = r > 180 && g > 120 && b < 100;
           
-          // Check if pixel is text
-          const isText = isGreen || isYellow || isOrange || isAmber || 
-                         isWhite || isRed || isCyan || isLightBlue || 
+          // Green text (Positive changes)
+          const isGreen = g > 80 && g > r * 1.15 && g > b * 1.2;
+          const isBrightGreen = g > 120 && g > r && g > b;
+          
+          // Red text (Negative changes)  
+          const isRed = r > 120 && r > g * 1.3 && r > b * 1.3;
+          
+          // White/Light gray text (General data)
+          const isWhite = r > 130 && g > 130 && b > 130 && brightness > 140;
+          const isLightGray = r > 100 && g > 100 && b > 100 && saturation < 0.2 && brightness > 110;
+          
+          // Cyan/Light blue (Links, special text)
+          const isCyan = b > 100 && g > 100 && r < 130 && (b + g) > r * 1.8;
+          const isLightBlue = b > 130 && g > 130 && r < 160;
+          
+          // Check if this pixel is Bloomberg text
+          const isText = isYellow || isOrange || isAmber || isGold ||
+                         isGreen || isBrightGreen || isRed ||
+                         isWhite || isLightGray || isCyan || isLightBlue ||
                          brightness > 100;
           
           // Convert to black text on white background
@@ -253,11 +269,16 @@ export class TesseractOCR {
     const lines = text.split('\n').filter(line => line.trim());
     const rows: string[][] = [];
     
-    // Expanded ticker patterns
+    // WisdomTree Holdings ticker patterns - comprehensive
     const tickerPatterns = [
-      /([A-Z]{2,5})\s+(US|JP|HK|LN|GY|FP|CN|IN|AU|SP|TB)\b/i,
-      /(\d{4})\s+(JP)\b/i,
+      // Standard US/International tickers: MSFT US, NVDA US, 7203 JP
+      /([A-Z]{2,6})\s+(US|JP|HK|LN|GY|GR|FP|CN|IN|AU|SP|TB|SS|SW|TT|NA|KS|SM|IM|PW)\b/i,
+      // Japanese numeric: 7203 JP
+      /(\d{4,6})\s+(JP|HK|TT|KS)\b/i,
+      // Treasury floaters: TF Float 0..., TF Float 1...
       /TF\s*Float\s*[\d\.]+/i,
+      // Bond tickers: B 0 02/05
+      /B\s+\d+\s+\d{2}\/\d{2}/i,
     ];
     
     const datePattern = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
@@ -265,10 +286,12 @@ export class TesseractOCR {
     const posChgPattern = /([+-]\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?)/;
     const mvPattern = /([\d,.]+)\s*(BLN|MLN|M|B)\b/i;
     
+    // Security name keywords from WisdomTree Holdings data
     const securityKeywords = [
-      'TREASURY', 'Microsoft', 'NVIDIA', 'Apple', 'Alphabet', 'Google',
-      'Exxon', 'Meta', 'Broadcom', 'Home Depot', 'JPMorgan', 'Chevron',
-      'Corp', 'Inc', 'Ltd', 'Co', 'Class', 'Common'
+      'TREASURY', 'FRN', 'BILL', 'Microsoft', 'NVIDIA', 'Apple', 'Alphabet',
+      'Google', 'Meta', 'Exxon', 'Mobil', 'Broadcom', 'Home Depot', 'JPMorgan',
+      'Chase', 'Chevron', 'UnitedHealth', 'Coca-Cola', 'AbbVie', 'Toyota', 'Oracle',
+      'Corp', 'Inc', 'Ltd', 'Co', 'Class', 'Common', 'Shares', 'Platforms'
     ];
     
     let rowCounter = 1;
@@ -277,7 +300,7 @@ export class TesseractOCR {
       const trimmedLine = line.trim();
       
       if (this.isHeaderRow([trimmedLine])) continue;
-      if (trimmedLine.length < 15) continue;
+      if (trimmedLine.length < 12) continue;
       
       // Initialize row values
       let rowNum = '';
@@ -289,7 +312,7 @@ export class TesseractOCR {
       let currMV = '';
       let filingDate = '';
       
-      // Extract row number
+      // Extract row number - handles 1), 2), 10) or just 1, 2, 10
       const rowNumMatch = trimmedLine.match(/^(\d{1,2})[\s\)\.\]]+/);
       if (rowNumMatch) {
         rowNum = rowNumMatch[1];

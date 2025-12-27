@@ -146,7 +146,7 @@ export const MT5TestOrderPanel: React.FC<MT5TestOrderPanelProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md bg-card border-border">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <Send className="w-5 h-5 text-primary" />
