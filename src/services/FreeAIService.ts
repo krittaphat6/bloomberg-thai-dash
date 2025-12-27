@@ -1,6 +1,4 @@
-// Free AI Service - Multiple free AI models with Local AI fallback
-
-export type FreeAIModel = 'lovable' | 'local';
+// Ollama AI Service - Local LLM Only
 
 export interface AIMessage {
   role: 'user' | 'assistant' | 'system';
@@ -10,167 +8,200 @@ export interface AIMessage {
 export interface AIResponse {
   text: string;
   model: string;
-  tokensUsed?: number;
 }
 
-export class FreeAIService {
-  
-  // Main entry point - tries Lovable AI first, then falls back to Local
+export interface OllamaModel {
+  name: string;
+  size: number;
+  modified_at: string;
+}
+
+export class OllamaService {
+  private static baseUrl = 'http://localhost:11434';
+
+  // Chat with Ollama
   static async chat(
     message: string,
     history: AIMessage[] = [],
-    model: FreeAIModel = 'lovable'
+    model: string = 'llama3',
+    systemPrompt?: string
   ): Promise<AIResponse> {
-    if (model === 'local') {
-      return this.localAI(message, history);
-    }
-    
-    // For Lovable AI, we need to call the edge function
-    // But since we can't call it directly from here, we'll use Local AI as default
-    return this.localAI(message, history);
-  }
+    try {
+      const messages: AIMessage[] = [];
 
-  // Local AI - Rule-based responses for financial analysis
-  static localAI(message: string, history: AIMessage[] = []): AIResponse {
-    const lowerMsg = message.toLowerCase();
-    let response = '';
-
-    // COT Analysis
-    if (lowerMsg.includes('cot') || lowerMsg.includes('commitment')) {
-      if (lowerMsg.includes('gold')) {
-        response = `📊 **COT Analysis - GOLD**\n\n` +
-          `ข้อมูล COT สำหรับทองคำแสดงให้เห็นว่า:\n\n` +
-          `• **Large Speculators (Hedge Funds)**: มักจะเป็น Trend Followers\n` +
-          `• **Commercial Hedgers (Producers)**: มักจะขาย hedge เมื่อราคาขึ้น\n` +
-          `• **Small Speculators**: รายย่อยที่มักจะผิดทางในช่วง extremes\n\n` +
-          `💡 **เคล็ดลับ**: ใช้ COT Index > 70 หรือ < 30 เป็นสัญญาณ contrarian\n\n` +
-          `คุณสามารถดูข้อมูลย้อนหลังได้ที่ COT Data Enhanced panel`;
+      // Add system prompt for trading assistant
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
       } else {
-        response = `📊 **COT (Commitment of Traders) Report**\n\n` +
-          `รายงาน COT แสดงตำแหน่งของ:\n` +
-          `1. **Commercial** - ผู้ผลิต/ผู้ใช้สินค้าจริง (Smart Money)\n` +
-          `2. **Non-Commercial** - กองทุน/Speculators ขนาดใหญ่\n` +
-          `3. **Non-Reportable** - รายย่อยที่ position เล็กกว่า reporting threshold\n\n` +
-          `ใช้ COT Data Enhanced panel เพื่อดูข้อมูลย้อนหลัง 5 ปีและ visualization`;
+        messages.push({
+          role: 'system',
+          content: `You are ABLE AI, a professional financial trading assistant. 
+You have access to these tools: COT data, trading journal, notes, market data, economic calendar.
+Always respond in the same language as the user (Thai or English).
+Be concise, accurate, and helpful.
+When analyzing data, provide clear insights and actionable recommendations.`
+        });
       }
-    }
-    // Trading Performance
-    else if (lowerMsg.includes('trade') || lowerMsg.includes('performance')) {
-      response = `📈 **Trading Performance Analysis**\n\n` +
-        `สำหรับการวิเคราะห์ผลการเทรด ควรดู:\n\n` +
-        `• **Win Rate**: อัตราชนะ (ควร > 40% สำหรับ trend following)\n` +
-        `• **Risk-Reward Ratio**: ควร > 1.5 ขึ้นไป\n` +
-        `• **Profit Factor**: ควร > 1.5\n` +
-        `• **Max Drawdown**: ควรควบคุมไม่เกิน 20%\n\n` +
-        `ใช้คำสั่ง "analyze_performance" เพื่อดูสถิติของคุณ`;
-    }
-    // Market Analysis
-    else if (lowerMsg.includes('market') || lowerMsg.includes('analysis') || lowerMsg.includes('ตลาด')) {
-      response = `🔍 **Market Analysis Overview**\n\n` +
-        `สำหรับการวิเคราะห์ตลาดแบบครบวงจร:\n\n` +
-        `1. **COT Data** - ดู positioning ของ Smart Money\n` +
-        `2. **Economic Indicators** - GDP, Inflation, Employment\n` +
-        `3. **Currency Table** - ความแข็งแกร่งของสกุลเงิน\n` +
-        `4. **Real Market Data** - ราคาสินทรัพย์ real-time\n` +
-        `5. **Bitcoin Mempool** - Crypto market sentiment\n\n` +
-        `💡 ใช้ panels เหล่านี้ร่วมกันเพื่อภาพรวมที่สมบูรณ์`;
-    }
-    // Position Sizing
-    else if (lowerMsg.includes('position') || lowerMsg.includes('risk') || lowerMsg.includes('lot')) {
-      response = `💰 **Position Sizing Calculator**\n\n` +
-        `สูตรคำนวณขนาด Position:\n\n` +
-        `Position Size = (Account × Risk%) ÷ (Entry - StopLoss)\n\n` +
-        `ตัวอย่าง:\n` +
-        `• Account: $10,000\n` +
-        `• Risk: 2% = $200\n` +
-        `• Entry: $50, Stop: $48\n` +
-        `• Position = $200 ÷ $2 = 100 shares\n\n` +
-        `ใช้ MCP tool "calculate_position_size" เพื่อคำนวณอัตโนมัติ`;
-    }
-    // Help / Commands
-    else if (lowerMsg.includes('help') || lowerMsg.includes('ช่วย') || lowerMsg.includes('command')) {
-      response = `🤖 **ABLE 3.0 AI - Available Commands**\n\n` +
-        `**COT Analysis:**\n` +
-        `• "Analyze COT for GOLD" - วิเคราะห์ COT ทองคำ\n` +
-        `• "Show COT index" - แสดง COT Index\n\n` +
-        `**Trading:**\n` +
-        `• "My trading performance" - ดูสถิติการเทรด\n` +
-        `• "Calculate position size" - คำนวณ lot size\n\n` +
-        `**Market:**\n` +
-        `• "Market overview" - ภาพรวมตลาด\n` +
-        `• "Economic indicators" - ตัวชี้วัดเศรษฐกิจ\n\n` +
-        `**Notes:**\n` +
-        `• "Search notes [keyword]" - ค้นหา notes\n` +
-        `• "Create note [title]" - สร้าง note ใหม่`;
-    }
-    // Greeting
-    else if (lowerMsg.includes('hello') || lowerMsg.includes('hi') || lowerMsg.includes('สวัสดี')) {
-      response = `👋 **สวัสดีครับ!**\n\n` +
-        `ผมคือ ABLE 3.0 AI พร้อมช่วยวิเคราะห์ตลาดการเงิน\n\n` +
-        `✅ ใช้งานได้ฟรี 100%\n` +
-        `✅ เชื่อมต่อกับ MCP System\n` +
-        `✅ เข้าถึง COT, Trading Journal, Notes\n\n` +
-        `พิมพ์ "help" เพื่อดูคำสั่งทั้งหมด`;
-    }
-    // Default response
-    else {
-      const topics = [
-        'COT Analysis (ข้อมูล Commitment of Traders)',
-        'Trading Performance (สถิติการเทรด)',
-        'Position Sizing (คำนวณขนาด position)',
-        'Market Overview (ภาพรวมตลาด)',
-        'Economic Indicators (ตัวชี้วัดเศรษฐกิจ)'
-      ];
-      
-      response = `🤖 **ABLE 3.0 AI**\n\n` +
-        `ขอบคุณสำหรับข้อความ! ผมพร้อมช่วยเรื่อง:\n\n` +
-        topics.map((t, i) => `${i + 1}. ${t}`).join('\n') +
-        `\n\nกรุณาระบุหัวข้อที่ต้องการวิเคราะห์ หรือพิมพ์ "help" เพื่อดูคำสั่งทั้งหมด`;
-    }
 
-    return {
-      text: response,
-      model: 'ABLE Local AI'
-    };
+      // Add history
+      messages.push(...history);
+
+      // Add current message
+      messages.push({ role: 'user', content: message });
+
+      const response = await fetch(`${this.baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: false
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ollama error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return {
+        text: data.message?.content || 'No response from Ollama',
+        model: `Ollama (${model})`
+      };
+    } catch (error) {
+      console.error('Ollama chat error:', error);
+      return {
+        text: '❌ ไม่สามารถเชื่อมต่อ Ollama ได้\n\n' +
+          '**กรุณาตรวจสอบ:**\n' +
+          '1. ติดตั้ง Ollama แล้ว (ollama.com)\n' +
+          '2. รัน: `ollama serve`\n' +
+          '3. ดาวน์โหลด model: `ollama pull llama3`\n\n' +
+          '**Windows/Mac/Linux:**\n' +
+          '```bash\n' +
+          'curl https://ollama.com/install.sh | sh\n' +
+          'ollama pull llama3\n' +
+          'ollama serve\n' +
+          '```',
+        model: 'Error'
+      };
+    }
   }
 
-  // Parse MCP tool calls from message
+  // Check Ollama connection
+  static async isAvailable(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/tags`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(3000)
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  // Get installed models
+  static async getModels(): Promise<OllamaModel[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/tags`);
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.models || [];
+    } catch {
+      return [];
+    }
+  }
+
+  // Generate with context (for analyzing data)
+  static async analyze(
+    prompt: string,
+    context: string,
+    model: string = 'llama3'
+  ): Promise<string> {
+    const response = await this.chat(
+      `${prompt}\n\nData:\n${context}`,
+      [],
+      model
+    );
+    return response.text;
+  }
+
+  // Detect MCP tool calls from message
   static detectToolCall(message: string): { tool: string; params: any } | null {
     const lowerMsg = message.toLowerCase();
 
     // COT Analysis
-    if (lowerMsg.includes('analyze cot') || lowerMsg.includes('วิเคราะห์ cot')) {
+    if (lowerMsg.includes('cot') || lowerMsg.includes('commitment')) {
       let asset = 'GOLD - COMMODITY EXCHANGE INC.';
-      if (lowerMsg.includes('silver')) asset = 'SILVER - COMMODITY EXCHANGE INC.';
-      if (lowerMsg.includes('oil')) asset = 'CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE';
+      if (lowerMsg.includes('silver') || lowerMsg.includes('เงิน')) asset = 'SILVER - COMMODITY EXCHANGE INC.';
+      if (lowerMsg.includes('oil') || lowerMsg.includes('น้ำมัน')) asset = 'CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE';
       if (lowerMsg.includes('euro') || lowerMsg.includes('eur')) asset = 'EURO FX - CHICAGO MERCANTILE EXCHANGE';
-      if (lowerMsg.includes('yen') || lowerMsg.includes('jpy')) asset = 'JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE';
+      if (lowerMsg.includes('yen') || lowerMsg.includes('jpy') || lowerMsg.includes('เยน')) asset = 'JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE';
       if (lowerMsg.includes('bitcoin') || lowerMsg.includes('btc')) asset = 'BITCOIN - CHICAGO MERCANTILE EXCHANGE';
-      
-      return { tool: 'analyze_cot', params: { asset } };
+      if (lowerMsg.includes('pound') || lowerMsg.includes('gbp')) asset = 'BRITISH POUND - CHICAGO MERCANTILE EXCHANGE';
+
+      if (lowerMsg.includes('analyze') || lowerMsg.includes('วิเคราะห์')) {
+        return { tool: 'analyze_cot', params: { asset } };
+      }
+      return { tool: 'get_cot_data', params: { asset } };
+    }
+
+    // Get COT assets list
+    if (lowerMsg.includes('cot asset') || lowerMsg.includes('available cot')) {
+      return { tool: 'get_cot_assets', params: {} };
     }
 
     // Trading Performance
-    if (lowerMsg.includes('performance') || lowerMsg.includes('trading stats') || lowerMsg.includes('สถิติ')) {
+    if (lowerMsg.includes('performance') || lowerMsg.includes('trading stats') || lowerMsg.includes('สถิติ') || lowerMsg.includes('ผลเทรด')) {
       return { tool: 'analyze_performance', params: {} };
     }
 
     // Get Trades
-    if (lowerMsg.includes('my trades') || lowerMsg.includes('show trades')) {
+    if (lowerMsg.includes('my trade') || lowerMsg.includes('show trade') || lowerMsg.includes('รายการเทรด')) {
       return { tool: 'get_trades', params: { limit: 10 } };
     }
 
+    // Add Trade
+    if (lowerMsg.includes('add trade') || lowerMsg.includes('เพิ่มเทรด')) {
+      // Extract trade info from message
+      const symbolMatch = message.match(/symbol[:\s]+(\w+)/i) || message.match(/(\w{3,6}USD[T]?)/i);
+      const directionMatch = message.match(/(long|short|buy|sell)/i);
+      const entryMatch = message.match(/entry[:\s]+([\d.]+)/i) || message.match(/at\s+([\d.]+)/i);
+      
+      if (symbolMatch && directionMatch && entryMatch) {
+        return {
+          tool: 'add_trade',
+          params: {
+            symbol: symbolMatch[1].toUpperCase(),
+            direction: directionMatch[1].toLowerCase().includes('long') || directionMatch[1].toLowerCase().includes('buy') ? 'Long' : 'Short',
+            entryPrice: parseFloat(entryMatch[1])
+          }
+        };
+      }
+    }
+
     // Search Notes
-    if (lowerMsg.includes('search note') || lowerMsg.includes('find note')) {
-      const match = message.match(/(?:search|find)\s+note[s]?\s+(.+)/i);
-      if (match) {
-        return { tool: 'search_notes', params: { query: match[1] } };
+    if (lowerMsg.includes('search note') || lowerMsg.includes('find note') || lowerMsg.includes('ค้นหาโน้ต')) {
+      const match = message.match(/(?:search|find|ค้นหา)\s+note[s]?\s+(.+)/i);
+      return { tool: 'search_notes', params: { query: match?.[1] || '' } };
+    }
+
+    // Create Note
+    if (lowerMsg.includes('create note') || lowerMsg.includes('new note') || lowerMsg.includes('สร้างโน้ต')) {
+      const titleMatch = message.match(/(?:create|new|สร้าง)\s+note[:\s]+(.+)/i);
+      if (titleMatch) {
+        return {
+          tool: 'create_note',
+          params: {
+            title: titleMatch[1].trim(),
+            content: `Created via ABLE AI on ${new Date().toLocaleString()}`
+          }
+        };
       }
     }
 
     // Position Size Calculator
-    if (lowerMsg.includes('position size') || lowerMsg.includes('calculate')) {
-      // Try to extract numbers from message
+    if (lowerMsg.includes('position size') || lowerMsg.includes('calculate') || lowerMsg.includes('lot size') || lowerMsg.includes('คำนวณ')) {
       const numbers = message.match(/\d+(?:\.\d+)?/g);
       if (numbers && numbers.length >= 4) {
         return {
@@ -183,6 +214,11 @@ export class FreeAIService {
           }
         };
       }
+    }
+
+    // Market Overview
+    if (lowerMsg.includes('market overview') || lowerMsg.includes('ภาพรวมตลาด')) {
+      return { tool: 'get_market_overview', params: {} };
     }
 
     return null;
@@ -205,15 +241,29 @@ export class FreeAIService {
           `**Open Interest:** ${a.openInterest.toLocaleString()}\n\n` +
           `💡 ${a.interpretation}`;
 
+      case 'get_cot_data':
+        if (!result.latest) return '❌ No COT data available';
+        const l = result.latest;
+        return `📊 **COT Data (${result.count} records)**\n\n` +
+          `**Date:** ${l.date}\n` +
+          `**Asset:** ${l.asset}\n` +
+          `**Commercial Net:** ${l.commercialNet.toLocaleString()}\n` +
+          `**Non-Commercial Net:** ${l.nonCommercialNet.toLocaleString()}\n` +
+          `**Open Interest:** ${l.openInterest.toLocaleString()}`;
+
+      case 'get_cot_assets':
+        return `📋 **Available COT Assets:**\n\n` +
+          result.assets.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n');
+
       case 'analyze_performance':
         const m = result.metrics;
         return `📈 **Trading Performance**\n\n` +
           `**Total Trades:** ${m.totalTrades}\n` +
           `**Win Rate:** ${m.winRate}\n` +
           `**Winning:** ${m.winningTrades} | **Losing:** ${m.losingTrades}\n\n` +
-          `**Total P&L:** $${m.totalPnL.toFixed(2)}\n` +
-          `**Avg Win:** $${m.averageWin.toFixed(2)}\n` +
-          `**Avg Loss:** $${m.averageLoss.toFixed(2)}`;
+          `**Total P&L:** $${typeof m.totalPnL === 'number' ? m.totalPnL.toFixed(2) : m.totalPnL}\n` +
+          `**Avg Win:** $${typeof m.averageWin === 'number' ? m.averageWin.toFixed(2) : m.averageWin}\n` +
+          `**Avg Loss:** $${typeof m.averageLoss === 'number' ? m.averageLoss.toFixed(2) : m.averageLoss}`;
 
       case 'get_trades':
         if (result.trades.length === 0) {
@@ -223,6 +273,12 @@ export class FreeAIService {
           `• ${t.symbol} ${t.direction} @ ${t.entryPrice} → P&L: $${(t.pnl || 0).toFixed(2)}`
         ).join('\n');
         return `📝 **Recent Trades (${result.total} total)**\n\n${trades}`;
+
+      case 'add_trade':
+        return `✅ **Trade Added**\n\n` +
+          `**Symbol:** ${result.trade.symbol}\n` +
+          `**Direction:** ${result.trade.direction}\n` +
+          `**Entry:** $${result.trade.entryPrice}`;
 
       case 'calculate_position_size':
         const c = result.calculation;
@@ -243,8 +299,20 @@ export class FreeAIService {
         ).join('\n');
         return `🔍 **Found ${result.count} notes**\n\n${notes}`;
 
+      case 'create_note':
+        return `✅ **Note Created**\n\n**Title:** ${result.note.title}`;
+
+      case 'get_market_overview':
+        return `🌐 **Market Overview**\n\n` +
+          `**Crypto:** BTC: ${result.markets.crypto.btc} | ETH: ${result.markets.crypto.eth}\n` +
+          `**Forex:** EUR/USD: ${result.markets.forex.eurusd} | USD/JPY: ${result.markets.forex.usdjpy}\n` +
+          `**Commodities:** Gold: ${result.markets.commodities.gold} | Oil: ${result.markets.commodities.oil}`;
+
       default:
         return `✅ Tool executed successfully.\n\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``;
     }
   }
 }
+
+// Export for backward compatibility
+export const FreeAIService = OllamaService;
