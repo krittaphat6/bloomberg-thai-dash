@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { toast } from '@/hooks/use-toast';
 import {
   Select,
   SelectContent,
@@ -16,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import {
   Send, Bot, User, Settings, Sparkles, Zap, Cpu, X,
-  RefreshCw, Plug, Check, Loader2, Wifi, WifiOff
+  RefreshCw, Circle, Wifi, WifiOff
 } from 'lucide-react';
 
 interface Message {
@@ -36,7 +35,7 @@ const ABLE3AI = () => {
   const [ollamaConnected, setOllamaConnected] = useState(false);
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [selectedModel, setSelectedModel] = useState('llama3');
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Check Ollama connection on mount
@@ -68,7 +67,7 @@ const ABLE3AI = () => {
   }, [messages]);
 
   const checkOllamaConnection = async () => {
-    setIsConnecting(true);
+    setIsCheckingConnection(true);
     try {
       const isAvailable = await OllamaService.isAvailable();
       setOllamaConnected(isAvailable);
@@ -79,26 +78,11 @@ const ABLE3AI = () => {
         if (models.length > 0 && !models.find(m => m.name === selectedModel)) {
           setSelectedModel(models[0].name);
         }
-        toast({
-          title: "🟢 Ollama Connected",
-          description: `Found ${models.length} models available`,
-        });
-      } else {
-        toast({
-          title: "🔴 Ollama Disconnected",
-          description: "Please run 'ollama serve' in your terminal",
-          variant: "destructive"
-        });
       }
     } catch (error) {
       setOllamaConnected(false);
-      toast({
-        title: "❌ Connection Failed",
-        description: "Could not connect to Ollama",
-        variant: "destructive"
-      });
     } finally {
-      setIsConnecting(false);
+      setIsCheckingConnection(false);
     }
   };
 
@@ -175,7 +159,7 @@ const ABLE3AI = () => {
             'กรุณาเริ่ม Ollama ก่อน:\n' +
             '1. เปิด Terminal\n' +
             '2. รัน: `ollama serve`\n' +
-            '3. กดปุ่ม "Connect Ollama"\n\n' +
+            '3. กดปุ่ม Refresh Connection\n\n' +
             'หากยังไม่ได้ติดตั้ง:\n' +
             '- Mac/Linux: `curl https://ollama.com/install.sh | sh`\n' +
             '- Windows: ดาวน์โหลดจาก ollama.com';
@@ -238,10 +222,10 @@ const ABLE3AI = () => {
     { label: '❓ Help', cmd: 'help' }
   ];
 
-  const renderMessage = (text: string, isUser: boolean) => {
+  const renderMessage = (text: string) => {
     return text.split('\n').map((line, i) => {
       if (line.startsWith('**') && line.endsWith('**')) {
-        return <div key={i} className={`font-bold ${isUser ? 'text-white' : 'text-green-400'}`}>{line.slice(2, -2)}</div>;
+        return <div key={i} className="font-bold text-primary">{line.slice(2, -2)}</div>;
       }
       if (line.startsWith('• ')) {
         return <div key={i} className="ml-2">• {line.slice(2)}</div>;
@@ -254,16 +238,16 @@ const ABLE3AI = () => {
         return (
           <div key={i}>
             {parts.map((part, j) =>
-              j % 2 === 1 ? <strong key={j} className={isUser ? 'text-white' : 'text-green-400'}>{part}</strong> : part
+              j % 2 === 1 ? <strong key={j} className="text-primary">{part}</strong> : part
             )}
           </div>
         );
       }
       if (line.startsWith('```')) {
-        return <code key={i} className="block bg-black/30 p-2 rounded text-xs font-mono text-green-300">{line.slice(3)}</code>;
+        return <code key={i} className="block bg-muted p-1 rounded text-xs">{line.slice(3)}</code>;
       }
       if (line === '---') {
-        return <hr key={i} className="my-2 border-white/20" />;
+        return <hr key={i} className="my-2 border-border" />;
       }
       return <div key={i}>{line || <br />}</div>;
     });
@@ -278,107 +262,84 @@ const ABLE3AI = () => {
     <Card className="w-full h-full bg-card border-primary/30 flex flex-col">
       <CardHeader className="pb-2 px-3 pt-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2 text-primary text-sm">
             <div className="relative">
-              <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-cyan-500 rounded-lg flex items-center justify-center">
-                <Bot className="w-5 h-5 text-black" />
+              <div className="w-7 h-7 bg-gradient-to-br from-green-500 to-cyan-500 rounded-lg flex items-center justify-center">
+                <Bot className="w-4 h-4 text-background" />
               </div>
-              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-card ${ollamaConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+              <div className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${ollamaConnected ? 'bg-green-500' : 'bg-red-500'}`} />
             </div>
             <div className="flex flex-col">
-              <span className="font-bold text-white">ABLE AI</span>
-              <span className="text-xs text-white/70 font-normal flex items-center gap-1">
+              <span className="font-bold">ABLE AI</span>
+              <span className="text-[9px] text-muted-foreground font-normal flex items-center gap-1">
                 {ollamaConnected ? (
                   <>
-                    <Wifi className="w-3 h-3 text-green-400" />
-                    <span className="text-green-400">Ollama • {selectedModel}</span>
+                    <Wifi className="w-2 h-2 text-green-500" />
+                    Ollama • {selectedModel}
                   </>
                 ) : (
                   <>
-                    <WifiOff className="w-3 h-3 text-red-400" />
-                    <span className="text-red-400">Ollama Offline</span>
+                    <WifiOff className="w-2 h-2 text-red-500" />
+                    Ollama Offline
                   </>
                 )}
-                {mcpReady && <span className="text-white/60">• {tools.length} MCP tools</span>}
+                {mcpReady && ` • ${tools.length} MCP tools`}
               </span>
             </div>
           </CardTitle>
-          
-          <div className="flex items-center gap-2">
-            {/* Connect Button */}
+          <div className="flex items-center gap-1">
             <Button
               size="sm"
+              variant="ghost"
               onClick={checkOllamaConnection}
-              disabled={isConnecting}
-              variant={ollamaConnected ? "outline" : "default"}
-              className={`h-8 gap-2 text-xs font-semibold ${
-                ollamaConnected 
-                  ? 'border-green-500 text-green-400 hover:bg-green-500/20' 
-                  : 'bg-green-600 hover:bg-green-700 text-white'
-              }`}
+              disabled={isCheckingConnection}
+              className="h-6 w-6 p-0"
+              title="Refresh Connection"
             >
-              {isConnecting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : ollamaConnected ? (
-                <Check className="w-4 h-4 text-green-400" />
-              ) : (
-                <Plug className="w-4 h-4" />
-              )}
-              {isConnecting ? 'Connecting...' : ollamaConnected ? 'Connected' : 'Connect Ollama'}
+              <RefreshCw className={`w-3 h-3 ${isCheckingConnection ? 'animate-spin' : ''}`} />
             </Button>
-            
             <Button
               size="sm"
               variant="ghost"
               onClick={() => setShowSettings(!showSettings)}
-              className="h-8 w-8 p-0 text-white hover:bg-white/10"
+              className="h-6 w-6 p-0"
             >
-              {showSettings ? <X className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
+              {showSettings ? <X className="w-3 h-3" /> : <Settings className="w-3 h-3" />}
             </Button>
           </div>
         </div>
 
         {/* Settings Panel */}
         {showSettings && (
-          <div className="mt-3 p-4 bg-black/40 rounded-lg border border-white/20 space-y-4">
+          <div className="mt-2 p-2 bg-background/50 rounded border border-border text-[10px] space-y-3">
             {/* Ollama Status */}
             <div>
-              <h3 className="font-bold text-white text-sm mb-2 flex items-center gap-2">
-                <Wifi className="w-4 h-4" />
-                Connection Status
-              </h3>
-              <Badge className={`text-sm px-3 py-1.5 font-bold ${
-                ollamaConnected 
-                  ? 'bg-green-500 text-white hover:bg-green-600' 
-                  : 'bg-red-500 text-white hover:bg-red-600'
-              }`}>
-                {ollamaConnected ? '🟢 Connected to Ollama' : '🔴 Disconnected'}
-              </Badge>
+              <div className="font-bold text-primary mb-1 flex items-center gap-1">
+                {ollamaConnected ? (
+                  <Circle className="w-2 h-2 fill-green-500 text-green-500" />
+                ) : (
+                  <Circle className="w-2 h-2 fill-red-500 text-red-500" />
+                )}
+                Ollama Status: {ollamaConnected ? 'Connected' : 'Disconnected'}
+              </div>
               {!ollamaConnected && (
-                <p className="text-yellow-400 text-sm mt-2">
-                  Run: <code className="bg-black/50 px-2 py-1 rounded font-mono">ollama serve</code>
-                </p>
+                <div className="text-muted-foreground text-[9px] ml-3">
+                  Run: <code className="bg-muted px-1 rounded">ollama serve</code>
+                </div>
               )}
             </div>
 
             {/* Model Selection */}
             {ollamaConnected && ollamaModels.length > 0 && (
               <div>
-                <h3 className="font-bold text-white text-sm mb-2 flex items-center gap-2">
-                  <Cpu className="w-4 h-4" />
-                  Select Model
-                </h3>
+                <div className="font-bold text-primary mb-1">Select Model:</div>
                 <Select value={selectedModel} onValueChange={setSelectedModel}>
-                  <SelectTrigger className="h-10 text-sm bg-black/30 border-white/30 text-white">
+                  <SelectTrigger className="h-7 text-xs">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-900 border-white/20">
+                  <SelectContent>
                     {ollamaModels.map(model => (
-                      <SelectItem 
-                        key={model.name} 
-                        value={model.name} 
-                        className="text-sm text-white hover:bg-white/10"
-                      >
+                      <SelectItem key={model.name} value={model.name} className="text-xs">
                         {model.name} ({formatModelSize(model.size)})
                       </SelectItem>
                     ))}
@@ -389,14 +350,11 @@ const ABLE3AI = () => {
 
             {/* MCP Tools */}
             <div>
-              <h3 className="font-bold text-green-400 text-sm mb-2 flex items-center gap-2">
-                <Zap className="w-4 h-4" />
-                MCP Tools Available ({tools.length})
-              </h3>
-              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+              <div className="font-bold text-primary mb-1">🛠️ MCP Tools ({tools.length}):</div>
+              <div className="grid grid-cols-2 gap-1 max-h-24 overflow-y-auto">
                 {tools.map(tool => (
-                  <div key={tool.name} className="flex items-center gap-2 text-white/80 text-sm bg-black/30 px-2 py-1 rounded">
-                    <Cpu className="w-3 h-3 text-green-400 flex-shrink-0" />
+                  <div key={tool.name} className="flex items-center gap-1 text-muted-foreground">
+                    <Cpu className="w-2 h-2 flex-shrink-0" />
                     <span className="truncate">{tool.name}</span>
                   </div>
                 ))}
@@ -409,61 +367,59 @@ const ABLE3AI = () => {
       <CardContent className="flex-1 min-h-0 p-0 flex flex-col">
         {/* Messages */}
         <ScrollArea className="flex-1 px-3" ref={scrollRef}>
-          <div className="space-y-4 py-3">
+          <div className="space-y-3 py-2">
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex gap-3 ${msg.isUser ? 'justify-end' : 'justify-start'}`}
+                className={`flex gap-2 ${msg.isUser ? 'justify-end' : 'justify-start'}`}
               >
                 {!msg.isUser && (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-4 h-4 text-black" />
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
+                    <Bot className="w-3 h-3 text-background" />
                   </div>
                 )}
                 <div
-                  className={`max-w-[85%] rounded-xl p-4 text-sm ${
+                  className={`max-w-[85%] rounded-lg p-2 text-[11px] ${
                     msg.isUser
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-800 text-white border border-white/10'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-accent'
                   }`}
                 >
-                  <div className={msg.isUser ? 'text-white' : 'text-white/90'}>
-                    {renderMessage(msg.text, msg.isUser)}
-                  </div>
+                  {renderMessage(msg.text)}
                   {!msg.isUser && msg.model && (
-                    <div className="text-xs text-green-400 mt-2 flex items-center gap-1 border-t border-white/10 pt-2">
-                      <Zap className="w-3 h-3" />
+                    <div className="text-[8px] text-muted-foreground mt-1 flex items-center gap-1">
+                      <Zap className="w-2 h-2" />
                       {msg.model}
                     </div>
                   )}
                 </div>
                 {msg.isUser && (
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
-                    <User className="w-4 h-4 text-white" />
+                  <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                    <User className="w-3 h-3 text-primary-foreground" />
                   </div>
                 )}
               </div>
             ))}
             {isLoading && (
-              <div className="flex gap-3 items-center">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-black animate-pulse" />
+              <div className="flex gap-2 items-center">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 flex items-center justify-center">
+                  <Sparkles className="w-3 h-3 text-background animate-pulse" />
                 </div>
-                <span className="text-sm text-green-400">กำลังคิด...</span>
+                <span className="text-[10px] text-muted-foreground">กำลังคิด...</span>
               </div>
             )}
           </div>
         </ScrollArea>
 
         {/* Quick Commands */}
-        <div className="px-3 py-2 flex gap-2 overflow-x-auto">
+        <div className="px-3 py-1 flex gap-1 overflow-x-auto">
           {quickCommands.map((cmd, i) => (
             <Button
               key={i}
               size="sm"
               variant="outline"
               onClick={() => setInputMessage(cmd.cmd)}
-              className="h-8 text-xs px-3 whitespace-nowrap flex-shrink-0 border-white/30 text-white hover:bg-white/10"
+              className="h-6 text-[9px] px-2 whitespace-nowrap flex-shrink-0"
             >
               {cmd.label}
             </Button>
@@ -471,22 +427,22 @@ const ABLE3AI = () => {
         </div>
 
         {/* Input */}
-        <div className="p-3 pt-2 flex gap-2">
+        <div className="p-3 pt-1 flex gap-2">
           <Input
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
-            placeholder={ollamaConnected ? "ถามอะไรก็ได้..." : "Click 'Connect Ollama' to start..."}
+            placeholder={ollamaConnected ? "ถามอะไรก็ได้..." : "Ollama offline - กด Refresh"}
             disabled={isLoading}
-            className="h-10 text-sm bg-black/30 border-white/30 text-white placeholder:text-white/50"
+            className="h-8 text-xs"
           />
           <Button
             onClick={sendMessage}
             disabled={isLoading || !inputMessage.trim()}
             size="sm"
-            className="h-10 w-10 p-0 bg-green-600 hover:bg-green-700"
+            className="h-8 w-8 p-0"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-3 h-3" />
           </Button>
         </div>
       </CardContent>
