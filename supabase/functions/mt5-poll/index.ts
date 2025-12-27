@@ -4,11 +4,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
@@ -17,7 +18,7 @@ serve(async (req) => {
 
     if (!connectionId) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Connection ID required' }),
+        JSON.stringify({ success: false, error: 'Missing connection_id' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -27,14 +28,24 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // GET request - poll for pending commands
+    // GET: EA polls for pending commands
     if (req.method === 'GET') {
-      console.log(`MT5 Poll: Fetching commands for connection ${connectionId}`)
-      
-      // First, reset any stuck 'processing' commands older than 30 seconds
+      console.log(`📡 MT5 Poll: Connection ${connectionId} polling...`)
+
+      // Update connection status
+      await supabase
+        .from('broker_connections')
+        .update({
+          is_connected: true,
+          last_connected_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', connectionId)
+
+      // Reset stuck 'processing' commands older than 30 seconds
       const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString()
       const { data: stuckCommands } = await supabase
-        .from('mt5_commands')
+        .from('api_forward_logs')
         .update({ status: 'pending' })
         .eq('connection_id', connectionId)
         .eq('status', 'processing')
@@ -42,12 +53,12 @@ serve(async (req) => {
         .select('id')
 
       if (stuckCommands && stuckCommands.length > 0) {
-        console.log(`MT5 Poll: Reset ${stuckCommands.length} stuck processing commands`)
+        console.log(`🔄 Reset ${stuckCommands.length} stuck commands`)
       }
 
-      // Fetch pending commands for this connection
+      // Get pending commands from api_forward_logs
       const { data: commands, error } = await supabase
-        .from('mt5_commands')
+        .from('api_forward_logs')
         .select('*')
         .eq('connection_id', connectionId)
         .eq('status', 'pending')
@@ -55,97 +66,112 @@ serve(async (req) => {
         .limit(10)
 
       if (error) {
-        console.error('MT5 Poll: Error fetching commands', error)
-        throw error
+        console.error('❌ Error fetching commands:', error)
+        return new Response(
+          JSON.stringify({ success: false, error: error.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
-      // CRITICAL FIX: Mark fetched commands as 'processing' immediately
-      // This prevents the same command from being fetched again on next poll
+      // CRITICAL: Mark commands as 'processing' immediately to prevent duplicate execution
       if (commands && commands.length > 0) {
         const commandIds = commands.map(cmd => cmd.id)
         
-        const { error: updateError } = await supabase
-          .from('mt5_commands')
+        await supabase
+          .from('api_forward_logs')
           .update({ status: 'processing' })
           .in('id', commandIds)
 
-        if (updateError) {
-          console.error('MT5 Poll: Error marking commands as processing', updateError)
-        } else {
-          console.log(`MT5 Poll: Marked ${commands.length} commands as processing`)
-        }
+        console.log(`✅ Marked ${commands.length} commands as processing`)
       }
 
-      // Update connection last poll time
-      await supabase
-        .from('broker_connections')
-        .update({
-          is_connected: true,
-          last_connected_at: new Date().toISOString()
-        })
-        .eq('id', connectionId)
+      // Transform to EA format
+      const eaCommands = (commands || []).map(cmd => ({
+        id: cmd.id,
+        command_type: cmd.action?.toLowerCase() || 'buy',
+        symbol: cmd.symbol || '',
+        volume: parseFloat(cmd.quantity) || 0.01,
+        price: parseFloat(cmd.price) || 0,
+        sl: cmd.response_data?.sl || 0,
+        tp: cmd.response_data?.tp || 0,
+        deviation: 20,
+        comment: `ABLE_${cmd.action}`
+      }))
 
-      console.log(`MT5 Poll: Returning ${commands?.length || 0} commands to EA`)
+      console.log(`📤 Returning ${eaCommands.length} commands to EA`)
 
       return new Response(
-        JSON.stringify({
-          success: true,
-          commands: commands || []
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: true, commands: eaCommands }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // POST request - report command result
+    // POST: EA reports execution result
     if (req.method === 'POST') {
       const body = await req.json()
       const { command_id, ticket, price, volume, code, message } = body
 
-      console.log(`MT5 Poll: Reporting result for command ${command_id}`, body)
+      console.log(`📥 Result for command ${command_id}: code=${code}`)
 
-      const isSuccess = code === 0 || code === 10009
+      if (!command_id) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Missing command_id' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const isSuccess = code === 0 || code === 10009 || code === 10008
       
-      const { error } = await supabase
-        .from('mt5_commands')
+      // Update command status in api_forward_logs
+      await supabase
+        .from('api_forward_logs')
         .update({
-          status: isSuccess ? 'completed' : 'failed',
-          ticket_id: ticket,
-          executed_price: price,
-          executed_volume: volume,
-          error_code: code,
-          error_message: message,
-          executed_at: new Date().toISOString()
+          status: isSuccess ? 'success' : 'failed',
+          order_id: ticket?.toString(),
+          error_message: isSuccess ? null : message,
+          executed_at: new Date().toISOString(),
+          response_data: { ticket, price, volume, code, message }
         })
         .eq('id', command_id)
 
-      if (error) {
-        console.error('MT5 Poll: Error updating command', error)
-        throw error
-      }
+      console.log(`✅ Command ${command_id} marked as ${isSuccess ? 'success' : 'failed'}`)
 
-      console.log(`MT5 Poll: Command ${command_id} marked as ${isSuccess ? 'completed' : 'failed'}`)
+      // Update connection stats
+      const { data: conn } = await supabase
+        .from('broker_connections')
+        .select('successful_orders, failed_orders, total_orders_sent')
+        .eq('id', connectionId)
+        .single()
 
-      // Update broker connection stats
-      if (isSuccess) {
-        await supabase.rpc('increment_broker_success', { conn_id: connectionId }).catch(() => {
-          // Fallback if RPC doesn't exist
-          console.log('MT5 Poll: RPC not available, skipping stats update')
-        })
+      if (conn) {
+        await supabase
+          .from('broker_connections')
+          .update({
+            total_orders_sent: (conn.total_orders_sent || 0) + 1,
+            successful_orders: isSuccess 
+              ? (conn.successful_orders || 0) + 1 
+              : conn.successful_orders,
+            failed_orders: !isSuccess 
+              ? (conn.failed_orders || 0) + 1 
+              : conn.failed_orders,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', connectionId)
       }
 
       return new Response(
-        JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: true, message: 'Result recorded' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     return new Response(
-      JSON.stringify({ success: false, error: 'Invalid method' }),
+      JSON.stringify({ success: false, error: 'Method not allowed' }),
       { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (err: any) {
-    console.error('MT5 Poll error:', err)
+    console.error('💥 MT5 Poll Error:', err)
     return new Response(
       JSON.stringify({ success: false, error: err.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
