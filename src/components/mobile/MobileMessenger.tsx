@@ -886,34 +886,96 @@ const MobileMessenger: React.FC<MobileMessengerProps> = ({ onBack }) => {
 
       {/* Webhook Info Dialog */}
       <Dialog open={showWebhookInfo} onOpenChange={setShowWebhookInfo}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-md max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>🔗 Webhook Info</DialogTitle></DialogHeader>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-primary">🔗 Webhook Information</DialogTitle>
+            <DialogDescription className="text-muted-foreground text-sm">ใช้ข้อมูลนี้ใน TradingView Alert</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-muted-foreground">Webhook URL:</label>
-              <div className="flex items-center gap-2 mt-1">
-                <code className="text-xs bg-muted p-2 rounded flex-1 overflow-auto break-all">{currentWebhookUrl}</code>
+              <label className="text-sm text-muted-foreground block mb-1">Webhook URL:</label>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-primary/10 text-primary p-3 rounded flex-1 overflow-auto break-all border border-primary/30">
+                  {currentWebhookUrl}
+                </code>
                 <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentWebhookUrl, 'url')}>
-                  {copiedItem === 'url' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copiedItem === 'url' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
             </div>
             <div>
-              <label className="text-sm text-muted-foreground">Secret:</label>
-              <div className="flex items-center gap-2 mt-1">
-                <code className="text-xs bg-muted p-2 rounded flex-1">{currentWebhookSecret}</code>
+              <label className="text-sm text-muted-foreground block mb-1">Secret Key:</label>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-primary/10 text-primary p-3 rounded flex-1 border border-primary/30">
+                  {currentWebhookSecret}
+                </code>
                 <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentWebhookSecret, 'secret')}>
-                  {copiedItem === 'secret' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copiedItem === 'secret' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
             </div>
-            <div className="border rounded p-3 text-sm">
-              <p className="font-bold mb-2">📊 วิธีใช้ TradingView:</p>
-              <ol className="text-xs space-y-1 text-muted-foreground">
-                <li>1. สร้าง Alert ใน TradingView</li>
-                <li>2. เปิด "Webhook URL"</li>
-                <li>3. วาง URL ด้านบน</li>
+            <div className="border border-primary/30 rounded p-4">
+              <h4 className="font-bold mb-2 text-primary">📊 วิธีใช้งานกับ TradingView:</h4>
+              <ol className="text-sm space-y-1 text-muted-foreground">
+                <li>1. ไปที่ TradingView → สร้าง Alert ใหม่</li>
+                <li>2. ใน "Notifications" เปิด "Webhook URL"</li>
+                <li>3. วาง Webhook URL ด้านบน</li>
+                <li>4. ใน "Message" ใส่ JSON format:</li>
               </ol>
+              <pre className="text-xs bg-black/50 text-primary p-2 rounded mt-2 overflow-auto">
+{`{
+  "ticker": "{{ticker}}",
+  "action": "{{strategy.order.action}}",
+  "price": "{{close}}",
+  "time": "{{time}}",
+  "message": "Your custom message"
+}`}
+              </pre>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t border-border">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={async () => {
+                  try {
+                    // Ensure TradingView user exists
+                    const { data: tvUser } = await supabase.from('users').select('id').eq('id', 'tradingview').maybeSingle();
+                    if (!tvUser) {
+                      await supabase.from('users').insert({
+                        id: 'tradingview',
+                        username: '📊 TradingView',
+                        color: '#2962FF',
+                        status: 'online'
+                      });
+                    }
+                    const testData = {
+                      ticker: 'TEST',
+                      action: 'BUY',
+                      price: '100.00',
+                      time: new Date().toISOString(),
+                      message: '🧪 Test alert from ABLE Messenger'
+                    };
+                    await supabase.from('messages').insert({
+                      room_id: currentRoomId,
+                      user_id: 'tradingview',
+                      username: '📊 TradingView',
+                      color: '#2962FF',
+                      content: `📊 **TradingView Alert**\n\n🏷️ Symbol: TEST\n📌 Action: BUY\n💰 Price: 100.00\n\n💬 🧪 Test alert from ABLE Messenger`,
+                      message_type: 'webhook',
+                      webhook_data: testData
+                    });
+                    toast({ title: '✅ Test Sent!', description: 'Check the chat for the test message' });
+                    setShowWebhookInfo(false);
+                  } catch (error) {
+                    console.error('Test webhook error:', error);
+                    toast({ title: 'Test Failed', variant: 'destructive' });
+                  }
+                }}
+                className="border-primary/30"
+              >
+                🧪 Send Test Alert
+              </Button>
+              <Button onClick={() => setShowWebhookInfo(false)}>Close</Button>
             </div>
           </div>
         </DialogContent>
