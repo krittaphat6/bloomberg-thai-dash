@@ -1738,9 +1738,7 @@ const LiveChatReal = () => {
                 
                 {/* Auto Bridge Button - Main feature for webhook to MT5 */}
                 {currentRoom?.type === 'webhook' && (
-                  <Button
-                    variant={autoForwardEnabled ? "default" : "outline"}
-                    size="sm"
+                  <button
                     onClick={() => {
                       if (!mt5ConnectionId) {
                         setShowAPIBridge(true);
@@ -1759,46 +1757,62 @@ const LiveChatReal = () => {
                       });
                     }}
                     title={autoForwardEnabled ? "Auto Bridge กำลังทำงาน - คลิกเพื่อปิด" : "เปิด Auto Bridge เพื่อส่ง webhook ไป MT5 อัตโนมัติ"}
-                    className={`flex items-center gap-2 px-3 py-1 rounded-lg text-xs h-8 font-bold transition-all duration-300 ${
+                    className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-300 ${
                       autoForwardEnabled 
-                        ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 text-white shadow-lg shadow-cyan-500/50 animate-pulse border-0' 
+                        ? 'bg-gradient-to-br from-emerald-500 via-cyan-500 to-blue-600 shadow-lg shadow-emerald-500/40' 
                         : mt5ConnectionId
-                          ? 'bg-gray-800/80 text-gray-300 border-gray-600 hover:border-cyan-500 hover:text-cyan-400'
-                          : 'bg-gray-900/50 text-gray-500 border-gray-700'
+                          ? 'bg-muted/60 border border-border hover:border-primary/50 hover:bg-muted'
+                          : 'bg-muted/30 border border-border/50 opacity-60'
                     }`}
                   >
-                    {/* Custom Bridge Icon */}
+                    {/* Bridge Logo Icon */}
                     <svg 
-                      className={`w-4 h-4 ${autoForwardEnabled ? 'animate-spin' : ''}`} 
+                      className={`w-6 h-6 ${autoForwardEnabled ? 'text-white' : mt5ConnectionId ? 'text-foreground' : 'text-muted-foreground'}`}
                       viewBox="0 0 24 24" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      strokeWidth="2"
+                      fill="none"
                     >
-                      <path d="M2 12h6l2-3 2 6 2-6 2 3h6" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M12 3v3M12 18v3" strokeLinecap="round"/>
-                      <circle cx="12" cy="12" r="2" fill={autoForwardEnabled ? "currentColor" : "none"}/>
-                      {autoForwardEnabled && (
-                        <path d="M12 7l-1 2h2l-1 2" strokeWidth="1.5"/>
-                      )}
+                      {/* Bridge base structure */}
+                      <path 
+                        d="M3 18V14C3 12.3431 4.34315 11 6 11H18C19.6569 11 21 12.3431 21 14V18" 
+                        stroke="currentColor" 
+                        strokeWidth="2" 
+                        strokeLinecap="round"
+                      />
+                      {/* Bridge pillars */}
+                      <path d="M6 11V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <path d="M18 11V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      {/* Data flow arrows */}
+                      <path 
+                        d="M9 14L12 11L15 14" 
+                        stroke="currentColor" 
+                        strokeWidth="2" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                        className={autoForwardEnabled ? 'animate-pulse' : ''}
+                      />
+                      {/* Connection nodes */}
+                      <circle cx="6" cy="6" r="2" fill={autoForwardEnabled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5"/>
+                      <circle cx="18" cy="6" r="2" fill={autoForwardEnabled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5"/>
                     </svg>
                     
-                    <span className="hidden sm:inline">
-                      {autoForwardEnabled ? '⚡ BRIDGE ACTIVE' : mt5ConnectionId ? '🔌 AUTO BRIDGE' : '⭕ NO MT5'}
-                    </span>
-                    <span className="sm:hidden">
-                      {autoForwardEnabled ? '⚡' : '🔌'}
-                    </span>
+                    {/* Active glow effect */}
+                    {autoForwardEnabled && (
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-emerald-400/30 to-cyan-400/30 animate-pulse" />
+                    )}
                     
-                    {/* Status indicator dot */}
-                    <div className={`w-2 h-2 rounded-full ${
+                    {/* Status indicator */}
+                    <div className={`absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background ${
                       autoForwardEnabled 
-                        ? 'bg-green-400 animate-ping' 
+                        ? 'bg-emerald-400' 
                         : mt5ConnectionId 
-                          ? 'bg-yellow-500' 
-                          : 'bg-red-500'
-                    }`} />
-                  </Button>
+                          ? 'bg-amber-500' 
+                          : 'bg-destructive/60'
+                    }`}>
+                      {autoForwardEnabled && (
+                        <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping" />
+                      )}
+                    </div>
+                  </button>
                 )}
                 
                 {/* MT5 Connection Settings Button */}
