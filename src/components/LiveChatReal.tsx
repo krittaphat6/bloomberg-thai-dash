@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { User, Friendship, ChatRoom, Message, Webhook as WebhookType, FriendNickname } from '@/types/chat';
-import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2, Share2, Loader2, RefreshCw, Volume2, VolumeX, PlugZap } from 'lucide-react';
+import { UserPlus, Users, Settings, Paperclip, Image as ImageIcon, Send, X, Copy, Check, Edit2, Video, Webhook, Trash2, Share2, Loader2, RefreshCw, Volume2, VolumeX, PlugZap, Forward, Zap } from 'lucide-react';
 import { useCurrentTheme } from '@/hooks/useCurrentTheme';
 import { getThemeColors } from '@/utils/themeColors';
 import { VideoCall } from './VideoCall';
@@ -93,6 +93,12 @@ const LiveChatReal = () => {
     return (saved as keyof typeof NOTIFICATION_SOUNDS) || 'ding';
   });
   const audioContextRef = useRef<AudioContext | null>(null);
+  
+  // MT5 Forward state
+  const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
+  const [mt5ConnectionId, setMt5ConnectionId] = useState<string | null>(null);
+  const [isMt5Connected, setIsMt5Connected] = useState(false);
+  const [autoForwardEnabled, setAutoForwardEnabled] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -552,6 +558,171 @@ const LiveChatReal = () => {
 
     loadWebhooks();
   }, [currentRoomId]);
+
+  // Check MT5 connection status
+  const checkMT5Connection = useCallback(async () => {
+    if (!currentUser) return;
+    
+    try {
+      const { data: connections, error } = await supabase
+        .from('broker_connections')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .eq('broker_type', 'mt5')
+        .eq('is_connected', true)
+        .limit(1);
+      
+      if (error) throw error;
+      
+      if (connections && connections.length > 0) {
+        setMt5ConnectionId(connections[0].id);
+        setIsMt5Connected(true);
+      } else {
+        setMt5ConnectionId(null);
+        setIsMt5Connected(false);
+      }
+    } catch (err) {
+      console.error('Error checking MT5 connection:', err);
+    }
+  }, [currentUser]);
+
+  // Subscribe to MT5 connection changes
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    checkMT5Connection();
+    
+    const channel = supabase
+      .channel('mt5-connection-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'broker_connections',
+        filter: `user_id=eq.${currentUser.id}`
+      }, () => {
+        checkMT5Connection();
+      })
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [checkMT5Connection, currentUser]);
+
+  // Forward webhook message to MT5
+  const handleForwardToMT5 = async (message: Message) => {
+    if (!mt5ConnectionId || !message.webhook_data) {
+      toast({
+        title: '❌ Error',
+        description: 'กรุณาเชื่อมต่อ MT5 ก่อน',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    setForwardingMessageId(message.id);
+    
+    try {
+      const webhookData = message.webhook_data as any;
+      const parsedTrade = webhookData.parsed_trade || webhookData;
+      
+      // Determine action
+      let action = 'buy';
+      const actionStr = (parsedTrade.action || webhookData.action || '').toString().toLowerCase();
+      
+      if (actionStr.includes('sell') || actionStr.includes('short')) {
+        action = 'sell';
+      } else if (actionStr.includes('close')) {
+        action = 'close';
+      }
+      
+      // Get symbol and price
+      const symbol = parsedTrade.symbol || webhookData.ticker || webhookData.symbol || '';
+      const price = parseFloat(parsedTrade.price || webhookData.price || webhookData.close || 0);
+      const quantity = parseFloat(parsedTrade.lotSize || parsedTrade.quantity || webhookData.lot || webhookData.quantity || 0.01);
+      
+      // Insert into api_forward_logs (pending status)
+      const { data: logData, error: logError } = await supabase
+        .from('api_forward_logs')
+        .insert({
+          connection_id: mt5ConnectionId,
+          room_id: message.room_id,
+          message_id: message.id,
+          broker_type: 'mt5',
+          action: action,
+          symbol: symbol,
+          quantity: quantity,
+          price: price,
+          status: 'pending',
+          response_data: {
+            sl: parsedTrade.sl || 0,
+            tp: parsedTrade.tp || 0,
+            source: 'webhook',
+            original_data: webhookData
+          }
+        })
+        .select()
+        .single();
+      
+      if (logError) throw logError;
+      
+      // Send confirmation message to chat
+      await supabase.from('messages').insert({
+        room_id: message.room_id,
+        user_id: 'system',
+        username: '🤖 ABLE System',
+        color: '#00ff88',
+        content: `📤 **Forwarded to MT5**\n\n` +
+          `🏷️ Symbol: ${symbol}\n` +
+          `📌 Action: ${action.toUpperCase()}\n` +
+          `📊 Quantity: ${quantity}\n` +
+          `💰 Price: ${price}\n\n` +
+          `⏳ Status: Waiting for MT5 EA to execute...\n` +
+          `🔗 Log ID: ${logData.id.slice(0, 8)}...`,
+        message_type: 'text'
+      });
+      
+      toast({
+        title: '✅ Forwarded to MT5!',
+        description: `${action.toUpperCase()} ${symbol} x${quantity} sent to MT5 EA`
+      });
+      
+    } catch (err: any) {
+      console.error('Error forwarding to MT5:', err);
+      toast({
+        title: '❌ Forward Failed',
+        description: err.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setForwardingMessageId(null);
+    }
+  };
+
+  // Auto-forward webhook messages to MT5
+  useEffect(() => {
+    if (!autoForwardEnabled || !isMt5Connected || !currentRoomId) return;
+    
+    const channel = supabase
+      .channel('webhook-auto-forward')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `room_id=eq.${currentRoomId}`
+      }, (payload) => {
+        const newMessage = payload.new as Message;
+        if (newMessage.message_type === 'webhook' && newMessage.webhook_data) {
+          // Auto forward
+          handleForwardToMT5(newMessage);
+        }
+      })
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [autoForwardEnabled, isMt5Connected, currentRoomId, mt5ConnectionId]);
 
   // Avatar upload
   const handleAvatarUpload = async (file: File) => {
@@ -1570,6 +1741,28 @@ const LiveChatReal = () => {
                   </Button>
                 )}
                 
+                {/* MT5 Status Indicator */}
+                {currentRoom?.type === 'webhook' && (
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${isMt5Connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                    <div className={`w-2 h-2 rounded-full ${isMt5Connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                    MT5 {isMt5Connected ? 'Connected' : 'Offline'}
+                  </div>
+                )}
+                
+                {/* Auto Forward Toggle */}
+                {currentRoom?.type === 'webhook' && isMt5Connected && (
+                  <Button
+                    variant={autoForwardEnabled ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setAutoForwardEnabled(!autoForwardEnabled)}
+                    className={`text-xs h-7 ${autoForwardEnabled ? 'bg-yellow-600 hover:bg-yellow-700' : ''}`}
+                    title="Auto-forward all incoming webhook signals to MT5"
+                  >
+                    <Zap className="w-3 h-3 mr-1" />
+                    {autoForwardEnabled ? 'Auto ON' : 'Auto OFF'}
+                  </Button>
+                )}
+                
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1662,12 +1855,67 @@ const LiveChatReal = () => {
                           <div className="mt-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded">
                             <pre className="text-sm whitespace-pre-wrap text-blue-300">{message.content}</pre>
                             {message.webhook_data && (
-                              <details className="mt-2">
-                                <summary className="text-xs text-blue-400 cursor-pointer hover:text-blue-300">📊 Raw Data</summary>
-                                <pre className="text-xs mt-1 overflow-auto bg-black/30 p-2 rounded">
-                                  {JSON.stringify(message.webhook_data, null, 2)}
-                                </pre>
-                              </details>
+                              <>
+                                {/* Parsed Trade Data */}
+                                <div className="mt-3 p-2 bg-black/30 rounded text-xs">
+                                  {(() => {
+                                    const data = message.webhook_data as any;
+                                    const parsedTrade = data.parsed_trade || data;
+                                    const symbol = parsedTrade.symbol || data.ticker || data.symbol || '';
+                                    const action = parsedTrade.action || data.action || '';
+                                    const price = parsedTrade.price || data.price || data.close || '';
+                                    const quantity = parsedTrade.lotSize || parsedTrade.quantity || data.lot || data.quantity || 0.01;
+                                    
+                                    return (
+                                      <div className="space-y-1">
+                                        <div className="text-blue-300">🏷️ Symbol: <span className="font-bold">{symbol || 'N/A'}</span></div>
+                                        <div className="text-blue-300">📌 Action: <span className={`font-bold ${action.toLowerCase().includes('buy') ? 'text-green-400' : action.toLowerCase().includes('sell') ? 'text-red-400' : 'text-yellow-400'}`}>{action || 'N/A'}</span></div>
+                                        <div className="text-blue-300">💰 Price: <span className="font-bold">{price || 'N/A'}</span></div>
+                                        <div className="text-blue-300">📊 Quantity: <span className="font-bold">{quantity}</span></div>
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                                
+                                {/* Forward to MT5 Button */}
+                                <div className="mt-3 flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant={isMt5Connected ? "default" : "outline"}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleForwardToMT5(message);
+                                    }}
+                                    disabled={!isMt5Connected || forwardingMessageId === message.id}
+                                    className={`h-8 text-xs ${isMt5Connected ? 'bg-green-600 hover:bg-green-700' : 'border-red-500/30 text-red-400'}`}
+                                  >
+                                    {forwardingMessageId === message.id ? (
+                                      <>
+                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                        Sending...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Forward className="w-3 h-3 mr-1" />
+                                        {isMt5Connected ? 'Forward to MT5' : 'MT5 Not Connected'}
+                                      </>
+                                    )}
+                                  </Button>
+                                  
+                                  {!isMt5Connected && (
+                                    <span className="text-xs text-red-400/70">
+                                      เชื่อมต่อ MT5 ใน API Bridge ก่อน
+                                    </span>
+                                  )}
+                                </div>
+                                
+                                <details className="mt-2">
+                                  <summary className="text-xs text-blue-400 cursor-pointer hover:text-blue-300">📊 Raw Data</summary>
+                                  <pre className="text-xs mt-1 overflow-auto bg-black/30 p-2 rounded">
+                                    {JSON.stringify(message.webhook_data, null, 2)}
+                                  </pre>
+                                </details>
+                              </>
                             )}
                           </div>
                         )}
