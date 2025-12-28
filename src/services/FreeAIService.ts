@@ -1,4 +1,4 @@
-// ABLE AI Bridge Service - Connect to Mac API Server
+// ABLE AI Bridge Service - Connect to Mac API Server via localhost.run
 
 export interface AIMessage {
   role: 'user' | 'assistant' | 'system';
@@ -17,49 +17,110 @@ export interface OllamaModel {
 }
 
 export class OllamaService {
-  // User sets this URL from settings (localhost.run URL)
   private static bridgeUrl = localStorage.getItem('able_bridge_url') || '';
-  
+  private static connectionCache: { isAvailable: boolean; timestamp: number } | null = null;
+  private static CACHE_DURATION = 30000; // 30 seconds
+
   static setBridgeUrl(url: string) {
-    // Remove trailing slash
-    const cleanUrl = url.replace(/\/$/, '');
+    // Clean URL - remove trailing slash and whitespace
+    const cleanUrl = url.trim().replace(/\/$/, '');
     localStorage.setItem('able_bridge_url', cleanUrl);
     this.bridgeUrl = cleanUrl;
-  }
-  
-  static getBridgeUrl(): string {
-    return this.bridgeUrl || localStorage.getItem('able_bridge_url') || '';
+    // Clear cache when URL changes
+    this.connectionCache = null;
+    console.log('✅ Bridge URL set:', cleanUrl);
   }
 
-  // Check connection to Bridge API
-  static async isAvailable(): Promise<boolean> {
+  static getBridgeUrl(): string {
+    if (!this.bridgeUrl) {
+      this.bridgeUrl = localStorage.getItem('able_bridge_url') || '';
+    }
+    return this.bridgeUrl;
+  }
+
+  // Check connection to Bridge API with retry
+  static async isAvailable(retries = 2): Promise<boolean> {
     const url = this.getBridgeUrl();
-    if (!url) return false;
-    
-    try {
-      const response = await fetch(`${url}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000)
-      });
-      return response.ok;
-    } catch {
+    if (!url) {
+      console.warn('⚠️ Bridge URL not set');
       return false;
     }
+
+    // Check cache
+    if (this.connectionCache) {
+      const age = Date.now() - this.connectionCache.timestamp;
+      if (age < this.CACHE_DURATION) {
+        return this.connectionCache.isAvailable;
+      }
+    }
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        console.log(`🔍 Checking Bridge API (attempt ${attempt + 1})...`);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+        const response = await fetch(`${url}/health`, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Bridge API available:', data);
+          this.connectionCache = { isAvailable: true, timestamp: Date.now() };
+          return true;
+        }
+      } catch (error: any) {
+        console.warn(`❌ Bridge check failed (attempt ${attempt + 1}):`, error.message);
+        if (attempt < retries) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+        }
+      }
+    }
+
+    this.connectionCache = { isAvailable: false, timestamp: Date.now() };
+    return false;
   }
 
   // Get Ollama status via Bridge
   static async getOllamaStatus(): Promise<{ connected: boolean; models: OllamaModel[] }> {
     const url = this.getBridgeUrl();
     if (!url) return { connected: false, models: [] };
-    
+
     try {
-      const response = await fetch(`${url}/ollama/status`);
+      console.log('🦙 Checking Ollama status...');
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(`${url}/ollama/status`, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.error('❌ Ollama status check failed:', response.status);
+        return { connected: false, models: [] };
+      }
+
       const data = await response.json();
+      console.log('📊 Ollama status:', data);
+
       return {
         connected: data.connected || false,
-        models: data.models || []
+        models: data.models || [],
       };
-    } catch {
+    } catch (error: any) {
+      console.error('❌ Ollama status error:', error.message);
       return { connected: false, models: [] };
     }
   }
@@ -68,9 +129,14 @@ export class OllamaService {
   static async getModels(): Promise<OllamaModel[]> {
     const url = this.getBridgeUrl();
     if (!url) return [];
-    
+
     try {
-      const response = await fetch(`${url}/ollama/models`);
+      const response = await fetch(`${url}/ollama/models`, {
+        headers: { 'Accept': 'application/json' },
+      });
+      
+      if (!response.ok) return [];
+      
       const data = await response.json();
       return Array.isArray(data) ? data : (data.models || []);
     } catch {
@@ -89,35 +155,80 @@ export class OllamaService {
     
     if (!url) {
       return {
-        text: '❌ ยังไม่ได้ตั้งค่า Bridge URL\n\nไปที่ Settings → ใส่ URL จาก localhost.run',
+        text: '❌ **ยังไม่ได้ตั้งค่า Bridge URL**\n\n' +
+              'กรุณาทำตามขั้นตอน:\n' +
+              '1. เปิด ABLE AI Server บน Mac\n' +
+              '2. กด "Start Tunnel" เพื่อได้ URL จาก localhost.run\n' +
+              '3. Copy URL (เช่น https://abc123.localhost.run)\n' +
+              '4. กลับมาที่ Settings และ Paste URL\n' +
+              '5. กด "Save" และ "Connect"',
         model: 'Error'
       };
     }
 
     try {
+      console.log(`💬 Sending message to Ollama (${model})...`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s for chat
+
       const response = await fetch(`${url}/ollama/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        signal: controller.signal,
         body: JSON.stringify({
           model,
           messages: [...history, { role: 'user', content: message }],
-          system: systemPrompt || 'คุณคือ ABLE AI ผู้เชี่ยวชาญการเทรดและการเงิน ตอบเป็นภาษาไทย'
-        })
+          system: systemPrompt || 'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาไทยแบบเป็นมิตร'
+        }),
       });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
       const data = await response.json();
       
       if (data.success) {
+        console.log('✅ Ollama response received');
         return {
           text: data.message,
-          model: `Ollama (${data.model})`
+          model: `Ollama (${data.model})`,
         };
       } else {
         throw new Error(data.error || 'Unknown error from Bridge API');
       }
     } catch (error: any) {
+      console.error('❌ Chat error:', error);
+      
+      if (error.name === 'AbortError') {
+        return {
+          text: '⏱️ **Request timeout**\n\nOllama ใช้เวลานานเกินไป อาจเป็นเพราะ:\n' +
+                '• Model ใหญ่เกินไป\n' +
+                '• Mac ทำงานช้า\n' +
+                '• Network ช้า\n\n' +
+                'ลองใช้ model เล็กกว่า หรือลดความยาวข้อความ',
+          model: 'Error'
+        };
+      }
+
       return {
-        text: `❌ เชื่อมต่อไม่ได้: ${error.message}\n\nตรวจสอบ:\n1. API Server รันอยู่บน Mac\n2. localhost.run ยังทำงาน\n3. URL ถูกต้อง`,
+        text: `❌ **เชื่อมต่อไม่ได้: ${error.message}**\n\n` +
+              '**ตรวจสอบ:**\n' +
+              '1. ✅ API Server รันอยู่บน Mac หรือไม่?\n' +
+              '2. ✅ Ollama serve ทำงานอยู่หรือไม่?\n' +
+              '3. ✅ localhost.run tunnel ยังทำงานอยู่หรือไม่?\n' +
+              '4. ✅ Bridge URL ถูกต้องหรือไม่?\n\n' +
+              '**วิธีแก้:**\n' +
+              '• เปิด ABLE AI Server บน Mac\n' +
+              '• กด "Restart Ollama"\n' +
+              '• กด "Tunnel" เพื่อสร้าง URL ใหม่\n' +
+              '• Copy URL ใหม่มาใส่ใน Settings',
         model: 'Error'
       };
     }
@@ -137,81 +248,41 @@ export class OllamaService {
     return response.text;
   }
 
-  // Detect MCP tool calls from message
+  // Parse MCP tool calls from message
   static detectToolCall(message: string): { tool: string; params: any } | null {
     const lowerMsg = message.toLowerCase();
 
     // COT Analysis
-    if (lowerMsg.includes('cot') || lowerMsg.includes('commitment')) {
+    if (lowerMsg.includes('analyze cot') || lowerMsg.includes('วิเคราะห์ cot') || lowerMsg.includes('cot')) {
       let asset = 'GOLD - COMMODITY EXCHANGE INC.';
-      if (lowerMsg.includes('silver') || lowerMsg.includes('เงิน')) asset = 'SILVER - COMMODITY EXCHANGE INC.';
-      if (lowerMsg.includes('oil') || lowerMsg.includes('น้ำมัน')) asset = 'CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE';
+      if (lowerMsg.includes('silver')) asset = 'SILVER - COMMODITY EXCHANGE INC.';
+      if (lowerMsg.includes('oil')) asset = 'CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE';
       if (lowerMsg.includes('euro') || lowerMsg.includes('eur')) asset = 'EURO FX - CHICAGO MERCANTILE EXCHANGE';
-      if (lowerMsg.includes('yen') || lowerMsg.includes('jpy') || lowerMsg.includes('เยน')) asset = 'JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE';
+      if (lowerMsg.includes('yen') || lowerMsg.includes('jpy')) asset = 'JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE';
       if (lowerMsg.includes('bitcoin') || lowerMsg.includes('btc')) asset = 'BITCOIN - CHICAGO MERCANTILE EXCHANGE';
-      if (lowerMsg.includes('pound') || lowerMsg.includes('gbp')) asset = 'BRITISH POUND - CHICAGO MERCANTILE EXCHANGE';
-
-      if (lowerMsg.includes('analyze') || lowerMsg.includes('วิเคราะห์')) {
-        return { tool: 'analyze_cot', params: { asset } };
-      }
-      return { tool: 'get_cot_data', params: { asset } };
-    }
-
-    // Get COT assets list
-    if (lowerMsg.includes('cot asset') || lowerMsg.includes('available cot')) {
-      return { tool: 'get_cot_assets', params: {} };
+      return { tool: 'analyze_cot', params: { asset } };
     }
 
     // Trading Performance
-    if (lowerMsg.includes('performance') || lowerMsg.includes('trading stats') || lowerMsg.includes('สถิติ') || lowerMsg.includes('ผลเทรด')) {
+    if (lowerMsg.includes('performance') || lowerMsg.includes('trading stats') || lowerMsg.includes('สถิติ')) {
       return { tool: 'analyze_performance', params: {} };
     }
 
     // Get Trades
-    if (lowerMsg.includes('my trade') || lowerMsg.includes('show trade') || lowerMsg.includes('รายการเทรด')) {
+    if (lowerMsg.includes('my trades') || lowerMsg.includes('show trades') || lowerMsg.includes('trades')) {
       return { tool: 'get_trades', params: { limit: 10 } };
     }
 
-    // Add Trade
-    if (lowerMsg.includes('add trade') || lowerMsg.includes('เพิ่มเทรด')) {
-      const symbolMatch = message.match(/symbol[:\s]+(\w+)/i) || message.match(/(\w{3,6}USD[T]?)/i);
-      const directionMatch = message.match(/(long|short|buy|sell)/i);
-      const entryMatch = message.match(/entry[:\s]+([\d.]+)/i) || message.match(/at\s+([\d.]+)/i);
-      
-      if (symbolMatch && directionMatch && entryMatch) {
-        return {
-          tool: 'add_trade',
-          params: {
-            symbol: symbolMatch[1].toUpperCase(),
-            direction: directionMatch[1].toLowerCase().includes('long') || directionMatch[1].toLowerCase().includes('buy') ? 'Long' : 'Short',
-            entryPrice: parseFloat(entryMatch[1])
-          }
-        };
-      }
-    }
-
     // Search Notes
-    if (lowerMsg.includes('search note') || lowerMsg.includes('find note') || lowerMsg.includes('ค้นหาโน้ต')) {
-      const match = message.match(/(?:search|find|ค้นหา)\s+note[s]?\s+(.+)/i);
-      return { tool: 'search_notes', params: { query: match?.[1] || '' } };
-    }
-
-    // Create Note
-    if (lowerMsg.includes('create note') || lowerMsg.includes('new note') || lowerMsg.includes('สร้างโน้ต')) {
-      const titleMatch = message.match(/(?:create|new|สร้าง)\s+note[:\s]+(.+)/i);
-      if (titleMatch) {
-        return {
-          tool: 'create_note',
-          params: {
-            title: titleMatch[1].trim(),
-            content: `Created via ABLE AI on ${new Date().toLocaleString()}`
-          }
-        };
+    if (lowerMsg.includes('search note') || lowerMsg.includes('find note')) {
+      const match = message.match(/(?:search|find)\s+note[s]?\s+(.+)/i);
+      if (match) {
+        return { tool: 'search_notes', params: { query: match[1] } };
       }
     }
 
     // Position Size Calculator
-    if (lowerMsg.includes('position size') || lowerMsg.includes('calculate') || lowerMsg.includes('lot size') || lowerMsg.includes('คำนวณ')) {
+    if (lowerMsg.includes('position size') || lowerMsg.includes('calculate')) {
       const numbers = message.match(/\d+(?:\.\d+)?/g);
       if (numbers && numbers.length >= 4) {
         return {
@@ -226,69 +297,42 @@ export class OllamaService {
       }
     }
 
-    // Market Overview
-    if (lowerMsg.includes('market overview') || lowerMsg.includes('ภาพรวมตลาด')) {
-      return { tool: 'get_market_overview', params: {} };
-    }
-
     return null;
   }
 
-  // Format MCP tool result for display
-  static formatToolResult(toolName: string, result: any): string {
-    if (!result.success) {
-      return `❌ Error: ${result.error || 'Unknown error'}`;
-    }
-
-    switch (toolName) {
+  // Format tool results for display
+  static formatToolResult(tool: string, result: any): string {
+    switch (tool) {
       case 'analyze_cot':
-        const a = result.analysis;
-        return `📊 **COT Analysis**\n\n` +
-          `**COT Index:** ${a.cotIndex.toFixed(0)}/100\n` +
-          `**Sentiment:** ${a.sentiment}\n\n` +
-          `**Large Traders:** ${a.largeTraders.direction} (${a.largeTraders.net.toLocaleString()} contracts)\n` +
-          `**Commercial:** ${a.commercial.direction} (${a.commercial.net.toLocaleString()} contracts)\n` +
-          `**Open Interest:** ${a.openInterest.toLocaleString()}\n\n` +
-          `💡 ${a.interpretation}`;
-
-      case 'get_cot_data':
-        if (!result.latest) return '❌ No COT data available';
-        const l = result.latest;
-        return `📊 **COT Data (${result.count} records)**\n\n` +
-          `**Date:** ${l.date}\n` +
-          `**Asset:** ${l.asset}\n` +
-          `**Commercial Net:** ${l.commercialNet.toLocaleString()}\n` +
-          `**Non-Commercial Net:** ${l.nonCommercialNet.toLocaleString()}\n` +
-          `**Open Interest:** ${l.openInterest.toLocaleString()}`;
-
-      case 'get_cot_assets':
-        return `📋 **Available COT Assets:**\n\n` +
-          result.assets.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n');
+        if (!result || result.error) {
+          return `❌ ไม่สามารถดึงข้อมูล COT ได้: ${result?.error || 'Unknown error'}`;
+        }
+        const latest = result.analysis?.latest;
+        return `📊 **COT Analysis - ${result.asset}**\n\n` +
+          `**วันที่:** ${latest?.date || 'N/A'}\n` +
+          `**Commercial:** ${latest?.commercial?.toLocaleString() || 'N/A'}\n` +
+          `**Non-Commercial:** ${latest?.non_commercial?.toLocaleString() || 'N/A'}\n` +
+          `**Net Position:** ${latest?.net_position?.toLocaleString() || 'N/A'}\n\n` +
+          `**COT Index:** ${result.analysis?.cot_index?.toFixed(2) || 'N/A'}`;
 
       case 'analyze_performance':
-        const m = result.metrics;
+        if (!result || result.error) {
+          return `❌ Error: ${result?.error || 'Unknown error'}`;
+        }
         return `📈 **Trading Performance**\n\n` +
-          `**Total Trades:** ${m.totalTrades}\n` +
-          `**Win Rate:** ${m.winRate}\n` +
-          `**Winning:** ${m.winningTrades} | **Losing:** ${m.losingTrades}\n\n` +
-          `**Total P&L:** $${typeof m.totalPnL === 'number' ? m.totalPnL.toFixed(2) : m.totalPnL}\n` +
-          `**Avg Win:** $${typeof m.averageWin === 'number' ? m.averageWin.toFixed(2) : m.averageWin}\n` +
-          `**Avg Loss:** $${typeof m.averageLoss === 'number' ? m.averageLoss.toFixed(2) : m.averageLoss}`;
+          `**Total Trades:** ${result.total_trades || 0}\n` +
+          `**Win Rate:** ${(result.win_rate || 0).toFixed(2)}%\n` +
+          `**Profit Factor:** ${(result.profit_factor || 0).toFixed(2)}\n` +
+          `**Total P&L:** $${(result.total_pnl || 0).toLocaleString()}`;
 
       case 'get_trades':
-        if (result.trades.length === 0) {
-          return `📝 No trades found. Start logging your trades in the Trading Journal!`;
+        if (!result?.trades || result.trades.length === 0) {
+          return `📝 ยังไม่มี trades\n\nเริ่มบันทึกการเทรดของคุณใน Trading Journal!`;
         }
         const trades = result.trades.slice(0, 5).map((t: any) =>
           `• ${t.symbol} ${t.direction} @ ${t.entryPrice} → P&L: $${(t.pnl || 0).toFixed(2)}`
         ).join('\n');
         return `📝 **Recent Trades (${result.total} total)**\n\n${trades}`;
-
-      case 'add_trade':
-        return `✅ **Trade Added**\n\n` +
-          `**Symbol:** ${result.trade.symbol}\n` +
-          `**Direction:** ${result.trade.direction}\n` +
-          `**Entry:** $${result.trade.entryPrice}`;
 
       case 'calculate_position_size':
         const c = result.calculation;
@@ -309,20 +353,11 @@ export class OllamaService {
         ).join('\n');
         return `🔍 **Found ${result.count} notes**\n\n${notes}`;
 
-      case 'create_note':
-        return `✅ **Note Created**\n\n**Title:** ${result.note.title}`;
-
-      case 'get_market_overview':
-        return `🌐 **Market Overview**\n\n` +
-          `**Crypto:** BTC: ${result.markets.crypto.btc} | ETH: ${result.markets.crypto.eth}\n` +
-          `**Forex:** EUR/USD: ${result.markets.forex.eurusd} | USD/JPY: ${result.markets.forex.usdjpy}\n` +
-          `**Commodities:** Gold: ${result.markets.commodities.gold} | Oil: ${result.markets.commodities.oil}`;
-
       default:
         return `✅ Tool executed successfully.\n\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``;
     }
   }
 }
 
-// Export for backward compatibility
+// Backward compatibility export
 export const FreeAIService = OllamaService;
