@@ -1741,12 +1741,18 @@ const LiveChatReal = () => {
                   </Button>
                 )}
                 
-                {/* MT5 Status Indicator */}
+                {/* MT5 Status Indicator - Clickable to open API Bridge */}
                 {currentRoom?.type === 'webhook' && (
-                  <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${isMt5Connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAPIBridge(true)}
+                    title={isMt5Connected ? "MT5 Connected - Click to manage" : "Click to connect MT5"}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs h-7 ${isMt5Connected ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'}`}
+                  >
                     <div className={`w-2 h-2 rounded-full ${isMt5Connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
                     MT5 {isMt5Connected ? 'Connected' : 'Offline'}
-                  </div>
+                  </Button>
                 )}
                 
                 {/* Auto Forward Toggle */}
