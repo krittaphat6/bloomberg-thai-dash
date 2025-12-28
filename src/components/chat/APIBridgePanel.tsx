@@ -298,7 +298,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
   };
 
   return (
-    <div className="h-full flex flex-col bg-background text-foreground">
+    <div className="h-full max-h-[80vh] flex flex-col bg-background text-foreground overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -314,8 +314,8 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         <Button variant="ghost" size="sm" onClick={onClose}>✕</Button>
       </div>
 
-      <Tabs defaultValue="connect" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="mx-4 mt-2">
+      <Tabs defaultValue="connect" className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <TabsList className="mx-4 mt-2 flex-shrink-0">
           <TabsTrigger value="connect">Connect</TabsTrigger>
           <TabsTrigger value="status">Status</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
@@ -323,7 +323,7 @@ export const APIBridgePanel: React.FC<APIBridgePanelProps> = ({ roomId, userId, 
         </TabsList>
 
         {/* Connect Tab */}
-        <TabsContent value="connect" className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain touch-pan-y">
+        <TabsContent value="connect" className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain touch-pan-y -webkit-overflow-scrolling-touch">
           <div className="space-y-4">
             {/* Broker Selector */}
             <div className="grid grid-cols-3 gap-2">

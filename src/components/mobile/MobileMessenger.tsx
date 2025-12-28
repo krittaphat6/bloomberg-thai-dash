@@ -983,9 +983,11 @@ const MobileMessenger: React.FC<MobileMessengerProps> = ({ onBack }) => {
 
       {/* API Bridge Dialog */}
       <Dialog open={showAPIBridge} onOpenChange={setShowAPIBridge}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-md p-0 max-h-[90vh] overflow-hidden">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-md p-0 h-[85vh] max-h-[85vh] flex flex-col overflow-hidden">
           {currentRoomId && currentUser && (
-            <APIBridgePanel roomId={currentRoomId} userId={currentUser.id} onClose={() => { setShowAPIBridge(false); checkMT5Connection(); }} />
+            <div className="flex-1 overflow-hidden">
+              <APIBridgePanel roomId={currentRoomId} userId={currentUser.id} onClose={() => { setShowAPIBridge(false); checkMT5Connection(); }} />
+            </div>
           )}
         </DialogContent>
       </Dialog>
