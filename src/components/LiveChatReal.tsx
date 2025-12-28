@@ -559,24 +559,31 @@ const LiveChatReal = () => {
     loadWebhooks();
   }, [currentRoomId]);
 
-  // Check MT5 connection status
+  // Check MT5 connection status - check by last_connected_at within 60 seconds (EA polls every second)
   const checkMT5Connection = useCallback(async () => {
     if (!currentUser) return;
     
     try {
+      // Get any MT5 connection for this user
       const { data: connections, error } = await supabase
         .from('broker_connections')
         .select('*')
         .eq('user_id', currentUser.id)
         .eq('broker_type', 'mt5')
-        .eq('is_connected', true)
+        .order('last_connected_at', { ascending: false })
         .limit(1);
       
       if (error) throw error;
       
       if (connections && connections.length > 0) {
-        setMt5ConnectionId(connections[0].id);
-        setIsMt5Connected(true);
+        const conn = connections[0];
+        setMt5ConnectionId(conn.id);
+        
+        // Check if EA is actively polling (last_connected_at within 60 seconds)
+        const lastConnected = conn.last_connected_at ? new Date(conn.last_connected_at) : null;
+        const isRecentlyActive = lastConnected && (Date.now() - lastConnected.getTime()) < 60000;
+        
+        setIsMt5Connected(isRecentlyActive || conn.is_connected === true);
       } else {
         setMt5ConnectionId(null);
         setIsMt5Connected(false);
@@ -1729,43 +1736,81 @@ const LiveChatReal = () => {
                   </Button>
                 )}
                 
+                {/* Auto Bridge Button - Main feature for webhook to MT5 */}
                 {currentRoom?.type === 'webhook' && (
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    onClick={() => setShowAPIBridge(true)}
-                    title="API Bridge - Connect to Broker"
-                    className="text-purple-500 hover:text-purple-400"
+                  <Button
+                    variant={autoForwardEnabled ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      if (!mt5ConnectionId) {
+                        setShowAPIBridge(true);
+                        toast({
+                          title: '⚠️ MT5 ยังไม่ได้เชื่อมต่อ',
+                          description: 'กรุณาเชื่อมต่อ MT5 ใน API Bridge ก่อน',
+                        });
+                        return;
+                      }
+                      setAutoForwardEnabled(!autoForwardEnabled);
+                      toast({
+                        title: autoForwardEnabled ? '🔴 Auto Bridge OFF' : '🟢 Auto Bridge ON',
+                        description: autoForwardEnabled 
+                          ? 'ระบบหยุดส่งคำสั่งอัตโนมัติไปยัง MT5' 
+                          : 'Webhook signals จะถูกส่งไป MT5 โดยอัตโนมัติ',
+                      });
+                    }}
+                    title={autoForwardEnabled ? "Auto Bridge กำลังทำงาน - คลิกเพื่อปิด" : "เปิด Auto Bridge เพื่อส่ง webhook ไป MT5 อัตโนมัติ"}
+                    className={`flex items-center gap-2 px-3 py-1 rounded-lg text-xs h-8 font-bold transition-all duration-300 ${
+                      autoForwardEnabled 
+                        ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 text-white shadow-lg shadow-cyan-500/50 animate-pulse border-0' 
+                        : mt5ConnectionId
+                          ? 'bg-gray-800/80 text-gray-300 border-gray-600 hover:border-cyan-500 hover:text-cyan-400'
+                          : 'bg-gray-900/50 text-gray-500 border-gray-700'
+                    }`}
                   >
-                    <PlugZap className="w-4 h-4" />
+                    {/* Custom Bridge Icon */}
+                    <svg 
+                      className={`w-4 h-4 ${autoForwardEnabled ? 'animate-spin' : ''}`} 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2"
+                    >
+                      <path d="M2 12h6l2-3 2 6 2-6 2 3h6" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 3v3M12 18v3" strokeLinecap="round"/>
+                      <circle cx="12" cy="12" r="2" fill={autoForwardEnabled ? "currentColor" : "none"}/>
+                      {autoForwardEnabled && (
+                        <path d="M12 7l-1 2h2l-1 2" strokeWidth="1.5"/>
+                      )}
+                    </svg>
+                    
+                    <span className="hidden sm:inline">
+                      {autoForwardEnabled ? '⚡ BRIDGE ACTIVE' : mt5ConnectionId ? '🔌 AUTO BRIDGE' : '⭕ NO MT5'}
+                    </span>
+                    <span className="sm:hidden">
+                      {autoForwardEnabled ? '⚡' : '🔌'}
+                    </span>
+                    
+                    {/* Status indicator dot */}
+                    <div className={`w-2 h-2 rounded-full ${
+                      autoForwardEnabled 
+                        ? 'bg-green-400 animate-ping' 
+                        : mt5ConnectionId 
+                          ? 'bg-yellow-500' 
+                          : 'bg-red-500'
+                    }`} />
                   </Button>
                 )}
                 
-                {/* MT5 Status Indicator - Clickable to open API Bridge */}
+                {/* MT5 Connection Settings Button */}
                 {currentRoom?.type === 'webhook' && (
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="icon"
                     onClick={() => setShowAPIBridge(true)}
-                    title={isMt5Connected ? "MT5 Connected - Click to manage" : "Click to connect MT5"}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs h-7 ${isMt5Connected ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'}`}
+                    title="MT5 Settings"
+                    className={`h-8 w-8 ${isMt5Connected ? 'text-green-500 hover:text-green-400' : 'text-gray-500 hover:text-gray-400'}`}
                   >
-                    <div className={`w-2 h-2 rounded-full ${isMt5Connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                    MT5 {isMt5Connected ? 'Connected' : 'Offline'}
-                  </Button>
-                )}
-                
-                {/* Auto Forward Toggle */}
-                {currentRoom?.type === 'webhook' && isMt5Connected && (
-                  <Button
-                    variant={autoForwardEnabled ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setAutoForwardEnabled(!autoForwardEnabled)}
-                    className={`text-xs h-7 ${autoForwardEnabled ? 'bg-yellow-600 hover:bg-yellow-700' : ''}`}
-                    title="Auto-forward all incoming webhook signals to MT5"
-                  >
-                    <Zap className="w-3 h-3 mr-1" />
-                    {autoForwardEnabled ? 'Auto ON' : 'Auto OFF'}
+                    <PlugZap className="w-4 h-4" />
                   </Button>
                 )}
                 
@@ -1778,6 +1823,7 @@ const LiveChatReal = () => {
                 >
                   <Video className="w-4 h-4" />
                 </Button>
+
 
                 {/* Delete Room Button - Available for all room types */}
                 <Button 
