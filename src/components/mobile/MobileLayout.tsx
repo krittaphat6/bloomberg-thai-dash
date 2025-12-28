@@ -5,8 +5,7 @@ import { MobilePanelSelector } from './MobilePanelSelector';
 import { MobileHeader } from './MobileHeader';
 import { MobileHomeScreen } from './MobileHomeScreen';
 import { MobileSettingsSheet } from './MobileSettingsSheet';
-import LiveChatReal from '@/components/LiveChatReal';
-
+import MobileMessenger from './MobileMessenger';
 interface Panel {
   id: string;
   title: string;
@@ -84,8 +83,8 @@ export function MobileLayout({
         );
       case 'chat':
         return (
-          <div className="flex-1 overflow-hidden">
-            <LiveChatReal />
+          <div className="flex-1 overflow-hidden h-full">
+            <MobileMessenger />
           </div>
         );
       default:
