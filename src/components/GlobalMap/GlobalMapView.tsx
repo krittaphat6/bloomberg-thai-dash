@@ -5,7 +5,14 @@ import 'leaflet/dist/leaflet.css';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { RefreshCw, Plane, Ship, Cloud, Activity, Flame, BarChart3 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { 
+  RefreshCw, Plane, Ship, Cloud, Activity, Flame, BarChart3,
+  MapPin, Navigation, Download, Waves, Crosshair, Search, AlertTriangle
+} from 'lucide-react';
+import { WeatherService, WeatherAlert } from '@/services/WeatherService';
+import { ConflictService, ConflictEvent } from '@/services/ConflictService';
+import { toast } from 'sonner';
 
 // Fix Leaflet default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -51,25 +58,43 @@ const MapController = ({ center, zoom }: { center: [number, number]; zoom: numbe
   return null;
 };
 
+// Fly to location component
+const FlyToLocation = ({ location }: { location: [number, number] | null }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (location) {
+      map.flyTo(location, 8, { duration: 1.5 });
+    }
+  }, [location, map]);
+  return null;
+};
+
 const GlobalMapView = () => {
   const [layers, setLayers] = useState<DataLayer[]>([
     { id: 'flights', name: '✈️ Live Flights', icon: <Plane className="w-4 h-4" />, enabled: true, color: '#00ff00' },
     { id: 'ships', name: '🚢 Live Ships', icon: <Ship className="w-4 h-4" />, enabled: false, color: '#00a0ff' },
     { id: 'earthquakes', name: '🌋 Earthquakes', icon: <Activity className="w-4 h-4" />, enabled: true, color: '#ff0000' },
-    { id: 'weather', name: '🌤️ Weather', icon: <Cloud className="w-4 h-4" />, enabled: false, color: '#ffaa00' },
+    { id: 'weather', name: '🌦️ Weather Alerts', icon: <Cloud className="w-4 h-4" />, enabled: true, color: '#ffaa00' },
+    { id: 'tsunami', name: '🌊 Tsunami Warnings', icon: <Waves className="w-4 h-4" />, enabled: true, color: '#ff0066' },
+    { id: 'conflicts', name: '⚔️ Conflict Zones', icon: <Crosshair className="w-4 h-4" />, enabled: true, color: '#ff4444' },
     { id: 'wildfires', name: '🔥 Wildfires', icon: <Flame className="w-4 h-4" />, enabled: false, color: '#ff6600' },
     { id: 'markets', name: '📈 Stock Markets', icon: <BarChart3 className="w-4 h-4" />, enabled: true, color: '#00ff88' },
   ]);
 
   const [flights, setFlights] = useState<FlightData[]>([]);
   const [earthquakes, setEarthquakes] = useState<EarthquakeData[]>([]);
+  const [weatherAlerts, setWeatherAlerts] = useState<WeatherAlert[]>([]);
+  const [tsunamiWarnings, setTsunamiWarnings] = useState<WeatherAlert[]>([]);
+  const [conflicts, setConflicts] = useState<ConflictEvent[]>([]);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [flyToTarget, setFlyToTarget] = useState<[number, number] | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   // Fetch Flights (with fallback to mock data)
   const fetchFlights = useCallback(async () => {
     try {
-      // OpenSky API - may have rate limits
       const res = await fetch('https://opensky-network.org/api/states/all?lamin=5&lomin=90&lamax=25&lomax=110', {
         signal: AbortSignal.timeout(10000)
       });
@@ -91,7 +116,6 @@ const GlobalMapView = () => {
     } catch (err) {
       console.log('Flight API unavailable, using mock data');
     }
-    // Fallback to mock data
     setFlights(generateMockFlights());
   }, []);
 
@@ -115,13 +139,87 @@ const GlobalMapView = () => {
     }
   }, []);
 
+  // Fetch Weather Alerts
+  const fetchWeatherAlerts = useCallback(async () => {
+    try {
+      const alerts = await WeatherService.getWeatherAlerts();
+      setWeatherAlerts(alerts);
+    } catch (err) {
+      console.error('Weather alerts error:', err);
+    }
+  }, []);
+
+  // Fetch Tsunami Warnings
+  const fetchTsunamiWarnings = useCallback(async () => {
+    try {
+      const warnings = await WeatherService.getTsunamiWarnings();
+      setTsunamiWarnings(warnings);
+      
+      if (warnings.length > 0) {
+        toast.error(`🌊 TSUNAMI WARNING: ${warnings.length} active warning(s)`);
+      }
+    } catch (err) {
+      console.error('Tsunami API error:', err);
+    }
+  }, []);
+
+  // Fetch Conflict Data
+  const fetchConflicts = useCallback(async () => {
+    try {
+      const data = await ConflictService.getConflictData();
+      setConflicts(data);
+    } catch (err) {
+      console.error('Conflict data error:', err);
+    }
+  }, []);
+
+  // Get User Location
+  const getUserLocation = useCallback(() => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const loc: [number, number] = [position.coords.latitude, position.coords.longitude];
+          setUserLocation(loc);
+          setFlyToTarget(loc);
+          toast.success('📍 Location found!');
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          toast.error('Could not get your location');
+        }
+      );
+    }
+  }, []);
+
+  // Search location
+  const handleSearch = useCallback(async () => {
+    if (!searchQuery.trim()) return;
+    
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`
+      );
+      const data = await res.json();
+      
+      if (data && data.length > 0) {
+        const { lat, lon } = data[0];
+        setFlyToTarget([parseFloat(lat), parseFloat(lon)]);
+        toast.success(`Found: ${data[0].display_name.split(',')[0]}`);
+      } else {
+        toast.error('Location not found');
+      }
+    } catch (err) {
+      console.error('Search error:', err);
+    }
+  }, [searchQuery]);
+
   // Generate Mock Flights
   const generateMockFlights = (): FlightData[] => {
     const mockFlights: FlightData[] = [];
     const routes = [
-      { from: [13.69, 100.75], to: [35.55, 139.78], country: 'Thailand' }, // BKK to NRT
-      { from: [1.36, 103.99], to: [22.31, 113.91], country: 'Singapore' }, // SIN to HKG
-      { from: [25.25, 55.36], to: [13.69, 100.75], country: 'UAE' }, // DXB to BKK
+      { from: [13.69, 100.75], to: [35.55, 139.78], country: 'Thailand' },
+      { from: [1.36, 103.99], to: [22.31, 113.91], country: 'Singapore' },
+      { from: [25.25, 55.36], to: [13.69, 100.75], country: 'UAE' },
     ];
     
     for (let i = 0; i < 30; i++) {
@@ -147,6 +245,10 @@ const GlobalMapView = () => {
     const promises = [];
     if (layers.find(l => l.id === 'flights')?.enabled) promises.push(fetchFlights());
     if (layers.find(l => l.id === 'earthquakes')?.enabled) promises.push(fetchEarthquakes());
+    if (layers.find(l => l.id === 'weather')?.enabled) promises.push(fetchWeatherAlerts());
+    if (layers.find(l => l.id === 'tsunami')?.enabled) promises.push(fetchTsunamiWarnings());
+    if (layers.find(l => l.id === 'conflicts')?.enabled) promises.push(fetchConflicts());
+    
     await Promise.all(promises);
     setLastUpdate(new Date());
     setLoading(false);
@@ -170,6 +272,40 @@ const GlobalMapView = () => {
     className: 'plane-marker',
     iconSize: [20, 20],
     iconAnchor: [10, 10],
+  });
+
+  // Weather alert icon
+  const createWeatherIcon = (severity: string) => L.divIcon({
+    html: `<div class="weather-marker" style="font-size: 20px; filter: drop-shadow(0 0 5px ${severity === 'extreme' ? '#ff0066' : '#ffaa00'});">
+      ${severity === 'extreme' ? '⛈️' : '🌧️'}
+    </div>`,
+    className: 'weather-icon',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+
+  // Tsunami icon
+  const createTsunamiIcon = () => L.divIcon({
+    html: `<div class="tsunami-marker alert-glow" style="font-size: 24px;">🌊</div>`,
+    className: 'tsunami-icon',
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+
+  // Conflict icon
+  const createConflictIcon = (severity: string) => L.divIcon({
+    html: `<div class="conflict-marker" style="font-size: 18px; filter: drop-shadow(0 0 4px ${severity === 'high' ? '#ff0000' : '#ff6666'});">⚔️</div>`,
+    className: 'conflict-icon',
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+  });
+
+  // User location icon
+  const createUserIcon = () => L.divIcon({
+    html: `<div class="user-location-marker" style="font-size: 20px; filter: drop-shadow(0 0 6px #00aaff);">📍</div>`,
+    className: 'user-icon',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
   });
 
   // Stock market locations
@@ -209,6 +345,49 @@ const GlobalMapView = () => {
     <div className="w-full h-full flex relative bg-[#0a1628]">
       {/* Map */}
       <div className="flex-1 relative">
+        {/* Top Control Bar */}
+        <div className="absolute top-3 left-3 right-72 z-[1000] flex items-center gap-2">
+          {/* Search */}
+          <div className="flex items-center gap-1 flex-1 max-w-md">
+            <Input
+              placeholder="Search location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              className="bg-[#1a2744] border-[#2d4a6f] text-white text-sm h-8"
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleSearch}
+              className="h-8 w-8 p-0 text-blue-400 hover:bg-blue-500/20"
+            >
+              <Search className="w-4 h-4" />
+            </Button>
+          </div>
+          
+          {/* Action Buttons */}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={getUserLocation}
+            className="h-8 px-2 text-cyan-400 hover:bg-cyan-500/20"
+            title="Get my location"
+          >
+            <Navigation className="w-4 h-4" />
+          </Button>
+          
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => toast.info('Screenshot feature coming soon')}
+            className="h-8 px-2 text-purple-400 hover:bg-purple-500/20"
+            title="Screenshot"
+          >
+            <Download className="w-4 h-4" />
+          </Button>
+        </div>
+
         <MapContainer
           center={[20, 100]}
           zoom={3}
@@ -216,6 +395,8 @@ const GlobalMapView = () => {
           style={{ background: '#0a1628' }}
           zoomControl={false}
         >
+          <FlyToLocation location={flyToTarget} />
+          
           {/* Dark Theme Tile Layer */}
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
@@ -264,6 +445,68 @@ const GlobalMapView = () => {
             </CircleMarker>
           ))}
 
+          {/* Weather Alerts Layer */}
+          {layers.find(l => l.id === 'weather')?.enabled && weatherAlerts.map(alert => (
+            <Marker
+              key={alert.id}
+              position={[alert.coordinates[1], alert.coordinates[0]]}
+              icon={createWeatherIcon(alert.severity)}
+            >
+              <Popup className="dark-popup">
+                <div className="bg-[#1a2744] text-white p-2 rounded min-w-[180px]">
+                  <p className="font-bold text-orange-400">
+                    {alert.severity === 'extreme' ? '🚨 ' : '⚠️ '}{alert.event}
+                  </p>
+                  <p className="text-sm text-white">{alert.location}</p>
+                  <p className="text-xs text-gray-300">{alert.description}</p>
+                  <p className={`text-xs mt-1 ${alert.severity === 'extreme' ? 'text-red-400' : 'text-yellow-400'}`}>
+                    Severity: {alert.severity.toUpperCase()}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+          {/* Tsunami Warnings Layer */}
+          {layers.find(l => l.id === 'tsunami')?.enabled && tsunamiWarnings.map(warning => (
+            <Marker
+              key={warning.id}
+              position={[warning.coordinates[1], warning.coordinates[0]]}
+              icon={createTsunamiIcon()}
+            >
+              <Popup className="dark-popup">
+                <div className="bg-[#1a2744] text-white p-2 rounded min-w-[200px] border border-red-500">
+                  <p className="font-bold text-red-400 text-lg">🌊 TSUNAMI WARNING</p>
+                  <p className="text-sm text-white">{warning.location}</p>
+                  <p className="text-xs text-gray-300">{warning.description}</p>
+                  <p className="text-xs text-red-400 mt-1 font-bold">⚠️ EVACUATE TO HIGHER GROUND</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Issued: {new Date(warning.start).toLocaleString()}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+          {/* Conflict Zones Layer */}
+          {layers.find(l => l.id === 'conflicts')?.enabled && conflicts.map(conflict => (
+            <Marker
+              key={conflict.id}
+              position={[conflict.coordinates[1], conflict.coordinates[0]]}
+              icon={createConflictIcon(conflict.severity)}
+            >
+              <Popup className="dark-popup">
+                <div className="bg-[#1a2744] text-white p-2 rounded min-w-[180px]">
+                  <p className="font-bold text-red-400">{conflict.type.toUpperCase()}</p>
+                  <p className="text-sm text-white">{conflict.location}</p>
+                  <p className="text-xs text-gray-300">{conflict.description}</p>
+                  <p className="text-xs text-gray-400">{new Date(conflict.time).toLocaleString()}</p>
+                  <p className="text-xs text-gray-500">Source: {conflict.source}</p>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
           {/* Stock Markets Layer */}
           {layers.find(l => l.id === 'markets')?.enabled && marketLocations.map(market => (
             <Marker
@@ -285,17 +528,54 @@ const GlobalMapView = () => {
               </Popup>
             </Marker>
           ))}
+
+          {/* User Location Marker */}
+          {userLocation && (
+            <Marker
+              position={userLocation}
+              icon={createUserIcon()}
+            >
+              <Popup className="dark-popup">
+                <div className="bg-[#1a2744] text-white p-2 rounded">
+                  <p className="font-bold text-cyan-400">📍 Your Location</p>
+                  <p className="text-xs text-gray-300">
+                    {userLocation[0].toFixed(4)}, {userLocation[1].toFixed(4)}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          )}
         </MapContainer>
 
-        {/* Stats Overlay */}
-        <div className="absolute bottom-4 left-4 bg-[#0d1f3c]/90 border border-[#1e3a5f] rounded-lg p-3 text-white text-xs z-[1000]">
-          <p className="text-[#ff6b00] font-bold mb-1">LIVE DATA</p>
-          <p className="text-green-400">✈️ Flights: {flights.length}</p>
-          <p className="text-red-400">🌋 Earthquakes: {earthquakes.length}</p>
-          <p className="text-blue-400">📈 Markets: {marketLocations.length}</p>
-          <p className="text-gray-400 mt-1">
-            Updated: {lastUpdate?.toLocaleTimeString() || 'Loading...'}
+        {/* Enhanced Stats Overlay */}
+        <div className="absolute bottom-4 left-4 bg-[#0d1f3c]/95 border border-[#1e3a5f] rounded-lg p-3 text-white text-xs z-[1000] min-w-[180px]">
+          <p className="text-[#ff6b00] font-bold mb-2 flex items-center gap-1">
+            🌍 LIVE GLOBAL DATA
           </p>
+          <div className="space-y-1">
+            <p className="text-green-400">✈️ Flights: {flights.length}</p>
+            <p className="text-red-400">🌋 Earthquakes: {earthquakes.length}</p>
+            <p className="text-orange-400">🌦️ Weather Alerts: {weatherAlerts.length}</p>
+            {tsunamiWarnings.length > 0 && (
+              <p className="text-pink-400 font-bold animate-pulse">
+                🌊 TSUNAMI: {tsunamiWarnings.length}
+              </p>
+            )}
+            <p className="text-red-400">⚔️ Conflicts: {conflicts.length}</p>
+            <p className="text-blue-400">📈 Markets: {marketLocations.length}</p>
+          </div>
+          <div className="mt-2 pt-2 border-t border-[#1e3a5f]">
+            <p className="text-gray-400 flex items-center gap-1">
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+              {lastUpdate?.toLocaleTimeString() || 'Loading...'}
+            </p>
+            {userLocation && (
+              <p className="text-cyan-400 flex items-center gap-1 mt-1">
+                <MapPin className="w-3 h-3" />
+                Location: Active
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -331,16 +611,32 @@ const GlobalMapView = () => {
             ))}
           </div>
 
-          {/* Suggested Data Layers */}
+          {/* Alert Summary */}
+          {(tsunamiWarnings.length > 0 || weatherAlerts.filter(a => a.severity === 'extreme').length > 0) && (
+            <div className="p-3 border-t border-[#1e3a5f]">
+              <p className="text-red-400 text-xs font-bold mb-2 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                ACTIVE ALERTS
+              </p>
+              <div className="space-y-1 text-xs">
+                {tsunamiWarnings.map(w => (
+                  <p key={w.id} className="text-pink-400 animate-pulse">🌊 {w.location}</p>
+                ))}
+                {weatherAlerts.filter(a => a.severity === 'extreme').map(a => (
+                  <p key={a.id} className="text-orange-400">⛈️ {a.location}</p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Coming Soon */}
           <div className="p-3 border-t border-[#1e3a5f]">
             <p className="text-[#ff6b00] text-xs font-bold mb-2">COMING SOON</p>
             <div className="space-y-1 text-gray-400 text-xs">
-              <p>• Coronavirus Outbreak</p>
-              <p>• Oil & Gas Pipelines</p>
               <p>• Shipping Routes (AIS)</p>
-              <p>• Weather Events</p>
+              <p>• Oil & Gas Pipelines</p>
               <p>• Central Banks</p>
-              <p>• Gold Mines</p>
+              <p>• Currency Flows</p>
             </div>
           </div>
         </ScrollArea>
