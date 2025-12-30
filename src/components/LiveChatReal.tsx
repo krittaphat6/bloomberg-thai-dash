@@ -617,6 +617,9 @@ const LiveChatReal = () => {
   }, [checkMT5Connection, currentUser]);
 
   // Forward webhook message to MT5
+  // ============================================
+  // 🔄 SMART WEBHOOK TO MT5 CONVERTER
+  // ============================================
   const handleForwardToMT5 = async (message: Message) => {
     if (!mt5ConnectionId || !message.webhook_data) {
       toast({
@@ -633,47 +636,213 @@ const LiveChatReal = () => {
       const webhookData = message.webhook_data as any;
       const parsedTrade = webhookData.parsed_trade || webhookData;
       
-      // Determine action
-      let action = 'buy';
-      const actionStr = (parsedTrade.action || webhookData.action || '').toString().toLowerCase();
+      // ============================================
+      // 📊 STEP 1: Extract Symbol (รองรับหลายรูปแบบ)
+      // ============================================
+      const symbol = (
+        parsedTrade.symbol || 
+        parsedTrade.ticker || 
+        webhookData.symbol || 
+        webhookData.ticker || 
+        webhookData.pair ||
+        webhookData.instrument ||
+        'BTCUSD'
+      ).toString().toUpperCase().trim();
       
-      if (actionStr.includes('sell') || actionStr.includes('short')) {
-        action = 'sell';
-      } else if (actionStr.includes('close')) {
-        action = 'close';
+      // ============================================
+      // 📌 STEP 2: Determine MT5 Command Type
+      // ============================================
+      const actionStr = (
+        parsedTrade.action || 
+        parsedTrade.order_action ||
+        parsedTrade.signal ||
+        parsedTrade.side ||
+        parsedTrade.type ||
+        webhookData.action || 
+        webhookData.order_action ||
+        webhookData.signal ||
+        webhookData.side ||
+        webhookData.type ||
+        webhookData.order_type ||
+        ''
+      ).toString().toLowerCase().trim();
+      
+      let commandType = 'buy'; // default
+      
+      // Close/Exit patterns
+      if (
+        actionStr.includes('close') || 
+        actionStr.includes('exit') || 
+        actionStr.includes('ออก') ||
+        actionStr.includes('ปิด') ||
+        actionStr === 'close' ||
+        actionStr === 'exit'
+      ) {
+        commandType = 'close';
+      }
+      // Sell/Short patterns
+      else if (
+        actionStr.includes('sell') || 
+        actionStr.includes('short') || 
+        actionStr.includes('ขาย') ||
+        actionStr === 's' ||
+        actionStr === 'sell' ||
+        actionStr === 'short'
+      ) {
+        commandType = 'sell';
+      }
+      // Buy/Long patterns
+      else if (
+        actionStr.includes('buy') || 
+        actionStr.includes('long') || 
+        actionStr.includes('ซื้อ') ||
+        actionStr === 'b' ||
+        actionStr === 'buy' ||
+        actionStr === 'long'
+      ) {
+        commandType = 'buy';
+      }
+      // Take Profit (map to close)
+      else if (
+        actionStr.includes('tp') ||
+        actionStr.includes('take') ||
+        actionStr.includes('profit') ||
+        actionStr.includes('กำไร')
+      ) {
+        commandType = 'close';
+      }
+      // Stop Loss (map to close)
+      else if (
+        actionStr.includes('sl') ||
+        actionStr.includes('stop') ||
+        actionStr.includes('loss') ||
+        actionStr.includes('ขาดทุน')
+      ) {
+        commandType = 'close';
       }
       
-      // Get symbol and price
-      const symbol = parsedTrade.symbol || webhookData.ticker || webhookData.symbol || '';
-      const price = parseFloat(parsedTrade.price || webhookData.price || webhookData.close || 0);
-      const quantity = parseFloat(parsedTrade.lotSize || parsedTrade.quantity || webhookData.lot || webhookData.quantity || 0.01);
+      // ============================================
+      // 💰 STEP 3: Extract Price
+      // ============================================
+      const priceValue = 
+        parsedTrade.price || 
+        parsedTrade.entry_price ||
+        parsedTrade.exit_price ||
+        webhookData.price || 
+        webhookData.close || 
+        webhookData.entry ||
+        webhookData.exit ||
+        webhookData.open ||
+        webhookData.current_price ||
+        0;
       
-      // Insert into api_forward_logs (pending status)
-      const { data: logData, error: logError } = await supabase
-        .from('api_forward_logs')
+      const price = parseFloat(String(priceValue));
+      
+      // ============================================
+      // 📊 STEP 4: Extract Volume/Quantity
+      // ============================================
+      const volumeValue = 
+        parsedTrade.volume ||
+        parsedTrade.lotSize || 
+        parsedTrade.quantity || 
+        parsedTrade.qty ||
+        parsedTrade.lot ||
+        parsedTrade.size ||
+        parsedTrade.contracts ||
+        webhookData.volume ||
+        webhookData.lot || 
+        webhookData.lotSize ||
+        webhookData.quantity ||
+        webhookData.qty ||
+        webhookData.size ||
+        webhookData.contracts ||
+        0.01;
+      
+      const volume = parseFloat(String(volumeValue));
+      
+      // ============================================
+      // 🛑 STEP 5: Extract Stop Loss
+      // ============================================
+      const slValue = 
+        parsedTrade.sl || 
+        parsedTrade.stop_loss ||
+        parsedTrade.stopLoss ||
+        parsedTrade.stoploss ||
+        webhookData.sl || 
+        webhookData.stop_loss ||
+        webhookData.stopLoss ||
+        webhookData.stoploss ||
+        0;
+      
+      const sl = parseFloat(String(slValue));
+      
+      // ============================================
+      // 🎯 STEP 6: Extract Take Profit
+      // ============================================
+      const tpValue = 
+        parsedTrade.tp || 
+        parsedTrade.take_profit ||
+        parsedTrade.takeProfit ||
+        parsedTrade.target ||
+        webhookData.tp || 
+        webhookData.take_profit ||
+        webhookData.takeProfit ||
+        webhookData.target ||
+        0;
+      
+      const tp = parseFloat(String(tpValue));
+      
+      // ============================================
+      // ⚙️ STEP 7: Extract Deviation/Slippage
+      // ============================================
+      const deviationValue = 
+        parsedTrade.deviation ||
+        parsedTrade.slippage ||
+        webhookData.deviation ||
+        webhookData.slippage ||
+        20;
+      
+      const deviation = parseInt(String(deviationValue));
+      
+      // ============================================
+      // 💬 STEP 8: Extract Comment/Message
+      // ============================================
+      const customComment = 
+        parsedTrade.comment ||
+        parsedTrade.message ||
+        webhookData.comment ||
+        webhookData.message ||
+        '';
+      
+      const comment = customComment 
+        ? `${String(customComment).slice(0, 20)} | ${message.id.slice(0, 8)}`
+        : `Webhook: ${message.id.slice(0, 8)}`;
+      
+      // ============================================
+      // ✅ STEP 9: Insert into mt5_commands table
+      // ============================================
+      const { data: commandData, error: commandError } = await supabase
+        .from('mt5_commands')
         .insert({
           connection_id: mt5ConnectionId,
-          room_id: message.room_id,
-          message_id: message.id,
-          broker_type: 'mt5',
-          action: action,
+          command_type: commandType,
           symbol: symbol,
-          quantity: quantity,
+          volume: volume,
           price: price,
+          sl: sl,
+          tp: tp,
+          deviation: deviation,
           status: 'pending',
-          response_data: {
-            sl: parsedTrade.sl || 0,
-            tp: parsedTrade.tp || 0,
-            source: 'webhook',
-            original_data: webhookData
-          }
+          comment: comment
         })
         .select()
         .single();
       
-      if (logError) throw logError;
+      if (commandError) throw commandError;
       
-      // Send confirmation message to chat
+      // ============================================
+      // 💬 STEP 10: Send confirmation message to chat
+      // ============================================
       await supabase.from('messages').insert({
         room_id: message.room_id,
         user_id: 'system',
@@ -681,24 +850,30 @@ const LiveChatReal = () => {
         color: '#00ff88',
         content: `📤 **Forwarded to MT5**\n\n` +
           `🏷️ Symbol: ${symbol}\n` +
-          `📌 Action: ${action.toUpperCase()}\n` +
-          `📊 Quantity: ${quantity}\n` +
-          `💰 Price: ${price}\n\n` +
-          `⏳ Status: Waiting for MT5 EA to execute...\n` +
-          `🔗 Log ID: ${logData.id.slice(0, 8)}...`,
+          `📌 Action: ${commandType.toUpperCase()}\n` +
+          `📊 Volume: ${volume} lot${volume !== 1 ? 's' : ''}\n` +
+          `💰 Price: ${price > 0 ? price.toFixed(5) : 'Market'}\n` +
+          `🛑 SL: ${sl > 0 ? sl.toFixed(5) : 'None'}\n` +
+          `🎯 TP: ${tp > 0 ? tp.toFixed(5) : 'None'}\n` +
+          `⚙️ Deviation: ${deviation} points\n\n` +
+          `⏳ Status: Waiting for MT5 EA...\n` +
+          `🔗 Command ID: ${commandData.id.slice(0, 8)}...`,
         message_type: 'text'
       });
       
+      // ============================================
+      // 🎉 STEP 11: Show success toast
+      // ============================================
       toast({
         title: '✅ Forwarded to MT5!',
-        description: `${action.toUpperCase()} ${symbol} x${quantity} sent to MT5 EA`
+        description: `${commandType.toUpperCase()} ${symbol} x${volume} lot${volume !== 1 ? 's' : ''} queued`
       });
       
     } catch (err: any) {
-      console.error('Error forwarding to MT5:', err);
+      console.error('❌ Error forwarding to MT5:', err);
       toast({
         title: '❌ Forward Failed',
-        description: err.message,
+        description: err.message || 'Unknown error',
         variant: 'destructive'
       });
     } finally {
