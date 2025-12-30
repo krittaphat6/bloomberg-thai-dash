@@ -937,7 +937,11 @@
 
 .plane-marker,
 .quake-marker,
-.market-marker {
+.market-marker,
+.weather-marker,
+.conflict-marker,
+.tsunami-marker,
+.user-location-marker {
   background: transparent !important;
   border: none !important;
 }
@@ -946,4 +950,57 @@
   0% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.5); opacity: 0.5; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+/* Map Marker Animations */
+.weather-marker,
+.conflict-marker,
+.user-location-marker {
+  animation: markerPulse 2s ease-in-out infinite;
+}
+
+.tsunami-marker {
+  animation: tsunamiPulse 1s ease-in-out infinite;
+}
+
+@keyframes markerPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes tsunamiPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+/* Alert Glow Effect */
+.alert-glow {
+  animation: alertGlow 2s ease-in-out infinite;
+}
+
+@keyframes alertGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(255, 0, 102, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 20px rgba(255, 0, 102, 0.9));
+  }
+}
+
+/* Bloomberg Terminal Style */
+.bloomberg-terminal {
+  background: linear-gradient(180deg, #0a1628 0%, #0d1f3c 100%);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
