@@ -46,6 +46,7 @@ import CorrelationMatrixTable from './CorrelationMatrixTable';
 import CVDChart from './CVDChart';
 import TopNews from './TopNews';
 import { BloombergMap } from './BloombergMap';
+import MonteCarloSimulator from './MonteCarloSimulator';
 
 interface PanelData {
   id: string;
@@ -371,6 +372,15 @@ const MarketData = () => {
       tags: ['journal', 'trades', 'tracking', 'analytics', 'performance']
     },
     { 
+      id: 'monte-carlo', 
+      title: '🎲 MONTE CARLO SIM', 
+      component: <MonteCarloSimulator />,
+      category: 'utilities',
+      icon: <TrendingUp className="w-5 h-5" />,
+      description: 'Monte Carlo simulation for strategy backtesting and risk analysis',
+      tags: ['monte-carlo', 'simulation', 'risk', 'backtesting', 'probability']
+    },
+    {
       id: 'calendar', 
       title: '📅 ECONOMIC CALENDAR', 
       component: <EconomicCalendar />,
