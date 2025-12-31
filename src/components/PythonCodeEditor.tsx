@@ -1,3 +1,4 @@
+import React from 'react';
 import CursorStyleEditor from './CodeEditor/CursorStyleEditor';
 
 export const PythonCodeEditor: React.FC = () => {
