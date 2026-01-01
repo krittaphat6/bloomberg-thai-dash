@@ -19,15 +19,8 @@ import {
 import {
   Dice6, Save, Download, RotateCcw, Plus, X, TrendingUp,
   TrendingDown, Target, AlertTriangle, HelpCircle, FileDown,
-  Play, Pause, BarChart3, LineChartIcon, PieChart, Upload, FileSpreadsheet
+  Play, Pause, BarChart3, LineChartIcon, PieChart
 } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import MonteCarloCSVImport from './MonteCarloCSVImport';
 
 // ============================================
 // TYPES & INTERFACES
@@ -354,8 +347,6 @@ const MonteCarloSimulator: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [activeTab, setActiveTab] = useState('distribution');
-  const [showCSVImport, setShowCSVImport] = useState(false);
-  const [dataSource, setDataSource] = useState<'manual' | 'csv'>('manual');
 
   // Get active scenario
   const activeScenario = useMemo(() => 
@@ -490,27 +481,6 @@ const MonteCarloSimulator: React.FC = () => {
     toast.success('📊 CSV exported');
   };
 
-  // Handle CSV Import
-  const handleCSVImport = (data: {
-    winRate: number;
-    avgWin: number;
-    avgLoss: number;
-    totalTrades: number;
-    maxConsecutiveLosses: number;
-    maxConsecutiveWins: number;
-    profitFactor: number;
-  }) => {
-    setConfig(prev => ({
-      ...prev,
-      winRate: data.winRate,
-      avgWin: data.avgWin,
-      avgLoss: data.avgLoss,
-      numTrades: data.totalTrades
-    }));
-    setDataSource('csv');
-    toast.success('Trade data imported! Run simulation to see results.');
-  };
-
   // Calculate R:R ratio
   const riskRewardRatio = config.avgLoss > 0 ? (config.avgWin / config.avgLoss).toFixed(2) : '0';
 
@@ -595,49 +565,20 @@ const MonteCarloSimulator: React.FC = () => {
         <div className="w-1/4 min-w-[280px] border-r border-border bg-card/50">
           <ScrollArea className="h-full">
             <div className="p-4 space-y-4">
-              {/* Data Source & Presets */}
+              {/* Presets */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground uppercase">Data Source</Label>
-                  {dataSource === 'csv' && (
-                    <span className="text-xs text-green-500">📊 From CSV</span>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Select onValueChange={applyPreset}>
-                    <SelectTrigger className="bg-background text-xs h-8">
-                      <SelectValue placeholder="Preset..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(PRESETS).map(([key, preset]) => (
-                        <SelectItem key={key} value={key}>{preset.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowCSVImport(true)}
-                    className="h-8 text-xs"
-                  >
-                    <Upload className="w-3 h-3 mr-1" />
-                    Import CSV
-                  </Button>
-                </div>
+                <Label className="text-xs text-muted-foreground uppercase">Quick Presets</Label>
+                <Select onValueChange={applyPreset}>
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="Select preset..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PRESETS).map(([key, preset]) => (
+                      <SelectItem key={key} value={key}>{preset.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-
-              {/* CSV Import Dialog */}
-              <Dialog open={showCSVImport} onOpenChange={setShowCSVImport}>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Import TradingView CSV</DialogTitle>
-                  </DialogHeader>
-                  <MonteCarloCSVImport
-                    onImport={handleCSVImport}
-                    onClose={() => setShowCSVImport(false)}
-                  />
-                </DialogContent>
-              </Dialog>
 
               {/* Strategy Parameters */}
               <Card className="border-green-500/20">

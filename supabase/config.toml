@@ -26,6 +26,3 @@ verify_jwt = false
 
 [functions.mt5-poll]
 verify_jwt = false
-
-[functions.auto-bridge]
-verify_jwt = false

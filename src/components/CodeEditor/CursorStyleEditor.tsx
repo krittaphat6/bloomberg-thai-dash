@@ -4,8 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { 
   Play, 
   FileText, 
@@ -24,10 +22,6 @@ import {
   TrendingUp,
   Save,
   FolderOpen as LibraryIcon,
-  Package,
-  Copy,
-  Check,
-  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PineScriptRunner, OHLCData } from '@/utils/PineScriptRunner';
@@ -175,11 +169,6 @@ export default function CursorStyleEditor() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'files' | 'search' | 'git'>('files');
   const [editorReady, setEditorReady] = useState(false);
-  const [pyodideProgress, setPyodideProgress] = useState(0);
-  const [installedPackages, setInstalledPackages] = useState<string[]>(['numpy', 'pandas']);
-  const [packageInput, setPackageInput] = useState('');
-  const [isInstallingPackage, setIsInstallingPackage] = useState(false);
-  const [copiedOutput, setCopiedOutput] = useState(false);
   
   // Pine Script specific state
   const [pineScripts, setPineScripts] = useState<SavedScript[]>([]);
@@ -224,31 +213,24 @@ export default function CursorStyleEditor() {
     }
   }, [files]);
 
-  // Initialize Pyodide with retry logic
+  // Initialize Pyodide (only when in Python mode and editor is ready)
   useEffect(() => {
     if (editorMode !== 'python' || !editorReady || pyodideReady || pyodideLoading) return;
     
     let isMounted = true;
-    let retryCount = 0;
-    const maxRetries = 3;
     
-    const initPyodide = async (): Promise<boolean> => {
+    const initPyodide = async () => {
       setPyodideLoading(true);
-      setPyodideProgress(0);
-      
       try {
-        addTerminalOutput('info', `🐍 Loading Python runtime (Pyodide)... Attempt ${retryCount + 1}/${maxRetries}`);
+        addTerminalOutput('info', '🐍 Loading Python runtime (Pyodide)...');
         
         // Check if already loaded
         if ((window as any).loadPyodide && pyodideRef.current) {
           setPyodideReady(true);
           setPyodideLoading(false);
-          setPyodideProgress(100);
           addTerminalOutput('info', '✅ Python runtime already loaded!');
-          return true;
+          return;
         }
-        
-        setPyodideProgress(10);
         
         // Load Pyodide script if not already present
         if (!(window as any).loadPyodide) {
@@ -263,26 +245,15 @@ export default function CursorStyleEditor() {
             script.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
             script.async = true;
             
-            const timeout = setTimeout(() => {
-              reject(new Error('Script load timeout'));
-            }, 30000);
-            
-            script.onload = () => {
-              clearTimeout(timeout);
-              resolve();
-            };
-            script.onerror = () => {
-              clearTimeout(timeout);
-              reject(new Error('Failed to load Pyodide script'));
-            };
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load Pyodide script'));
             
             document.head.appendChild(script);
           });
         }
         
-        if (!isMounted) return false;
+        if (!isMounted) return;
         
-        setPyodideProgress(30);
         addTerminalOutput('info', '📦 Initializing Python environment...');
         
         // @ts-ignore
@@ -290,27 +261,22 @@ export default function CursorStyleEditor() {
           indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/'
         });
         
-        if (!isMounted) return false;
+        if (!isMounted) return;
         
-        setPyodideProgress(60);
         addTerminalOutput('info', '📦 Installing packages (numpy, pandas)...');
         
         try {
           await pyodide.loadPackage(['numpy', 'pandas']);
-          setInstalledPackages(['numpy', 'pandas']);
         } catch (pkgErr) {
           console.warn('Some packages failed to load:', pkgErr);
           addTerminalOutput('info', '⚠️ Some packages may not be available');
         }
         
-        if (!isMounted) return false;
-        
-        setPyodideProgress(80);
+        if (!isMounted) return;
         
         // Setup matplotlib if available
         try {
           await pyodide.loadPackage(['matplotlib', 'micropip']);
-          setInstalledPackages(prev => [...prev, 'matplotlib', 'micropip']);
           await pyodide.runPythonAsync(`
 import matplotlib
 matplotlib.use('Agg')
@@ -331,34 +297,22 @@ def show_plot():
           console.warn('Matplotlib setup failed:', matplotErr);
         }
         
-        if (!isMounted) return false;
+        if (!isMounted) return;
         
-        setPyodideProgress(100);
         pyodideRef.current = pyodide;
         setPyodideReady(true);
         setPyodideLoading(false);
-        addTerminalOutput('info', '✅ Python runtime ready! Press Ctrl+Enter to run code.');
+        addTerminalOutput('info', '✅ Python runtime ready! You can now run Python code.');
         toast.success('Python runtime loaded successfully!');
-        return true;
         
       } catch (err: any) {
         console.error('Pyodide initialization error:', err);
         if (isMounted) {
           addTerminalOutput('error', `❌ Failed to load Python: ${err.message || err}`);
-          
-          if (retryCount < maxRetries - 1) {
-            retryCount++;
-            addTerminalOutput('info', `🔄 Retrying in 2 seconds... (${retryCount}/${maxRetries})`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            return initPyodide();
-          } else {
-            addTerminalOutput('error', '❌ All retry attempts failed.');
-            addTerminalOutput('info', '💡 Tips to fix:\n  • Check your internet connection\n  • Try refreshing the page\n  • Disable ad blockers');
-            setPyodideLoading(false);
-            toast.error('Failed to load Python runtime after 3 attempts');
-          }
+          addTerminalOutput('info', '💡 Try refreshing the page or check your internet connection');
+          setPyodideLoading(false);
+          toast.error('Failed to load Python runtime');
         }
-        return false;
       }
     };
 
@@ -504,7 +458,7 @@ def show_plot():
     }
   };
 
-  // Run Python code with timeout
+  // Run Python code
   const runPythonCode = async (tab: EditorTab) => {
     if (!pyodideReady || !pyodideRef.current) {
       addTerminalOutput('error', '❌ Python runtime not ready. Please wait...');
@@ -523,15 +477,7 @@ def show_plot():
         }
       });
 
-      // Add timeout of 30 seconds
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Execution timeout (30s)')), 30000);
-      });
-
-      const result = await Promise.race([
-        pyodideRef.current.runPythonAsync(tab.content),
-        timeoutPromise
-      ]);
+      const result = await pyodideRef.current.runPythonAsync(tab.content);
       
       if (capturedOutput) {
         capturedOutput.split('\n').forEach((line: string) => {
@@ -546,51 +492,8 @@ def show_plot():
       addTerminalOutput('info', '✅ Execution complete');
 
     } catch (err: any) {
-      const errorMsg = err.message || String(err);
-      // Parse Python errors for better formatting
-      if (errorMsg.includes('Traceback')) {
-        addTerminalOutput('error', '❌ Python Error:');
-        errorMsg.split('\n').forEach((line: string) => {
-          addTerminalOutput('error', `  ${line}`);
-        });
-      } else {
-        addTerminalOutput('error', `❌ Error: ${errorMsg}`);
-      }
+      addTerminalOutput('error', `Error: ${err.message || err}`);
     }
-  };
-
-  // Install package using micropip
-  const installPackage = async (packageName: string) => {
-    if (!pyodideReady || !pyodideRef.current || !packageName.trim()) return;
-    
-    setIsInstallingPackage(true);
-    addTerminalOutput('info', `📦 Installing ${packageName}...`);
-    
-    try {
-      await pyodideRef.current.runPythonAsync(`
-import micropip
-await micropip.install('${packageName.trim()}')
-      `);
-      
-      setInstalledPackages(prev => [...new Set([...prev, packageName.trim()])]);
-      addTerminalOutput('info', `✅ Package ${packageName} installed successfully!`);
-      toast.success(`Package ${packageName} installed`);
-      setPackageInput('');
-    } catch (err: any) {
-      addTerminalOutput('error', `❌ Failed to install ${packageName}: ${err.message}`);
-      toast.error(`Failed to install ${packageName}`);
-    } finally {
-      setIsInstallingPackage(false);
-    }
-  };
-
-  // Copy terminal output
-  const copyTerminalOutput = () => {
-    const text = terminalOutput.map(o => o.content).join('\n');
-    navigator.clipboard.writeText(text);
-    setCopiedOutput(true);
-    setTimeout(() => setCopiedOutput(false), 2000);
-    toast.success('Output copied to clipboard');
   };
 
   // File tree operations
@@ -725,26 +628,11 @@ await micropip.install('${packageName.trim()}')
             Run
           </Button>
           
-          {pyodideLoading && editorMode === 'python' && (
-            <div className="flex items-center gap-2">
-              <Progress value={pyodideProgress} className="w-20 h-2" />
-              <span className="text-xs text-muted-foreground">{pyodideProgress}%</span>
-            </div>
-          )}
-          
-          {!pyodideReady && !pyodideLoading && editorMode === 'python' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setPyodideLoading(false);
-                setEditorReady(true);
-              }}
-              className="h-7 text-xs text-amber-400"
-            >
-              <RefreshCw className="h-3 w-3 mr-1" />
-              Retry
-            </Button>
+          {!pyodideReady && editorMode === 'python' && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Loading Python...
+            </span>
           )}
         </div>
       </div>
@@ -867,33 +755,18 @@ await micropip.install('${packageName.trim()}')
 
       {/* Terminal */}
       {showTerminal && (
-        <div className="h-56 border-t border-[#333] flex flex-col bg-[#1e1e1e]">
+        <div className="h-48 border-t border-[#333] flex flex-col bg-[#1e1e1e]">
           <div className="h-8 border-b border-[#333] flex items-center justify-between px-2 bg-[#252526]">
             <div className="flex items-center gap-2">
               <Terminal className="h-4 w-4 text-terminal-green" />
               <span className="text-xs">Terminal</span>
-              {editorMode === 'python' && pyodideReady && (
-                <Badge variant="outline" className="h-5 text-[10px] border-terminal-green/30 text-terminal-green">
-                  Python Ready
-                </Badge>
-              )}
             </div>
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0"
-                onClick={copyTerminalOutput}
-                title="Copy output"
-              >
-                {copiedOutput ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
                 onClick={() => setTerminalOutput([])}
-                title="Clear terminal"
               >
                 <Trash2 className="h-3 w-3" />
               </Button>
@@ -907,40 +780,6 @@ await micropip.install('${packageName.trim()}')
               </Button>
             </div>
           </div>
-          
-          {/* Package installer */}
-          {editorMode === 'python' && pyodideReady && (
-            <div className="h-8 border-b border-[#333] flex items-center gap-2 px-2 bg-[#1a1a1a]">
-              <Package className="h-3 w-3 text-muted-foreground" />
-              <Input
-                placeholder="Install package (e.g., scipy)..."
-                value={packageInput}
-                onChange={(e) => setPackageInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && installPackage(packageInput)}
-                className="h-6 text-xs bg-[#2d2d2d] border-[#444] flex-1"
-                disabled={isInstallingPackage}
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => installPackage(packageInput)}
-                disabled={isInstallingPackage || !packageInput.trim()}
-                className="h-6 px-2 text-xs"
-              >
-                {isInstallingPackage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-              </Button>
-              <div className="flex items-center gap-1 ml-2">
-                {installedPackages.slice(0, 4).map(pkg => (
-                  <Badge key={pkg} variant="secondary" className="h-5 text-[9px] bg-[#333]">
-                    {pkg}
-                  </Badge>
-                ))}
-                {installedPackages.length > 4 && (
-                  <span className="text-[10px] text-muted-foreground">+{installedPackages.length - 4}</span>
-                )}
-              </div>
-            </div>
-          )}
           
           <ScrollArea className="flex-1 p-2">
             <div className="font-mono text-xs space-y-1">
