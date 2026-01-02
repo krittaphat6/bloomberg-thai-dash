@@ -39,6 +39,11 @@ const ABLE3AI = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [bridgeUrl, setBridgeUrl] = useState(OllamaService.getBridgeUrl());
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Loading time tracking
+  const [loadingTime, setLoadingTime] = useState(0);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check Ollama connection on mount if bridge URL exists
   useEffect(() => {
@@ -69,6 +74,46 @@ const ABLE3AI = () => {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Loading time counter
+  useEffect(() => {
+    if (isLoading) {
+      setLoadingTime(0);
+      loadingTimerRef.current = setInterval(() => {
+        setLoadingTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (loadingTimerRef.current) {
+        clearInterval(loadingTimerRef.current);
+      }
+    }
+    return () => {
+      if (loadingTimerRef.current) clearInterval(loadingTimerRef.current);
+    };
+  }, [isLoading]);
+
+  // Auto-check connection every 30 seconds when connected
+  useEffect(() => {
+    const checkStatus = async () => {
+      if (!bridgeUrl) return;
+      const result = await OllamaService.checkConnection();
+      if (!result.ok && result.error) {
+        setConnectionError(result.error);
+        toast({
+          title: '⚠️ ABLE AI Connection Error',
+          description: result.error,
+          variant: 'destructive'
+        });
+      } else {
+        setConnectionError(null);
+      }
+    };
+    
+    if (ollamaConnected) {
+      const interval = setInterval(checkStatus, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [ollamaConnected, bridgeUrl]);
 
   const handleSaveBridgeUrl = () => {
     OllamaService.setBridgeUrl(bridgeUrl);
@@ -515,7 +560,24 @@ const ABLE3AI = () => {
                 <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 flex items-center justify-center">
                   <Sparkles className="w-4 h-4 text-black animate-pulse" />
                 </div>
-                <span className="text-sm text-green-400">กำลังคิด...</span>
+                <div className="flex flex-col">
+                  <span className="text-sm text-green-400">กำลังคิด...</span>
+                  <span className="text-xs text-muted-foreground">
+                    {loadingTime} วินาที {loadingTime > 30 && '(model กำลังประมวลผล)'}
+                  </span>
+                  {loadingTime > 60 && (
+                    <span className="text-xs text-yellow-400">รอได้ถึง 180 วินาที</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {connectionError && (
+              <div className="flex items-center gap-2 p-2 bg-red-500/20 border border-red-500/50 rounded-lg">
+                <WifiOff className="w-4 h-4 text-red-400" />
+                <span className="text-sm text-red-300">Connection Error: {connectionError}</span>
+                <Button size="sm" variant="ghost" onClick={handleConnect} className="h-6 px-2 text-red-400">
+                  Retry
+                </Button>
               </div>
             )}
           </div>

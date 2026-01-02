@@ -94,11 +94,15 @@ const LiveChatReal = () => {
   });
   const audioContextRef = useRef<AudioContext | null>(null);
   
-  // MT5 Forward state
+  // MT5 Forward state - persist with localStorage
   const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
-  const [mt5ConnectionId, setMt5ConnectionId] = useState<string | null>(null);
+  const [mt5ConnectionId, setMt5ConnectionId] = useState<string | null>(() => {
+    return localStorage.getItem('auto-bridge-mt5') || null;
+  });
   const [isMt5Connected, setIsMt5Connected] = useState(false);
-  const [autoForwardEnabled, setAutoForwardEnabled] = useState(false);
+  const [autoForwardEnabled, setAutoForwardEnabled] = useState(() => {
+    return localStorage.getItem('auto-bridge-enabled') === 'true';
+  });
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -113,6 +117,27 @@ const LiveChatReal = () => {
   useEffect(() => {
     localStorage.setItem('messenger-sound-type', selectedSound);
   }, [selectedSound]);
+
+  // Persist Auto Bridge state to localStorage
+  useEffect(() => {
+    localStorage.setItem('auto-bridge-enabled', String(autoForwardEnabled));
+    if (autoForwardEnabled && currentRoomId) {
+      localStorage.setItem('auto-bridge-room', currentRoomId);
+      localStorage.setItem('auto-bridge-mt5', mt5ConnectionId || '');
+    }
+  }, [autoForwardEnabled, currentRoomId, mt5ConnectionId]);
+
+  // Load Auto Bridge state on mount
+  useEffect(() => {
+    const savedMt5 = localStorage.getItem('auto-bridge-mt5');
+    const savedEnabled = localStorage.getItem('auto-bridge-enabled') === 'true';
+    const savedRoom = localStorage.getItem('auto-bridge-room');
+    
+    if (savedMt5 && savedEnabled && savedRoom === currentRoomId) {
+      setMt5ConnectionId(savedMt5);
+      setAutoForwardEnabled(true);
+    }
+  }, [currentRoomId]);
 
   // Play notification sound using Web Audio API
   const playNotificationSound = useCallback((soundKey?: keyof typeof NOTIFICATION_SOUNDS) => {

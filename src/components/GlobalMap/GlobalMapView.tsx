@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, CircleMarker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Circle, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Button } from '@/components/ui/button';
@@ -8,10 +8,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { 
   RefreshCw, Plane, Ship, Cloud, Activity, Flame, BarChart3,
-  MapPin, Navigation, Download, Waves, Crosshair, Search, AlertTriangle
+  MapPin, Navigation, Download, Waves, Crosshair, Search, AlertTriangle, Wind
 } from 'lucide-react';
 import { WeatherService, WeatherAlert } from '@/services/WeatherService';
 import { ConflictService, ConflictEvent } from '@/services/ConflictService';
+import CycloneService, { CycloneData } from '@/services/CycloneService';
 import { toast } from 'sonner';
 
 // Fix Leaflet default icon
@@ -71,6 +72,7 @@ const FlyToLocation = ({ location }: { location: [number, number] | null }) => {
 
 const GlobalMapView = () => {
   const [layers, setLayers] = useState<DataLayer[]>([
+    { id: 'cyclones', name: '🌀 Active Cyclones', icon: <Wind className="w-4 h-4" />, enabled: true, color: '#ff00ff' },
     { id: 'flights', name: '✈️ Live Flights', icon: <Plane className="w-4 h-4" />, enabled: true, color: '#00ff00' },
     { id: 'ships', name: '🚢 Live Ships', icon: <Ship className="w-4 h-4" />, enabled: false, color: '#00a0ff' },
     { id: 'earthquakes', name: '🌋 Earthquakes', icon: <Activity className="w-4 h-4" />, enabled: true, color: '#ff0000' },
@@ -86,6 +88,8 @@ const GlobalMapView = () => {
   const [weatherAlerts, setWeatherAlerts] = useState<WeatherAlert[]>([]);
   const [tsunamiWarnings, setTsunamiWarnings] = useState<WeatherAlert[]>([]);
   const [conflicts, setConflicts] = useState<ConflictEvent[]>([]);
+  const [cyclones, setCyclones] = useState<CycloneData[]>([]);
+  const [cyclonesLoading, setCyclonesLoading] = useState(false);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [flyToTarget, setFlyToTarget] = useState<[number, number] | null>(null);
@@ -160,6 +164,22 @@ const GlobalMapView = () => {
       }
     } catch (err) {
       console.error('Tsunami API error:', err);
+    }
+  }, []);
+
+  // Fetch Cyclones Data
+  const fetchCyclones = useCallback(async () => {
+    setCyclonesLoading(true);
+    try {
+      const data = await CycloneService.fetchAllCyclones();
+      setCyclones(data);
+      if (data.length > 0) {
+        toast.success(`🌀 Found ${data.length} active cyclone(s)`);
+      }
+    } catch (err) {
+      console.error('Cyclone fetch error:', err);
+    } finally {
+      setCyclonesLoading(false);
     }
   }, []);
 
@@ -248,6 +268,7 @@ const GlobalMapView = () => {
     if (layers.find(l => l.id === 'weather')?.enabled) promises.push(fetchWeatherAlerts());
     if (layers.find(l => l.id === 'tsunami')?.enabled) promises.push(fetchTsunamiWarnings());
     if (layers.find(l => l.id === 'conflicts')?.enabled) promises.push(fetchConflicts());
+    if (layers.find(l => l.id === 'cyclones')?.enabled) promises.push(fetchCyclones());
     
     await Promise.all(promises);
     setLastUpdate(new Date());
@@ -307,6 +328,47 @@ const GlobalMapView = () => {
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
+
+  // Cyclone icon
+  const createCycloneIcon = (category: number) => {
+    const size = 28 + category * 6;
+    const color = CycloneService.getCategoryColor(category);
+    
+    return L.divIcon({
+      className: 'cyclone-icon',
+      html: `
+        <div style="
+          width: ${size}px;
+          height: ${size}px;
+          position: relative;
+          animation: spin 3s linear infinite;
+        ">
+          <div style="
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: radial-gradient(circle, ${color}40 0%, transparent 70%);
+            animation: pulse 2s ease-in-out infinite;
+          "></div>
+          <div style="
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: ${size * 0.6}px;
+            filter: drop-shadow(0 0 8px ${color});
+          ">🌀</div>
+        </div>
+        <style>
+          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+          @keyframes pulse { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.2); } }
+        </style>
+      `,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2]
+    });
+  };
 
   // Stock market locations
   const marketLocations = [
@@ -402,6 +464,82 @@ const GlobalMapView = () => {
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />
+
+          {/* Cyclones Layer */}
+          {layers.find(l => l.id === 'cyclones')?.enabled && cyclones.map(cyclone => (
+            <React.Fragment key={cyclone.id}>
+              {/* Danger Zone Circle */}
+              <Circle
+                center={[cyclone.coordinates[1], cyclone.coordinates[0]]}
+                radius={CycloneService.getDangerRadius(cyclone.category)}
+                pathOptions={{
+                  color: CycloneService.getCategoryColor(cyclone.category),
+                  fillColor: CycloneService.getCategoryColor(cyclone.category),
+                  fillOpacity: 0.15,
+                  weight: 2,
+                  dashArray: '10, 10'
+                }}
+              />
+              
+              {/* Forecast Track */}
+              {cyclone.forecastTrack.length > 0 && (
+                <Polyline
+                  positions={[
+                    [cyclone.coordinates[1], cyclone.coordinates[0]],
+                    ...cyclone.forecastTrack.map(f => [f.lat, f.lng] as [number, number])
+                  ]}
+                  pathOptions={{
+                    color: '#ff00ff',
+                    weight: 3,
+                    dashArray: '10, 10',
+                    opacity: 0.7
+                  }}
+                />
+              )}
+              
+              {/* Cyclone Marker */}
+              <Marker
+                position={[cyclone.coordinates[1], cyclone.coordinates[0]]}
+                icon={createCycloneIcon(cyclone.category)}
+              >
+                <Popup className="dark-popup">
+                  <div className="bg-[#1a2744] text-white p-3 rounded min-w-[220px] border border-purple-500/50">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-2xl">🌀</span>
+                      <div>
+                        <p className="font-bold text-purple-400 text-lg">{cyclone.name}</p>
+                        <p className="text-xs text-gray-300">{cyclone.type} • {cyclone.basin}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-black/30 p-2 rounded">
+                        <p className="text-gray-400">Category</p>
+                        <p className="text-white font-bold text-lg">{cyclone.category}</p>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded">
+                        <p className="text-gray-400">Wind Speed</p>
+                        <p className="text-white font-bold">{cyclone.windSpeed} kt</p>
+                        <p className="text-gray-400">({cyclone.windSpeedKmh} km/h)</p>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded">
+                        <p className="text-gray-400">Pressure</p>
+                        <p className="text-white font-bold">{cyclone.pressure} mb</p>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded">
+                        <p className="text-gray-400">Movement</p>
+                        <p className="text-white font-bold">{cyclone.movement.direction}</p>
+                        <p className="text-gray-400">@ {cyclone.movement.speed} kt</p>
+                      </div>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400">
+                      <p>Source: {cyclone.source}</p>
+                      <p>Updated: {new Date(cyclone.lastUpdate).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            </React.Fragment>
+          ))}
 
           {/* Flights Layer */}
           {layers.find(l => l.id === 'flights')?.enabled && flights.map(flight => (
@@ -553,6 +691,12 @@ const GlobalMapView = () => {
             🌍 LIVE GLOBAL DATA
           </p>
           <div className="space-y-1">
+            {cyclones.length > 0 && (
+              <p className="text-purple-400 font-bold animate-pulse flex items-center gap-1">
+                🌀 Cyclones: {cyclones.length}
+                {cyclonesLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
+              </p>
+            )}
             <p className="text-green-400">✈️ Flights: {flights.length}</p>
             <p className="text-red-400">🌋 Earthquakes: {earthquakes.length}</p>
             <p className="text-orange-400">🌦️ Weather Alerts: {weatherAlerts.length}</p>
@@ -564,6 +708,20 @@ const GlobalMapView = () => {
             <p className="text-red-400">⚔️ Conflicts: {conflicts.length}</p>
             <p className="text-blue-400">📈 Markets: {marketLocations.length}</p>
           </div>
+          
+          {/* Cyclone Summary */}
+          {cyclones.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-[#1e3a5f]">
+              <p className="text-purple-400 font-bold mb-1">🌀 ACTIVE CYCLONES</p>
+              {cyclones.slice(0, 3).map(c => (
+                <div key={c.id} className="mb-1">
+                  <p className="text-white font-medium">{c.name}</p>
+                  <p className="text-gray-400">{c.windSpeed} kt • Cat {c.category} • {c.basin}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          
           <div className="mt-2 pt-2 border-t border-[#1e3a5f]">
             <p className="text-gray-400 flex items-center gap-1">
               <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
