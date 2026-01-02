@@ -161,7 +161,8 @@ export class OllamaService {
       console.log(`💬 Sending message to Ollama (${model})...`);
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      // Increased timeout to 180 seconds (3 minutes)
+      const timeoutId = setTimeout(() => controller.abort(), 180000);
 
       const response = await fetch(`${url}/ollama/chat`, {
         method: 'POST',
@@ -199,10 +200,12 @@ export class OllamaService {
       
       if (error.name === 'AbortError') {
         return {
-          text: '⏱️ **Request timeout**\n\nOllama ใช้เวลานานเกินไป อาจเป็นเพราะ:\n' +
-                '• Model ใหญ่เกินไป\n' +
-                '• Mac ทำงานช้า\n' +
-                '• Network ช้า',
+          text: '⏱️ **Request timeout (3 นาที)**\n\n' +
+                'Ollama กำลังประมวลผลอยู่ คำถามอาจซับซ้อน\n\n' +
+                '**ลองทำสิ่งนี้:**\n' +
+                '• ถามคำถามสั้นลง\n' +
+                '• ใช้ model เล็กกว่า เช่น gemma3:1b\n' +
+                '• รอสักครู่แล้วลองใหม่',
           model: 'Error'
         };
       }
@@ -216,6 +219,34 @@ export class OllamaService {
               '4. Bridge URL ถูกต้องหรือไม่?',
         model: 'Error'
       };
+    }
+  }
+
+  // Check connection status with latency
+  static async checkConnection(): Promise<{ ok: boolean; error?: string; latency?: number }> {
+    const url = this.getBridgeUrl();
+    if (!url) return { ok: false, error: 'Bridge URL not set' };
+    
+    const start = Date.now();
+    try {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(`${url}/health`, { 
+        method: 'GET',
+        signal: controller.signal
+      });
+      
+      if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
+      
+      const data = await response.json();
+      return { 
+        ok: data.stats?.ollamaConnected || false,
+        latency: Date.now() - start,
+        error: data.stats?.ollamaConnected ? undefined : 'Ollama not connected'
+      };
+    } catch (error: any) {
+      return { ok: false, error: error.message };
     }
   }
 

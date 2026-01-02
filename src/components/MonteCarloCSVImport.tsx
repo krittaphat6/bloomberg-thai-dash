@@ -33,6 +33,21 @@ interface CSVImportProps {
   onClose: () => void;
 }
 
+// TradingView specific column names for auto-detection
+const TRADINGVIEW_COLUMNS: Record<string, string> = {
+  'Trade #': 'tradeNum',
+  'Type': 'type',
+  'Signal': 'signal',
+  'Date/Time': 'dateTime',
+  'Price': 'price',
+  'Contracts': 'contracts',
+  'Profit': 'profit',
+  'Profit %': 'profitPercent',
+  'Cum. Profit': 'runningPnl',
+  'Run-up': 'runUp',
+  'Drawdown': 'drawdown'
+};
+
 const COLUMN_MAPPINGS = {
   tradeNum: ['Trade #', 'trade', 'tradeno', 'trade_num', 'number', '#'],
   type: ['Type', 'type', 'direction', 'side', 'order_type'],
@@ -41,7 +56,7 @@ const COLUMN_MAPPINGS = {
   price: ['Price', 'price', 'entry_price', 'avg_price', 'fill_price'],
   contracts: ['Contracts', 'contracts', 'qty', 'quantity', 'lots', 'size', 'volume'],
   profit: ['Profit', 'profit', 'pnl', 'p&l', 'net_profit', 'realized_pnl', 'profit/loss'],
-  runningPnl: ['Running P&L', 'running_pnl', 'cumulative', 'cum_pnl', 'balance']
+  runningPnl: ['Running P&L', 'running_pnl', 'cumulative', 'cum_pnl', 'balance', 'Cum. Profit']
 };
 
 const MonteCarloCSVImport: React.FC<CSVImportProps> = ({ onImport, onClose }) => {
@@ -54,9 +69,34 @@ const MonteCarloCSVImport: React.FC<CSVImportProps> = ({ onImport, onClose }) =>
   const [parsedTrades, setParsedTrades] = useState<TradeData[]>([]);
   const [calculatedStats, setCalculatedStats] = useState<any>(null);
 
+  const [isDragging, setIsDragging] = useState(false);
+  const [isTradingViewFormat, setIsTradingViewFormat] = useState(false);
+
+  // Auto-detect TradingView format
+  const autoDetectTradingViewFormat = (headers: string[]): Record<string, string> => {
+    const mappings: Record<string, string> = {};
+    let matchCount = 0;
+    
+    headers.forEach(header => {
+      const trimmed = header.trim();
+      if (TRADINGVIEW_COLUMNS[trimmed]) {
+        mappings[TRADINGVIEW_COLUMNS[trimmed]] = trimmed;
+        matchCount++;
+      }
+    });
+    
+    if (matchCount >= 3) {
+      setIsTradingViewFormat(true);
+      toast.success(`✅ TradingView format detected! Auto-mapped ${matchCount} columns`);
+    }
+    
+    return mappings;
+  };
+
   // Handle file drop
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragging(false);
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile?.name.endsWith('.csv')) {
       handleFile(droppedFile);
@@ -88,17 +128,22 @@ const MonteCarloCSVImport: React.FC<CSVImportProps> = ({ onImport, onClose }) =>
         setRawData(data);
         setHeaders(cols);
         
-        // Auto-detect column mappings
-        const autoMappings: Record<string, string> = {};
+        // Try TradingView auto-detect first
+        const tvMappings = autoDetectTradingViewFormat(cols);
+        
+        // Fall back to generic auto-detect
+        const autoMappings: Record<string, string> = { ...tvMappings };
         
         Object.entries(COLUMN_MAPPINGS).forEach(([key, possibleNames]) => {
-          const match = cols.find(col => 
-            possibleNames.some(name => 
-              col.toLowerCase().includes(name.toLowerCase())
-            )
-          );
-          if (match) {
-            autoMappings[key] = match;
+          if (!autoMappings[key]) {
+            const match = cols.find(col => 
+              possibleNames.some(name => 
+                col.toLowerCase().includes(name.toLowerCase())
+              )
+            );
+            if (match) {
+              autoMappings[key] = match;
+            }
           }
         });
         
@@ -225,23 +270,46 @@ const MonteCarloCSVImport: React.FC<CSVImportProps> = ({ onImport, onClose }) =>
         {step === 'upload' && (
           <div
             onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            className="border-2 border-dashed border-green-500/30 rounded-lg p-8 text-center hover:border-green-500/60 transition-colors cursor-pointer"
-            onClick={() => document.getElementById('csv-input')?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
+              isDragging 
+                ? 'border-green-500 bg-green-500/10' 
+                : 'border-green-500/30 hover:border-green-500/60'
+            }`}
+            onClick={() => document.getElementById('mc-csv-input')?.click()}
           >
             <input
-              id="csv-input"
+              id="mc-csv-input"
               type="file"
               accept=".csv"
               onChange={handleFileChange}
               className="hidden"
             />
-            <Upload className="w-12 h-12 mx-auto mb-4 text-green-500/60" />
-            <p className="text-lg font-medium">Drop your TradingView CSV here</p>
+            <Upload className={`w-12 h-12 mx-auto mb-4 transition-colors ${isDragging ? 'text-green-500' : 'text-green-500/60'}`} />
+            <p className="text-lg font-medium">Drop TradingView CSV here</p>
             <p className="text-sm text-muted-foreground mt-1">or click to browse</p>
-            <p className="text-xs text-muted-foreground mt-4">
-              Supports TradingView strategy tester export format
-            </p>
+            
+            {/* Process Steps */}
+            <div className="flex items-center justify-center gap-4 mt-6">
+              <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-green-500 font-bold">1</div>
+                <p className="text-xs text-muted-foreground mt-1">Export from<br/>TradingView</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-muted-foreground" />
+              <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-green-500 font-bold">2</div>
+                <p className="text-xs text-muted-foreground mt-1">Drop CSV<br/>here</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-muted-foreground" />
+              <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-green-500 font-bold">3</div>
+                <p className="text-xs text-muted-foreground mt-1">Run Monte<br/>Carlo</p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -249,10 +317,17 @@ const MonteCarloCSVImport: React.FC<CSVImportProps> = ({ onImport, onClose }) =>
         {step === 'mapping' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                File: <span className="text-foreground">{file?.name}</span> ({rawData.length} trades)
-              </p>
-              <Button variant="ghost" size="sm" onClick={() => setStep('upload')}>
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  File: <span className="text-foreground">{file?.name}</span> ({rawData.length} trades)
+                </p>
+                {isTradingViewFormat && (
+                  <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
+                    <Check className="w-3 h-3" /> TradingView format detected
+                  </p>
+                )}
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => { setStep('upload'); setIsTradingViewFormat(false); }}
                 <RefreshCw className="w-4 h-4 mr-1" /> Change File
               </Button>
             </div>
