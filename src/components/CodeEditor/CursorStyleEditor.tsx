@@ -409,7 +409,7 @@ def show_plot():
       ],
       tokenizer: {
         root: [
-          [/\/\/@version=\d+/, 'annotation.pinescript'],
+          [/@version=\d+/, 'annotation'],
           [/\/\/.*$/, 'comment'],
           [/\b(ta|math|array|matrix|map|request|ticker|str|color|input|strategy|alert|log|runtime)\.[a-zA-Z_]\w*/, 'function.builtin'],
           [/\b(plot|hline|bgcolor|fill|plotshape|plotchar|plotarrow|plotcandle|plotbar|barcolor|alertcondition)\b/, 'function.plot'],
