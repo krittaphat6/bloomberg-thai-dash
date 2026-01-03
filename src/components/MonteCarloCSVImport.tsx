@@ -340,14 +340,14 @@ const MonteCarloCSVImport: React.FC<CSVImportProps> = ({ onImport, onClose }) =>
                     {key === 'profit' && <span className="text-red-500">*</span>}
                   </Label>
                   <Select
-                    value={mappings[key] || ''}
-                    onValueChange={(v) => updateMapping(key, v)}
+                    value={mappings[key] || '__none__'}
+                    onValueChange={(v) => updateMapping(key, v === '__none__' ? '' : v)}
                   >
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="Select column..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">-- Not mapped --</SelectItem>
+                      <SelectItem value="__none__">-- Not mapped --</SelectItem>
                       {headers.map(h => (
                         <SelectItem key={h} value={h}>{h}</SelectItem>
                       ))}
