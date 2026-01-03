@@ -1882,8 +1882,14 @@ const LiveChatReal = () => {
                 <h2 className="font-bold text-lg">
                   {currentRoomId && roomNames[currentRoomId] ? roomNames[currentRoomId] : 'Chat'}
                 </h2>
-                <div className="text-xs opacity-60">
+                <div className="text-xs opacity-60 flex items-center gap-2">
                   {currentRoom?.type === 'webhook' ? '🔗 Webhook Room' : currentRoom?.type === 'group' ? 'Group Chat' : 'Private Chat'}
+                  {autoForwardEnabled && currentRoom?.type === 'webhook' && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/50">
+                      <Zap className="w-3 h-3 mr-1" />
+                      Background Active - Works even when app is closed
+                    </span>
+                  )}
                 </div>
               </div>
               
