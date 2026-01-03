@@ -236,6 +236,44 @@ export default function CursorStyleEditor() {
       setPyodideLoading(true);
       setPyodideProgress(0);
       
+      // CDN URLs to try in order
+      const cdnUrls = [
+        'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js',
+        'https://pyodide-cdn2.iodide.io/v0.24.1/full/pyodide.js',
+        'https://cdn.jsdelivr.net/npm/pyodide@0.24.1/pyodide.js'
+      ];
+      
+      const loadScript = (url: string): Promise<void> => {
+        return new Promise((resolve, reject) => {
+          const existingScript = document.querySelector(`script[src="${url}"]`);
+          if (existingScript) {
+            resolve();
+            return;
+          }
+          
+          const script = document.createElement('script');
+          script.src = url;
+          script.async = true;
+          
+          const timeout = setTimeout(() => {
+            script.remove();
+            reject(new Error(`Timeout loading ${url}`));
+          }, 20000);
+          
+          script.onload = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+          script.onerror = () => {
+            clearTimeout(timeout);
+            script.remove();
+            reject(new Error(`Failed to load ${url}`));
+          };
+          
+          document.head.appendChild(script);
+        });
+      };
+      
       try {
         addTerminalOutput('info', `🐍 Loading Python runtime (Pyodide)... Attempt ${retryCount + 1}/${maxRetries}`);
         
@@ -250,34 +288,24 @@ export default function CursorStyleEditor() {
         
         setPyodideProgress(10);
         
-        // Load Pyodide script if not already present
+        // Try loading from CDNs with fallback
         if (!(window as any).loadPyodide) {
-          await new Promise<void>((resolve, reject) => {
-            const existingScript = document.querySelector('script[src*="pyodide.js"]');
-            if (existingScript) {
-              resolve();
-              return;
+          let loaded = false;
+          for (const url of cdnUrls) {
+            try {
+              addTerminalOutput('info', `📥 Trying CDN: ${url.split('/')[2]}...`);
+              await loadScript(url);
+              loaded = true;
+              addTerminalOutput('info', '✅ Script loaded successfully');
+              break;
+            } catch (e) {
+              console.warn(`Failed to load from ${url}:`, e);
             }
-            
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
-            script.async = true;
-            
-            const timeout = setTimeout(() => {
-              reject(new Error('Script load timeout'));
-            }, 30000);
-            
-            script.onload = () => {
-              clearTimeout(timeout);
-              resolve();
-            };
-            script.onerror = () => {
-              clearTimeout(timeout);
-              reject(new Error('Failed to load Pyodide script'));
-            };
-            
-            document.head.appendChild(script);
-          });
+          }
+          
+          if (!loaded) {
+            throw new Error('Failed to load Pyodide from all CDNs');
+          }
         }
         
         if (!isMounted) return false;

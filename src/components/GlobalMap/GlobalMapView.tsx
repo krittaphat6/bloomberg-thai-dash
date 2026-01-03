@@ -14,7 +14,8 @@ import { WeatherService, WeatherAlert } from '@/services/WeatherService';
 import { ConflictService, ConflictEvent } from '@/services/ConflictService';
 import CycloneService, { CycloneData } from '@/services/CycloneService';
 import { toast } from 'sonner';
-
+import ShipRouteLayer from './ShipRouteLayer';
+import { AISShipData } from '@/services/AISStreamService';
 // Fix Leaflet default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -74,7 +75,7 @@ const GlobalMapView = () => {
   const [layers, setLayers] = useState<DataLayer[]>([
     { id: 'cyclones', name: '🌀 Active Cyclones', icon: <Wind className="w-4 h-4" />, enabled: true, color: '#ff00ff' },
     { id: 'flights', name: '✈️ Live Flights', icon: <Plane className="w-4 h-4" />, enabled: true, color: '#00ff00' },
-    { id: 'ships', name: '🚢 Live Ships', icon: <Ship className="w-4 h-4" />, enabled: false, color: '#00a0ff' },
+    { id: 'ships', name: '🚢 Live Ships (AIS)', icon: <Ship className="w-4 h-4" />, enabled: true, color: '#00a0ff' },
     { id: 'earthquakes', name: '🌋 Earthquakes', icon: <Activity className="w-4 h-4" />, enabled: true, color: '#ff0000' },
     { id: 'weather', name: '🌦️ Weather Alerts', icon: <Cloud className="w-4 h-4" />, enabled: true, color: '#ffaa00' },
     { id: 'tsunami', name: '🌊 Tsunami Warnings', icon: <Waves className="w-4 h-4" />, enabled: true, color: '#ff0066' },
@@ -95,6 +96,11 @@ const GlobalMapView = () => {
   const [flyToTarget, setFlyToTarget] = useState<[number, number] | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  
+  // Ship AIS state
+  const [selectedShip, setSelectedShip] = useState<AISShipData | null>(null);
+  const [shipCount, setShipCount] = useState(0);
+  const [showShipRoutes, setShowShipRoutes] = useState(true);
 
   // Fetch Flights (with fallback to mock data)
   const fetchFlights = useCallback(async () => {
@@ -541,6 +547,15 @@ const GlobalMapView = () => {
             </React.Fragment>
           ))}
 
+          {/* Ships Layer (AIS) */}
+          <ShipRouteLayer
+            enabled={layers.find(l => l.id === 'ships')?.enabled || false}
+            showRoutes={showShipRoutes}
+            selectedShipMMSI={selectedShip?.mmsi}
+            onShipSelect={setSelectedShip}
+            onShipCountChange={setShipCount}
+          />
+
           {/* Flights Layer */}
           {layers.find(l => l.id === 'flights')?.enabled && flights.map(flight => (
             <Marker
@@ -698,6 +713,7 @@ const GlobalMapView = () => {
               </p>
             )}
             <p className="text-green-400">✈️ Flights: {flights.length}</p>
+            <p className="text-blue-400">🚢 Ships (AIS): {shipCount}</p>
             <p className="text-red-400">🌋 Earthquakes: {earthquakes.length}</p>
             <p className="text-orange-400">🌦️ Weather Alerts: {weatherAlerts.length}</p>
             {tsunamiWarnings.length > 0 && (
@@ -787,11 +803,35 @@ const GlobalMapView = () => {
             </div>
           )}
 
+          {/* Ship Info */}
+          {selectedShip && (
+            <div className="p-3 border-t border-[#1e3a5f]">
+              <p className="text-blue-400 text-xs font-bold mb-2 flex items-center gap-1">
+                <Ship className="w-3 h-3" />
+                SELECTED SHIP
+              </p>
+              <div className="text-xs space-y-1">
+                <p className="text-white font-medium">{selectedShip.name}</p>
+                <p className="text-gray-400">Type: {selectedShip.shipTypeName}</p>
+                <p className="text-gray-400">Speed: {selectedShip.speed.toFixed(1)} kn</p>
+                <p className="text-gray-400">Dest: {selectedShip.destination || 'Unknown'}</p>
+                <p className="text-gray-400">Flag: {selectedShip.flag}</p>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <Checkbox 
+                  checked={showShipRoutes}
+                  onCheckedChange={(checked) => setShowShipRoutes(!!checked)}
+                  className="border-gray-500 data-[state=checked]:bg-blue-500"
+                />
+                <span className="text-gray-400 text-xs">Show Route</span>
+              </div>
+            </div>
+          )}
+
           {/* Coming Soon */}
           <div className="p-3 border-t border-[#1e3a5f]">
             <p className="text-[#ff6b00] text-xs font-bold mb-2">COMING SOON</p>
             <div className="space-y-1 text-gray-400 text-xs">
-              <p>• Shipping Routes (AIS)</p>
               <p>• Oil & Gas Pipelines</p>
               <p>• Central Banks</p>
               <p>• Currency Flows</p>
