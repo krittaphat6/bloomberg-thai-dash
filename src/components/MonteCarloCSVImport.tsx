@@ -327,7 +327,7 @@ const MonteCarloCSVImport: React.FC<CSVImportProps> = ({ onImport, onClose }) =>
                   </p>
                 )}
               </div>
-              <Button variant="ghost" size="sm" onClick={() => { setStep('upload'); setIsTradingViewFormat(false); }}
+              <Button variant="ghost" size="sm" onClick={() => { setStep('upload'); setIsTradingViewFormat(false); }}>
                 <RefreshCw className="w-4 h-4 mr-1" /> Change File
               </Button>
             </div>
