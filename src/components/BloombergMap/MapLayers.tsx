@@ -83,11 +83,12 @@ export const MapLayers = ({ layers, onToggleLayer }: MapLayersProps) => {
 
 export const DEFAULT_LAYERS: LayerConfig[] = [
   { id: 'markets', name: 'World Equity Markets', icon: '📈', enabled: true, color: '#00ff00', description: 'Stock exchanges worldwide' },
-  { id: 'earthquakes', name: 'Earthquakes', icon: '🌋', enabled: true, color: '#ff4444', description: 'USGS real-time data' },
+  { id: 'earthquakes', name: 'Earthquakes', icon: '🌋', enabled: false, color: '#ff4444', description: 'USGS real-time data' },
+  { id: 'ais_ships', name: 'Live AIS Ships', icon: '🚢', enabled: true, color: '#00a0ff', description: 'Real-time vessel tracking' },
   { id: 'wildfires', name: 'Wildfires', icon: '🔥', enabled: false, color: '#ff6600', description: 'NASA FIRMS data' },
-  { id: 'banking', name: 'Central Banks', icon: '🏦', enabled: true, color: '#00a0ff', description: 'Interest rates & meetings' },
+  { id: 'banking', name: 'Central Banks', icon: '🏦', enabled: false, color: '#00a0ff', description: 'Interest rates & meetings' },
   { id: 'oil_gas', name: 'Oil & Gas', icon: '🛢️', enabled: false, color: '#8b4513', description: 'Fields, refineries, LNG' },
-  { id: 'shipping', name: 'Shipping & Ports', icon: '🚢', enabled: false, color: '#4169e1', description: 'Major ports worldwide' },
+  { id: 'shipping', name: 'Ports & Routes', icon: '⚓', enabled: false, color: '#4169e1', description: 'Major ports worldwide' },
   { id: 'manufacturing', name: 'Manufacturing', icon: '🏭', enabled: false, color: '#808080', description: 'PMI data by country' },
   { id: 'retail', name: 'Retail', icon: '🛒', enabled: false, color: '#9932cc', description: 'Consumer confidence' },
   { id: 'agriculture', name: 'Agriculture', icon: '🌾', enabled: false, color: '#228b22', description: 'Commodity regions' },
