@@ -286,16 +286,18 @@ class AISStreamService {
     };
   }
 
-  disconnect() {
+  disconnect(clearListeners: boolean = true) {
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
     this._isConnected = false;
     this.notifyConnectionListeners(false);
-    this.listeners.clear();
-    this.allShipsListeners.clear();
-    this.connectionListeners.clear();
+    if (clearListeners) {
+      this.listeners.clear();
+      this.allShipsListeners.clear();
+      this.connectionListeners.clear();
+    }
     this.isConnecting = false;
   }
 
@@ -309,8 +311,8 @@ class AISStreamService {
     this.apiKey = newKey;
     // Save to localStorage
     localStorage.setItem('aisstream_api_key', newKey);
-    // Reconnect with new key
-    this.disconnect();
+    // Close existing connection but KEEP listeners
+    this.disconnect(false);
   }
 
   getApiKey(): string {
