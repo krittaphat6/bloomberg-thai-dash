@@ -10,6 +10,7 @@ interface ShipRouteLayerProps {
   selectedShipMMSI?: string;
   onShipSelect?: (ship: AISShipData) => void;
   onShipCountChange?: (count: number) => void;
+  onConnectionChange?: (connected: boolean) => void;
 }
 
 const getShipColor = (type: string): string => {
@@ -58,7 +59,8 @@ const ShipRouteLayer: React.FC<ShipRouteLayerProps> = ({
   showRoutes,
   selectedShipMMSI,
   onShipSelect,
-  onShipCountChange
+  onShipCountChange,
+  onConnectionChange
 }) => {
   const [ships, setShips] = useState<AISShipData[]>([]);
   const [selectedShip, setSelectedShip] = useState<AISShipData | null>(null);
@@ -68,33 +70,26 @@ const ShipRouteLayer: React.FC<ShipRouteLayerProps> = ({
   useEffect(() => {
     if (!enabled) {
       aisService.disconnect();
+      onConnectionChange?.(false);
       return;
     }
 
     // Connect to AIS stream with global coverage
     aisService.connect([[[-90, -180], [90, 180]]]);
 
-    // Subscribe to updates
-    aisService.subscribe('ship-layer', (shipData) => {
-      setShips(prev => {
-        const existing = prev.findIndex(s => s.mmsi === shipData.mmsi);
-        let updated: AISShipData[];
-        if (existing >= 0) {
-          updated = [...prev];
-          updated[existing] = shipData;
-        } else {
-          updated = [...prev, shipData];
-        }
-        
-        // Limit to 500 ships for performance
-        if (updated.length > 500) {
-          updated = updated.slice(-500);
-        }
-        
-        onShipCountChange?.(updated.length);
-        return updated;
-      });
+    // Subscribe to connection status
+    aisService.subscribeToConnection('ship-layer', (connected) => {
+      onConnectionChange?.(connected);
+    });
 
+    // Subscribe to all ships updates
+    aisService.subscribeToAllShips('ship-layer', (allShips) => {
+      setShips(allShips.slice(0, 500)); // Limit for performance
+      onShipCountChange?.(allShips.length);
+    });
+
+    // Subscribe to individual ship updates for history tracking
+    aisService.subscribe('ship-layer', (shipData) => {
       // Update history for route drawing
       setShipHistory(prev => {
         const history = prev.get(shipData.mmsi) || [];
@@ -116,8 +111,10 @@ const ShipRouteLayer: React.FC<ShipRouteLayerProps> = ({
 
     return () => {
       aisService.unsubscribe('ship-layer');
+      aisService.unsubscribeFromAllShips('ship-layer');
+      aisService.unsubscribeFromConnection('ship-layer');
     };
-  }, [enabled, onShipCountChange]);
+  }, [enabled, onShipCountChange, onConnectionChange]);
 
   // Update selected ship
   useEffect(() => {
