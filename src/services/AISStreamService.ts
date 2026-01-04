@@ -35,10 +35,13 @@ class AISStreamService {
   private ws: WebSocket | null = null;
   private apiKey: string;
   private listeners: Map<string, (data: AISShipData) => void> = new Map();
+  private allShipsListeners: Map<string, (ships: AISShipData[]) => void> = new Map();
+  private connectionListeners: Map<string, (connected: boolean) => void> = new Map();
   private shipData: Map<string, AISShipData> = new Map();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private isConnecting = false;
+  private _isConnected = false;
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -57,7 +60,9 @@ class AISStreamService {
     this.ws.onopen = () => {
       console.log('✅ AISStream connected');
       this.isConnecting = false;
+      this._isConnected = true;
       this.reconnectAttempts = 0;
+      this.notifyConnectionListeners(true);
       
       const subscriptionMessage = {
         Apikey: this.apiKey,
@@ -85,12 +90,16 @@ class AISStreamService {
     this.ws.onclose = () => {
       console.log('⚠️ AISStream disconnected');
       this.isConnecting = false;
+      this._isConnected = false;
+      this.notifyConnectionListeners(false);
       this.attemptReconnect(boundingBoxes);
     };
 
     this.ws.onerror = (error) => {
       console.error('❌ AISStream error:', error);
       this.isConnecting = false;
+      this._isConnected = false;
+      this.notifyConnectionListeners(false);
     };
   }
 
@@ -215,6 +224,36 @@ class AISStreamService {
 
   private notifyListeners(data: AISShipData) {
     this.listeners.forEach(callback => callback(data));
+    // Also notify all-ships listeners
+    const allShips = this.getAllShips();
+    this.allShipsListeners.forEach(callback => callback(allShips));
+  }
+
+  private notifyConnectionListeners(connected: boolean) {
+    this.connectionListeners.forEach(callback => callback(connected));
+  }
+
+  // Subscribe to all ships updates (for map display)
+  subscribeToAllShips(id: string, callback: (ships: AISShipData[]) => void) {
+    this.allShipsListeners.set(id, callback);
+    // Immediately send current data
+    if (this.shipData.size > 0) {
+      callback(this.getAllShips());
+    }
+  }
+
+  unsubscribeFromAllShips(id: string) {
+    this.allShipsListeners.delete(id);
+  }
+
+  // Subscribe to connection status changes
+  subscribeToConnection(id: string, callback: (connected: boolean) => void) {
+    this.connectionListeners.set(id, callback);
+    callback(this._isConnected);
+  }
+
+  unsubscribeFromConnection(id: string) {
+    this.connectionListeners.delete(id);
   }
 
   getAllShips(): AISShipData[] {
@@ -237,7 +276,14 @@ class AISStreamService {
   }
 
   isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this._isConnected && this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  getConnectionStatus(): { connected: boolean; shipCount: number } {
+    return {
+      connected: this.isConnected(),
+      shipCount: this.shipData.size
+    };
   }
 
   disconnect() {
@@ -245,8 +291,18 @@ class AISStreamService {
       this.ws.close();
       this.ws = null;
     }
+    this._isConnected = false;
+    this.notifyConnectionListeners(false);
     this.listeners.clear();
+    this.allShipsListeners.clear();
+    this.connectionListeners.clear();
     this.isConnecting = false;
+  }
+
+  clearCache() {
+    this.shipData.clear();
+    const allShips = this.getAllShips();
+    this.allShipsListeners.forEach(callback => callback(allShips));
   }
 }
 

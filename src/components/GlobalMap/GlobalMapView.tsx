@@ -16,7 +16,7 @@ import { ConflictService, ConflictEvent } from '@/services/ConflictService';
 import CycloneService, { CycloneData } from '@/services/CycloneService';
 import { toast } from 'sonner';
 import ShipRouteLayer from './ShipRouteLayer';
-import { AISShipData } from '@/services/AISStreamService';
+import { AISShipData, aisService } from '@/services/AISStreamService';
 // Fix Leaflet default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -513,11 +513,39 @@ const GlobalMapView = () => {
                 onClick={() => {
                   localStorage.setItem('ais-api-key', aisApiKey);
                   toast.success('API Key saved! Reconnecting...');
-                  // Would need to update service here
+                  aisService.disconnect();
+                  setTimeout(() => aisService.connect(), 500);
                 }}
               >
                 Save & Reconnect
               </Button>
+              
+              {/* Clear Cache & Reconnect */}
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    aisService.clearCache();
+                    toast.info('Ship cache cleared');
+                  }}
+                >
+                  Clear Cache
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    aisService.disconnect();
+                    setTimeout(() => aisService.connect(), 500);
+                    toast.success('Reconnecting to AIS...');
+                  }}
+                >
+                  Reconnect
+                </Button>
+              </div>
               
               {/* Ship Stats */}
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1e3a5f]">
@@ -644,6 +672,7 @@ const GlobalMapView = () => {
             selectedShipMMSI={selectedShip?.mmsi}
             onShipSelect={setSelectedShip}
             onShipCountChange={setShipCount}
+            onConnectionChange={setAisConnected}
           />
 
           {/* Flights Layer */}
