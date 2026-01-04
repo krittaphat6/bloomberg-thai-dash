@@ -1,4 +1,4 @@
-import { Check, Square } from 'lucide-react';
+import { Check, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface LayerConfig {
@@ -8,14 +8,16 @@ export interface LayerConfig {
   enabled: boolean;
   color: string;
   description: string;
+  hasSettings?: boolean;
 }
 
 interface MapLayersProps {
   layers: LayerConfig[];
   onToggleLayer: (layerId: string) => void;
+  onOpenSettings?: (layerId: string) => void;
 }
 
-export const MapLayers = ({ layers, onToggleLayer }: MapLayersProps) => {
+export const MapLayers = ({ layers, onToggleLayer, onOpenSettings }: MapLayersProps) => {
   return (
     <div className="h-full flex flex-col">
       <div className="p-3 border-b border-[#2d4a6f]">
@@ -57,10 +59,24 @@ export const MapLayers = ({ layers, onToggleLayer }: MapLayersProps) => {
               </div>
             </div>
             
-            <div 
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: layer.color }}
-            />
+            <div className="flex items-center gap-1">
+              {layer.hasSettings && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenSettings?.(layer.id);
+                  }}
+                  className="p-1 rounded hover:bg-white/20 transition-colors"
+                  title="Settings"
+                >
+                  <Settings className="w-3 h-3 text-white/60 hover:text-white" />
+                </button>
+              )}
+              <div 
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: layer.color }}
+              />
+            </div>
           </button>
         ))}
       </div>
@@ -84,7 +100,7 @@ export const MapLayers = ({ layers, onToggleLayer }: MapLayersProps) => {
 export const DEFAULT_LAYERS: LayerConfig[] = [
   { id: 'markets', name: 'World Equity Markets', icon: '📈', enabled: true, color: '#00ff00', description: 'Stock exchanges worldwide' },
   { id: 'earthquakes', name: 'Earthquakes', icon: '🌋', enabled: false, color: '#ff4444', description: 'USGS real-time data' },
-  { id: 'ais_ships', name: 'Live AIS Ships', icon: '🚢', enabled: true, color: '#00a0ff', description: 'Real-time vessel tracking' },
+  { id: 'ais_ships', name: 'Live AIS Ships', icon: '🚢', enabled: true, color: '#00a0ff', description: 'Real-time vessel tracking', hasSettings: true },
   { id: 'wildfires', name: 'Wildfires', icon: '🔥', enabled: false, color: '#ff6600', description: 'NASA FIRMS data' },
   { id: 'banking', name: 'Central Banks', icon: '🏦', enabled: false, color: '#00a0ff', description: 'Interest rates & meetings' },
   { id: 'oil_gas', name: 'Oil & Gas', icon: '🛢️', enabled: false, color: '#8b4513', description: 'Fields, refineries, LNG' },
