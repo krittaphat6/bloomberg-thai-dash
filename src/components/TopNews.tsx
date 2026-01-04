@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,127 +7,59 @@ import { Progress } from '@/components/ui/progress';
 import { 
   RefreshCw, Sparkles, ExternalLink, 
   Brain, TrendingUp, ChevronRight, Clock, BarChart3,
-  Settings, Eye, FileText, Users, Zap
+  Settings, Eye, FileText, Users, Zap, Loader2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
-// ============ MOCK DATA ============
-const macroData = [
-  {
-    id: '1',
-    symbol: 'EURUSD',
-    sentiment: 'bullish' as const,
-    confidence: 85,
-    analysis: 'EUR/USD firm at 1.1765; capitalizing on broad dollar softness as traders eye thin holiday liquidity and the ECB\'s relative stability.',
-    change: '+0.56%',
-    changeValue: 0.56
-  },
-  {
-    id: '2',
-    symbol: 'USDJPY',
-    sentiment: 'bullish' as const,
-    confidence: 89.5,
-    analysis: 'USD/JPY holding 156.20 breakout; "Sell the Fact" trade on BoJ hike dominates, with no intervention warnings yet from Tokyo.',
-    change: '-0.36%',
-    changeValue: -0.36
-  },
-  {
-    id: '3',
-    symbol: 'XAUUSD',
-    sentiment: 'bullish' as const,
-    confidence: 94.2,
-    analysis: 'Gold hits fresh record ($4,388); "Fear Trade" accelerates on news of Venezuela-Russia naval drills, defying overbought technicals.',
-    change: '+1.58%',
-    changeValue: 1.58
-  },
-  {
-    id: '4',
-    symbol: 'GBPUSD',
-    sentiment: 'neutral' as const,
-    confidence: 74.22,
-    analysis: 'GBP/USD capped at 1.3410; Q3 GDP confirmed at 0.1% (Stagnant), tempering the "Hawkish Cut" optimism from last week.',
-    change: '+0.48%',
-    changeValue: 0.48
-  }
-];
+// ============ TYPES ============
+interface MacroAnalysis {
+  symbol: string;
+  sentiment: 'bullish' | 'bearish' | 'neutral';
+  confidence: number;
+  analysis: string;
+  change: string;
+  changeValue: number;
+}
 
-const dailyReports = [
-  {
-    id: '1',
-    date: 'Sun 21 Dec',
-    title: 'Christmas Week Outlook: Thin Ice, Thick Spreads, and the Ghost of Quadruple Witching',
-    description: 'Dovy (Asia/Dubai) – Gather \'round, traders! Last week\'s "week of reckoning" delivered in spectacular fashion. The BoJ hiked rates and the Yen FELL (carry trade immortal!...',
-    time: '01:13 PM',
-    assetsAnalyzed: 6,
-    isHighlighted: true
-  },
-  {
-    id: '2',
-    date: 'Fri 19 Dec',
-    title: 'The BoJ\'s \'Dovish Hike\' Paradox: Yen Crashes on a Rate INCREASE, Nasdaq Soars, Carry Trade Immortal!',
-    description: 'Dovy (Asia/Dubai) — BoJ hiked to 0.75% but Yen CRASHED past 156.00! Markets called the bluff - real rates still -2.25%. Nasdaq +1.31% on Micron/Oracle...',
-    time: '03:59 PM',
-    assetsAnalyzed: 6,
-    isHighlighted: false
-  },
-  {
-    id: '3',
-    date: 'Thu 18 Dec',
-    title: 'Super Thursday: US Inflation hits a \'2-handle\', BoE\'s Razor-Thin Cut, and the AI Renaissance!',
-    description: 'Dovy (Asia/Dubai) – What a difference 24 hours makes! We called today the \'most dangerous event\' of the week, US CPI came in at a...',
-    time: '02:05 PM',
-    assetsAnalyzed: 6,
-    isHighlighted: false
-  }
-];
+interface ForYouItem {
+  id: string;
+  symbol: string;
+  type: string;
+  title: string;
+  source: string;
+  timestamp: number;
+  url: string;
+  isNew: boolean;
+}
 
-const forYouItems = [
-  {
-    id: '1',
-    symbol: 'EURUSD',
-    type: 'BULLISH (MEDIUM)',
-    title: 'EUR/USD firm at 1.1765; capitalizing on broad dollar softness as traders eye thin holiday liquidity and the ECB\'s relative stability.',
-    isNew: true
-  },
-  {
-    id: '2',
-    symbol: 'USDJPY',
-    type: 'BULLISH (HIGH)',
-    title: 'USD/JPY holding 156.20 breakout; "Sell the Fact" trade on BoJ hike dominates, with no intervention warnings yet from Tokyo.',
-    isNew: true
-  },
-  {
-    id: '3',
-    symbol: 'XAUUSD',
-    type: 'BULLISH (HIGH)',
-    title: 'Gold hits fresh record ($4,388); "Fear Trade" accelerates on news of Venezuela-Russia naval drills, defying overbought technicals.',
-    isNew: true
-  }
-];
+interface DailyReport {
+  id: string;
+  date: string;
+  title: string;
+  description: string;
+  time: string;
+  assetsAnalyzed: number;
+  isHighlighted: boolean;
+  url: string;
+  source: string;
+}
 
-const xNotifications = [
-  {
-    id: '1',
-    source: 'thehill',
-    avatarColor: 'bg-blue-500',
-    time: '36m ago',
-    content: 'Bill Clinton spokesman says they don\'t need \'protection,\' asks for release of all Epstei...'
-  },
-  {
-    id: '2',
-    source: 'NBCNews',
-    avatarColor: 'bg-gradient-to-r from-red-500 via-yellow-500 to-green-500',
-    time: '42m ago',
-    content: 'The father and son accused of killing 15 people at a Hanukkah celebration threw...'
-  },
-  {
-    id: '3',
-    source: 'wsj',
-    avatarColor: 'bg-black',
-    time: '48m ago',
-    content: 'Fed officials signal slower pace of rate cuts ahead as inflation remains sticky...'
-  }
-];
+interface XNotification {
+  id: string;
+  source: string;
+  time: string;
+  content: string;
+  url: string;
+}
+
+interface NewsData {
+  macro: MacroAnalysis[];
+  forYou: ForYouItem[];
+  dailyReports: DailyReport[];
+  xNotifications: XNotification[];
+  timestamp: number;
+}
 
 // ============ COMPONENTS ============
 const SentimentBadge = ({ sentiment }: { sentiment: string }) => (
@@ -152,10 +84,18 @@ interface TopNewsProps {
 const TopNews: React.FC<TopNewsProps> = () => {
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [updateCount] = useState(3);
   const [activeTab, setActiveTab] = useState<'macro' | 'reports'>('macro');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  
+  // Data state
+  const [macroData, setMacroData] = useState<MacroAnalysis[]>([]);
+  const [forYouItems, setForYouItems] = useState<ForYouItem[]>([]);
+  const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
+  const [xNotifications, setXNotifications] = useState<XNotification[]>([]);
 
+  // Time updates
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -180,13 +120,91 @@ const TopNews: React.FC<TopNewsProps> = () => {
 
   const session = getMarketSession();
 
-  const refreshData = useCallback(() => {
+  // Fetch news from edge function
+  const fetchNews = useCallback(async () => {
     setLoading(true);
-    setTimeout(() => {
+    try {
+      console.log('Fetching news from edge function...');
+      
+      const { data, error } = await supabase.functions.invoke('news-aggregator', {
+        body: {}
+      });
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
+      }
+
+      if (data?.success) {
+        setMacroData(data.macro || []);
+        setForYouItems(data.forYou || []);
+        setDailyReports(data.dailyReports || []);
+        setXNotifications(data.xNotifications || []);
+        setLastUpdated(new Date());
+        
+        console.log(`Loaded ${data.macro?.length || 0} macro items, ${data.forYou?.length || 0} for you items`);
+        
+        if (!initialLoading) {
+          toast({ 
+            title: '✅ News updated', 
+            description: `AI analysis complete • ${data.processingTime}ms`
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Fetch error:', error);
+      toast({ 
+        title: 'Error fetching news', 
+        description: 'Using cached data',
+        variant: 'destructive' 
+      });
+    } finally {
       setLoading(false);
-      toast({ title: '✅ Data refreshed' });
-    }, 1000);
-  }, [toast]);
+      setInitialLoading(false);
+    }
+  }, [toast, initialLoading]);
+
+  // Initial load
+  useEffect(() => {
+    fetchNews();
+  }, []);
+
+  // Auto-refresh every 2 minutes
+  useEffect(() => {
+    const interval = setInterval(fetchNews, 120000);
+    return () => clearInterval(interval);
+  }, [fetchNews]);
+
+  // Calculate pre-market countdown
+  const getPreMarketCountdown = () => {
+    const now = new Date();
+    const utcHours = now.getUTCHours();
+    const utcMinutes = now.getUTCMinutes();
+    
+    // Pre-market starts at 9:00 UTC (4:00 AM ET)
+    let hoursUntil = 9 - utcHours;
+    let minutesUntil = 60 - utcMinutes;
+    
+    if (hoursUntil < 0) hoursUntil += 24;
+    if (minutesUntil === 60) {
+      minutesUntil = 0;
+    } else {
+      hoursUntil -= 1;
+    }
+    
+    return `${hoursUntil}h ${minutesUntil}m`;
+  };
+
+  if (initialLoading) {
+    return (
+      <div className="flex h-full bg-black text-white items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+          <p className="text-zinc-400">Loading market intelligence...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full bg-black text-white overflow-hidden">
@@ -205,10 +223,16 @@ const TopNews: React.FC<TopNewsProps> = () => {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {lastUpdated && (
+                <span className="text-xs text-zinc-500">
+                  Updated {lastUpdated.toLocaleTimeString()}
+                </span>
+              )}
               <Button 
                 variant="ghost" 
                 size="sm" 
-                onClick={refreshData}
+                onClick={fetchNews}
+                disabled={loading}
                 className="text-zinc-400 hover:text-white"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -272,7 +296,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                   <div className="grid grid-cols-2 gap-4">
                     {macroData.map((item) => (
                       <Card 
-                        key={item.id} 
+                        key={item.symbol} 
                         className="bg-zinc-900/50 border-zinc-800 p-4 hover:border-emerald-500/30 transition-colors cursor-pointer"
                       >
                         <div className="flex items-center justify-between mb-3">
@@ -326,7 +350,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                     </div>
                     <Badge variant="outline" className="border-zinc-700 text-zinc-400 bg-transparent">
                       <RefreshCw className="w-3 h-3 mr-1" />
-                      {updateCount} updates
+                      {forYouItems.filter(i => i.isNew).length} updates
                     </Badge>
                   </div>
 
@@ -334,11 +358,14 @@ const TopNews: React.FC<TopNewsProps> = () => {
                     {forYouItems.map((item) => (
                       <div 
                         key={item.id}
+                        onClick={() => window.open(item.url, '_blank')}
                         className="flex items-start gap-3 p-3 rounded-lg hover:bg-zinc-900/50 transition-colors cursor-pointer"
                       >
-                        <Badge className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 flex-shrink-0 mt-0.5">
-                          Today
-                        </Badge>
+                        {item.isNew && (
+                          <Badge className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 flex-shrink-0 mt-0.5">
+                            Today
+                          </Badge>
+                        )}
                         <div className="flex-1 text-sm">
                           <span className="text-white font-medium">{item.symbol}</span>
                           <span className="text-zinc-500 mx-2">bias updated:</span>
@@ -369,6 +396,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                   {dailyReports.map((report) => (
                     <Card 
                       key={report.id}
+                      onClick={() => window.open(report.url, '_blank')}
                       className={`p-4 border transition-all cursor-pointer ${
                         report.isHighlighted 
                           ? 'bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 border-emerald-500/30 hover:border-emerald-400/50' 
@@ -384,8 +412,9 @@ const TopNews: React.FC<TopNewsProps> = () => {
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-emerald-400 font-medium">{report.date}</span>
                               <span className="text-zinc-600">–</span>
+                              <span className="text-zinc-500 text-xs">{report.source}</span>
                             </div>
-                            <h3 className="text-white font-medium mb-2 text-lg leading-tight">{report.title}</h3>
+                            <h3 className="text-white font-medium mb-2 text-lg leading-tight line-clamp-2">{report.title}</h3>
                             <p className="text-zinc-500 text-sm line-clamp-2">{report.description}</p>
                           </div>
                         </div>
@@ -427,7 +456,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-2xl font-mono text-zinc-300">{formatTime(currentTime)}</span>
-            <span className="text-emerald-400 font-mono text-lg">11h 38m</span>
+            <span className="text-emerald-400 font-mono text-lg">{getPreMarketCountdown()}</span>
           </div>
         </div>
 
@@ -447,9 +476,13 @@ const TopNews: React.FC<TopNewsProps> = () => {
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-4">
               {xNotifications.map((notif) => (
-                <div key={notif.id} className="group cursor-pointer">
+                <div 
+                  key={notif.id} 
+                  className="group cursor-pointer"
+                  onClick={() => window.open(notif.url, '_blank')}
+                >
                   <div className="flex items-start gap-3">
-                    <div className={`w-10 h-10 rounded-full ${notif.avatarColor} flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
+                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                       {notif.source.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -464,6 +497,12 @@ const TopNews: React.FC<TopNewsProps> = () => {
                   </div>
                 </div>
               ))}
+              
+              {xNotifications.length === 0 && (
+                <div className="text-center text-zinc-500 py-8">
+                  <p className="text-sm">No notifications yet</p>
+                </div>
+              )}
             </div>
           </ScrollArea>
         </div>
