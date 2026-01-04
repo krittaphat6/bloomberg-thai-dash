@@ -2,391 +2,472 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
+import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { 
-  RefreshCw, Search, Flame, ExternalLink, 
-  MessageCircle, Globe, Zap, Brain,
-  TrendingUp, TrendingDown, Minus, Sparkles, Radio, Newspaper,
-  Settings, X, Key, AlertTriangle, Bookmark, Calendar,
-  DollarSign, BarChart3, Lock, Box, BookOpen
+  RefreshCw, Sparkles, ExternalLink, 
+  Brain, TrendingUp, ChevronRight, Clock, BarChart3,
+  Settings, Eye, FileText, Users, Zap
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { EnhancedNewsItem, SentimentStats, TradingSignal } from '@/types/news';
-import { 
-  aggregateAllNews, 
-  analyzeNewsWithAI, 
-  applyAIAnalysis,
-  analyzeSentiment,
-  extractTickers,
-  calculateImpactScore,
-  getImpactCategory
-} from '@/services/newsAggregatorService';
-import { AI_MODELS, SOURCE_CREDIBILITY } from '@/config/newsSources';
-import { 
-  setGroqApiKey, 
-  hasGroqApiKey, 
-  clearGroqApiKey 
-} from '@/services/llmAnalysisService';
+
+// ============ MOCK DATA ============
+const macroData = [
+  {
+    id: '1',
+    symbol: 'EURUSD',
+    sentiment: 'bullish' as const,
+    confidence: 85,
+    analysis: 'EUR/USD firm at 1.1765; capitalizing on broad dollar softness as traders eye thin holiday liquidity and the ECB\'s relative stability.',
+    change: '+0.56%',
+    changeValue: 0.56
+  },
+  {
+    id: '2',
+    symbol: 'USDJPY',
+    sentiment: 'bullish' as const,
+    confidence: 89.5,
+    analysis: 'USD/JPY holding 156.20 breakout; "Sell the Fact" trade on BoJ hike dominates, with no intervention warnings yet from Tokyo.',
+    change: '-0.36%',
+    changeValue: -0.36
+  },
+  {
+    id: '3',
+    symbol: 'XAUUSD',
+    sentiment: 'bullish' as const,
+    confidence: 94.2,
+    analysis: 'Gold hits fresh record ($4,388); "Fear Trade" accelerates on news of Venezuela-Russia naval drills, defying overbought technicals.',
+    change: '+1.58%',
+    changeValue: 1.58
+  },
+  {
+    id: '4',
+    symbol: 'GBPUSD',
+    sentiment: 'neutral' as const,
+    confidence: 74.22,
+    analysis: 'GBP/USD capped at 1.3410; Q3 GDP confirmed at 0.1% (Stagnant), tempering the "Hawkish Cut" optimism from last week.',
+    change: '+0.48%',
+    changeValue: 0.48
+  }
+];
+
+const dailyReports = [
+  {
+    id: '1',
+    date: 'Sun 21 Dec',
+    title: 'Christmas Week Outlook: Thin Ice, Thick Spreads, and the Ghost of Quadruple Witching',
+    description: 'Dovy (Asia/Dubai) – Gather \'round, traders! Last week\'s "week of reckoning" delivered in spectacular fashion. The BoJ hiked rates and the Yen FELL (carry trade immortal!...',
+    time: '01:13 PM',
+    assetsAnalyzed: 6,
+    isHighlighted: true
+  },
+  {
+    id: '2',
+    date: 'Fri 19 Dec',
+    title: 'The BoJ\'s \'Dovish Hike\' Paradox: Yen Crashes on a Rate INCREASE, Nasdaq Soars, Carry Trade Immortal!',
+    description: 'Dovy (Asia/Dubai) — BoJ hiked to 0.75% but Yen CRASHED past 156.00! Markets called the bluff - real rates still -2.25%. Nasdaq +1.31% on Micron/Oracle...',
+    time: '03:59 PM',
+    assetsAnalyzed: 6,
+    isHighlighted: false
+  },
+  {
+    id: '3',
+    date: 'Thu 18 Dec',
+    title: 'Super Thursday: US Inflation hits a \'2-handle\', BoE\'s Razor-Thin Cut, and the AI Renaissance!',
+    description: 'Dovy (Asia/Dubai) – What a difference 24 hours makes! We called today the \'most dangerous event\' of the week, US CPI came in at a...',
+    time: '02:05 PM',
+    assetsAnalyzed: 6,
+    isHighlighted: false
+  }
+];
+
+const forYouItems = [
+  {
+    id: '1',
+    symbol: 'EURUSD',
+    type: 'BULLISH (MEDIUM)',
+    title: 'EUR/USD firm at 1.1765; capitalizing on broad dollar softness as traders eye thin holiday liquidity and the ECB\'s relative stability.',
+    isNew: true
+  },
+  {
+    id: '2',
+    symbol: 'USDJPY',
+    type: 'BULLISH (HIGH)',
+    title: 'USD/JPY holding 156.20 breakout; "Sell the Fact" trade on BoJ hike dominates, with no intervention warnings yet from Tokyo.',
+    isNew: true
+  },
+  {
+    id: '3',
+    symbol: 'XAUUSD',
+    type: 'BULLISH (HIGH)',
+    title: 'Gold hits fresh record ($4,388); "Fear Trade" accelerates on news of Venezuela-Russia naval drills, defying overbought technicals.',
+    isNew: true
+  }
+];
+
+const xNotifications = [
+  {
+    id: '1',
+    source: 'thehill',
+    avatarColor: 'bg-blue-500',
+    time: '36m ago',
+    content: 'Bill Clinton spokesman says they don\'t need \'protection,\' asks for release of all Epstei...'
+  },
+  {
+    id: '2',
+    source: 'NBCNews',
+    avatarColor: 'bg-gradient-to-r from-red-500 via-yellow-500 to-green-500',
+    time: '42m ago',
+    content: 'The father and son accused of killing 15 people at a Hanukkah celebration threw...'
+  },
+  {
+    id: '3',
+    source: 'wsj',
+    avatarColor: 'bg-black',
+    time: '48m ago',
+    content: 'Fed officials signal slower pace of rate cuts ahead as inflation remains sticky...'
+  }
+];
 
 // ============ COMPONENTS ============
-const SentimentBadge = ({ sentiment, confidence }: { sentiment: string; confidence?: number }) => {
-  const config = {
-    bullish: { bg: 'bg-primary/20', text: 'text-primary', border: 'border-primary/50' },
-    bearish: { bg: 'bg-destructive/20', text: 'text-destructive', border: 'border-destructive/50' },
-    neutral: { bg: 'bg-muted', text: 'text-muted-foreground', border: 'border-border' }
-  };
-  const style = config[sentiment as keyof typeof config] || config.neutral;
-  
-  return (
-    <span className={`${style.bg} ${style.text} ${style.border} border text-[10px] px-2 py-0.5 rounded font-mono`}>
-      {sentiment.toUpperCase()}
-      {confidence !== undefined && <span className="ml-1 opacity-70">({Math.round(confidence * 100)}%)</span>}
-    </span>
-  );
-};
+const SentimentBadge = ({ sentiment }: { sentiment: string }) => (
+  <Badge 
+    className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+      sentiment === 'bullish' 
+        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+        : sentiment === 'bearish'
+        ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+        : 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
+    }`}
+  >
+    • {sentiment.charAt(0).toUpperCase() + sentiment.slice(1)}
+  </Badge>
+);
 
-const SourceIcon = ({ sourceId }: { sourceId: string }) => {
-  const icons: Record<string, any> = {
-    'reddit': MessageCircle,
-    'hackernews': Zap,
-    'cryptocompare': Globe,
-    'coindesk': DollarSign,
-    'theblock': Box,
-    'decrypt': Lock,
-    'forexfactory': Calendar,
-    'kitco': Sparkles,
-    'fxstreet': DollarSign,
-    'dailyfx': BarChart3,
-    'seekingalpha': BookOpen,
-    'finnhub': BarChart3,
-  };
-  const Icon = Object.entries(icons).find(([key]) => sourceId.includes(key))?.[1] || Globe;
-  return <Icon className="w-3 h-3 text-muted-foreground" />;
-};
+interface TopNewsProps {
+  onMaximize?: () => void;
+  onClose?: () => void;
+}
 
-const formatTimeAgo = (ts: number) => {
-  const diff = Date.now() - ts;
-  if (diff < 60000) return 'now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-  return `${Math.floor(diff / 86400000)}d`;
-};
-
-const ImpactBadge = ({ category }: { category: string }) => {
-  const colors = {
-    critical: 'bg-destructive text-destructive-foreground',
-    high: 'bg-terminal-amber text-black',
-    medium: 'bg-yellow-500/20 text-yellow-500',
-    low: 'bg-muted text-muted-foreground'
-  };
-  return (
-    <Badge className={`text-[9px] px-1 ${colors[category as keyof typeof colors] || colors.low}`}>
-      {category.toUpperCase()}
-    </Badge>
-  );
-};
-
-// ============ MAIN COMPONENT ============
-const TopNews = () => {
+const TopNews: React.FC<TopNewsProps> = () => {
   const { toast } = useToast();
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [updateCount] = useState(3);
+  const [activeTab, setActiveTab] = useState<'macro' | 'reports'>('macro');
   const [loading, setLoading] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [news, setNews] = useState<EnhancedNewsItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState('bitcoin crypto gold');
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'gold' | 'crypto' | 'forex' | 'stocks'>('all');
-  const [sortBy, setSortBy] = useState<'time' | 'impact' | 'sentiment'>('impact');
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [hasLLM, setHasLLM] = useState(hasGroqApiKey());
-  const [selectedModel, setSelectedModel] = useState('groq-llama');
-  const [aiEnabled, setAiEnabled] = useState(true);
-
-  // Stats
-  const stats: SentimentStats = useMemo(() => {
-    const bullish = news.filter(n => (n.aiSentiment || n.algoSentiment) === 'bullish').length;
-    const bearish = news.filter(n => (n.aiSentiment || n.algoSentiment) === 'bearish').length;
-    const neutral = news.length - bullish - bearish;
-    const aiAnalyzed = news.filter(n => n.isAIAnalyzed).length;
-    const avgImpact = news.length > 0 ? news.reduce((sum, n) => sum + n.impactScore, 0) / news.length : 0;
-    const critical = news.filter(n => n.impactCategory === 'critical').length;
-    const high = news.filter(n => n.impactCategory === 'high').length;
-    
-    return {
-      bullish, bearish, neutral,
-      total: news.length,
-      bullishPercent: news.length > 0 ? (bullish / news.length) * 100 : 0,
-      bearishPercent: news.length > 0 ? (bearish / news.length) * 100 : 0,
-      aiAnalyzedCount: aiAnalyzed,
-      avgImpactScore: avgImpact,
-      criticalCount: critical,
-      highCount: high
-    };
-  }, [news]);
-
-  const fetchNews = useCallback(async () => {
-    setLoading(true);
-    try {
-      const aggregated = await aggregateAllNews(searchQuery, selectedCategory);
-      setNews(aggregated);
-      toast({ title: '✅ News updated', description: `Found ${aggregated.length} items` });
-
-      // AI Analysis if enabled
-      if (hasLLM && aiEnabled && aggregated.length > 0) {
-        setAiLoading(true);
-        try {
-          const apiKey = localStorage.getItem('groq_api_key') || '';
-          const analyses = await analyzeNewsWithAI(aggregated, apiKey, selectedModel);
-          if (analyses.length > 0) {
-            const enhanced = applyAIAnalysis(aggregated, analyses);
-            setNews(enhanced);
-          }
-        } catch (e) {
-          console.error('AI analysis error:', e);
-        } finally {
-          setAiLoading(false);
-        }
-      }
-    } catch (e) {
-      console.error('Fetch error:', e);
-      toast({ title: 'Error', description: 'Failed to fetch news', variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  }, [searchQuery, selectedCategory, hasLLM, aiEnabled, selectedModel, toast]);
-
-  useEffect(() => { fetchNews(); }, [selectedCategory]);
 
   useEffect(() => {
-    if (!autoRefresh) return;
-    const interval = setInterval(fetchNews, 120000);
-    return () => clearInterval(interval);
-  }, [autoRefresh, fetchNews]);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  // Group by impact
-  const groupedNews = useMemo(() => {
-    const sorted = [...news].sort((a, b) => {
-      if (sortBy === 'time') return b.timestamp - a.timestamp;
-      if (sortBy === 'sentiment') return (b.algoScore || 0) - (a.algoScore || 0);
-      return b.impactScore - a.impactScore;
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit',
+      hour12: true 
     });
-
-    return {
-      critical: sorted.filter(n => n.impactCategory === 'critical'),
-      high: sorted.filter(n => n.impactCategory === 'high'),
-      medium: sorted.filter(n => n.impactCategory === 'medium'),
-      low: sorted.filter(n => n.impactCategory === 'low')
-    };
-  }, [news, sortBy]);
-
-  const handleSaveApiKey = () => {
-    if (apiKeyInput.trim()) {
-      setGroqApiKey(apiKeyInput.trim());
-      setHasLLM(true);
-      setApiKeyInput('');
-      setShowSettings(false);
-      toast({ title: '✅ API Key saved', description: 'AI Analysis ready' });
-    }
   };
 
-  const NewsCard = ({ item }: { item: EnhancedNewsItem }) => (
-    <div 
-      className={`p-3 border-l-2 hover:bg-muted/30 cursor-pointer transition-colors ${
-        item.impactCategory === 'critical' ? 'border-l-destructive bg-destructive/5' :
-        item.impactCategory === 'high' ? 'border-l-terminal-amber bg-terminal-amber/5' :
-        item.impactCategory === 'medium' ? 'border-l-yellow-500 bg-yellow-500/5' :
-        'border-l-muted'
-      }`}
-      onClick={() => window.open(item.url, '_blank')}
-    >
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <SourceIcon sourceId={item.sourceId} />
-          <span className="text-xs text-muted-foreground">{item.source}</span>
-          <span className="text-xs text-muted-foreground">•</span>
-          <span className="text-xs text-muted-foreground">{formatTimeAgo(item.timestamp)}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {item.isBreaking && <Badge variant="destructive" className="text-[9px]">BREAKING</Badge>}
-          <Badge variant="outline" className="text-[9px]">Impact: {item.impactScore}</Badge>
-        </div>
-      </div>
+  const getMarketSession = () => {
+    const hour = currentTime.getUTCHours();
+    if (hour >= 13 && hour < 21) return { name: 'US Session', status: 'live' };
+    if (hour >= 0 && hour < 9) return { name: 'Asian Session', status: 'live' };
+    if (hour >= 7 && hour < 16) return { name: 'London Session', status: 'live' };
+    return { name: 'After Hours', status: 'closed' };
+  };
 
-      <h3 className="text-sm font-medium text-foreground mb-1 line-clamp-2">{item.title}</h3>
+  const session = getMarketSession();
 
-      {item.isAIAnalyzed && (
-        <div className="mt-2 p-2 bg-card rounded border border-primary/20">
-          <div className="flex items-center gap-2 mb-1">
-            <Brain className="w-3 h-3 text-primary" />
-            <span className="text-[10px] text-primary font-medium">AI ANALYSIS</span>
-            <span className="text-[10px] text-muted-foreground">{Math.round((item.aiConfidence || 0) * 100)}%</span>
-          </div>
-          <div className="flex items-center gap-2 mb-1">
-            <SentimentBadge sentiment={item.aiSentiment!} confidence={item.aiConfidence} />
-            {item.aiTradingSignal && (
-              <Badge variant={item.aiTradingSignal.action.includes('buy') ? 'default' : 'destructive'} className="text-[10px]">
-                {item.aiTradingSignal.action.toUpperCase()} ({item.aiTradingSignal.strength}%)
-              </Badge>
-            )}
-          </div>
-          {item.aiSummary && <p className="text-xs text-muted-foreground">💡 {item.aiSummary}</p>}
-        </div>
-      )}
-
-      {item.relatedTickers.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {item.relatedTickers.slice(0, 4).map(ticker => (
-            <Badge key={ticker} variant="outline" className="text-[10px]">{ticker}</Badge>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const refreshData = useCallback(() => {
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      toast({ title: '✅ Data refreshed' });
+    }, 1000);
+  }, [toast]);
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Flame className="w-5 h-5 text-terminal-amber" />
-          <span className="text-primary font-bold">TOP NEWS</span>
-          <Badge variant="outline" className="text-xs">{news.length}</Badge>
-        </div>
-        <div className="flex items-center gap-2">
-          {hasLLM && (
-            <Select value={selectedModel} onValueChange={setSelectedModel}>
-              <SelectTrigger className="w-[130px] h-8 text-xs">
-                <Brain className="w-3 h-3 mr-1" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AI_MODELS.slice(0, 4).map(model => (
-                  <SelectItem key={model.id} value={model.id} className="text-xs">{model.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <Button variant="ghost" size="sm" onClick={() => setShowSettings(!showSettings)}>
-            <Settings className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={fetchNews} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-      </div>
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="p-3 border-b border-primary/30 bg-card">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold flex items-center gap-2"><Key className="w-3 h-3" /> Groq API Key</span>
-            <Button variant="ghost" size="sm" onClick={() => setShowSettings(false)}><X className="w-3 h-3" /></Button>
-          </div>
-          {hasLLM ? (
+    <div className="flex h-full bg-black text-white overflow-hidden">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="p-6 border-b border-zinc-800">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-light text-emerald-400">
+                Good afternoon, Trader.
+              </h1>
+              <p className="text-zinc-500 flex items-center gap-2 mt-1">
+                <Sparkles className="w-4 h-4 text-emerald-500" />
+                Your personal financial newspaper
+              </p>
+            </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-primary">✓ Configured</span>
-              <Button variant="destructive" size="sm" className="h-6 text-xs" onClick={() => { clearGroqApiKey(); setHasLLM(false); }}>Remove</Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={refreshData}
+                className="text-zinc-400 hover:text-white"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+              <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 bg-transparent">
+                <Settings className="w-4 h-4 mr-2" />
+                Personalize
+              </Button>
             </div>
-          ) : (
-            <div className="flex gap-2">
-              <input type="password" value={apiKeyInput} onChange={e => setApiKeyInput(e.target.value)} placeholder="gsk_xxx..." className="flex-1 bg-background border rounded px-2 py-1 text-xs" />
-              <Button size="sm" className="h-7" onClick={handleSaveApiKey}>Save</Button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="flex items-center gap-2 p-2 border-b border-border">
-        {['all', 'gold', 'crypto', 'forex', 'stocks'].map(cat => (
-          <Button key={cat} variant={selectedCategory === cat ? 'default' : 'ghost'} size="sm" className="h-7 text-xs" onClick={() => setSelectedCategory(cat as any)}>
-            {cat === 'all' ? 'All' : cat === 'gold' ? '🥇 Gold' : cat === 'crypto' ? '₿ Crypto' : cat === 'forex' ? '💱 Forex' : '📈 Stocks'}
-          </Button>
-        ))}
-        <div className="flex-1" />
-        <Select value={sortBy} onValueChange={v => setSortBy(v as any)}>
-          <SelectTrigger className="w-[100px] h-7 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="impact">💥 Impact</SelectItem>
-            <SelectItem value="time">⏰ Time</SelectItem>
-            <SelectItem value="sentiment">📊 Sentiment</SelectItem>
-          </SelectContent>
-        </Select>
-        {hasLLM && <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />}
-      </div>
-
-      {/* Sentiment Bar */}
-      <div className="p-2 border-b border-border bg-muted/30">
-        <div className="flex items-center justify-between mb-1 text-xs">
-          <span className="text-muted-foreground">MARKET SENTIMENT</span>
-          <div className="flex gap-3">
-            <span className="text-primary">🟢 {stats.bullish}</span>
-            <span className="text-destructive">🔴 {stats.bearish}</span>
-            <span className="text-muted-foreground">⚪ {stats.neutral}</span>
-            {hasLLM && <span className="text-primary">🤖 {stats.aiAnalyzedCount}</span>}
           </div>
         </div>
-        <div className="h-2 bg-muted rounded overflow-hidden flex">
-          <div className="bg-primary h-full" style={{ width: `${stats.bullishPercent}%` }} />
-          <div className="bg-destructive h-full" style={{ width: `${stats.bearishPercent}%` }} />
-        </div>
-      </div>
 
-      {/* News List */}
-      <ScrollArea className="flex-1">
-        {loading && news.length === 0 ? (
-          <div className="flex items-center justify-center h-32">
-            <RefreshCw className="w-6 h-6 animate-spin text-primary" />
-          </div>
-        ) : (
-          <>
-            {groupedNews.critical.length > 0 && (
-              <div className="border-b border-destructive/30">
-                <div className="px-3 py-1 bg-destructive/10 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-destructive" />
-                  <span className="text-xs font-bold text-destructive">CRITICAL ({groupedNews.critical.length})</span>
+        <ScrollArea className="flex-1">
+          <div className="p-6 space-y-8">
+            {/* Tab Selector */}
+            <div className="flex gap-6 border-b border-zinc-800">
+              <button
+                onClick={() => setActiveTab('macro')}
+                className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
+                  activeTab === 'macro' 
+                    ? 'text-emerald-400 border-b-2 border-emerald-400' 
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                <Zap className="w-4 h-4" />
+                AI Macro Desk
+              </button>
+              <button
+                onClick={() => setActiveTab('reports')}
+                className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
+                  activeTab === 'reports' 
+                    ? 'text-emerald-400 border-b-2 border-emerald-400' 
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                Daily Reports
+              </button>
+            </div>
+
+            {activeTab === 'macro' ? (
+              <>
+                {/* AI Macro Desk Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <Zap className="w-5 h-5 text-emerald-400" />
+                      <div>
+                        <h2 className="text-lg font-medium text-white flex items-center gap-2">
+                          AI Macro Desk
+                          <span className="text-zinc-600 text-sm">⚙</span>
+                        </h2>
+                        <p className="text-xs text-zinc-500">Market bias analysis</p>
+                      </div>
+                    </div>
+                    <button className="text-zinc-500 hover:text-emerald-400 text-sm flex items-center gap-1">
+                      View All <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {macroData.map((item) => (
+                      <Card 
+                        key={item.id} 
+                        className="bg-zinc-900/50 border-zinc-800 p-4 hover:border-emerald-500/30 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-lg font-semibold text-white">{item.symbol}</h3>
+                          <div className="flex items-center gap-2">
+                            <SentimentBadge sentiment={item.sentiment} />
+                            <span className="text-xs text-zinc-500">{item.confidence}%</span>
+                          </div>
+                        </div>
+
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-zinc-500">Confidence</span>
+                          </div>
+                          <Progress 
+                            value={item.confidence} 
+                            className="h-1.5 bg-zinc-800 [&>div]:bg-emerald-500"
+                          />
+                        </div>
+
+                        <div className="mb-3">
+                          <div className="flex items-center gap-1 mb-1">
+                            <Brain className="w-3 h-3 text-emerald-400" />
+                            <span className="text-xs text-emerald-400">AI Analysis</span>
+                          </div>
+                          <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">
+                            {item.analysis}
+                          </p>
+                        </div>
+
+                        <div className={`text-sm font-medium ${item.changeValue >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {item.changeValue >= 0 ? '↗' : '↘'} {item.change}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
-                {groupedNews.critical.map(item => <NewsCard key={item.id} item={item} />)}
-              </div>
-            )}
-            {groupedNews.high.length > 0 && (
-              <div className="border-b border-terminal-amber/30">
-                <div className="px-3 py-1 bg-terminal-amber/10 flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-terminal-amber" />
-                  <span className="text-xs font-bold text-terminal-amber">HIGH IMPACT ({groupedNews.high.length})</span>
+
+                {/* For You Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <Users className="w-5 h-5 text-zinc-400" />
+                      <div>
+                        <h2 className="text-lg font-medium text-white flex items-center gap-2">
+                          For You
+                          <span className="text-zinc-600 text-sm">⚙</span>
+                        </h2>
+                        <p className="text-xs text-zinc-500">Your personalized market briefing</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="border-zinc-700 text-zinc-400 bg-transparent">
+                      <RefreshCw className="w-3 h-3 mr-1" />
+                      {updateCount} updates
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-1">
+                    {forYouItems.map((item) => (
+                      <div 
+                        key={item.id}
+                        className="flex items-start gap-3 p-3 rounded-lg hover:bg-zinc-900/50 transition-colors cursor-pointer"
+                      >
+                        <Badge className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 flex-shrink-0 mt-0.5">
+                          Today
+                        </Badge>
+                        <div className="flex-1 text-sm">
+                          <span className="text-white font-medium">{item.symbol}</span>
+                          <span className="text-zinc-500 mx-2">bias updated:</span>
+                          <span className="text-emerald-400">{item.type}</span>
+                          <span className="text-zinc-500 mx-2">–</span>
+                          <span className="text-zinc-400">{item.title}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                {groupedNews.high.map(item => <NewsCard key={item.id} item={item} />)}
-              </div>
-            )}
-            {groupedNews.medium.length > 0 && (
-              <div className="border-b border-border">
-                <div className="px-3 py-1 bg-yellow-500/10 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-yellow-500" />
-                  <span className="text-xs font-bold text-yellow-500">MEDIUM ({groupedNews.medium.length})</span>
-                </div>
-                {groupedNews.medium.map(item => <NewsCard key={item.id} item={item} />)}
-              </div>
-            )}
-            {groupedNews.low.length > 0 && (
+              </>
+            ) : (
+              /* Daily Reports Section */
               <div>
-                <div className="px-3 py-1 bg-muted/50 flex items-center gap-2">
-                  <Newspaper className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs font-bold text-muted-foreground">OTHER ({groupedNews.low.length})</span>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-2xl font-light text-emerald-400">Daily Reports</h2>
+                    <p className="text-zinc-500 text-sm">This is your daily pre-market report to build your bias</p>
+                  </div>
+                  <Button variant="outline" className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 bg-transparent">
+                    <Eye className="w-4 h-4 mr-2" />
+                    Mark all as read
+                  </Button>
                 </div>
-                {groupedNews.low.map(item => <NewsCard key={item.id} item={item} />)}
+
+                <div className="space-y-4">
+                  {dailyReports.map((report) => (
+                    <Card 
+                      key={report.id}
+                      className={`p-4 border transition-all cursor-pointer ${
+                        report.isHighlighted 
+                          ? 'bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 border-emerald-500/30 hover:border-emerald-400/50' 
+                          : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-4">
+                          <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-5 h-5 text-zinc-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-emerald-400 font-medium">{report.date}</span>
+                              <span className="text-zinc-600">–</span>
+                            </div>
+                            <h3 className="text-white font-medium mb-2 text-lg leading-tight">{report.title}</h3>
+                            <p className="text-zinc-500 text-sm line-clamp-2">{report.description}</p>
+                          </div>
+                        </div>
+                        <div className="text-right text-sm space-y-1 ml-4 flex-shrink-0">
+                          <div className="flex items-center gap-2 text-zinc-500">
+                            <Clock className="w-3 h-3" />
+                            {report.time}
+                          </div>
+                          <div className="flex items-center gap-2 text-zinc-500">
+                            <BarChart3 className="w-3 h-3" />
+                            {report.assetsAnalyzed} assets analyzed
+                          </div>
+                          <div className="flex items-center gap-2 text-emerald-400">
+                            <TrendingUp className="w-3 h-3" />
+                            Pre-market analysis
+                            <ChevronRight className="w-3 h-3" />
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               </div>
             )}
-          </>
-        )}
-      </ScrollArea>
+          </div>
+        </ScrollArea>
+      </div>
 
-      {aiLoading && (
-        <div className="flex items-center justify-center gap-2 p-2 bg-primary/10 border-t border-primary/30">
-          <Brain className="w-3 h-3 text-primary animate-pulse" />
-          <span className="text-xs text-primary">Analyzing with AI...</span>
+      {/* Right Sidebar */}
+      <div className="w-80 border-l border-zinc-800 flex flex-col bg-black">
+        {/* Market Session Timer */}
+        <div className="p-4 border-b border-zinc-800">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${session.status === 'live' ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+              <span className="text-white font-medium">{session.name}</span>
+            </div>
+            <span className="text-xs text-zinc-500">Pre-Market in</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-2xl font-mono text-zinc-300">{formatTime(currentTime)}</span>
+            <span className="text-emerald-400 font-mono text-lg">11h 38m</span>
+          </div>
         </div>
-      )}
+
+        {/* X Notifications */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-white font-medium">Latest notifications from</span>
+              <span className="font-bold text-white text-lg">𝕏</span>
+            </div>
+            <Badge className="border-emerald-500/30 text-emerald-400 text-xs bg-emerald-500/10 border">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse" />
+              Live
+            </Badge>
+          </div>
+
+          <ScrollArea className="flex-1">
+            <div className="p-4 space-y-4">
+              {xNotifications.map((notif) => (
+                <div key={notif.id} className="group cursor-pointer">
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-full ${notif.avatarColor} flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
+                      {notif.source.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-white font-medium text-sm">{notif.source}</span>
+                        <span className="text-zinc-600">·</span>
+                        <span className="text-zinc-500 text-xs">{notif.time}</span>
+                        <ExternalLink className="w-3 h-3 text-zinc-600 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                      <p className="text-zinc-400 text-sm line-clamp-3">{notif.content}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      </div>
     </div>
   );
 };
