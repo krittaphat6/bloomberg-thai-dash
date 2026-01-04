@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { OllamaService, OllamaModel } from '@/services/FreeAIService';
 import { useMCP } from '@/contexts/MCPContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +16,8 @@ import {
 } from '@/components/ui/select';
 import {
   Send, Bot, User, Settings, Sparkles, Zap, Cpu, X,
-  RefreshCw, Wifi, WifiOff, Plug, Check, Loader2
+  RefreshCw, Wifi, WifiOff, Plug, Check, Loader2,
+  Newspaper, Calendar, FileText, Dice6
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -184,6 +186,102 @@ const ABLE3AI = () => {
     }
   };
 
+  // Fetch Economic Calendar
+  const fetchEconomicCalendar = async (): Promise<string> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('economic-calendar', {
+        body: { filter: 'all' }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.events && data.events.length > 0) {
+        const events = data.events.slice(0, 8);
+        const formatted = events.map((e: any) => 
+          `📅 ${e.time || 'TBD'} - ${e.event} (${e.importance || 'Medium'})`
+        ).join('\n');
+        return `**📆 Economic Calendar Today**\n\n${formatted}`;
+      }
+      return '📅 No upcoming economic events found';
+    } catch (error) {
+      console.error('Calendar fetch error:', error);
+      return '❌ Unable to fetch economic calendar';
+    }
+  };
+
+  // Fetch Notes from localStorage
+  const fetchNotes = (): string => {
+    try {
+      const savedNotes = localStorage.getItem('able-notes');
+      if (savedNotes) {
+        const notes = JSON.parse(savedNotes);
+        if (notes.length > 0) {
+          const formatted = notes.slice(0, 5).map((n: any) => 
+            `📝 **${n.title || 'Untitled'}**\n   ${(n.content || '').substring(0, 100)}...`
+          ).join('\n\n');
+          return `**📓 Your Notes**\n\n${formatted}`;
+        }
+      }
+      return '📝 No notes found. Use the Notes panel to create some!';
+    } catch (error) {
+      return '❌ Unable to load notes';
+    }
+  };
+
+  // Fetch Monte Carlo Results
+  const fetchMonteCarloResults = (): string => {
+    try {
+      const savedConfig = localStorage.getItem('mc-config');
+      if (savedConfig) {
+        const config = JSON.parse(savedConfig);
+        const winRate = config.winRate || 60;
+        const avgWin = config.avgWin || 150;
+        const avgLoss = config.avgLoss || 100;
+        const rr = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : '0';
+        const expectancy = ((winRate/100 * avgWin) - ((100-winRate)/100 * avgLoss)).toFixed(2);
+        
+        return `**🎲 Monte Carlo Configuration**\n\n` +
+          `📊 **Strategy Parameters**\n` +
+          `• Win Rate: ${winRate}%\n` +
+          `• Avg Win: $${avgWin}\n` +
+          `• Avg Loss: $${avgLoss}\n` +
+          `• Risk:Reward: 1:${rr}\n` +
+          `• Expected Value: $${expectancy}/trade\n\n` +
+          `📈 **Simulation Settings**\n` +
+          `• Starting Capital: $${config.startingCapital || 10000}\n` +
+          `• Risk per Trade: ${config.riskPerTrade || 2}%\n` +
+          `• # of Trades: ${config.numTrades || 100}\n` +
+          `• Position Sizing: ${config.positionSizing || 'fixedPercent'}\n\n` +
+          `💡 Run simulation in Monte Carlo panel for full analysis!`;
+      }
+      return '🎲 No Monte Carlo data found. Configure in Monte Carlo Simulator!';
+    } catch (error) {
+      return '❌ Unable to load Monte Carlo data';
+    }
+  };
+
+  // Detect special commands
+  const detectSpecialCommand = (message: string): { type: string } | null => {
+    const lowerMsg = message.toLowerCase();
+    
+    if (lowerMsg.includes('news') || lowerMsg.includes('ข่าว') || lowerMsg.includes('headline')) {
+      return { type: 'news' };
+    }
+    if (lowerMsg.includes('calendar') || lowerMsg.includes('ปฏิทิน') || lowerMsg.includes('event') || 
+        lowerMsg.includes('nfp') || lowerMsg.includes('fomc') || lowerMsg.includes('cpi')) {
+      return { type: 'calendar' };
+    }
+    if (lowerMsg.includes('note') || lowerMsg.includes('โน้ต') || lowerMsg.includes('บันทึก') || lowerMsg.includes('memo')) {
+      return { type: 'notes' };
+    }
+    if (lowerMsg.includes('monte carlo') || lowerMsg.includes('simulation') || lowerMsg.includes('probability') ||
+        lowerMsg.includes('risk analysis') || lowerMsg.includes('backtest')) {
+      return { type: 'montecarlo' };
+    }
+    
+    return null;
+  };
+
   const sendMessage = async () => {
     if (!inputMessage.trim()) return;
 
@@ -210,59 +308,93 @@ const ABLE3AI = () => {
       }
       // Check for MCP tool calls
       else {
-        const toolCall = OllamaService.detectToolCall(currentInput);
-
-        if (toolCall && mcpReady) {
-          try {
-            // Execute MCP tool
-            const result = await executeTool(toolCall.tool, toolCall.params);
-            const toolResult = OllamaService.formatToolResult(toolCall.tool, result);
-
-            // If Ollama is connected, ask it to analyze the data
-            if (ollamaConnected) {
-              const analysisPrompt = `User asked: "${currentInput}"\n\nHere is the data from ${toolCall.tool}:\n\n${toolResult}\n\nPlease provide a brief analysis and any insights based on this data. Respond in the same language as the user.`;
-              
-              const ollamaResponse = await OllamaService.chat(
-                analysisPrompt,
-                [],
-                selectedModel
-              );
-
-              aiResponse = `${toolResult}\n\n---\n\n**AI Analysis:**\n${ollamaResponse.text}`;
-              model = `MCP + Ollama (${selectedModel})`;
-            } else {
-              aiResponse = toolResult;
-              model = `MCP: ${toolCall.tool}`;
-            }
-          } catch (error) {
-            console.error('MCP tool error:', error);
-            aiResponse = `❌ Error executing tool: ${error instanceof Error ? error.message : 'Unknown error'}`;
-            model = 'Error';
+        // First check for special commands (news, calendar, notes, monte carlo)
+        const specialCmd = detectSpecialCommand(currentInput);
+        
+        if (specialCmd) {
+          let specialResult = '';
+          
+          switch (specialCmd.type) {
+            case 'calendar':
+              specialResult = await fetchEconomicCalendar();
+              model = 'Economic Calendar';
+              break;
+            case 'notes':
+              specialResult = fetchNotes();
+              model = 'Notes';
+              break;
+            case 'montecarlo':
+              specialResult = fetchMonteCarloResults();
+              model = 'Monte Carlo';
+              break;
+            case 'news':
+              specialResult = '📰 **Market News**\n\nUse the Top News panel for real-time news updates!\n\nTip: Check economic calendar for scheduled events.';
+              model = 'News';
+              break;
           }
-        } else if (ollamaConnected) {
-          // No tool needed, just chat with Ollama
-          const response = await OllamaService.chat(
-            currentInput,
-            messages.slice(-10).map(m => ({
-              role: m.isUser ? 'user' as const : 'assistant' as const,
-              content: m.text
-            })),
-            selectedModel
-          );
-          aiResponse = response.text;
-          model = response.model;
-        } else {
-          // Not connected via Bridge
-          aiResponse = '❌ ยังไม่ได้เชื่อมต่อ Bridge API\n\n' +
-            '**ขั้นตอนการตั้งค่า:**\n' +
-            '1. รัน API Server บน Mac\n' +
-            '2. ใช้ localhost.run เพื่อได้ URL\n' +
-            '3. กดปุ่ม ⚙️ Settings\n' +
-            '4. ใส่ Bridge URL แล้วกด Save\n' +
-            '5. กดปุ่ม Connect\n\n' +
-            '**ตัวอย่าง URL:**\n' +
-            '`https://xxxx.localhost.run`';
-          model = 'System';
+          
+          // If Ollama is connected, ask it to analyze
+          if (ollamaConnected && specialResult) {
+            const analysisPrompt = `User asked: "${currentInput}"\n\nData:\n${specialResult}\n\nProvide analysis in the same language as the user.`;
+            const ollamaResponse = await OllamaService.chat(analysisPrompt, [], selectedModel);
+            aiResponse = `${specialResult}\n\n---\n\n**🤖 AI Analysis:**\n${ollamaResponse.text}`;
+            model = `${model} + Ollama`;
+          } else {
+            aiResponse = specialResult;
+          }
+        }
+        // Then check for MCP tool calls
+        else {
+          const toolCall = OllamaService.detectToolCall(currentInput);
+
+          if (toolCall && mcpReady) {
+            try {
+              const result = await executeTool(toolCall.tool, toolCall.params);
+              const toolResult = OllamaService.formatToolResult(toolCall.tool, result);
+
+              if (ollamaConnected) {
+                const analysisPrompt = `User asked: "${currentInput}"\n\nHere is the data from ${toolCall.tool}:\n\n${toolResult}\n\nPlease provide a brief analysis and any insights based on this data. Respond in the same language as the user.`;
+                
+                const ollamaResponse = await OllamaService.chat(
+                  analysisPrompt,
+                  [],
+                  selectedModel
+                );
+
+                aiResponse = `${toolResult}\n\n---\n\n**AI Analysis:**\n${ollamaResponse.text}`;
+                model = `MCP + Ollama (${selectedModel})`;
+              } else {
+                aiResponse = toolResult;
+                model = `MCP: ${toolCall.tool}`;
+              }
+            } catch (error) {
+              console.error('MCP tool error:', error);
+              aiResponse = `❌ Error executing tool: ${error instanceof Error ? error.message : 'Unknown error'}`;
+              model = 'Error';
+            }
+          } else if (ollamaConnected) {
+            const response = await OllamaService.chat(
+              currentInput,
+              messages.slice(-10).map(m => ({
+                role: m.isUser ? 'user' as const : 'assistant' as const,
+                content: m.text
+              })),
+              selectedModel
+            );
+            aiResponse = response.text;
+            model = response.model;
+          } else {
+            aiResponse = '❌ ยังไม่ได้เชื่อมต่อ Bridge API\n\n' +
+              '**ขั้นตอนการตั้งค่า:**\n' +
+              '1. รัน API Server บน Mac\n' +
+              '2. ใช้ localhost.run เพื่อได้ URL\n' +
+              '3. กดปุ่ม ⚙️ Settings\n' +
+              '4. ใส่ Bridge URL แล้วกด Save\n' +
+              '5. กดปุ่ม Connect\n\n' +
+              '**ตัวอย่าง URL:**\n' +
+              '`https://xxxx.localhost.run`';
+            model = 'System';
+          }
         }
       }
 
@@ -292,32 +424,36 @@ const ABLE3AI = () => {
 
   const getHelpText = () => {
     return `🤖 **ABLE AI Commands**\n\n` +
+      `**📰 News & Updates:**\n` +
+      `• "show news" / "ข่าวล่าสุด" - ดูข่าวตลาด\n` +
+      `• "market update" - อัพเดทตลาด\n\n` +
+      `**📅 Economic Calendar:**\n` +
+      `• "economic calendar" / "ปฏิทินเศรษฐกิจ"\n` +
+      `• "today events" / "event วันนี้"\n` +
+      `• "when is NFP" / "FOMC เมื่อไหร่"\n\n` +
+      `**📝 Notes:**\n` +
+      `• "show notes" / "ดูโน้ต"\n` +
+      `• "my notes" / "บันทึกของฉัน"\n\n` +
+      `**🎲 Monte Carlo:**\n` +
+      `• "monte carlo" / "simulation"\n` +
+      `• "risk analysis" / "probability"\n\n` +
       `**📊 COT Analysis:**\n` +
       `• "Analyze COT gold" - วิเคราะห์ COT ทองคำ\n` +
-      `• "COT silver" - ดูข้อมูล COT เงิน\n` +
-      `• "COT bitcoin" - ดูข้อมูล COT Bitcoin\n` +
-      `• "COT assets" - ดูรายการ assets ทั้งหมด\n\n` +
+      `• "COT silver" / "COT bitcoin"\n\n` +
       `**📈 Trading:**\n` +
       `• "My trades" - ดูรายการเทรดล่าสุด\n` +
-      `• "Performance" - ดูสถิติการเทรด\n` +
-      `• "Calculate 10000 2 50 48" - คำนวณ position size\n` +
-      `  (account, risk%, entry, stop)\n\n` +
-      `**📝 Notes:**\n` +
-      `• "Search notes trading" - ค้นหาโน้ต\n` +
-      `• "Create note: [title]" - สร้างโน้ตใหม่\n\n` +
-      `**🌐 Market:**\n` +
-      `• "Market overview" - ภาพรวมตลาด\n\n` +
+      `• "Calculate 10000 2 50 48" - Position size\n\n` +
       `**💬 Chat:**\n` +
       `• พิมพ์อะไรก็ได้ถาม AI ได้เลย!\n\n` +
       `**⚙️ Settings:**\n` +
-      `• กดปุ่ม ⚙️ เพื่อเปลี่ยน model และดู tools`;
+      `• กดปุ่ม ⚙️ เพื่อตั้งค่า Bridge`;
   };
 
   const quickCommands = [
+    { label: '📅 Calendar', cmd: 'Show economic calendar today' },
+    { label: '📝 Notes', cmd: 'Show my notes' },
+    { label: '🎲 Monte Carlo', cmd: 'Show monte carlo analysis' },
     { label: '📊 COT Gold', cmd: 'Analyze COT for GOLD' },
-    { label: '📈 Performance', cmd: 'Show my trading performance' },
-    { label: '💰 Position', cmd: 'Calculate position size 10000 2 50 48' },
-    { label: '📝 Notes', cmd: 'Search notes' },
     { label: '❓ Help', cmd: 'help' }
   ];
 

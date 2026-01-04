@@ -16,6 +16,8 @@ interface WebhookPayload {
   comment?: string;
   room_id?: string;
   user_id?: string;
+  message_id?: string;
+  auto_triggered?: boolean;
 }
 
 serve(async (req) => {
@@ -33,7 +35,8 @@ serve(async (req) => {
 
     // Parse webhook payload
     const payload: WebhookPayload = await req.json();
-    console.log('📥 Received webhook:', JSON.stringify(payload));
+    const isAutoTriggered = payload.auto_triggered === true;
+    console.log(`📥 ${isAutoTriggered ? '🤖 AUTO-TRIGGERED' : 'Manual'} webhook:`, JSON.stringify(payload));
 
     // Validate required fields
     if (!payload.action || !payload.symbol) {
@@ -187,20 +190,22 @@ serve(async (req) => {
     // Also insert a message into the chat room if room_id exists
     if (settings.room_id) {
       const statusEmoji = status === 'success' ? '✅' : (status === 'error' ? '❌' : '⚠️');
-      const messageContent = `${statusEmoji} Auto-Bridge: ${actionUpper} ${payload.symbol} @ ${payload.price || 'Market'}\n` +
+      const triggerLabel = isAutoTriggered ? '🤖 Background' : '⚡ Manual';
+      const messageContent = `${statusEmoji} ${triggerLabel} Auto-Bridge: ${actionUpper} ${payload.symbol} @ ${payload.price || 'Market'}\n` +
         `Lot: ${quantity} | SL: ${payload.sl || 'None'} | TP: ${payload.tp || 'None'}\n` +
-        `Status: ${status}${errorMessage ? ` (${errorMessage})` : ''}`;
+        `Status: ${status}${errorMessage ? ` (${errorMessage})` : ''}\n` +
+        `Execution: ${executionTime}ms`;
 
       await supabase
         .from('messages')
         .insert({
           room_id: settings.room_id,
           user_id: settings.user_id,
-          username: 'Auto-Bridge',
+          username: isAutoTriggered ? 'Auto-Bridge (Background)' : 'Auto-Bridge',
           color: status === 'success' ? '#22c55e' : '#ef4444',
           content: messageContent,
           message_type: 'system',
-          webhook_data: { auto_bridge: true, original_payload: payload }
+          webhook_data: { auto_bridge: true, auto_triggered: isAutoTriggered, original_payload: payload }
         });
     }
 
