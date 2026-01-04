@@ -98,6 +98,17 @@ interface SimulationStats {
   profitFactor: number;
   avgWinRate: number;
   expectedValuePerTrade: number;
+  // Advanced metrics
+  calmarRatio: number;
+  valueAtRisk95: number;
+  valueAtRisk99: number;
+  conditionalVaR: number;
+  gainToPainRatio: number;
+  tailRatio: number;
+  recoveryFactor: number;
+  kellyCriterion: number;
+  optimalF: number;
+  payoffRatio: number;
   percentiles: {
     p5: { return: number; dd: number; capital: number };
     p25: { return: number; dd: number; capital: number };
@@ -268,6 +279,51 @@ function calculateStatistics(results: SimulationResult[], config: SimulationConf
   const downsideStd = downsideReturns.length > 0 ? stdDev(downsideReturns) : stdReturn;
   const sortinoRatio = downsideStd > 0 ? avgReturn / downsideStd : 0;
 
+  // Advanced metrics calculations
+  const var95Index = Math.floor(returns.length * 0.05);
+  const var99Index = Math.floor(returns.length * 0.01);
+  const valueAtRisk95 = returns[var95Index] || 0;
+  const valueAtRisk99 = returns[var99Index] || 0;
+  
+  // Conditional VaR (Expected Shortfall)
+  const worstReturns = returns.slice(0, var95Index);
+  const conditionalVaR = worstReturns.length > 0 
+    ? mean(worstReturns)
+    : 0;
+  
+  // Calmar Ratio
+  const maxDD = getPercentile(maxDDs, 0.5);
+  const calmarRatio = maxDD > 0 ? (avgReturn / config.startingCapital * 100) / maxDD : 0;
+  
+  // Gain to Pain Ratio
+  const gains = returns.filter(r => r > 0);
+  const losses = returns.filter(r => r < 0);
+  const totalGain = gains.reduce((a, b) => a + b, 0);
+  const totalLoss = Math.abs(losses.reduce((a, b) => a + b, 0));
+  const gainToPainRatio = totalLoss > 0 ? totalGain / totalLoss : totalGain > 0 ? 999 : 0;
+  
+  // Tail Ratio
+  const p95Gain = getPercentile(returns, 0.95);
+  const p5Loss = Math.abs(getPercentile(returns, 0.05));
+  const tailRatio = p5Loss > 0 ? p95Gain / p5Loss : p95Gain > 0 ? 999 : 0;
+  
+  // Recovery Factor
+  const worstDD = getPercentile(maxDDs, 0.95);
+  const recoveryFactor = worstDD > 0 ? (avgReturn / config.startingCapital * 100) / worstDD : 0;
+  
+  // Payoff Ratio
+  const avgWinAmount = mean(results.map(r => r.numWins > 0 ? r.totalWinAmount / r.numWins : 0));
+  const avgLossAmount = mean(results.map(r => r.numLosses > 0 ? r.totalLossAmount / r.numLosses : 0));
+  const payoffRatio = avgLossAmount > 0 ? avgWinAmount / avgLossAmount : avgWinAmount > 0 ? 999 : 0;
+  
+  // Kelly Criterion
+  const winRate = config.winRate / 100;
+  const rr = config.avgWin / config.avgLoss;
+  const kellyCriterion = winRate - ((1 - winRate) / rr);
+  
+  // Optimal F (based on Kelly but capped)
+  const optimalF = Math.max(0, Math.min(kellyCriterion, 0.25));
+
   const createHistogramData = (data: number[], bins: number) => {
     if (data.length === 0) return [];
     const min = Math.min(...data);
@@ -311,6 +367,17 @@ function calculateStatistics(results: SimulationResult[], config: SimulationConf
     profitFactor: avgPF,
     avgWinRate: (mean(avgWins) / config.numTrades) * 100,
     expectedValuePerTrade: avgReturn / config.numTrades,
+    // Advanced metrics
+    calmarRatio,
+    valueAtRisk95,
+    valueAtRisk99,
+    conditionalVaR,
+    gainToPainRatio,
+    tailRatio,
+    recoveryFactor,
+    kellyCriterion,
+    optimalF,
+    payoffRatio,
     percentiles: {
       p5: { return: getPercentile(returns, 0.05), dd: getPercentile(maxDDs, 0.05), capital: getPercentile(finalCapitals, 0.05) },
       p25: { return: getPercentile(returns, 0.25), dd: getPercentile(maxDDs, 0.25), capital: getPercentile(finalCapitals, 0.25) },
@@ -885,6 +952,9 @@ const MonteCarloSimulator: React.FC = () => {
               <TabsTrigger value="metrics" className="text-xs">
                 <Target className="w-3 h-3 mr-1" /> Risk Metrics
               </TabsTrigger>
+              <TabsTrigger value="advanced" className="text-xs">
+                <AlertTriangle className="w-3 h-3 mr-1" /> Advanced
+              </TabsTrigger>
             </TabsList>
 
             <div className="flex-1 overflow-auto p-4">
@@ -1247,6 +1317,171 @@ const MonteCarloSimulator: React.FC = () => {
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
                     Run a simulation to see risk metrics
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Advanced Analysis Tab */}
+              <TabsContent value="advanced" className="h-full mt-0">
+                {activeScenario?.stats ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-3">
+                      {/* VaR Metrics */}
+                      <Card className="border-red-500/20">
+                        <CardHeader className="py-2 px-3">
+                          <CardTitle className="text-sm text-red-400">⚠️ Value at Risk</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-3 space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">VaR (95%)</span>
+                            <span className="text-red-400">${activeScenario.stats.valueAtRisk95.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">VaR (99%)</span>
+                            <span className="text-red-500">${activeScenario.stats.valueAtRisk99.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">CVaR (ES)</span>
+                            <span className="text-red-500">${activeScenario.stats.conditionalVaR.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Performance Ratios */}
+                      <Card className="border-green-500/20">
+                        <CardHeader className="py-2 px-3">
+                          <CardTitle className="text-sm text-green-400">📊 Performance Ratios</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-3 space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Calmar Ratio</span>
+                            <span className="text-green-400">{activeScenario.stats.calmarRatio.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Gain/Pain</span>
+                            <span className="text-green-400">{activeScenario.stats.gainToPainRatio.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Tail Ratio</span>
+                            <span className="text-green-400">{activeScenario.stats.tailRatio.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Recovery Factor</span>
+                            <span className="text-green-400">{activeScenario.stats.recoveryFactor.toFixed(2)}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Position Sizing */}
+                      <Card className="border-blue-500/20">
+                        <CardHeader className="py-2 px-3">
+                          <CardTitle className="text-sm text-blue-400">💰 Position Sizing</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-3 space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Kelly Criterion</span>
+                            <span className={activeScenario.stats.kellyCriterion > 0 ? 'text-green-400' : 'text-red-400'}>
+                              {(activeScenario.stats.kellyCriterion * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Optimal F</span>
+                            <span className="text-blue-400">{(activeScenario.stats.optimalF * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Half Kelly</span>
+                            <span className="text-blue-400">{(activeScenario.stats.kellyCriterion * 50).toFixed(1)}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Payoff Ratio</span>
+                            <span className="text-blue-400">{activeScenario.stats.payoffRatio.toFixed(2)}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Kelly & Position Sizing Explanation */}
+                    <Card className="border-amber-500/20">
+                      <CardHeader className="py-2 px-3">
+                        <CardTitle className="text-sm text-amber-400">📐 Kelly Criterion Analysis</CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-3">
+                        <div className="grid grid-cols-4 gap-4 text-center">
+                          <div className="p-3 bg-muted/30 rounded-lg">
+                            <div className="text-xs text-muted-foreground mb-1">Full Kelly</div>
+                            <div className={`text-xl font-bold ${activeScenario.stats.kellyCriterion > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                              {(activeScenario.stats.kellyCriterion * 100).toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">Max Growth Rate</div>
+                          </div>
+                          <div className="p-3 bg-muted/30 rounded-lg">
+                            <div className="text-xs text-muted-foreground mb-1">Half Kelly</div>
+                            <div className="text-xl font-bold text-blue-500">
+                              {(activeScenario.stats.kellyCriterion * 50).toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">Recommended</div>
+                          </div>
+                          <div className="p-3 bg-muted/30 rounded-lg">
+                            <div className="text-xs text-muted-foreground mb-1">Quarter Kelly</div>
+                            <div className="text-xl font-bold text-purple-500">
+                              {(activeScenario.stats.kellyCriterion * 25).toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">Conservative</div>
+                          </div>
+                          <div className="p-3 bg-muted/30 rounded-lg">
+                            <div className="text-xs text-muted-foreground mb-1">Current Risk</div>
+                            <div className="text-xl font-bold text-amber-500">
+                              {config.riskPerTrade}%
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">Your Setting</div>
+                          </div>
+                        </div>
+                        {activeScenario.stats.kellyCriterion > 0 && (
+                          <p className="text-xs text-muted-foreground mt-3 text-center">
+                            💡 Tip: Your current risk ({config.riskPerTrade}%) is {config.riskPerTrade / 100 < activeScenario.stats.kellyCriterion * 0.5 ? 'below' : 'above'} Half Kelly ({(activeScenario.stats.kellyCriterion * 50).toFixed(1)}%)
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Summary Card */}
+                    <Card className="border-purple-500/20">
+                      <CardHeader className="py-2 px-3">
+                        <CardTitle className="text-sm text-purple-400">📊 Risk/Reward Summary</CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-3">
+                        <div className="grid grid-cols-6 gap-2 text-center text-xs">
+                          <div className="p-2 bg-green-500/10 rounded">
+                            <div className="text-green-400 font-bold">{activeScenario.stats.sharpeRatio.toFixed(2)}</div>
+                            <div className="text-muted-foreground">Sharpe</div>
+                          </div>
+                          <div className="p-2 bg-blue-500/10 rounded">
+                            <div className="text-blue-400 font-bold">{activeScenario.stats.sortinoRatio.toFixed(2)}</div>
+                            <div className="text-muted-foreground">Sortino</div>
+                          </div>
+                          <div className="p-2 bg-purple-500/10 rounded">
+                            <div className="text-purple-400 font-bold">{activeScenario.stats.calmarRatio.toFixed(2)}</div>
+                            <div className="text-muted-foreground">Calmar</div>
+                          </div>
+                          <div className="p-2 bg-amber-500/10 rounded">
+                            <div className="text-amber-400 font-bold">{activeScenario.stats.profitFactor.toFixed(2)}</div>
+                            <div className="text-muted-foreground">PF</div>
+                          </div>
+                          <div className="p-2 bg-red-500/10 rounded">
+                            <div className="text-red-400 font-bold">-{activeScenario.stats.worstMaxDD.toFixed(1)}%</div>
+                            <div className="text-muted-foreground">Max DD</div>
+                          </div>
+                          <div className="p-2 bg-cyan-500/10 rounded">
+                            <div className="text-cyan-400 font-bold">{activeScenario.stats.probabilityOfRuin.toFixed(1)}%</div>
+                            <div className="text-muted-foreground">P(Ruin)</div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    Run a simulation to see advanced metrics
                   </div>
                 )}
               </TabsContent>

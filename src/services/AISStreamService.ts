@@ -250,8 +250,8 @@ class AISStreamService {
   }
 }
 
-// Get API key from environment
-const AISSTREAM_API_KEY = import.meta.env.VITE_AISSTREAM_API_KEY || '';
+// API Key - hardcoded for convenience, can also use env variable
+const AISSTREAM_API_KEY = import.meta.env.VITE_AISSTREAM_API_KEY || 'api20e05d4778974e70f1d2b1843ad61312fd29cf6d';
 
 export const aisService = new AISStreamService(AISSTREAM_API_KEY);
 

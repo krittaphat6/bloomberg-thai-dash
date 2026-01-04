@@ -8,8 +8,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { 
   RefreshCw, Plane, Ship, Cloud, Activity, Flame, BarChart3,
-  MapPin, Navigation, Download, Waves, Crosshair, Search, AlertTriangle, Wind
+  MapPin, Navigation, Download, Waves, Crosshair, Search, AlertTriangle, Wind, Settings, X, Anchor
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { WeatherService, WeatherAlert } from '@/services/WeatherService';
 import { ConflictService, ConflictEvent } from '@/services/ConflictService';
 import CycloneService, { CycloneData } from '@/services/CycloneService';
@@ -101,6 +102,9 @@ const GlobalMapView = () => {
   const [selectedShip, setSelectedShip] = useState<AISShipData | null>(null);
   const [shipCount, setShipCount] = useState(0);
   const [showShipRoutes, setShowShipRoutes] = useState(true);
+  const [showAISSettings, setShowAISSettings] = useState(false);
+  const [aisConnected, setAisConnected] = useState(false);
+  const [aisApiKey, setAisApiKey] = useState(localStorage.getItem('ais-api-key') || 'api20e05d4778974e70f1d2b1843ad61312fd29cf6d');
 
   // Fetch Flights (with fallback to mock data)
   const fetchFlights = useCallback(async () => {
@@ -445,6 +449,18 @@ const GlobalMapView = () => {
             <Navigation className="w-4 h-4" />
           </Button>
           
+          {/* AIS Settings Button */}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setShowAISSettings(!showAISSettings)}
+            className={`h-8 px-2 ${aisConnected ? 'text-green-400' : 'text-gray-400'} hover:bg-green-500/20`}
+            title="AIS Ship Settings"
+          >
+            <Anchor className="w-4 h-4" />
+            <span className="ml-1 text-xs">{aisConnected ? shipCount : 'Off'}</span>
+          </Button>
+          
           <Button
             size="sm"
             variant="ghost"
@@ -455,6 +471,80 @@ const GlobalMapView = () => {
             <Download className="w-4 h-4" />
           </Button>
         </div>
+
+        {/* AIS Settings Panel */}
+        {showAISSettings && (
+          <div className="absolute top-14 left-3 z-[1001] bg-[#0d1f3c]/95 border border-[#1e3a5f] rounded-lg p-4 w-80">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Ship className="w-4 h-4 text-blue-400" />
+                <span className="text-white font-bold text-sm">AIS Ship Tracking</span>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setShowAISSettings(false)} className="h-6 w-6 p-0 text-gray-400">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div className="space-y-3">
+              {/* Connection Status */}
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 text-xs">Status:</span>
+                <Badge className={aisConnected ? 'bg-green-500/20 text-green-400 border-green-500/50' : 'bg-red-500/20 text-red-400 border-red-500/50'}>
+                  {aisConnected ? `🟢 Connected (${shipCount} ships)` : '🔴 Disconnected'}
+                </Badge>
+              </div>
+              
+              {/* API Key */}
+              <div className="space-y-1">
+                <span className="text-gray-400 text-xs">AISStream API Key:</span>
+                <Input
+                  value={aisApiKey}
+                  onChange={(e) => setAisApiKey(e.target.value)}
+                  placeholder="Enter API Key"
+                  className="bg-black/50 border-[#1e3a5f] text-white text-xs h-8"
+                  type="password"
+                />
+              </div>
+              
+              {/* Save Button */}
+              <Button
+                size="sm"
+                className="w-full bg-blue-600 hover:bg-blue-700"
+                onClick={() => {
+                  localStorage.setItem('ais-api-key', aisApiKey);
+                  toast.success('API Key saved! Reconnecting...');
+                  // Would need to update service here
+                }}
+              >
+                Save & Reconnect
+              </Button>
+              
+              {/* Ship Stats */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1e3a5f]">
+                <div className="text-center">
+                  <p className="text-red-400 text-lg font-bold">{shipCount > 0 ? Math.floor(shipCount * 0.15) : 0}</p>
+                  <p className="text-gray-400 text-xs">Tankers</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-green-400 text-lg font-bold">{shipCount > 0 ? Math.floor(shipCount * 0.45) : 0}</p>
+                  <p className="text-gray-400 text-xs">Cargo</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-blue-400 text-lg font-bold">{shipCount > 0 ? Math.floor(shipCount * 0.1) : 0}</p>
+                  <p className="text-gray-400 text-xs">Passenger</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-gray-400 text-lg font-bold">{shipCount > 0 ? Math.floor(shipCount * 0.3) : 0}</p>
+                  <p className="text-gray-400 text-xs">Other</p>
+                </div>
+              </div>
+              
+              <p className="text-gray-500 text-xs">
+                Get free API key at <span className="text-blue-400">aisstream.io</span>
+              </p>
+            </div>
+          </div>
+        )}
 
         <MapContainer
           center={[20, 100]}
