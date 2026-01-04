@@ -304,11 +304,27 @@ class AISStreamService {
     const allShips = this.getAllShips();
     this.allShipsListeners.forEach(callback => callback(allShips));
   }
+
+  setApiKey(newKey: string) {
+    this.apiKey = newKey;
+    // Save to localStorage
+    localStorage.setItem('aisstream_api_key', newKey);
+    // Reconnect with new key
+    this.disconnect();
+  }
+
+  getApiKey(): string {
+    return this.apiKey;
+  }
 }
 
-// API Key - hardcoded for convenience, can also use env variable
-const AISSTREAM_API_KEY = import.meta.env.VITE_AISSTREAM_API_KEY || 'api20e05d4778974e70f1d2b1843ad61312fd29cf6d';
+// Get API key from localStorage first, then env, then default
+const getStoredApiKey = (): string => {
+  const stored = localStorage.getItem('aisstream_api_key');
+  if (stored) return stored;
+  return import.meta.env.VITE_AISSTREAM_API_KEY || '';
+};
 
-export const aisService = new AISStreamService(AISSTREAM_API_KEY);
+export const aisService = new AISStreamService(getStoredApiKey());
 
 export default AISStreamService;

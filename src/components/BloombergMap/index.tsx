@@ -51,6 +51,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
   const [aisConnected, setAisConnected] = useState(false);
   const [aisShipCount, setAisShipCount] = useState(0);
   const [showAISSettings, setShowAISSettings] = useState(false);
+  const [aisApiKey, setAisApiKey] = useState(aisService.getApiKey());
 
   // Fetch data
   const { data: earthquakes = [], isLoading: loadingEQ, refetch: refetchEQ } = useEarthquakeData();
@@ -458,6 +459,35 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
             </div>
             
             <div className="p-4 space-y-4">
+              {/* API Key Input */}
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">API Key</label>
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    value={aisApiKey}
+                    onChange={(e) => setAisApiKey(e.target.value)}
+                    placeholder="Enter AISStream API Key..."
+                    className="flex-1 h-8 text-xs font-mono"
+                  />
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-8 text-xs"
+                    onClick={() => {
+                      aisService.setApiKey(aisApiKey);
+                      setTimeout(() => aisService.connect([[[-90, -180], [90, 180]]]), 300);
+                      toast.success('API Key saved & reconnecting...');
+                    }}
+                  >
+                    Save
+                  </Button>
+                </div>
+                <p className="text-[9px] text-muted-foreground">
+                  Get free API key at <a href="https://aisstream.io" target="_blank" rel="noopener noreferrer" className="text-[#00a0ff] hover:underline">aisstream.io</a>
+                </p>
+              </div>
+
               {/* Connection Status */}
               <div className="p-3 rounded bg-background/50">
                 <div className="flex items-center justify-between mb-2">
