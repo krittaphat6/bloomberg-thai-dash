@@ -24,7 +24,8 @@ import {
   Camera,
   Clock,
   Ship,
-  Anchor
+  X,
+  Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +50,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
   const [aisShips, setAisShips] = useState<AISShipData[]>([]);
   const [aisConnected, setAisConnected] = useState(false);
   const [aisShipCount, setAisShipCount] = useState(0);
+  const [showAISSettings, setShowAISSettings] = useState(false);
 
   // Fetch data
   const { data: earthquakes = [], isLoading: loadingEQ, refetch: refetchEQ } = useEarthquakeData();
@@ -116,6 +118,12 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
 
   const handleScreenshot = useCallback(() => {
     toast.info('Screenshot feature coming soon');
+  }, []);
+
+  const handleOpenLayerSettings = useCallback((layerId: string) => {
+    if (layerId === 'ais_ships') {
+      setShowAISSettings(true);
+    }
   }, []);
 
   const getMarketColor = (market: MarketData) => {
@@ -426,8 +434,112 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
 
         {/* Sidebar - Layer Controls */}
         <div className="w-56 bg-card border-l border-border">
-          <MapLayers layers={layers} onToggleLayer={handleToggleLayer} />
+          <MapLayers 
+            layers={layers} 
+            onToggleLayer={handleToggleLayer} 
+            onOpenSettings={handleOpenLayerSettings}
+          />
         </div>
+
+        {/* AIS Settings Panel */}
+        {showAISSettings && (
+          <div className="absolute top-12 right-60 w-72 bg-card border border-border rounded-lg shadow-xl z-50">
+            <div className="flex items-center justify-between p-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Ship className="w-4 h-4 text-[#00a0ff]" />
+                <span className="font-bold text-sm">AIS Settings</span>
+              </div>
+              <button 
+                onClick={() => setShowAISSettings(false)}
+                className="p-1 rounded hover:bg-accent"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              {/* Connection Status */}
+              <div className="p-3 rounded bg-background/50">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">Status</span>
+                  <Badge className={cn(
+                    "text-[10px]",
+                    aisConnected 
+                      ? "bg-green-500/20 text-green-400" 
+                      : "bg-red-500/20 text-red-400"
+                  )}>
+                    {aisConnected ? '🟢 Connected' : '🔴 Disconnected'}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Ships Tracked</span>
+                  <span className="text-sm font-mono text-[#00a0ff]">{aisShipCount.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Ship Type Stats */}
+              {aisConnected && aisShips.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-xs text-muted-foreground">By Type:</span>
+                  <div className="grid grid-cols-2 gap-1 text-[10px]">
+                    <div className="flex items-center justify-between p-1.5 rounded bg-red-500/10">
+                      <span>🛢️ Tanker</span>
+                      <span className="text-red-400">{aisShips.filter(s => s.shipTypeName === 'Tanker').length}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-1.5 rounded bg-green-500/10">
+                      <span>📦 Cargo</span>
+                      <span className="text-green-400">{aisShips.filter(s => s.shipTypeName === 'Cargo').length}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-1.5 rounded bg-blue-500/10">
+                      <span>🚢 Passenger</span>
+                      <span className="text-blue-400">{aisShips.filter(s => s.shipTypeName === 'Passenger').length}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-1.5 rounded bg-yellow-500/10">
+                      <span>🎣 Fishing</span>
+                      <span className="text-yellow-400">{aisShips.filter(s => s.shipTypeName === 'Fishing').length}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 text-xs"
+                  onClick={() => {
+                    aisService.clearCache();
+                    toast.info('Ship cache cleared');
+                  }}
+                >
+                  <Trash2 className="w-3 h-3 mr-1" />
+                  Clear Cache
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 text-xs"
+                  onClick={() => {
+                    aisService.disconnect();
+                    setTimeout(() => aisService.connect([[[-90, -180], [90, 180]]]), 500);
+                    toast.success('Reconnecting...');
+                  }}
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Reconnect
+                </Button>
+              </div>
+
+              {/* API Info */}
+              <div className="pt-2 border-t border-border">
+                <p className="text-[9px] text-muted-foreground text-center">
+                  Powered by AISStream.io • Real-time AIS data
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Panel */}
