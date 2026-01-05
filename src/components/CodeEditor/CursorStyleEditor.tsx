@@ -171,6 +171,7 @@ export default function CursorStyleEditor() {
   const [isRunning, setIsRunning] = useState(false);
   const [pyodideReady, setPyodideReady] = useState(false);
   const [pyodideLoading, setPyodideLoading] = useState(false);
+  const [pyodideLoadError, setPyodideLoadError] = useState<string | null>(null);
   const [showTerminal, setShowTerminal] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'files' | 'search' | 'git'>('files');
@@ -235,6 +236,16 @@ export default function CursorStyleEditor() {
     const initPyodide = async (): Promise<boolean> => {
       setPyodideLoading(true);
       setPyodideProgress(0);
+      setPyodideLoadError(null);
+      
+      // Check WebAssembly support
+      if (typeof WebAssembly !== 'object') {
+        setPyodideLoadError('WebAssembly not supported in this browser');
+        setPyodideLoading(false);
+        addTerminalOutput('error', '❌ WebAssembly not supported in this browser');
+        addTerminalOutput('info', '💡 You can still use Pine Script mode without Python');
+        return false;
+      }
       
       // CDN URLs to try in order
       const cdnUrls = [
@@ -372,7 +383,8 @@ def show_plot():
       } catch (err: any) {
         console.error('Pyodide initialization error:', err);
         if (isMounted) {
-          addTerminalOutput('error', `❌ Failed to load Python: ${err.message || err}`);
+          const errorMessage = err.message || String(err);
+          addTerminalOutput('error', `❌ Failed to load Python: ${errorMessage}`);
           
           if (retryCount < maxRetries - 1) {
             retryCount++;
@@ -382,6 +394,7 @@ def show_plot():
           } else {
             addTerminalOutput('error', '❌ All retry attempts failed.');
             addTerminalOutput('info', '💡 Tips to fix:\n  • Check your internet connection\n  • Try refreshing the page\n  • Disable ad blockers');
+            setPyodideLoadError(errorMessage);
             setPyodideLoading(false);
             toast.error('Failed to load Python runtime after 3 attempts');
           }

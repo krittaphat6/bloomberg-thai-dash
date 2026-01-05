@@ -11,9 +11,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { AssetPinPanel } from './TopNews/AssetPinPanel';
-import { AbleAnalysisPanel } from './TopNews/AbleAnalysisPanel';
-import { AbleNewsResult, AbleNewsAnalyzer, ASSET_DISPLAY_NAMES } from '@/services/ableNewsIntelligence';
+import { AbleNewsResult, AbleNewsAnalyzer, ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
 
 // ============ TYPES ============
 interface MacroAnalysis {
@@ -83,6 +81,31 @@ const SentimentBadge = ({ sentiment }: { sentiment: string }) => (
   </Badge>
 );
 
+// Trading Signal Badge
+const TradingSignalBadge = ({ signal }: { signal: string }) => {
+  const getSignalStyle = () => {
+    if (signal.includes('STRONG_BUY') || signal.includes('Ultra Strong BUY')) {
+      return 'bg-emerald-500/30 text-emerald-300 border-emerald-400/50';
+    }
+    if (signal.includes('BUY')) {
+      return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+    }
+    if (signal.includes('STRONG_SELL') || signal.includes('Ultra Strong SELL')) {
+      return 'bg-red-500/30 text-red-300 border-red-400/50';
+    }
+    if (signal.includes('SELL')) {
+      return 'bg-red-500/20 text-red-400 border-red-500/30';
+    }
+    return 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
+  };
+  
+  return (
+    <Badge className={`text-xs px-2 py-0.5 rounded-full font-medium border ${getSignalStyle()}`}>
+      {signal.replace(/[🚀💥📈📉⚡💚⚪]/g, '').trim().slice(0, 15)}
+    </Badge>
+  );
+};
+
 interface TopNewsProps {
   onMaximize?: () => void;
   onClose?: () => void;
@@ -90,10 +113,18 @@ interface TopNewsProps {
 
 const PINNED_ASSETS_STORAGE_KEY = 'able-pinned-assets';
 
+// Default pinned assets
+const DEFAULT_PINNED_ASSETS: PinnedAsset[] = [
+  { symbol: 'EURUSD', addedAt: Date.now() },
+  { symbol: 'USDJPY', addedAt: Date.now() },
+  { symbol: 'XAUUSD', addedAt: Date.now() },
+  { symbol: 'GBPUSD', addedAt: Date.now() }
+];
+
 const TopNews: React.FC<TopNewsProps> = () => {
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [activeTab, setActiveTab] = useState<'macro' | 'reports' | 'able'>('able');
+  const [activeTab, setActiveTab] = useState<'macro' | 'reports'>('macro');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -105,28 +136,23 @@ const TopNews: React.FC<TopNewsProps> = () => {
   const [xNotifications, setXNotifications] = useState<XNotification[]>([]);
   const [rawNews, setRawNews] = useState<RawNewsItem[]>([]);
 
-  // ABLE-HF 3.0 State
-  const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>([]);
-  const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
+  // ABLE-HF 3.0 State - Merged with AI Macro Desk
+  const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>(DEFAULT_PINNED_ASSETS);
   const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleNewsResult>>({});
-  const [isAnalyzing, setIsAnalyzing] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState<Record<string, boolean>>({});
 
   // Load pinned assets from localStorage
   useEffect(() => {
     const saved = localStorage.getItem(PINNED_ASSETS_STORAGE_KEY);
     if (saved) {
       try {
-        setPinnedAssets(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPinnedAssets(parsed);
+        }
       } catch (e) {
         console.error('Error loading pinned assets:', e);
       }
-    } else {
-      // Default pinned assets
-      setPinnedAssets([
-        { symbol: 'XAUUSD', addedAt: Date.now() },
-        { symbol: 'EURUSD', addedAt: Date.now() },
-        { symbol: 'BTCUSD', addedAt: Date.now() }
-      ]);
     }
   }, []);
 
@@ -162,117 +188,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
 
   const session = getMarketSession();
 
-  // Fetch news from edge function
-  const fetchNews = useCallback(async () => {
-    setLoading(true);
-    try {
-      console.log('Fetching news from edge function...');
-      
-      const { data, error } = await supabase.functions.invoke('news-aggregator', {
-        body: {}
-      });
-
-      if (error) {
-        console.error('Edge function error:', error);
-        throw error;
-      }
-
-      if (data?.success) {
-        setMacroData(data.macro || []);
-        setForYouItems(data.forYou || []);
-        setDailyReports(data.dailyReports || []);
-        setXNotifications(data.xNotifications || []);
-        setRawNews(data.rawNews || []);
-        setLastUpdated(new Date());
-        
-        console.log(`Loaded ${data.macro?.length || 0} macro items, ${data.rawNews?.length || 0} raw news`);
-        
-        // Auto-analyze selected asset if we have new news
-        if (selectedAsset && data.rawNews?.length > 0) {
-          analyzeAsset(selectedAsset, data.rawNews);
-        }
-        
-        if (!initialLoading) {
-          toast({ 
-            title: '✅ News updated', 
-            description: `AI analysis complete • ${data.processingTime}ms`
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Fetch error:', error);
-      toast({ 
-        title: 'Error fetching news', 
-        description: 'Using cached data',
-        variant: 'destructive' 
-      });
-    } finally {
-      setLoading(false);
-      setInitialLoading(false);
-    }
-  }, [toast, initialLoading, selectedAsset]);
-
-  // ABLE-HF 3.0 Analysis Function
-  const analyzeAsset = useCallback(async (symbol: string, newsItems?: RawNewsItem[]) => {
-    const newsToUse = newsItems || rawNews;
-    if (newsToUse.length === 0) {
-      toast({ 
-        title: 'No news data', 
-        description: 'Please wait for news to load',
-        variant: 'destructive' 
-      });
-      return;
-    }
-
-    setIsAnalyzing(symbol);
-
-    try {
-      // Filter relevant news for this asset
-      const symbolLower = symbol.toLowerCase();
-      const relevantKeywords = getRelevantKeywords(symbol);
-      
-      const relevantNews = newsToUse.filter(item => {
-        const titleLower = item.title.toLowerCase();
-        return relevantKeywords.some(keyword => titleLower.includes(keyword));
-      });
-
-      // Use all news if no specific relevant news found
-      const headlinesToAnalyze = relevantNews.length > 5 
-        ? relevantNews.slice(0, 30).map(n => n.title)
-        : newsToUse.slice(0, 30).map(n => n.title);
-
-      console.log(`Analyzing ${symbol} with ${headlinesToAnalyze.length} headlines`);
-
-      // Run ABLE-HF 3.0 Analysis
-      const analyzer = new AbleNewsAnalyzer({
-        symbol,
-        headlines: headlinesToAnalyze
-      });
-
-      const result = analyzer.analyze();
-      
-      setAbleAnalysis(prev => ({
-        ...prev,
-        [symbol]: result
-      }));
-
-      toast({
-        title: `🎯 ${ASSET_DISPLAY_NAMES[symbol]} Analysis Complete`,
-        description: `${result.decision} | Confidence: ${result.confidence}`
-      });
-
-    } catch (error) {
-      console.error('Analysis error:', error);
-      toast({ 
-        title: 'Analysis failed', 
-        description: 'Please try again',
-        variant: 'destructive' 
-      });
-    } finally {
-      setIsAnalyzing(null);
-    }
-  }, [rawNews, toast]);
-
   // Get relevant keywords for asset
   const getRelevantKeywords = (symbol: string): string[] => {
     const keywordMap: Record<string, string[]> = {
@@ -300,40 +215,108 @@ const TopNews: React.FC<TopNewsProps> = () => {
     return keywordMap[symbol] || [symbol.toLowerCase()];
   };
 
-  // Pin/Unpin/Select asset handlers
-  const handlePinAsset = (symbol: string) => {
-    if (pinnedAssets.length >= 10) {
+  // ABLE-HF 3.0 Analysis Function
+  const analyzeAsset = useCallback(async (symbol: string, newsItems?: RawNewsItem[]) => {
+    const newsToUse = newsItems || rawNews;
+    if (newsToUse.length === 0) {
+      return null;
+    }
+
+    setIsAnalyzing(prev => ({ ...prev, [symbol]: true }));
+
+    try {
+      // Filter relevant news for this asset
+      const relevantKeywords = getRelevantKeywords(symbol);
+      
+      const relevantNews = newsToUse.filter(item => {
+        const titleLower = item.title.toLowerCase();
+        return relevantKeywords.some(keyword => titleLower.includes(keyword));
+      });
+
+      // Use all news if no specific relevant news found
+      const headlinesToAnalyze = relevantNews.length > 5 
+        ? relevantNews.slice(0, 30).map(n => n.title)
+        : newsToUse.slice(0, 30).map(n => n.title);
+
+      // Run ABLE-HF 3.0 Analysis
+      const analyzer = new AbleNewsAnalyzer({
+        symbol,
+        headlines: headlinesToAnalyze
+      });
+
+      const result = analyzer.analyze();
+      
+      setAbleAnalysis(prev => ({
+        ...prev,
+        [symbol]: result
+      }));
+
+      return result;
+
+    } catch (error) {
+      console.error('Analysis error:', error);
+      return null;
+    } finally {
+      setIsAnalyzing(prev => ({ ...prev, [symbol]: false }));
+    }
+  }, [rawNews]);
+
+  // Analyze all pinned assets when news is loaded
+  const analyzeAllPinnedAssets = useCallback(async (newsItems: RawNewsItem[]) => {
+    for (const asset of pinnedAssets) {
+      await analyzeAsset(asset.symbol, newsItems);
+    }
+  }, [pinnedAssets, analyzeAsset]);
+
+  // Fetch news from edge function
+  const fetchNews = useCallback(async () => {
+    setLoading(true);
+    try {
+      console.log('Fetching news from edge function...');
+      
+      const { data, error } = await supabase.functions.invoke('news-aggregator', {
+        body: {}
+      });
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
+      }
+
+      if (data?.success) {
+        setMacroData(data.macro || []);
+        setForYouItems(data.forYou || []);
+        setDailyReports(data.dailyReports || []);
+        setXNotifications(data.xNotifications || []);
+        setRawNews(data.rawNews || []);
+        setLastUpdated(new Date());
+        
+        console.log(`Loaded ${data.macro?.length || 0} macro items, ${data.rawNews?.length || 0} raw news`);
+        
+        // Auto-analyze all pinned assets
+        if (data.rawNews?.length > 0) {
+          analyzeAllPinnedAssets(data.rawNews);
+        }
+        
+        if (!initialLoading) {
+          toast({ 
+            title: '✅ News updated', 
+            description: `AI analysis complete • ${data.processingTime}ms`
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Fetch error:', error);
       toast({ 
-        title: 'Max 10 assets', 
-        description: 'Please unpin an asset first',
+        title: 'Error fetching news', 
+        description: 'Using cached data',
         variant: 'destructive' 
       });
-      return;
+    } finally {
+      setLoading(false);
+      setInitialLoading(false);
     }
-    setPinnedAssets(prev => [...prev, { symbol, addedAt: Date.now() }]);
-    toast({ title: `📌 ${ASSET_DISPLAY_NAMES[symbol]} pinned` });
-  };
-
-  const handleUnpinAsset = (symbol: string) => {
-    setPinnedAssets(prev => prev.filter(p => p.symbol !== symbol));
-    if (selectedAsset === symbol) {
-      setSelectedAsset(null);
-    }
-    // Remove analysis
-    setAbleAnalysis(prev => {
-      const newAnalysis = { ...prev };
-      delete newAnalysis[symbol];
-      return newAnalysis;
-    });
-  };
-
-  const handleSelectAsset = (symbol: string) => {
-    setSelectedAsset(symbol);
-    // Auto-analyze if not already analyzed
-    if (!ableAnalysis[symbol]) {
-      analyzeAsset(symbol);
-    }
-  };
+  }, [toast, initialLoading, analyzeAllPinnedAssets]);
 
   // Initial load
   useEffect(() => {
@@ -421,18 +404,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
             {/* Tab Selector */}
             <div className="flex gap-6 border-b border-zinc-800">
               <button
-                onClick={() => setActiveTab('able')}
-                className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
-                  activeTab === 'able' 
-                    ? 'text-emerald-400 border-b-2 border-emerald-400' 
-                    : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                <Target className="w-4 h-4" />
-                ABLE-HF 3.0
-                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">NEW</Badge>
-              </button>
-              <button
                 onClick={() => setActiveTab('macro')}
                 className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
                   activeTab === 'macro' 
@@ -456,65 +427,9 @@ const TopNews: React.FC<TopNewsProps> = () => {
               </button>
             </div>
 
-            {activeTab === 'able' ? (
+            {activeTab === 'macro' ? (
               <>
-                {/* ABLE-HF 3.0 Section */}
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <Target className="w-5 h-5 text-emerald-400" />
-                      <div>
-                        <h2 className="text-lg font-medium text-white flex items-center gap-2">
-                          ABLE-HF 3.0 News Intelligence
-                        </h2>
-                        <p className="text-xs text-zinc-500">Hedge Fund Grade • 40 Module Analysis Engine</p>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="border-purple-500/30 text-purple-400 bg-purple-500/10">
-                      <Brain className="w-3 h-3 mr-1" />
-                      {rawNews.length} news analyzed
-                    </Badge>
-                  </div>
-
-                  {/* Asset Pin Panel */}
-                  <AssetPinPanel
-                    pinnedAssets={pinnedAssets}
-                    selectedAsset={selectedAsset}
-                    analysisResults={ableAnalysis}
-                    onPinAsset={handlePinAsset}
-                    onUnpinAsset={handleUnpinAsset}
-                    onSelectAsset={handleSelectAsset}
-                    isAnalyzing={isAnalyzing}
-                  />
-
-                  {/* Analysis Panel */}
-                  {selectedAsset && ableAnalysis[selectedAsset] && (
-                    <div className="mt-4">
-                      <AbleAnalysisPanel 
-                        symbol={selectedAsset} 
-                        result={ableAnalysis[selectedAsset]} 
-                      />
-                    </div>
-                  )}
-
-                  {selectedAsset && !ableAnalysis[selectedAsset] && isAnalyzing === selectedAsset && (
-                    <div className="mt-4 p-8 text-center border border-dashed border-zinc-700 rounded-lg">
-                      <Loader2 className="w-8 h-8 animate-spin text-emerald-400 mx-auto mb-2" />
-                      <p className="text-zinc-400">Running 40-Module Analysis for {ASSET_DISPLAY_NAMES[selectedAsset]}...</p>
-                    </div>
-                  )}
-
-                  {!selectedAsset && pinnedAssets.length > 0 && (
-                    <div className="mt-4 p-8 text-center border border-dashed border-zinc-700 rounded-lg">
-                      <Target className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
-                      <p className="text-zinc-400">Select a pinned asset to view full ABLE-HF 3.0 analysis</p>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : activeTab === 'macro' ? (
-              <>
-                {/* AI Macro Desk Section */}
+                {/* AI Macro Desk Section - Merged with ABLE-HF 3.0 */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
@@ -532,45 +447,94 @@ const TopNews: React.FC<TopNewsProps> = () => {
                     </button>
                   </div>
 
+                  {/* Macro Cards Grid - Using ABLE-HF 3.0 Analysis */}
                   <div className="grid grid-cols-2 gap-4">
-                    {macroData.map((item) => (
-                      <Card 
-                        key={item.symbol} 
-                        className="bg-zinc-900/50 border-zinc-800 p-4 hover:border-emerald-500/30 transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-lg font-semibold text-white">{item.symbol}</h3>
-                          <div className="flex items-center gap-2">
-                            <SentimentBadge sentiment={item.sentiment} />
-                            <span className="text-xs text-zinc-500">{item.confidence}%</span>
-                          </div>
-                        </div>
+                    {pinnedAssets.map((pinned) => {
+                      const analysis = ableAnalysis[pinned.symbol];
+                      const analyzing = isAnalyzing[pinned.symbol];
+                      
+                      // Fallback to macro data if ABLE analysis not ready
+                      const macroItem = macroData.find(m => m.symbol === pinned.symbol);
+                      
+                      const sentiment = analysis 
+                        ? (analysis.P_up_pct > 55 ? 'bullish' : analysis.P_up_pct < 45 ? 'bearish' : 'neutral')
+                        : (macroItem?.sentiment || 'neutral');
+                      
+                      const confidence = analysis 
+                        ? Math.round(analysis.regime_adjusted_confidence * 100) 
+                        : (macroItem?.confidence || 50);
+                      
+                      const analysisText = analysis 
+                        ? analysis.thai_summary 
+                        : (macroItem?.analysis || 'Analyzing...');
+                      
+                      const changeValue = analysis
+                        ? (analysis.P_up_pct - 50) / 10
+                        : (macroItem?.changeValue || 0);
+                      
+                      const change = changeValue >= 0 ? `+${changeValue.toFixed(2)}%` : `${changeValue.toFixed(2)}%`;
 
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-zinc-500">Confidence</span>
+                      return (
+                        <Card 
+                          key={pinned.symbol} 
+                          className="bg-zinc-900/50 border-zinc-800 p-4 hover:border-emerald-500/30 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-lg font-semibold text-white">{pinned.symbol}</h3>
+                            <div className="flex items-center gap-2">
+                              <SentimentBadge sentiment={sentiment} />
+                              <span className="text-xs text-zinc-500">{confidence}%</span>
+                            </div>
                           </div>
-                          <Progress 
-                            value={item.confidence} 
-                            className="h-1.5 bg-zinc-800 [&>div]:bg-emerald-500"
-                          />
-                        </div>
 
-                        <div className="mb-3">
-                          <div className="flex items-center gap-1 mb-1">
-                            <Brain className="w-3 h-3 text-emerald-400" />
-                            <span className="text-xs text-emerald-400">AI Analysis</span>
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs text-zinc-500">Confidence</span>
+                            </div>
+                            <Progress 
+                              value={confidence} 
+                              className="h-1.5 bg-zinc-800 [&>div]:bg-emerald-500"
+                            />
                           </div>
-                          <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">
-                            {item.analysis}
-                          </p>
-                        </div>
 
-                        <div className={`text-sm font-medium ${item.changeValue >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {item.changeValue >= 0 ? '↗' : '↘'} {item.change}
-                        </div>
-                      </Card>
-                    ))}
+                          <div className="mb-3">
+                            <div className="flex items-center gap-1 mb-1">
+                              <Brain className="w-3 h-3 text-emerald-400" />
+                              <span className="text-xs text-emerald-400">AI Analysis</span>
+                              {analyzing && (
+                                <Loader2 className="w-3 h-3 animate-spin text-emerald-400 ml-1" />
+                              )}
+                            </div>
+                            <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">
+                              {analysisText}
+                            </p>
+                          </div>
+
+                          {/* ABLE-HF 3.0 Enhanced Info */}
+                          {analysis && (
+                            <div className="mb-3 flex flex-wrap gap-1">
+                              <Badge className="text-[10px] bg-purple-500/20 text-purple-400 border-purple-500/30">
+                                P↑ {analysis.P_up_pct.toFixed(0)}%
+                              </Badge>
+                              {analysis.quantum_enhancement > 0 && (
+                                <Badge className="text-[10px] bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
+                                  Q+{(analysis.quantum_enhancement * 100).toFixed(0)}%
+                                </Badge>
+                              )}
+                              {analysis.neural_enhancement > 0 && (
+                                <Badge className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30">
+                                  N+{(analysis.neural_enhancement * 100).toFixed(0)}%
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+
+                          <div className={`text-sm font-medium ${changeValue >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {changeValue >= 0 ? '↗' : '↘'} {change}
+                          </div>
+                        </Card>
+                      );
+                    })}
                   </div>
                 </div>
 
