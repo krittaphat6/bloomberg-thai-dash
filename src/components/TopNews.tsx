@@ -7,11 +7,20 @@ import { Progress } from '@/components/ui/progress';
 import { 
   RefreshCw, Sparkles, ExternalLink, 
   Brain, TrendingUp, ChevronRight, Clock, BarChart3,
-  Settings, Eye, FileText, Users, Zap, Loader2, Target
+  Settings, Eye, FileText, Users, Zap, Loader2, Target, Plus, X,
+  ChevronDown
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { AbleNewsResult, AbleNewsAnalyzer, ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 
 // ============ TYPES ============
 interface MacroAnalysis {
@@ -66,6 +75,28 @@ interface RawNewsItem {
   category: string;
 }
 
+// ============ CONSTANTS ============
+const ASSET_CATEGORIES = {
+  forex: {
+    label: '💱 Forex',
+    assets: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'USDCAD', 'NZDUSD']
+  },
+  commodities: {
+    label: '🥇 Commodities',
+    assets: ['XAUUSD', 'XAGUSD', 'USOIL', 'UKOIL']
+  },
+  crypto: {
+    label: '₿ Crypto',
+    assets: ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD']
+  },
+  indices: {
+    label: '📊 Indices',
+    assets: ['US500', 'US30', 'US100', 'DE40', 'JP225']
+  }
+};
+
+const PINNED_ASSETS_STORAGE_KEY = 'able-pinned-assets';
+
 // ============ COMPONENTS ============
 const SentimentBadge = ({ sentiment }: { sentiment: string }) => (
   <Badge 
@@ -81,44 +112,14 @@ const SentimentBadge = ({ sentiment }: { sentiment: string }) => (
   </Badge>
 );
 
-// Trading Signal Badge
-const TradingSignalBadge = ({ signal }: { signal: string }) => {
-  const getSignalStyle = () => {
-    if (signal.includes('STRONG_BUY') || signal.includes('Ultra Strong BUY')) {
-      return 'bg-emerald-500/30 text-emerald-300 border-emerald-400/50';
-    }
-    if (signal.includes('BUY')) {
-      return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-    }
-    if (signal.includes('STRONG_SELL') || signal.includes('Ultra Strong SELL')) {
-      return 'bg-red-500/30 text-red-300 border-red-400/50';
-    }
-    if (signal.includes('SELL')) {
-      return 'bg-red-500/20 text-red-400 border-red-500/30';
-    }
-    return 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
-  };
-  
-  return (
-    <Badge className={`text-xs px-2 py-0.5 rounded-full font-medium border ${getSignalStyle()}`}>
-      {signal.replace(/[🚀💥📈📉⚡💚⚪]/g, '').trim().slice(0, 15)}
-    </Badge>
-  );
-};
-
 interface TopNewsProps {
   onMaximize?: () => void;
   onClose?: () => void;
 }
 
-const PINNED_ASSETS_STORAGE_KEY = 'able-pinned-assets';
-
 // Default pinned assets
 const DEFAULT_PINNED_ASSETS: PinnedAsset[] = [
-  { symbol: 'EURUSD', addedAt: Date.now() },
-  { symbol: 'USDJPY', addedAt: Date.now() },
-  { symbol: 'XAUUSD', addedAt: Date.now() },
-  { symbol: 'GBPUSD', addedAt: Date.now() }
+  { symbol: 'XAUUSD', addedAt: Date.now() }
 ];
 
 const TopNews: React.FC<TopNewsProps> = () => {
@@ -275,7 +276,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
       console.log('Fetching news from edge function...');
       
       const { data, error } = await supabase.functions.invoke('news-aggregator', {
-        body: {}
+        body: { pinnedAssets: pinnedAssets.map(p => p.symbol) }
       });
 
       if (error) {
@@ -316,7 +317,37 @@ const TopNews: React.FC<TopNewsProps> = () => {
       setLoading(false);
       setInitialLoading(false);
     }
-  }, [toast, initialLoading, analyzeAllPinnedAssets]);
+  }, [toast, initialLoading, analyzeAllPinnedAssets, pinnedAssets]);
+
+  // Add asset handler
+  const handleAddAsset = (symbol: string) => {
+    if (pinnedAssets.find(p => p.symbol === symbol)) {
+      toast({ title: 'Asset already added', variant: 'destructive' });
+      return;
+    }
+    if (pinnedAssets.length >= 8) {
+      toast({ title: 'Maximum 8 assets', description: 'Remove an asset first', variant: 'destructive' });
+      return;
+    }
+    
+    setPinnedAssets(prev => [...prev, { symbol, addedAt: Date.now() }]);
+    toast({ title: `✅ ${ASSET_DISPLAY_NAMES[symbol] || symbol} added` });
+    
+    // Immediately analyze the new asset
+    if (rawNews.length > 0) {
+      analyzeAsset(symbol, rawNews);
+    }
+  };
+
+  // Remove asset handler
+  const handleRemoveAsset = (symbol: string) => {
+    setPinnedAssets(prev => prev.filter(p => p.symbol !== symbol));
+    setAbleAnalysis(prev => {
+      const newAnalysis = { ...prev };
+      delete newAnalysis[symbol];
+      return newAnalysis;
+    });
+  };
 
   // Initial load
   useEffect(() => {
@@ -335,7 +366,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
     const utcHours = now.getUTCHours();
     const utcMinutes = now.getUTCMinutes();
     
-    // Pre-market starts at 9:00 UTC (4:00 AM ET)
     let hoursUntil = 9 - utcHours;
     let minutesUntil = 60 - utcMinutes;
     
@@ -347,6 +377,15 @@ const TopNews: React.FC<TopNewsProps> = () => {
     }
     
     return `${hoursUntil}h ${minutesUntil}m`;
+  };
+
+  // Get available assets (not already pinned)
+  const getAvailableAssets = () => {
+    const pinnedSymbols = pinnedAssets.map(p => p.symbol);
+    return Object.entries(ASSET_CATEGORIES).map(([key, category]) => ({
+      ...category,
+      assets: category.assets.filter(a => !pinnedSymbols.includes(a))
+    }));
   };
 
   if (initialLoading) {
@@ -442,9 +481,48 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         <p className="text-xs text-zinc-500">Market bias analysis</p>
                       </div>
                     </div>
-                    <button className="text-zinc-500 hover:text-emerald-400 text-sm flex items-center gap-1">
-                      View All <ChevronRight className="w-4 h-4" />
-                    </button>
+                    
+                    <div className="flex items-center gap-2">
+                      {/* Add Asset Dropdown */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 bg-transparent"
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            Add Asset
+                            <ChevronDown className="w-3 h-3 ml-1" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-48 bg-zinc-900 border-zinc-700" align="end">
+                          {getAvailableAssets().map((category) => (
+                            category.assets.length > 0 && (
+                              <div key={category.label}>
+                                <DropdownMenuLabel className="text-zinc-400 text-xs">
+                                  {category.label}
+                                </DropdownMenuLabel>
+                                {category.assets.map((asset) => (
+                                  <DropdownMenuItem 
+                                    key={asset}
+                                    onClick={() => handleAddAsset(asset)}
+                                    className="text-white hover:bg-zinc-800 cursor-pointer"
+                                  >
+                                    {ASSET_DISPLAY_NAMES[asset] || asset}
+                                  </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator className="bg-zinc-700" />
+                              </div>
+                            )
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      
+                      <button className="text-zinc-500 hover:text-emerald-400 text-sm flex items-center gap-1">
+                        View All <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Macro Cards Grid - Using ABLE-HF 3.0 Analysis */}
@@ -453,7 +531,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                       const analysis = ableAnalysis[pinned.symbol];
                       const analyzing = isAnalyzing[pinned.symbol];
                       
-                      // Fallback to macro data if ABLE analysis not ready
+                      // Use server macro data or ABLE analysis
                       const macroItem = macroData.find(m => m.symbol === pinned.symbol);
                       
                       const sentiment = analysis 
@@ -464,21 +542,30 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         ? Math.round(analysis.regime_adjusted_confidence * 100) 
                         : (macroItem?.confidence || 50);
                       
-                      const analysisText = analysis 
-                        ? analysis.thai_summary 
-                        : (macroItem?.analysis || 'Analyzing...');
+                      const analysisText = macroItem?.analysis || analysis?.thai_summary || 'Analyzing...';
                       
-                      const changeValue = analysis
+                      const changeValue = macroItem?.changeValue ?? (analysis
                         ? (analysis.P_up_pct - 50) / 10
-                        : (macroItem?.changeValue || 0);
+                        : 0);
                       
                       const change = changeValue >= 0 ? `+${changeValue.toFixed(2)}%` : `${changeValue.toFixed(2)}%`;
 
                       return (
                         <Card 
                           key={pinned.symbol} 
-                          className="bg-zinc-900/50 border-zinc-800 p-4 hover:border-emerald-500/30 transition-colors cursor-pointer"
+                          className="bg-zinc-900/50 border-zinc-800 p-4 hover:border-emerald-500/30 transition-colors cursor-pointer relative group"
                         >
+                          {/* Remove button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveAsset(pinned.symbol);
+                            }}
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded"
+                          >
+                            <X className="w-3 h-3 text-zinc-400" />
+                          </button>
+                          
                           <div className="flex items-center justify-between mb-3">
                             <h3 className="text-lg font-semibold text-white">{pinned.symbol}</h3>
                             <div className="flex items-center gap-2">
@@ -535,10 +622,44 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         </Card>
                       );
                     })}
+                    
+                    {/* Add Asset Card */}
+                    {pinnedAssets.length < 8 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Card className="bg-zinc-900/30 border-zinc-800 border-dashed p-4 hover:border-emerald-500/30 transition-colors cursor-pointer flex flex-col items-center justify-center min-h-[200px]">
+                            <Plus className="w-8 h-8 text-zinc-600 mb-2" />
+                            <span className="text-zinc-500 text-sm">Add Asset</span>
+                            <span className="text-zinc-600 text-xs mt-1">{pinnedAssets.length}/8 assets</span>
+                          </Card>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-48 bg-zinc-900 border-zinc-700">
+                          {getAvailableAssets().map((category) => (
+                            category.assets.length > 0 && (
+                              <div key={category.label}>
+                                <DropdownMenuLabel className="text-zinc-400 text-xs">
+                                  {category.label}
+                                </DropdownMenuLabel>
+                                {category.assets.map((asset) => (
+                                  <DropdownMenuItem 
+                                    key={asset}
+                                    onClick={() => handleAddAsset(asset)}
+                                    className="text-white hover:bg-zinc-800 cursor-pointer"
+                                  >
+                                    {ASSET_DISPLAY_NAMES[asset] || asset}
+                                  </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator className="bg-zinc-700" />
+                              </div>
+                            )
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </div>
 
-                {/* For You Section */}
+                {/* For You Section - Real-time news for pinned assets */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
@@ -558,7 +679,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                   </div>
 
                   <div className="space-y-1">
-                    {forYouItems.map((item) => (
+                    {forYouItems.slice(0, 10).map((item) => (
                       <div 
                         key={item.id}
                         onClick={() => window.open(item.url, '_blank')}
@@ -572,12 +693,21 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         <div className="flex-1 text-sm">
                           <span className="text-white font-medium">{item.symbol}</span>
                           <span className="text-zinc-500 mx-2">bias updated:</span>
-                          <span className="text-emerald-400">{item.type}</span>
+                          <span className={`font-medium ${
+                            item.type.includes('BULLISH') ? 'text-emerald-400' : 
+                            item.type.includes('BEARISH') ? 'text-red-400' : 'text-zinc-400'
+                          }`}>{item.type}</span>
                           <span className="text-zinc-500 mx-2">–</span>
                           <span className="text-zinc-400">{item.title}</span>
                         </div>
                       </div>
                     ))}
+                    
+                    {forYouItems.length === 0 && (
+                      <div className="text-center py-8 text-zinc-500">
+                        <p>Add assets above to see personalized news</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
