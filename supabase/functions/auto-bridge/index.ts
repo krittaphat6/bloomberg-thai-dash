@@ -46,12 +46,12 @@ serve(async (req) => {
       );
     }
 
-    // Get room_id from payload or find from webhook
-    let roomId = payload.room_id;
+    // Get room_id and user_id from payload
+    const roomId = payload.room_id;
     let userId = payload.user_id;
 
-    // If no room_id, try to find from authorization
-    if (!roomId) {
+    // If no user_id, try to find from authorization header
+    if (!userId) {
       const authHeader = req.headers.get('Authorization');
       if (authHeader) {
         const { data: userData } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
@@ -61,16 +61,49 @@ serve(async (req) => {
       }
     }
 
-    // Find active bridge settings
-    const { data: bridgeSettings, error: settingsError } = await supabase
+    console.log(`🔍 Looking for bridge settings - roomId: ${roomId}, userId: ${userId}`);
+
+    // Build query for bridge settings - prioritize room_id, fallback to user_id
+    let bridgeQuery = supabase
       .from('bridge_settings')
       .select('*, broker_connections(*)')
-      .eq('enabled', true)
-      .eq(roomId ? 'room_id' : 'user_id', roomId || userId);
+      .eq('enabled', true);
+
+    // Query by room_id if provided, otherwise by user_id
+    if (roomId) {
+      bridgeQuery = bridgeQuery.eq('room_id', roomId);
+    } else if (userId) {
+      bridgeQuery = bridgeQuery.eq('user_id', userId);
+    } else {
+      console.log('⚠️ No room_id or user_id provided');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'No room_id or user_id provided',
+          hint: 'Include room_id or user_id in webhook payload'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { data: bridgeSettings, error: settingsError } = await bridgeQuery;
+
+    console.log(`📊 Bridge settings query result:`, {
+      found: bridgeSettings?.length || 0,
+      error: settingsError?.message || null,
+      settings: bridgeSettings
+    });
 
     if (settingsError) {
       console.error('❌ Error fetching bridge settings:', settingsError);
-      throw settingsError;
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: settingsError.message,
+          hint: 'Database error while fetching bridge settings'
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     if (!bridgeSettings || bridgeSettings.length === 0) {
@@ -79,7 +112,8 @@ serve(async (req) => {
         JSON.stringify({ 
           success: false, 
           message: 'No active auto-bridge configuration found',
-          hint: 'Enable Auto Bridge in Messenger settings'
+          hint: 'Enable Auto Bridge in Messenger settings',
+          debug: { roomId, userId }
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -132,12 +166,34 @@ serve(async (req) => {
     let status = 'success';
     let errorMessage = null;
 
+    // Check connection status
+    console.log(`🔗 Connection check:`, {
+      hasConnection: !!connection,
+      connectionId: connection?.id,
+      isConnected: connection?.is_connected
+    });
+
     // Forward to MT5 if connection exists and is active
-    if (connection && connection.is_connected) {
+    if (!connection) {
+      status = 'no_connection';
+      errorMessage = 'Please connect MT5 first - no broker connection found';
+      console.log('⚠️ No MT5 connection configured');
+    } else if (!connection.is_connected) {
+      status = 'disconnected';
+      errorMessage = 'MT5 is disconnected - please reconnect your broker';
+      console.log('⚠️ MT5 connection exists but is disconnected');
+    } else {
       try {
         // Create MT5 command
         const commandType = actionUpper === 'CLOSE' ? 'CLOSE' : (actionUpper === 'BUY' ? 'BUY' : 'SELL');
         
+        console.log(`📤 Creating MT5 command:`, {
+          connectionId: connection.id,
+          commandType,
+          symbol: payload.symbol,
+          volume: quantity
+        });
+
         const { data: command, error: cmdError } = await supabase
           .from('mt5_commands')
           .insert({
@@ -166,10 +222,6 @@ serve(async (req) => {
         status = 'error';
         errorMessage = mt5Error.message;
       }
-    } else {
-      status = 'no_connection';
-      errorMessage = 'MT5 not connected or connection inactive';
-      console.log('⚠️ MT5 not connected');
     }
 
     const executionTime = Date.now() - startTime;
