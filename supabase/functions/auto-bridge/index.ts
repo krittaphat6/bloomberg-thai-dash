@@ -138,13 +138,32 @@ serve(async (req) => {
       );
     }
 
+    // Clean symbol format (remove /, -, spaces)
+    const cleanSymbol = payload.symbol
+      .toUpperCase()
+      .replace(/[\/\-\s]/g, '')  // Remove /, -, spaces
+      .trim();
+
     // Validate lot size
-    let quantity = payload.quantity || 0.1;
+    let quantity = parseFloat(String(payload.quantity)) || 0.1;
     const maxLot = settings.max_lot_size || 1.0;
+    if (quantity <= 0 || isNaN(quantity)) {
+      quantity = 0.1; // default
+    }
     if (quantity > maxLot) {
       console.log(`⚠️ Quantity ${quantity} exceeds max ${maxLot}, adjusting...`);
       quantity = maxLot;
     }
+
+    // Validate price
+    let price = parseFloat(String(payload.price)) || 0;
+    if (price < 0 || isNaN(price)) {
+      price = 0; // market order
+    }
+
+    // Validate SL/TP
+    const sl = parseFloat(String(payload.sl)) || 0;
+    const tp = parseFloat(String(payload.tp)) || 0;
 
     // Create log entry
     const { data: logEntry, error: logError } = await supabase
@@ -184,13 +203,25 @@ serve(async (req) => {
       console.log('⚠️ MT5 connection exists but is disconnected');
     } else {
       try {
-        // Create MT5 command
-        const commandType = actionUpper === 'CLOSE' ? 'CLOSE' : (actionUpper === 'BUY' ? 'BUY' : 'SELL');
+        // Create MT5 command - USE LOWERCASE for command_type
+        const commandType = actionUpper === 'CLOSE' ? 'close' : 
+                           (actionUpper === 'BUY' ? 'buy' : 'sell');
         
+        console.log(`🔧 Command details:`, {
+          command_type: commandType,
+          symbol: cleanSymbol,
+          volume: quantity,
+          price: price,
+          sl: sl,
+          tp: tp,
+          original_symbol: payload.symbol,
+          original_action: payload.action
+        });
+
         console.log(`📤 Creating MT5 command:`, {
           connectionId: connection.id,
           commandType,
-          symbol: payload.symbol,
+          symbol: cleanSymbol,
           volume: quantity
         });
 
@@ -198,12 +229,13 @@ serve(async (req) => {
           .from('mt5_commands')
           .insert({
             connection_id: connection.id,
-            command_type: commandType,
-            symbol: payload.symbol,
+            command_type: commandType, // lowercase
+            symbol: cleanSymbol, // cleaned symbol
             volume: quantity,
-            price: payload.price,
-            sl: payload.sl,
-            tp: payload.tp,
+            price: price > 0 ? price : null,
+            sl: sl > 0 ? sl : null,
+            tp: tp > 0 ? tp : null,
+            deviation: 20,
             comment: payload.comment || `Auto-Bridge: ${actionUpper}`,
             status: 'pending'
           })
