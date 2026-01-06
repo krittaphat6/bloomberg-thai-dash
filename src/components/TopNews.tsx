@@ -176,6 +176,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
   // AI Thinking State for Macro Desk
   const [macroThinkingSteps, setMacroThinkingSteps] = useState<Record<string, ThinkingStep[]>>({});
   const [macroThinkingLogs, setMacroThinkingLogs] = useState<Record<string, string[]>>({});
+  const [geminiStreams, setGeminiStreams] = useState<Record<string, string>>({}); // Live Gemini streaming
   const [aiAnalysisResults, setAIAnalysisResults] = useState<Record<string, AIAnalysisResult>>({});
   const [expandedThinking, setExpandedThinking] = useState<string | null>(null);
 
@@ -288,7 +289,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
     return () => clearInterval(interval);
   }, [fetchPrices]);
 
-  // ABLE-HF 3.0 + Lovable AI Analysis Function with thinking steps
+  // ABLE-HF 3.0 + Lovable AI Analysis Function with STREAMING thinking steps
   const analyzeAssetWithAI = useCallback(async (symbol: string, newsItems?: RawNewsItem[]) => {
     const newsToUse = newsItems || rawNews;
     if (newsToUse.length === 0) {
@@ -297,11 +298,12 @@ const TopNews: React.FC<TopNewsProps> = () => {
 
     setIsAnalyzing(prev => ({ ...prev, [symbol]: true }));
     setExpandedThinking(symbol);
+    setGeminiStreams(prev => ({ ...prev, [symbol]: '' })); // Reset stream
     
     // Initialize thinking steps
     const steps: ThinkingStep[] = [
       { id: 'fetch', label: 'ดึงข่าว', status: 'pending' },
-      { id: 'analyze', label: 'วิเคราะห์ด้วย AI', status: 'pending' },
+      { id: 'analyze', label: 'Gemini AI คิดสด', status: 'pending' },
       { id: 'compute', label: 'คำนวณ ABLE-HF', status: 'pending' }
     ];
     setMacroThinkingSteps(prev => ({ ...prev, [symbol]: steps }));
@@ -348,37 +350,113 @@ const TopNews: React.FC<TopNewsProps> = () => {
       const step1Duration = Date.now() - startTime;
       updateStep('fetch', 'complete', `${headlinesToAnalyze.length} ข่าว`, step1Duration);
 
-      // STEP 2: Call Lovable AI for Analysis
-      updateStep('analyze', 'running', 'ส่งข้อมูลให้ Gemini 2.5 Flash...');
-      addLog(`🧠 เริ่มวิเคราะห์ด้วย Gemini AI...`);
+      // STEP 2: Call Lovable AI with STREAMING
+      updateStep('analyze', 'running', 'Gemini กำลังคิด...');
+      addLog(`🧠 ส่งข้อมูลให้ Gemini 2.5 Flash (Streaming)...`);
       
       const priceData = assetPrices[symbol];
       const aiStartTime = Date.now();
 
-      const { data: aiData, error: aiError } = await supabase.functions.invoke('macro-ai-analysis', {
-        body: {
-          symbol,
-          headlines: headlinesToAnalyze,
-          currentPrice: priceData?.price,
-          priceChange: priceData?.changePercent
+      // Use streaming endpoint
+      const streamUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/macro-ai-stream`;
+      
+      try {
+        const response = await fetch(streamUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            symbol,
+            headlines: headlinesToAnalyze,
+            currentPrice: priceData?.price,
+            priceChange: priceData?.changePercent
+          })
+        });
+
+        if (!response.ok || !response.body) {
+          throw new Error(`Stream failed: ${response.status}`);
         }
-      });
 
-      if (aiError) {
-        addLog(`⚠️ AI Error: ${aiError.message}`);
-        // Fallback to local ABLE analysis
-        addLog(`📊 ใช้ ABLE-HF local analysis แทน...`);
-      } else if (aiData?.success) {
-        const aiAnalysis = aiData.analysis as AIAnalysisResult;
-        addLog(`✅ AI Analysis: ${aiAnalysis.sentiment.toUpperCase()}`);
-        addLog(`📊 P(Up): ${aiAnalysis.P_up_pct}% | Confidence: ${aiAnalysis.confidence}%`);
-        addLog(`💡 Decision: ${aiAnalysis.decision}`);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        let textBuffer = '';
+
+        // Read stream
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          textBuffer += decoder.decode(value, { stream: true });
+          
+          // Process SSE lines
+          let newlineIndex: number;
+          while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
+            let line = textBuffer.slice(0, newlineIndex);
+            textBuffer = textBuffer.slice(newlineIndex + 1);
+            
+            if (line.endsWith('\r')) line = line.slice(0, -1);
+            if (line.startsWith(':') || line.trim() === '') continue;
+            if (!line.startsWith('data: ')) continue;
+            
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') continue;
+            
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+              if (content) {
+                fullText += content;
+                // Update streaming text
+                setGeminiStreams(prev => ({ ...prev, [symbol]: fullText }));
+              }
+            } catch {
+              // Incomplete JSON, wait for more
+            }
+          }
+        }
+
+        // Parse result from fullText
+        let aiAnalysis: AIAnalysisResult | null = null;
         
-        setAIAnalysisResults(prev => ({ ...prev, [symbol]: aiAnalysis }));
-      }
+        // Extract JSON from <result> tag
+        const resultMatch = fullText.match(/<result>\s*([\s\S]*?)\s*<\/result>/);
+        if (resultMatch) {
+          try {
+            const jsonStr = resultMatch[1].trim();
+            const parsed = JSON.parse(jsonStr);
+            aiAnalysis = {
+              symbol,
+              sentiment: parsed.sentiment || 'neutral',
+              P_up_pct: parsed.P_up_pct || 50,
+              P_down_pct: parsed.P_down_pct || 50,
+              confidence: parsed.confidence || 50,
+              decision: parsed.decision || 'HOLD',
+              thai_summary: parsed.thai_summary || '',
+              key_drivers: parsed.key_drivers || [],
+              risk_warnings: parsed.risk_warnings || [],
+              market_regime: parsed.market_regime || 'ranging',
+              analyzed_at: new Date().toISOString(),
+              model: 'gemini-2.5-flash',
+              news_count: headlinesToAnalyze.length
+            };
+            addLog(`✅ AI: ${aiAnalysis.sentiment.toUpperCase()} | P(Up): ${aiAnalysis.P_up_pct}%`);
+            setAIAnalysisResults(prev => ({ ...prev, [symbol]: aiAnalysis! }));
+          } catch (e) {
+            console.warn('JSON parse failed:', e);
+          }
+        }
 
-      const step2Duration = Date.now() - aiStartTime;
-      updateStep('analyze', 'complete', aiData?.success ? 'Gemini AI ✓' : 'Fallback mode', step2Duration);
+        const step2Duration = Date.now() - aiStartTime;
+        updateStep('analyze', 'complete', aiAnalysis ? `${aiAnalysis.decision}` : 'Done', step2Duration);
+
+      } catch (streamError) {
+        console.warn('Stream error, using fallback:', streamError);
+        addLog(`⚠️ Stream error, using fallback...`);
+        updateStep('analyze', 'complete', 'Fallback mode', Date.now() - aiStartTime);
+      }
 
       // STEP 3: ABLE-HF Local Enhancement
       updateStep('compute', 'running', 'รัน 40 Modules...');
@@ -395,11 +473,10 @@ const TopNews: React.FC<TopNewsProps> = () => {
 
       const result = analyzer.analyze();
       
-      addLog(`📈 Module Macro-Economic: ${(result.category_performance.macro_economic * 100).toFixed(0)}%`);
+      addLog(`📈 Module Macro: ${(result.category_performance.macro_economic * 100).toFixed(0)}%`);
       addLog(`📊 Module Sentiment: ${(result.category_performance.sentiment_flow * 100).toFixed(0)}%`);
-      addLog(`🎯 Quantum Boost: +${result.quantum_enhancement}%`);
-      addLog(`🧠 Neural Boost: +${result.neural_enhancement}%`);
-      addLog(`✅ ABLE-HF Complete: ${result.decision} (${result.regime_adjusted_confidence}%)`);
+      addLog(`🎯 Boost: +${result.quantum_enhancement + result.neural_enhancement}%`);
+      addLog(`✅ ABLE-HF: ${result.decision} (${result.regime_adjusted_confidence}%)`);
 
       const step3Duration = Date.now() - computeStartTime;
       updateStep('compute', 'complete', `${result.decision}`, step3Duration);
@@ -410,7 +487,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
       }));
 
       const totalDuration = Date.now() - startTime;
-      addLog(`🏁 Total: ${totalDuration}ms | Final: ${result.trading_signal.signal}`);
+      addLog(`🏁 Total: ${totalDuration}ms`);
 
       return result;
 
@@ -797,6 +874,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                       const priceData = assetPrices[pinned.symbol];
                       const thinkingSteps = macroThinkingSteps[pinned.symbol] || [];
                       const thinkingLogs = macroThinkingLogs[pinned.symbol] || [];
+                      const geminiStreamText = geminiStreams[pinned.symbol] || '';
                       const isExpanded = expandedThinking === pinned.symbol;
                       
                       // Use AI result first, then ABLE analysis
@@ -909,8 +987,8 @@ const TopNews: React.FC<TopNewsProps> = () => {
                             </Badge>
                           </div>
 
-                          {/* Expandable AI Thinking Panel */}
-                          {isExpanded && (thinkingLogs.length > 0 || analyzing) && (
+                          {/* Expandable AI Thinking Panel with Gemini Streaming */}
+                          {isExpanded && (thinkingLogs.length > 0 || analyzing || geminiStreamText) && (
                             <div className="mt-3 pt-3 border-t border-zinc-700">
                               {/* 3-Step Progress */}
                               <div className="grid grid-cols-3 gap-1 mb-3">
@@ -918,7 +996,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                                   <div 
                                     key={step.id}
                                     className={`p-1.5 rounded text-center transition-all ${
-                                      step.status === 'running' ? 'bg-purple-500/20 border border-purple-500/50' :
+                                      step.status === 'running' ? 'bg-purple-500/20 border border-purple-500/50 animate-pulse' :
                                       step.status === 'complete' ? 'bg-emerald-500/10 border border-emerald-500/30' :
                                       'bg-zinc-800/50 border border-zinc-700'
                                     }`}
@@ -941,20 +1019,18 @@ const TopNews: React.FC<TopNewsProps> = () => {
                                 ))}
                               </div>
 
-                              {/* Thinking Log */}
-                              <div className="bg-black/50 rounded p-2 max-h-24 overflow-y-auto">
+                              {/* Step 1: News Search Logs */}
+                              <div className="bg-black/50 rounded p-2 mb-2">
                                 <div className="flex items-center gap-1 mb-1">
-                                  <Zap className="w-2.5 h-2.5 text-yellow-400" />
-                                  <span className="text-[9px] font-medium text-yellow-400">AI Thinking (Live)</span>
+                                  <Search className="w-2.5 h-2.5 text-blue-400" />
+                                  <span className="text-[9px] font-medium text-blue-400">Step 1: ค้นหาข่าว</span>
                                 </div>
-                                <div className="space-y-0.5 font-mono text-[9px]">
-                                  {thinkingLogs.slice(-6).map((log, i) => (
+                                <div className="space-y-0.5 font-mono text-[9px] max-h-16 overflow-y-auto">
+                                  {thinkingLogs.filter(l => !l.includes('ABLE-HF') && !l.includes('Module')).slice(-4).map((log, i) => (
                                     <div 
                                       key={i} 
                                       className={`flex items-start gap-1 ${
                                         log.includes('✅') ? 'text-emerald-400' :
-                                        log.includes('❌') ? 'text-red-400' :
-                                        log.includes('⚡') ? 'text-yellow-400' :
                                         log.includes('🧠') ? 'text-purple-400' :
                                         'text-zinc-400'
                                       }`}
@@ -965,6 +1041,49 @@ const TopNews: React.FC<TopNewsProps> = () => {
                                   ))}
                                 </div>
                               </div>
+
+                              {/* Step 2: Gemini AI Streaming Response */}
+                              {geminiStreamText && (
+                                <div className="bg-gradient-to-br from-purple-950/50 to-pink-950/30 rounded p-2 mb-2 border border-purple-500/30">
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <Brain className="w-2.5 h-2.5 text-purple-400" />
+                                    <span className="text-[9px] font-bold text-purple-400">Step 2: Gemini AI กำลังคิด</span>
+                                    {thinkingSteps.find(s => s.id === 'analyze')?.status === 'running' && (
+                                      <div className="flex gap-0.5 ml-1">
+                                        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                        <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <ScrollArea className="h-32 w-full">
+                                    <div className="font-mono text-[9px] text-purple-200 whitespace-pre-wrap leading-relaxed">
+                                      {geminiStreamText}
+                                      {thinkingSteps.find(s => s.id === 'analyze')?.status === 'running' && (
+                                        <span className="inline-block w-1.5 h-3 bg-purple-400 ml-0.5 animate-pulse" />
+                                      )}
+                                    </div>
+                                  </ScrollArea>
+                                </div>
+                              )}
+
+                              {/* Step 3: ABLE-HF Logs */}
+                              {thinkingLogs.some(l => l.includes('ABLE-HF') || l.includes('Module')) && (
+                                <div className="bg-emerald-950/30 rounded p-2 border border-emerald-500/20">
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <Zap className="w-2.5 h-2.5 text-emerald-400" />
+                                    <span className="text-[9px] font-medium text-emerald-400">Step 3: ABLE-HF 3.0</span>
+                                  </div>
+                                  <div className="space-y-0.5 font-mono text-[9px]">
+                                    {thinkingLogs.filter(l => l.includes('ABLE-HF') || l.includes('Module') || l.includes('Boost') || l.includes('🏁')).slice(-4).map((log, i) => (
+                                      <div key={i} className="flex items-start gap-1 text-emerald-400">
+                                        <span className="text-zinc-600 flex-shrink-0">›</span>
+                                        <span className="break-words">{log}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 

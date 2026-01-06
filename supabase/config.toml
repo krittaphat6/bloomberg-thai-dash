@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.macro-ai-analysis]
 verify_jwt = false
+
+[functions.macro-ai-stream]
+verify_jwt = false
