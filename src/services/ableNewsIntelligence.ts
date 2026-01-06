@@ -229,7 +229,7 @@ export class AbleNewsAnalyzer {
       P_down_pct: Math.round(P_down * 100),
       decision,
       confidence,
-      regime_adjusted_confidence: Math.round(P_up * 100 * (1 + quantum_boost + neural_boost)),
+      regime_adjusted_confidence: Math.min(100, Math.round(P_up * 100 * (1 + quantum_boost + neural_boost))),
       market_regime,
       quantum_enhancement: Math.round(quantum_boost * 100),
       neural_enhancement: Math.round(neural_boost * 100),
