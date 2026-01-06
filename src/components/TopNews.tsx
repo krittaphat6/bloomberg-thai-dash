@@ -8,7 +8,7 @@ import {
   RefreshCw, Sparkles, ExternalLink, 
   Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3,
   Settings, Eye, FileText, Users, Zap, Loader2, Target, Plus, X,
-  ChevronDown, Twitter, AlertCircle, PlayCircle
+  ChevronDown, Twitter, AlertCircle, PlayCircle, CheckCircle2, Search
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,6 +22,33 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { TWITTER_ACCOUNTS, type TwitterPost } from '@/types/twitterIntelligence';
+import { getSimulatedPrice } from '@/services/realTimePriceService';
+
+// AI Analysis Result from Lovable AI
+interface AIAnalysisResult {
+  symbol: string;
+  sentiment: 'bullish' | 'bearish' | 'neutral';
+  P_up_pct: number;
+  P_down_pct: number;
+  confidence: number;
+  decision: string;
+  thai_summary: string;
+  key_drivers: string[];
+  risk_warnings: string[];
+  market_regime: string;
+  analyzed_at: string;
+  model: string;
+  news_count: number;
+}
+
+// AI Thinking Step
+interface ThinkingStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'running' | 'complete';
+  detail?: string;
+  duration?: number;
+}
 
 // ============ TYPES ============
 interface MacroAnalysis {
@@ -142,6 +169,15 @@ const TopNews: React.FC<TopNewsProps> = () => {
   const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>(DEFAULT_PINNED_ASSETS);
   const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleNewsResult>>({});
   const [isAnalyzing, setIsAnalyzing] = useState<Record<string, boolean>>({});
+  
+  // Real-time price data
+  const [assetPrices, setAssetPrices] = useState<Record<string, { price: number; change: number; changePercent: number }>>({});
+  
+  // AI Thinking State for Macro Desk
+  const [macroThinkingSteps, setMacroThinkingSteps] = useState<Record<string, ThinkingStep[]>>({});
+  const [macroThinkingLogs, setMacroThinkingLogs] = useState<Record<string, string[]>>({});
+  const [aiAnalysisResults, setAIAnalysisResults] = useState<Record<string, AIAnalysisResult>>({});
+  const [expandedThinking, setExpandedThinking] = useState<string | null>(null);
 
   // Twitter Intelligence State
   const [twitterPosts, setTwitterPosts] = useState<TwitterPost[]>([]);
@@ -224,58 +260,175 @@ const TopNews: React.FC<TopNewsProps> = () => {
     return keywordMap[symbol] || [symbol.toLowerCase()];
   };
 
-  // ABLE-HF 3.0 Analysis Function
-  const analyzeAsset = useCallback(async (symbol: string, newsItems?: RawNewsItem[]) => {
+  // Fetch real-time prices for pinned assets
+  const fetchPrices = useCallback(async () => {
+    const prices: Record<string, { price: number; change: number; changePercent: number }> = {};
+    
+    for (const asset of pinnedAssets) {
+      try {
+        // Use simulated prices (can be replaced with real API later)
+        const priceData = getSimulatedPrice(asset.symbol);
+        prices[asset.symbol] = {
+          price: priceData.price,
+          change: priceData.change,
+          changePercent: priceData.changePercent
+        };
+      } catch (error) {
+        console.warn(`Price fetch error for ${asset.symbol}:`, error);
+      }
+    }
+    
+    setAssetPrices(prices);
+  }, [pinnedAssets]);
+
+  // Fetch prices periodically
+  useEffect(() => {
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 15000); // Every 15 seconds
+    return () => clearInterval(interval);
+  }, [fetchPrices]);
+
+  // ABLE-HF 3.0 + Lovable AI Analysis Function with thinking steps
+  const analyzeAssetWithAI = useCallback(async (symbol: string, newsItems?: RawNewsItem[]) => {
     const newsToUse = newsItems || rawNews;
     if (newsToUse.length === 0) {
       return null;
     }
 
     setIsAnalyzing(prev => ({ ...prev, [symbol]: true }));
+    setExpandedThinking(symbol);
+    
+    // Initialize thinking steps
+    const steps: ThinkingStep[] = [
+      { id: 'fetch', label: 'ดึงข่าว', status: 'pending' },
+      { id: 'analyze', label: 'วิเคราะห์ด้วย AI', status: 'pending' },
+      { id: 'compute', label: 'คำนวณ ABLE-HF', status: 'pending' }
+    ];
+    setMacroThinkingSteps(prev => ({ ...prev, [symbol]: steps }));
+    setMacroThinkingLogs(prev => ({ ...prev, [symbol]: [] }));
+
+    const addLog = (log: string) => {
+      setMacroThinkingLogs(prev => ({
+        ...prev,
+        [symbol]: [...(prev[symbol] || []), log]
+      }));
+    };
+
+    const updateStep = (stepId: string, status: ThinkingStep['status'], detail?: string, duration?: number) => {
+      setMacroThinkingSteps(prev => ({
+        ...prev,
+        [symbol]: (prev[symbol] || []).map(s => 
+          s.id === stepId ? { ...s, status, detail, duration } : s
+        )
+      }));
+    };
 
     try {
-      // Filter relevant news for this asset
+      const startTime = Date.now();
+
+      // STEP 1: Fetch & Filter News
+      updateStep('fetch', 'running', 'กำลังค้นหาข่าวที่เกี่ยวข้อง...');
+      addLog(`🔍 เริ่มค้นหาข่าวสำหรับ ${symbol}...`);
+      
       const relevantKeywords = getRelevantKeywords(symbol);
+      addLog(`📋 Keywords: ${relevantKeywords.slice(0, 5).join(', ')}`);
       
       const relevantNews = newsToUse.filter(item => {
         const titleLower = item.title.toLowerCase();
         return relevantKeywords.some(keyword => titleLower.includes(keyword));
       });
 
-      // Use all news if no specific relevant news found
       const headlinesToAnalyze = relevantNews.length > 5 
-        ? relevantNews.slice(0, 30).map(n => n.title)
-        : newsToUse.slice(0, 30).map(n => n.title);
+        ? relevantNews.slice(0, 20).map(n => n.title)
+        : newsToUse.slice(0, 20).map(n => n.title);
 
-      // Run ABLE-HF 3.0 Analysis
+      addLog(`✅ พบข่าวที่เกี่ยวข้อง ${relevantNews.length} ข่าว`);
+      addLog(`📰 ใช้ ${headlinesToAnalyze.length} ข่าวในการวิเคราะห์`);
+      
+      const step1Duration = Date.now() - startTime;
+      updateStep('fetch', 'complete', `${headlinesToAnalyze.length} ข่าว`, step1Duration);
+
+      // STEP 2: Call Lovable AI for Analysis
+      updateStep('analyze', 'running', 'ส่งข้อมูลให้ Gemini 2.5 Flash...');
+      addLog(`🧠 เริ่มวิเคราะห์ด้วย Gemini AI...`);
+      
+      const priceData = assetPrices[symbol];
+      const aiStartTime = Date.now();
+
+      const { data: aiData, error: aiError } = await supabase.functions.invoke('macro-ai-analysis', {
+        body: {
+          symbol,
+          headlines: headlinesToAnalyze,
+          currentPrice: priceData?.price,
+          priceChange: priceData?.changePercent
+        }
+      });
+
+      if (aiError) {
+        addLog(`⚠️ AI Error: ${aiError.message}`);
+        // Fallback to local ABLE analysis
+        addLog(`📊 ใช้ ABLE-HF local analysis แทน...`);
+      } else if (aiData?.success) {
+        const aiAnalysis = aiData.analysis as AIAnalysisResult;
+        addLog(`✅ AI Analysis: ${aiAnalysis.sentiment.toUpperCase()}`);
+        addLog(`📊 P(Up): ${aiAnalysis.P_up_pct}% | Confidence: ${aiAnalysis.confidence}%`);
+        addLog(`💡 Decision: ${aiAnalysis.decision}`);
+        
+        setAIAnalysisResults(prev => ({ ...prev, [symbol]: aiAnalysis }));
+      }
+
+      const step2Duration = Date.now() - aiStartTime;
+      updateStep('analyze', 'complete', aiData?.success ? 'Gemini AI ✓' : 'Fallback mode', step2Duration);
+
+      // STEP 3: ABLE-HF Local Enhancement
+      updateStep('compute', 'running', 'รัน 40 Modules...');
+      addLog(`⚡ เริ่มรัน ABLE-HF 3.0 (40 Modules)...`);
+      
+      const computeStartTime = Date.now();
+      
       const analyzer = new AbleNewsAnalyzer({
         symbol,
-        headlines: headlinesToAnalyze
+        headlines: headlinesToAnalyze,
+        currentPrice: priceData?.price,
+        priceChange24h: priceData?.changePercent
       });
 
       const result = analyzer.analyze();
+      
+      addLog(`📈 Module Macro-Economic: ${(result.category_performance.macro_economic * 100).toFixed(0)}%`);
+      addLog(`📊 Module Sentiment: ${(result.category_performance.sentiment_flow * 100).toFixed(0)}%`);
+      addLog(`🎯 Quantum Boost: +${result.quantum_enhancement}%`);
+      addLog(`🧠 Neural Boost: +${result.neural_enhancement}%`);
+      addLog(`✅ ABLE-HF Complete: ${result.decision} (${result.regime_adjusted_confidence}%)`);
+
+      const step3Duration = Date.now() - computeStartTime;
+      updateStep('compute', 'complete', `${result.decision}`, step3Duration);
       
       setAbleAnalysis(prev => ({
         ...prev,
         [symbol]: result
       }));
 
+      const totalDuration = Date.now() - startTime;
+      addLog(`🏁 Total: ${totalDuration}ms | Final: ${result.trading_signal.signal}`);
+
       return result;
 
     } catch (error) {
       console.error('Analysis error:', error);
+      addLog(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return null;
     } finally {
       setIsAnalyzing(prev => ({ ...prev, [symbol]: false }));
     }
-  }, [rawNews]);
+  }, [rawNews, assetPrices]);
 
   // Analyze all pinned assets when news is loaded
   const analyzeAllPinnedAssets = useCallback(async (newsItems: RawNewsItem[]) => {
     for (const asset of pinnedAssets) {
-      await analyzeAsset(asset.symbol, newsItems);
+      await analyzeAssetWithAI(asset.symbol, newsItems);
     }
-  }, [pinnedAssets, analyzeAsset]);
+  }, [pinnedAssets, analyzeAssetWithAI]);
 
   // Fetch news from edge function
   const fetchNews = useCallback(async () => {
@@ -343,7 +496,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
     
     // Immediately analyze the new asset
     if (rawNews.length > 0) {
-      analyzeAsset(symbol, rawNews);
+      analyzeAssetWithAI(symbol, rawNews);
     }
   };
 
@@ -639,33 +792,32 @@ const TopNews: React.FC<TopNewsProps> = () => {
                   <div className="grid grid-cols-2 gap-4">
                     {pinnedAssets.map((pinned) => {
                       const analysis = ableAnalysis[pinned.symbol];
+                      const aiResult = aiAnalysisResults[pinned.symbol];
                       const analyzing = isAnalyzing[pinned.symbol];
+                      const priceData = assetPrices[pinned.symbol];
+                      const thinkingSteps = macroThinkingSteps[pinned.symbol] || [];
+                      const thinkingLogs = macroThinkingLogs[pinned.symbol] || [];
+                      const isExpanded = expandedThinking === pinned.symbol;
                       
-                      // Use server macro data or ABLE analysis
-                      const macroItem = macroData.find(m => m.symbol === pinned.symbol);
-                      
-                      const sentiment = analysis 
+                      // Use AI result first, then ABLE analysis
+                      const sentiment = aiResult?.sentiment || (analysis 
                         ? (analysis.P_up_pct > 55 ? 'bullish' : analysis.P_up_pct < 45 ? 'bearish' : 'neutral')
-                        : (macroItem?.sentiment || 'neutral');
+                        : 'neutral');
                       
-                      // Fix: regime_adjusted_confidence is already in percentage (0-100+), cap at 100
-                      const rawConfidence = analysis 
-                        ? analysis.regime_adjusted_confidence  // Already a percentage
-                        : (macroItem?.confidence || 50);
-                      const confidence = Math.min(100, Math.max(0, Math.round(rawConfidence)));
+                      const confidence = aiResult?.confidence || (analysis 
+                        ? Math.min(100, Math.max(0, Math.round(analysis.regime_adjusted_confidence)))
+                        : 50);
                       
-                      const analysisText = macroItem?.analysis || analysis?.thai_summary || 'Analyzing...';
+                      const analysisText = aiResult?.thai_summary || analysis?.thai_summary || 'คลิก Refresh เพื่อเริ่มวิเคราะห์...';
                       
-                      const changeValue = macroItem?.changeValue ?? (analysis
-                        ? (analysis.P_up_pct - 50) / 10
-                        : 0);
-                      
-                      const change = changeValue >= 0 ? `+${changeValue.toFixed(2)}%` : `${changeValue.toFixed(2)}%`;
+                      const P_up = aiResult?.P_up_pct || analysis?.P_up_pct || 50;
+                      const decision = aiResult?.decision || analysis?.trading_signal?.signal || 'HOLD';
 
                       return (
                         <Card 
                           key={pinned.symbol} 
-                          className="bg-zinc-900/50 border-zinc-800 p-4 hover:border-emerald-500/30 transition-colors cursor-pointer relative group"
+                          className={`bg-zinc-900/50 border-zinc-800 p-4 hover:border-emerald-500/30 transition-colors cursor-pointer relative group ${analyzing ? 'ring-1 ring-purple-500/30' : ''}`}
+                          onClick={() => setExpandedThinking(isExpanded ? null : pinned.symbol)}
                         >
                           {/* Remove button */}
                           <button
@@ -673,64 +825,155 @@ const TopNews: React.FC<TopNewsProps> = () => {
                               e.stopPropagation();
                               handleRemoveAsset(pinned.symbol);
                             }}
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded z-10"
                           >
                             <X className="w-3 h-3 text-zinc-400" />
                           </button>
                           
-                          <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-lg font-semibold text-white">{pinned.symbol}</h3>
+                          {/* Header with Price */}
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <h3 className="text-lg font-semibold text-white">{pinned.symbol}</h3>
+                              {priceData && (
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-sm font-mono text-zinc-300">
+                                    {priceData.price.toLocaleString('en-US', { 
+                                      minimumFractionDigits: priceData.price > 100 ? 2 : 4,
+                                      maximumFractionDigits: priceData.price > 100 ? 2 : 4
+                                    })}
+                                  </span>
+                                  <span className={`text-xs font-medium ${priceData.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {priceData.changePercent >= 0 ? '↑' : '↓'} {Math.abs(priceData.changePercent).toFixed(2)}%
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2">
                               <SentimentBadge sentiment={sentiment} />
                               <span className="text-xs text-zinc-500">{confidence}%</span>
                             </div>
                           </div>
 
+                          {/* Confidence Bar */}
                           <div className="mb-3">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-xs text-zinc-500">Confidence</span>
+                              <span className="text-xs text-zinc-500">{confidence}%</span>
                             </div>
                             <Progress 
                               value={confidence} 
-                              className="h-1.5 bg-zinc-800 [&>div]:bg-emerald-500"
+                              className={`h-1.5 bg-zinc-800 ${
+                                sentiment === 'bullish' ? '[&>div]:bg-emerald-500' : 
+                                sentiment === 'bearish' ? '[&>div]:bg-red-500' : 
+                                '[&>div]:bg-zinc-500'
+                              }`}
                             />
                           </div>
 
+                          {/* AI Analysis */}
                           <div className="mb-3">
                             <div className="flex items-center gap-1 mb-1">
-                              <Brain className="w-3 h-3 text-emerald-400" />
-                              <span className="text-xs text-emerald-400">AI Analysis</span>
+                              <Brain className="w-3 h-3 text-purple-400" />
+                              <span className="text-xs text-purple-400">AI Analysis</span>
                               {analyzing && (
-                                <Loader2 className="w-3 h-3 animate-spin text-emerald-400 ml-1" />
+                                <Loader2 className="w-3 h-3 animate-spin text-purple-400 ml-1" />
                               )}
                             </div>
-                            <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">
+                            <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2">
                               {analysisText}
                             </p>
                           </div>
 
-                          {/* ABLE-HF 3.0 Enhanced Info */}
-                          {analysis && (
-                            <div className="mb-3 flex flex-wrap gap-1">
-                              <Badge className="text-[10px] bg-purple-500/20 text-purple-400 border-purple-500/30">
-                                P↑ {analysis.P_up_pct.toFixed(0)}%
+                          {/* P(up) and Decision */}
+                          <div className="mb-3 flex items-center justify-between">
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className={`text-[10px] ${
+                                P_up > 60 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                P_up < 40 ? 'bg-red-500/20 text-red-400 border-red-500/30' :
+                                'bg-purple-500/20 text-purple-400 border-purple-500/30'
+                              }`}>
+                                P↑ {P_up.toFixed(0)}%
                               </Badge>
-                              {analysis.quantum_enhancement > 0 && (
+                              {analysis && analysis.quantum_enhancement > 0 && (
                                 <Badge className="text-[10px] bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
-                                  Q+{(analysis.quantum_enhancement * 100).toFixed(0)}%
-                                </Badge>
-                              )}
-                              {analysis.neural_enhancement > 0 && (
-                                <Badge className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30">
-                                  N+{(analysis.neural_enhancement * 100).toFixed(0)}%
+                                  Q+{analysis.quantum_enhancement}%
                                 </Badge>
                               )}
                             </div>
+                            <Badge className={`text-[10px] font-medium ${
+                              decision.includes('BUY') ? 'bg-emerald-500/20 text-emerald-400' :
+                              decision.includes('SELL') ? 'bg-red-500/20 text-red-400' :
+                              'bg-zinc-500/20 text-zinc-400'
+                            }`}>
+                              {decision}
+                            </Badge>
+                          </div>
+
+                          {/* Expandable AI Thinking Panel */}
+                          {isExpanded && (thinkingLogs.length > 0 || analyzing) && (
+                            <div className="mt-3 pt-3 border-t border-zinc-700">
+                              {/* 3-Step Progress */}
+                              <div className="grid grid-cols-3 gap-1 mb-3">
+                                {thinkingSteps.map((step, idx) => (
+                                  <div 
+                                    key={step.id}
+                                    className={`p-1.5 rounded text-center transition-all ${
+                                      step.status === 'running' ? 'bg-purple-500/20 border border-purple-500/50' :
+                                      step.status === 'complete' ? 'bg-emerald-500/10 border border-emerald-500/30' :
+                                      'bg-zinc-800/50 border border-zinc-700'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      {step.status === 'running' ? (
+                                        <Loader2 className="w-2.5 h-2.5 text-purple-400 animate-spin" />
+                                      ) : step.status === 'complete' ? (
+                                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                                      ) : (
+                                        <div className="w-2.5 h-2.5 rounded-full bg-zinc-600" />
+                                      )}
+                                      <span className="text-[9px] text-zinc-400">Step {idx + 1}</span>
+                                    </div>
+                                    <p className="text-[9px] text-white truncate">{step.label}</p>
+                                    {step.duration && (
+                                      <p className="text-[8px] text-emerald-500">{step.duration}ms</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Thinking Log */}
+                              <div className="bg-black/50 rounded p-2 max-h-24 overflow-y-auto">
+                                <div className="flex items-center gap-1 mb-1">
+                                  <Zap className="w-2.5 h-2.5 text-yellow-400" />
+                                  <span className="text-[9px] font-medium text-yellow-400">AI Thinking (Live)</span>
+                                </div>
+                                <div className="space-y-0.5 font-mono text-[9px]">
+                                  {thinkingLogs.slice(-6).map((log, i) => (
+                                    <div 
+                                      key={i} 
+                                      className={`flex items-start gap-1 ${
+                                        log.includes('✅') ? 'text-emerald-400' :
+                                        log.includes('❌') ? 'text-red-400' :
+                                        log.includes('⚡') ? 'text-yellow-400' :
+                                        log.includes('🧠') ? 'text-purple-400' :
+                                        'text-zinc-400'
+                                      }`}
+                                    >
+                                      <span className="text-zinc-600 flex-shrink-0">›</span>
+                                      <span className="break-words">{log}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
                           )}
 
-                          <div className={`text-sm font-medium ${changeValue >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {changeValue >= 0 ? '↗' : '↘'} {change}
-                          </div>
+                          {/* Click to expand hint */}
+                          {thinkingLogs.length > 0 && !isExpanded && (
+                            <div className="mt-2 text-center">
+                              <span className="text-[9px] text-zinc-600">คลิกเพื่อดูขั้นตอน AI</span>
+                            </div>
+                          )}
                         </Card>
                       );
                     })}
