@@ -77,26 +77,30 @@ const MobileMessenger: React.FC<MobileMessengerProps> = ({ onBack }) => {
     return localStorage.getItem('auto-bridge-enabled') === 'true';
   });
   
-  // Persist Auto Bridge state
+  // Load bridge_settings from database when room changes
   useEffect(() => {
-    localStorage.setItem('auto-bridge-enabled', String(autoForwardEnabled));
-    if (autoForwardEnabled && currentRoomId) {
-      localStorage.setItem('auto-bridge-room', currentRoomId);
-      localStorage.setItem('auto-bridge-mt5', mt5ConnectionId || '');
-    }
-  }, [autoForwardEnabled, currentRoomId, mt5ConnectionId]);
-
-  // Load Auto Bridge state on room change
-  useEffect(() => {
-    const savedMt5 = localStorage.getItem('auto-bridge-mt5');
-    const savedEnabled = localStorage.getItem('auto-bridge-enabled') === 'true';
-    const savedRoom = localStorage.getItem('auto-bridge-room');
+    if (!currentRoomId || !currentUser) return;
     
-    if (savedMt5 && savedEnabled && savedRoom === currentRoomId) {
-      setMt5ConnectionId(savedMt5);
-      setAutoForwardEnabled(true);
-    }
-  }, [currentRoomId]);
+    const loadBridgeSettings = async () => {
+      const { data } = await supabase
+        .from('bridge_settings')
+        .select('enabled, mt5_connection_id')
+        .eq('user_id', currentUser.id)
+        .eq('room_id', currentRoomId)
+        .maybeSingle();
+      
+      if (data) {
+        setAutoForwardEnabled(data.enabled);
+        if (data.mt5_connection_id) {
+          setMt5ConnectionId(data.mt5_connection_id);
+        }
+      } else {
+        setAutoForwardEnabled(false);
+      }
+    };
+    
+    loadBridgeSettings();
+  }, [currentRoomId, currentUser]);
   const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
   
   // Nicknames
@@ -750,14 +754,43 @@ const MobileMessenger: React.FC<MobileMessengerProps> = ({ onBack }) => {
               </button>
               {/* Auto Bridge */}
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!mt5ConnectionId) {
                     setShowAPIBridge(true);
                     toast({ title: '⚠️ เชื่อมต่อ MT5 ก่อน' });
                     return;
                   }
-                  setAutoForwardEnabled(!autoForwardEnabled);
-                  toast({ title: autoForwardEnabled ? '🔴 Auto Bridge OFF' : '🟢 Auto Bridge ON' });
+                  
+                  const newState = !autoForwardEnabled;
+                  setAutoForwardEnabled(newState);
+                  
+                  // Save to database for 24/7 operation
+                  try {
+                    const { error } = await supabase
+                      .from('bridge_settings')
+                      .upsert({
+                        user_id: currentUser!.id,
+                        room_id: currentRoomId,
+                        enabled: newState,
+                        mt5_connection_id: mt5ConnectionId,
+                        auto_forward_signals: true,
+                        signal_types: ['BUY', 'SELL', 'CLOSE'],
+                        max_lot_size: 1.0
+                      }, {
+                        onConflict: 'user_id,room_id'
+                      });
+                    
+                    if (error) throw error;
+                    
+                    toast({
+                      title: newState ? '🟢 Auto Bridge ON - 24/7' : '🔴 Auto Bridge OFF',
+                      description: newState ? 'ทำงานแม้ปิดเว็บ' : 'หยุดส่งอัตโนมัติ'
+                    });
+                  } catch (error: any) {
+                    console.error('Error updating bridge settings:', error);
+                    toast({ title: 'Error', variant: 'destructive' });
+                    setAutoForwardEnabled(!newState); // rollback
+                  }
                 }}
                 className={`relative flex items-center justify-center w-9 h-9 rounded-xl transition-all ${
                   autoForwardEnabled 

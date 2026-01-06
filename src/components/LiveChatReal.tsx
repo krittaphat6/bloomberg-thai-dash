@@ -118,26 +118,31 @@ const LiveChatReal = () => {
     localStorage.setItem('messenger-sound-type', selectedSound);
   }, [selectedSound]);
 
-  // Persist Auto Bridge state to localStorage
+  // Load bridge_settings from database when room changes
   useEffect(() => {
-    localStorage.setItem('auto-bridge-enabled', String(autoForwardEnabled));
-    if (autoForwardEnabled && currentRoomId) {
-      localStorage.setItem('auto-bridge-room', currentRoomId);
-      localStorage.setItem('auto-bridge-mt5', mt5ConnectionId || '');
-    }
-  }, [autoForwardEnabled, currentRoomId, mt5ConnectionId]);
-
-  // Load Auto Bridge state on mount
-  useEffect(() => {
-    const savedMt5 = localStorage.getItem('auto-bridge-mt5');
-    const savedEnabled = localStorage.getItem('auto-bridge-enabled') === 'true';
-    const savedRoom = localStorage.getItem('auto-bridge-room');
+    if (!currentRoomId || !currentUser) return;
     
-    if (savedMt5 && savedEnabled && savedRoom === currentRoomId) {
-      setMt5ConnectionId(savedMt5);
-      setAutoForwardEnabled(true);
-    }
-  }, [currentRoomId]);
+    const loadBridgeSettings = async () => {
+      const { data } = await supabase
+        .from('bridge_settings')
+        .select('enabled, mt5_connection_id')
+        .eq('user_id', currentUser.id)
+        .eq('room_id', currentRoomId)
+        .maybeSingle();
+      
+      if (data) {
+        setAutoForwardEnabled(data.enabled);
+        if (data.mt5_connection_id) {
+          setMt5ConnectionId(data.mt5_connection_id);
+        }
+      } else {
+        // Reset if no settings for this room
+        setAutoForwardEnabled(false);
+      }
+    };
+    
+    loadBridgeSettings();
+  }, [currentRoomId, currentUser]);
 
   // Play notification sound using Web Audio API
   const playNotificationSound = useCallback((soundKey?: keyof typeof NOTIFICATION_SOUNDS) => {
@@ -1948,7 +1953,7 @@ const LiveChatReal = () => {
                 {/* Auto Bridge Button - Main feature for webhook to MT5 */}
                 {currentRoom?.type === 'webhook' && (
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (!mt5ConnectionId) {
                         setShowAPIBridge(true);
                         toast({
@@ -1957,13 +1962,43 @@ const LiveChatReal = () => {
                         });
                         return;
                       }
-                      setAutoForwardEnabled(!autoForwardEnabled);
-                      toast({
-                        title: autoForwardEnabled ? '🔴 Auto Bridge OFF' : '🟢 Auto Bridge ON',
-                        description: autoForwardEnabled 
-                          ? 'ระบบหยุดส่งคำสั่งอัตโนมัติไปยัง MT5' 
-                          : 'Webhook signals จะถูกส่งไป MT5 โดยอัตโนมัติ',
-                      });
+                      
+                      const newState = !autoForwardEnabled;
+                      setAutoForwardEnabled(newState);
+                      
+                      // Save to database for 24/7 operation
+                      try {
+                        const { error } = await supabase
+                          .from('bridge_settings')
+                          .upsert({
+                            user_id: currentUser!.id,
+                            room_id: currentRoomId,
+                            enabled: newState,
+                            mt5_connection_id: mt5ConnectionId,
+                            auto_forward_signals: true,
+                            signal_types: ['BUY', 'SELL', 'CLOSE'],
+                            max_lot_size: 1.0
+                          }, {
+                            onConflict: 'user_id,room_id'
+                          });
+                        
+                        if (error) throw error;
+                        
+                        toast({
+                          title: newState ? '🟢 Auto Bridge ON - ทำงาน 24/7' : '🔴 Auto Bridge OFF',
+                          description: newState 
+                            ? 'ระบบจะ forward webhook ไป MT5 อัตโนมัติ แม้ปิดเว็บ' 
+                            : 'ระบบหยุดส่งคำสั่งอัตโนมัติ',
+                        });
+                      } catch (error: any) {
+                        console.error('Error updating bridge settings:', error);
+                        toast({ 
+                          title: 'Error', 
+                          description: 'ไม่สามารถบันทึก Auto Bridge settings ได้', 
+                          variant: 'destructive' 
+                        });
+                        setAutoForwardEnabled(!newState); // rollback state
+                      }
                     }}
                     title={autoForwardEnabled ? "Auto Bridge กำลังทำงาน - คลิกเพื่อปิด" : "เปิด Auto Bridge เพื่อส่ง webhook ไป MT5 อัตโนมัติ"}
                     className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-300 ${
