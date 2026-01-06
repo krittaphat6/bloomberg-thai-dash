@@ -29,3 +29,15 @@ verify_jwt = false
 
 [functions.auto-bridge]
 verify_jwt = false
+
+[functions.able-ai]
+verify_jwt = false
+
+[functions.mt5-poll-v2]
+verify_jwt = false
+
+[functions.twitter-scraper]
+verify_jwt = false
+
+[functions.twitter-ai-analyzer]
+verify_jwt = false
