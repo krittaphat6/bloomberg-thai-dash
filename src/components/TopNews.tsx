@@ -8,8 +8,9 @@ import {
   RefreshCw, Sparkles, ExternalLink, 
   Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3,
   Settings, Eye, FileText, Users, Zap, Loader2, Target, Plus, X,
-  ChevronDown, Twitter, AlertCircle, PlayCircle, CheckCircle2, Search
+  ChevronDown, Twitter, AlertCircle, PlayCircle, CheckCircle2, Search, Pin
 } from 'lucide-react';
+import { TwitterChannelPinPanel } from '@/components/TopNews/TwitterChannelPinPanel';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { AbleNewsResult, AbleNewsAnalyzer, ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
@@ -1271,42 +1272,61 @@ const TopNews: React.FC<TopNewsProps> = () => {
             ) : activeTab === 'twitter' ? (
               /* Twitter Intelligence Full View */
               <div className="space-y-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-500/20 rounded-lg">
-                      <Twitter className="w-5 h-5 text-blue-400" />
+                {/* Pinned Twitter Channels Section */}
+                <TwitterChannelPinPanel 
+                  onNewPosts={(posts, username) => {
+                    // Add new posts to main feed
+                    setTwitterPosts(prev => {
+                      const existingIds = prev.map(p => p.id);
+                      const newPosts = posts.filter(p => !existingIds.includes(p.id));
+                      return [...newPosts, ...prev].slice(0, 100);
+                    });
+                    toast({
+                      title: `🐦 New posts from @${username}`,
+                      description: `${posts.length} new posts detected`,
+                    });
+                  }}
+                />
+
+                {/* Separator */}
+                <div className="border-t border-zinc-800 pt-6">
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-500/20 rounded-lg">
+                        <Twitter className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-medium text-white flex items-center gap-2">
+                          All Twitter Feed
+                          <Badge className="text-[10px] bg-blue-500/20 text-blue-400 border-blue-500/30">
+                            100 Accounts
+                          </Badge>
+                        </h2>
+                        <p className="text-xs text-zinc-500">Real-time market-moving tweets with AI analysis</p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-lg font-medium text-white flex items-center gap-2">
-                        Twitter Intelligence Pipeline
-                        <Badge className="text-[10px] bg-blue-500/20 text-blue-400 border-blue-500/30">
-                          100 Accounts
-                        </Badge>
-                      </h2>
-                      <p className="text-xs text-zinc-500">Real-time market-moving tweets with AI analysis</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {twitterLastUpdate && (
-                      <span className="text-xs text-zinc-500">
-                        Updated {twitterLastUpdate.toLocaleTimeString('th-TH')}
-                      </span>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={fetchTwitterIntelligence}
-                      disabled={twitterLoading}
-                      className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 bg-transparent"
-                    >
-                      {twitterLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin mr-1" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4 mr-1" />
+                    <div className="flex items-center gap-2">
+                      {twitterLastUpdate && (
+                        <span className="text-xs text-zinc-500">
+                          Updated {twitterLastUpdate.toLocaleTimeString('th-TH')}
+                        </span>
                       )}
-                      {twitterLoading ? 'Analyzing...' : 'Refresh'}
-                    </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={fetchTwitterIntelligence}
+                        disabled={twitterLoading}
+                        className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 bg-transparent"
+                      >
+                        {twitterLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4 mr-1" />
+                        )}
+                        {twitterLoading ? 'Analyzing...' : 'Refresh All'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
