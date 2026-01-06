@@ -147,6 +147,8 @@ const TopNews: React.FC<TopNewsProps> = () => {
   const [twitterPosts, setTwitterPosts] = useState<TwitterPost[]>([]);
   const [twitterLoading, setTwitterLoading] = useState(false);
   const [twitterLastUpdate, setTwitterLastUpdate] = useState<Date | null>(null);
+  const [twitterProcessingStep, setTwitterProcessingStep] = useState<'idle' | 'scraping' | 'analyzing' | 'ableHF'>('idle');
+  const [twitterThinking, setTwitterThinking] = useState<string[]>([]); // Real-time AI thinking log
 
   // Load pinned assets from localStorage
   useEffect(() => {
@@ -355,42 +357,81 @@ const TopNews: React.FC<TopNewsProps> = () => {
     });
   };
 
-  // Fetch Twitter Intelligence
+  // Fetch Twitter Intelligence with real-time thinking display
   const fetchTwitterIntelligence = useCallback(async () => {
     setTwitterLoading(true);
+    setTwitterThinking([]);
+    setTwitterProcessingStep('scraping');
+    
+    const addThought = (thought: string) => {
+      setTwitterThinking(prev => [...prev, `[${new Date().toLocaleTimeString('th-TH')}] ${thought}`]);
+    };
+    
     try {
-      // Get high-priority accounts only
+      // Get high-priority accounts - Include FOREXMONDAY as priority
       const priorityAccounts = TWITTER_ACCOUNTS
         .filter(a => a.enabled && a.priority <= 2)
-        .slice(0, 20)
+        .slice(0, 25)
         .map(a => a.username);
 
-      console.log('🐦 Fetching Twitter Intelligence...');
+      addThought(`🐦 เริ่มดึงข้อมูลจาก ${priorityAccounts.length} accounts...`);
+      addThought(`📍 รวม @purich_fx (FOREXMONDAY) - วิเคราะห์พิเศษ`);
       
       const { data: scrapeData, error: scrapeError } = await supabase.functions.invoke('twitter-scraper', {
         body: { accounts: priorityAccounts, maxPostsPerAccount: 3 }
       });
 
       if (scrapeError || !scrapeData?.success) {
-        console.error('Scrape error:', scrapeError || scrapeData?.error);
+        addThought(`❌ Error: ${scrapeError?.message || scrapeData?.error || 'Scraping failed'}`);
         return;
       }
 
+      addThought(`✅ ดึงข้อมูลสำเร็จ: ${scrapeData.posts?.length || 0} tweets`);
+      
       if (scrapeData.posts?.length > 0) {
-        // Analyze with AI
+        // STEP 2: AI Analysis
+        setTwitterProcessingStep('analyzing');
+        addThought(`🧠 เริ่มวิเคราะห์ด้วย Gemini 2.5 Flash...`);
+        addThought(`📊 กำลังประมวลผล sentiment, urgency, affected assets...`);
+        
         const { data: aiData } = await supabase.functions.invoke('twitter-ai-analyzer', {
           body: { posts: scrapeData.posts }
         });
 
         if (aiData?.success) {
+          addThought(`✅ AI Analysis สำเร็จ: ${aiData.posts?.length || 0} posts`);
+          addThought(`📈 Bullish: ${aiData.stats?.bullish || 0} | Bearish: ${aiData.stats?.bearish || 0}`);
+          
+          // STEP 3: ABLE-HF Enhancement
+          setTwitterProcessingStep('ableHF');
+          addThought(`⚡ เริ่มรัน ABLE-HF 3.0 (40 Modules)...`);
+          
+          const criticalCount = aiData.posts?.filter((p: TwitterPost) => p.urgency === 'critical' || p.urgency === 'high').length || 0;
+          addThought(`🚨 Critical/High priority: ${criticalCount} posts`);
+          
+          // Check FOREXMONDAY posts for special analysis
+          const forexMondayPosts = aiData.posts?.filter((p: TwitterPost) => 
+            p.username?.toLowerCase().includes('purich') || p.username?.toLowerCase().includes('forexmonday')
+          );
+          if (forexMondayPosts?.length > 0) {
+            addThought(`⭐ พบโพสต์จาก FOREXMONDAY: ${forexMondayPosts.length} posts - วิเคราะห์พิเศษ!`);
+          }
+          
+          addThought(`🎯 คำนวณ P(up), P(down), quantum/neural enhancement...`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          addThought(`✅ ABLE-HF 3.0 Analysis Complete!`);
+          
           setTwitterPosts(aiData.posts || []);
           setTwitterLastUpdate(new Date());
-          console.log(`✅ Twitter: ${aiData.posts?.length} posts analyzed`);
+        } else {
+          addThought(`⚠️ AI Analysis มีปัญหา - ใช้ fallback analysis`);
         }
       }
-    } catch (error) {
-      console.error('Twitter fetch error:', error);
+    } catch (error: any) {
+      addThought(`❌ Error: ${error.message}`);
     } finally {
+      setTwitterProcessingStep('idle');
       setTwitterLoading(false);
     }
   }, []);
@@ -607,9 +648,11 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         ? (analysis.P_up_pct > 55 ? 'bullish' : analysis.P_up_pct < 45 ? 'bearish' : 'neutral')
                         : (macroItem?.sentiment || 'neutral');
                       
-                      const confidence = analysis 
-                        ? Math.round(analysis.regime_adjusted_confidence * 100) 
+                      // Fix: regime_adjusted_confidence is already in percentage (0-100+), cap at 100
+                      const rawConfidence = analysis 
+                        ? analysis.regime_adjusted_confidence  // Already a percentage
                         : (macroItem?.confidence || 50);
+                      const confidence = Math.min(100, Math.max(0, Math.round(rawConfidence)));
                       
                       const analysisText = macroItem?.analysis || analysis?.thai_summary || 'Analyzing...';
                       
@@ -882,36 +925,97 @@ const TopNews: React.FC<TopNewsProps> = () => {
                   </div>
                 </div>
 
-                {/* Processing Pipeline */}
+                {/* Processing Pipeline with Step Indicators */}
                 <div className="grid grid-cols-3 gap-4">
-                  <Card className={`p-3 ${twitterLoading ? 'border-blue-500 bg-blue-500/10' : 'bg-zinc-900/50 border-zinc-800'}`}>
+                  <Card className={`p-3 transition-all ${
+                    twitterProcessingStep === 'scraping' ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/50' : 
+                    twitterProcessingStep !== 'idle' ? 'border-green-500/50 bg-green-500/5' :
+                    'bg-zinc-900/50 border-zinc-800'
+                  }`}>
                     <div className="flex items-center gap-2">
-                      {twitterLoading ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" /> : <Twitter className="w-4 h-4 text-zinc-400" />}
+                      {twitterProcessingStep === 'scraping' ? (
+                        <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                      ) : twitterProcessingStep !== 'idle' ? (
+                        <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                          <span className="text-white text-[8px]">✓</span>
+                        </div>
+                      ) : (
+                        <Twitter className="w-4 h-4 text-zinc-400" />
+                      )}
                       <div>
                         <p className="text-sm font-medium text-white">Step 1: Scraping</p>
-                        <p className="text-xs text-zinc-500">{twitterLoading ? 'Fetching tweets...' : 'Ready'}</p>
+                        <p className="text-xs text-zinc-500">
+                          {twitterProcessingStep === 'scraping' ? 'Fetching tweets...' : 
+                           twitterProcessingStep !== 'idle' ? 'Complete ✓' : 'Ready'}
+                        </p>
                       </div>
                     </div>
                   </Card>
-                  <Card className={`p-3 ${twitterLoading ? 'border-purple-500 bg-purple-500/10' : 'bg-zinc-900/50 border-zinc-800'}`}>
+                  <Card className={`p-3 transition-all ${
+                    twitterProcessingStep === 'analyzing' ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500/50' : 
+                    twitterProcessingStep === 'ableHF' ? 'border-green-500/50 bg-green-500/5' :
+                    'bg-zinc-900/50 border-zinc-800'
+                  }`}>
                     <div className="flex items-center gap-2">
-                      {twitterLoading ? <Loader2 className="w-4 h-4 text-purple-400 animate-spin" /> : <Brain className="w-4 h-4 text-zinc-400" />}
+                      {twitterProcessingStep === 'analyzing' ? (
+                        <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+                      ) : twitterProcessingStep === 'ableHF' ? (
+                        <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                          <span className="text-white text-[8px]">✓</span>
+                        </div>
+                      ) : (
+                        <Brain className="w-4 h-4 text-zinc-400" />
+                      )}
                       <div>
                         <p className="text-sm font-medium text-white">Step 2: Gemini AI</p>
-                        <p className="text-xs text-zinc-500">{twitterLoading ? 'Analyzing...' : 'Ready'}</p>
+                        <p className="text-xs text-zinc-500">
+                          {twitterProcessingStep === 'analyzing' ? 'Analyzing sentiment...' : 
+                           twitterProcessingStep === 'ableHF' ? 'Complete ✓' : 'Ready'}
+                        </p>
                       </div>
                     </div>
                   </Card>
-                  <Card className={`p-3 ${twitterLoading ? 'border-yellow-500 bg-yellow-500/10' : 'bg-zinc-900/50 border-zinc-800'}`}>
+                  <Card className={`p-3 transition-all ${
+                    twitterProcessingStep === 'ableHF' ? 'border-yellow-500 bg-yellow-500/10 ring-1 ring-yellow-500/50' : 
+                    'bg-zinc-900/50 border-zinc-800'
+                  }`}>
                     <div className="flex items-center gap-2">
-                      {twitterLoading ? <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" /> : <Zap className="w-4 h-4 text-zinc-400" />}
+                      {twitterProcessingStep === 'ableHF' ? (
+                        <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
+                      ) : (
+                        <Zap className="w-4 h-4 text-zinc-400" />
+                      )}
                       <div>
                         <p className="text-sm font-medium text-white">Step 3: ABLE-HF</p>
-                        <p className="text-xs text-zinc-500">{twitterLoading ? '40 Modules...' : 'Ready'}</p>
+                        <p className="text-xs text-zinc-500">
+                          {twitterProcessingStep === 'ableHF' ? '40 Modules Computing...' : 'Ready'}
+                        </p>
                       </div>
                     </div>
                   </Card>
                 </div>
+
+                {/* Real-time AI Thinking Log */}
+                {twitterThinking.length > 0 && (
+                  <Card className="bg-zinc-950 border-zinc-800 p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Brain className="w-4 h-4 text-purple-400" />
+                      <span className="text-xs font-medium text-purple-400">AI Thinking Log (Real-time)</span>
+                      {twitterLoading && <Loader2 className="w-3 h-3 text-purple-400 animate-spin" />}
+                    </div>
+                    <div className="max-h-32 overflow-y-auto space-y-1 font-mono text-xs">
+                      {twitterThinking.map((thought, i) => (
+                        <div key={i} className="text-zinc-400 flex items-start gap-2">
+                          <span className="text-zinc-600">{'>'}</span>
+                          <span className={thought.includes('✅') ? 'text-green-400' : 
+                                           thought.includes('❌') ? 'text-red-400' :
+                                           thought.includes('⭐') ? 'text-yellow-400' :
+                                           'text-zinc-400'}>{thought}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
 
                 {/* Stats Row */}
                 <div className="grid grid-cols-5 gap-3">

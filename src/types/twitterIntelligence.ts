@@ -172,6 +172,9 @@ export const TWITTER_ACCOUNTS: TwitterAccount[] = [
   { id: 'robinhood', username: 'RobinhoodApp', displayName: 'Robinhood', category: 'fintech', priority: 2, description: 'Trading App', marketImpact: 'medium', enabled: true },
   { id: 'coinbase', username: 'coinbase', displayName: 'Coinbase', category: 'fintech', priority: 1, description: 'Crypto Exchange', marketImpact: 'high', enabled: true },
   { id: 'kraken', username: 'kaborrakenfx', displayName: 'Kraken', category: 'fintech', priority: 2, description: 'Crypto Exchange', marketImpact: 'high', enabled: true },
+  
+  // Special Priority Account - Thai Forex Expert
+  { id: 'forexmonday', username: 'purich_fx', displayName: 'Purich | FOREXMONDAY', category: 'technical', priority: 1, description: 'Thai Forex Expert - วิเคราะห์พิเศษทุกข่าว', marketImpact: 'extreme', enabled: true },
 ];
 
 // Category display names
