@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.twitter-ai-analyzer]
 verify_jwt = false
+
+[functions.macro-ai-analysis]
+verify_jwt = false
