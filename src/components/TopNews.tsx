@@ -6,9 +6,9 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { 
   RefreshCw, Sparkles, ExternalLink, 
-  Brain, TrendingUp, ChevronRight, Clock, BarChart3,
+  Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3,
   Settings, Eye, FileText, Users, Zap, Loader2, Target, Plus, X,
-  ChevronDown
+  ChevronDown, Twitter, AlertCircle, PlayCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,6 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { TWITTER_ACCOUNTS, type TwitterPost } from '@/types/twitterIntelligence';
 
 // ============ TYPES ============
 interface MacroAnalysis {
@@ -141,6 +142,11 @@ const TopNews: React.FC<TopNewsProps> = () => {
   const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>(DEFAULT_PINNED_ASSETS);
   const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleNewsResult>>({});
   const [isAnalyzing, setIsAnalyzing] = useState<Record<string, boolean>>({});
+
+  // Twitter Intelligence State
+  const [twitterPosts, setTwitterPosts] = useState<TwitterPost[]>([]);
+  const [twitterLoading, setTwitterLoading] = useState(false);
+  const [twitterLastUpdate, setTwitterLastUpdate] = useState<Date | null>(null);
 
   // Load pinned assets from localStorage
   useEffect(() => {
@@ -349,9 +355,50 @@ const TopNews: React.FC<TopNewsProps> = () => {
     });
   };
 
+  // Fetch Twitter Intelligence
+  const fetchTwitterIntelligence = useCallback(async () => {
+    setTwitterLoading(true);
+    try {
+      // Get high-priority accounts only
+      const priorityAccounts = TWITTER_ACCOUNTS
+        .filter(a => a.enabled && a.priority <= 2)
+        .slice(0, 20)
+        .map(a => a.username);
+
+      console.log('🐦 Fetching Twitter Intelligence...');
+      
+      const { data: scrapeData, error: scrapeError } = await supabase.functions.invoke('twitter-scraper', {
+        body: { accounts: priorityAccounts, maxPostsPerAccount: 3 }
+      });
+
+      if (scrapeError || !scrapeData?.success) {
+        console.error('Scrape error:', scrapeError || scrapeData?.error);
+        return;
+      }
+
+      if (scrapeData.posts?.length > 0) {
+        // Analyze with AI
+        const { data: aiData } = await supabase.functions.invoke('twitter-ai-analyzer', {
+          body: { posts: scrapeData.posts }
+        });
+
+        if (aiData?.success) {
+          setTwitterPosts(aiData.posts || []);
+          setTwitterLastUpdate(new Date());
+          console.log(`✅ Twitter: ${aiData.posts?.length} posts analyzed`);
+        }
+      }
+    } catch (error) {
+      console.error('Twitter fetch error:', error);
+    } finally {
+      setTwitterLoading(false);
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
     fetchNews();
+    fetchTwitterIntelligence();
   }, []);
 
   // Auto-refresh every 2 minutes
@@ -359,6 +406,12 @@ const TopNews: React.FC<TopNewsProps> = () => {
     const interval = setInterval(fetchNews, 120000);
     return () => clearInterval(interval);
   }, [fetchNews]);
+
+  // Auto-refresh Twitter every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(fetchTwitterIntelligence, 300000);
+    return () => clearInterval(interval);
+  }, [fetchTwitterIntelligence]);
 
   // Calculate pre-market countdown
   const getPreMarketCountdown = () => {
@@ -793,47 +846,119 @@ const TopNews: React.FC<TopNewsProps> = () => {
           </div>
         </div>
 
-        {/* X Notifications */}
+        {/* Twitter Intelligence */}
         <div className="flex-1 overflow-hidden flex flex-col">
           <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-white font-medium">Latest notifications from</span>
-              <span className="font-bold text-white text-lg">𝕏</span>
+              <Twitter className="w-4 h-4 text-blue-400" />
+              <span className="text-white font-medium">Twitter Intelligence</span>
             </div>
-            <Badge className="border-emerald-500/30 text-emerald-400 text-xs bg-emerald-500/10 border">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse" />
-              Live
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchTwitterIntelligence}
+                disabled={twitterLoading}
+                className="h-6 w-6 p-0 text-zinc-400 hover:text-white"
+              >
+                {twitterLoading ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3 h-3" />
+                )}
+              </Button>
+              <Badge className="border-emerald-500/30 text-emerald-400 text-xs bg-emerald-500/10 border">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse" />
+                Live
+              </Badge>
+            </div>
           </div>
 
           <ScrollArea className="flex-1">
-            <div className="p-4 space-y-4">
-              {xNotifications.map((notif) => (
-                <div 
-                  key={notif.id} 
-                  className="group cursor-pointer"
-                  onClick={() => window.open(notif.url, '_blank')}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                      {notif.source.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-white font-medium text-sm">{notif.source}</span>
-                        <span className="text-zinc-600">·</span>
-                        <span className="text-zinc-500 text-xs">{notif.time}</span>
-                        <ExternalLink className="w-3 h-3 text-zinc-600 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="p-3 space-y-3">
+              {twitterPosts.length === 0 && !twitterLoading ? (
+                <div className="text-center py-8">
+                  <Twitter className="w-8 h-8 text-zinc-600 mx-auto mb-3" />
+                  <p className="text-zinc-500 text-sm mb-3">กด Refresh เพื่อดึงข่าว Twitter</p>
+                  <Button
+                    size="sm"
+                    onClick={fetchTwitterIntelligence}
+                    className="bg-blue-500 hover:bg-blue-600 text-white"
+                  >
+                    <PlayCircle className="w-4 h-4 mr-1" />
+                    Start Intelligence
+                  </Button>
+                </div>
+              ) : twitterLoading && twitterPosts.length === 0 ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-400 mx-auto mb-2" />
+                  <p className="text-zinc-500 text-sm">กำลังวิเคราะห์ Twitter...</p>
+                </div>
+              ) : (
+                twitterPosts.slice(0, 15).map((post) => (
+                  <div 
+                    key={post.id} 
+                    className="group cursor-pointer p-2 rounded-lg hover:bg-zinc-900/50 transition-colors"
+                    onClick={() => window.open(post.url, '_blank')}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-xs flex-shrink-0">
+                        {post.username?.[0]?.toUpperCase() || '@'}
                       </div>
-                      <p className="text-zinc-400 text-sm line-clamp-3">{notif.content}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <span className="text-white font-medium text-xs truncate">@{post.username}</span>
+                          {post.sentiment && (
+                            <Badge className={`text-[9px] px-1 py-0 ${
+                              post.sentiment === 'bullish' ? 'bg-emerald-500/20 text-emerald-400' :
+                              post.sentiment === 'bearish' ? 'bg-red-500/20 text-red-400' :
+                              'bg-zinc-500/20 text-zinc-400'
+                            }`}>
+                              {post.sentiment === 'bullish' && <TrendingUp className="w-2 h-2 mr-0.5" />}
+                              {post.sentiment === 'bearish' && <TrendingDown className="w-2 h-2 mr-0.5" />}
+                              {post.sentiment}
+                            </Badge>
+                          )}
+                          {(post.urgency === 'critical' || post.urgency === 'high') && (
+                            <Badge className="text-[9px] px-1 py-0 bg-red-500/20 text-red-400 animate-pulse">
+                              <AlertCircle className="w-2 h-2 mr-0.5" />
+                              {post.urgency}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-zinc-400 text-xs line-clamp-2">{post.aiSummary || post.content}</p>
+                        
+                        {/* Affected Assets */}
+                        {post.affectedAssets && post.affectedAssets.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {post.affectedAssets.slice(0, 3).map(asset => (
+                              <Badge key={asset} variant="outline" className="text-[9px] px-1 py-0 border-emerald-500/30 text-emerald-400">
+                                {asset}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* ABLE-HF Analysis */}
+                        {post.ableAnalysis && (
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge className="text-[9px] px-1 py-0 bg-yellow-500/20 text-yellow-400">
+                              <Zap className="w-2 h-2 mr-0.5" />
+                              {post.ableAnalysis.decision}
+                            </Badge>
+                            <span className="text-[9px] text-zinc-500">P↑ {post.ableAnalysis.P_up_pct}%</span>
+                          </div>
+                        )}
+                      </div>
+                      <ExternalLink className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
               
-              {xNotifications.length === 0 && (
-                <div className="text-center text-zinc-500 py-8">
-                  <p className="text-sm">No notifications yet</p>
+              {twitterLastUpdate && twitterPosts.length > 0 && (
+                <div className="text-center text-[10px] text-zinc-600 pt-2">
+                  Updated: {twitterLastUpdate.toLocaleTimeString('th-TH')}
                 </div>
               )}
             </div>
