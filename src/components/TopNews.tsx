@@ -22,7 +22,7 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { TWITTER_ACCOUNTS, type TwitterPost } from '@/types/twitterIntelligence';
-import { getSimulatedPrice } from '@/services/realTimePriceService';
+import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
 
 // AI Analysis Result from Lovable AI
 interface AIAnalysisResult {
@@ -267,13 +267,19 @@ const TopNews: React.FC<TopNewsProps> = () => {
     
     for (const asset of pinnedAssets) {
       try {
-        // Use simulated prices (can be replaced with real API later)
-        const priceData = getSimulatedPrice(asset.symbol);
-        prices[asset.symbol] = {
-          price: priceData.price,
-          change: priceData.change,
-          changePercent: priceData.changePercent
-        };
+        // Try crypto API first for crypto assets
+        const isCrypto = ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD'].includes(asset.symbol);
+        const priceData = isCrypto 
+          ? await fetchCryptoPrice(asset.symbol)
+          : await fetchRealTimePrice(asset.symbol);
+        
+        if (priceData) {
+          prices[asset.symbol] = {
+            price: priceData.price,
+            change: priceData.change,
+            changePercent: priceData.changePercent
+          };
+        }
       } catch (error) {
         console.warn(`Price fetch error for ${asset.symbol}:`, error);
       }
@@ -912,7 +918,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                           <div className="flex items-center justify-between mb-2">
                             <div>
                               <h3 className="text-lg font-semibold text-white">{pinned.symbol}</h3>
-                              {priceData && (
+                              {priceData ? (
                                 <div className="flex items-center gap-2 mt-0.5">
                                   <span className="text-sm font-mono text-zinc-300">
                                     {priceData.price.toLocaleString('en-US', { 
@@ -924,11 +930,27 @@ const TopNews: React.FC<TopNewsProps> = () => {
                                     {priceData.changePercent >= 0 ? '↑' : '↓'} {Math.abs(priceData.changePercent).toFixed(2)}%
                                   </span>
                                 </div>
+                              ) : (
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <Loader2 className="w-3 h-3 animate-spin text-zinc-500" />
+                                  <span className="text-xs text-zinc-500">Loading...</span>
+                                </div>
                               )}
                             </div>
                             <div className="flex items-center gap-2">
-                              <SentimentBadge sentiment={sentiment} />
-                              <span className="text-xs text-zinc-500">{confidence}%</span>
+                              {/* Show Sentiment with Confidence in same format */}
+                              <Badge 
+                                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                  sentiment === 'bullish' 
+                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                    : sentiment === 'bearish'
+                                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                    : 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
+                                }`}
+                              >
+                                • {sentiment.charAt(0).toUpperCase() + sentiment.slice(1)}
+                              </Badge>
+                              <span className="text-sm font-medium text-white">{confidence}%</span>
                             </div>
                           </div>
 
@@ -962,7 +984,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                             </p>
                           </div>
 
-                          {/* P(up) and Decision */}
+                          {/* P(up) and Decision - All show % consistently */}
                           <div className="mb-3 flex items-center justify-between">
                             <div className="flex flex-wrap gap-1">
                               <Badge className={`text-[10px] ${
@@ -978,12 +1000,13 @@ const TopNews: React.FC<TopNewsProps> = () => {
                                 </Badge>
                               )}
                             </div>
-                            <Badge className={`text-[10px] font-medium ${
-                              decision.includes('BUY') ? 'bg-emerald-500/20 text-emerald-400' :
-                              decision.includes('SELL') ? 'bg-red-500/20 text-red-400' :
-                              'bg-zinc-500/20 text-zinc-400'
+                            {/* ABLE-HF Decision with % */}
+                            <Badge className={`text-xs font-bold px-2 py-1 ${
+                              decision.includes('BUY') ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/50' :
+                              decision.includes('SELL') ? 'bg-red-500/30 text-red-300 border border-red-500/50' :
+                              'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
                             }`}>
-                              {decision}
+                              {decision.includes('BUY') ? '📈' : decision.includes('SELL') ? '📉' : '⚖️'} {decision} ({confidence}%)
                             </Badge>
                           </div>
 
