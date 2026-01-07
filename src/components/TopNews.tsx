@@ -721,34 +721,34 @@ const TopNews: React.FC<TopNewsProps> = () => {
 
   if (initialLoading) {
     return (
-      <div className="flex h-full bg-black text-white items-center justify-center">
+      <div className="flex h-full bg-background text-foreground items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-          <p className="text-zinc-400">Loading ABLE-HF 3.0 Intelligence...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading ABLE-HF 3.0 Intelligence...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full bg-black text-white overflow-hidden">
+    <div className="flex h-full bg-background text-foreground overflow-hidden">
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="p-6 border-b border-zinc-800">
+        <div className="p-6 border-b border-border">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-light text-emerald-400">
+              <h1 className="text-3xl font-light text-primary">
                 Good afternoon, Trader.
               </h1>
-              <p className="text-zinc-500 flex items-center gap-2 mt-1">
-                <Sparkles className="w-4 h-4 text-emerald-500" />
+              <p className="text-muted-foreground flex items-center gap-2 mt-1">
+                <Sparkles className="w-4 h-4 text-primary" />
                 ABLE-HF 3.0 News Intelligence • 40 Modules Active
               </p>
             </div>
             <div className="flex items-center gap-2">
               {lastUpdated && (
-                <span className="text-xs text-zinc-500">
+                <span className="text-xs text-muted-foreground">
                   Updated {lastUpdated.toLocaleTimeString()}
                 </span>
               )}
@@ -757,11 +757,11 @@ const TopNews: React.FC<TopNewsProps> = () => {
                 size="sm" 
                 onClick={fetchNews}
                 disabled={loading}
-                className="text-zinc-400 hover:text-white"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               </Button>
-              <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 bg-transparent">
+              <Button variant="outline" className="border-border text-muted-foreground hover:bg-secondary bg-transparent">
                 <Settings className="w-4 h-4 mr-2" />
                 Personalize
               </Button>
@@ -772,13 +772,13 @@ const TopNews: React.FC<TopNewsProps> = () => {
         <ScrollArea className="flex-1">
           <div className="p-6 space-y-6">
             {/* Tab Selector */}
-            <div className="flex gap-6 border-b border-zinc-800">
+            <div className="flex gap-6 border-b border-border">
               <button
                 onClick={() => setActiveTab('macro')}
                 className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
                   activeTab === 'macro' 
-                    ? 'text-emerald-400 border-b-2 border-emerald-400' 
-                    : 'text-zinc-500 hover:text-zinc-300'
+                    ? 'text-primary border-b-2 border-primary' 
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <Zap className="w-4 h-4" />
@@ -789,7 +789,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                 className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
                   activeTab === 'twitter' 
                     ? 'text-blue-400 border-b-2 border-blue-400' 
-                    : 'text-zinc-500 hover:text-zinc-300'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <Twitter className="w-4 h-4" />
@@ -804,8 +804,8 @@ const TopNews: React.FC<TopNewsProps> = () => {
                 onClick={() => setActiveTab('reports')}
                 className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
                   activeTab === 'reports' 
-                    ? 'text-emerald-400 border-b-2 border-emerald-400' 
-                    : 'text-zinc-500 hover:text-zinc-300'
+                    ? 'text-primary border-b-2 border-primary' 
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <FileText className="w-4 h-4" />
@@ -1567,9 +1567,9 @@ const TopNews: React.FC<TopNewsProps> = () => {
       </div>
 
       {/* Right Sidebar */}
-      <div className="w-80 border-l border-zinc-800 flex flex-col bg-black">
+      <div className="w-80 border-l border-border flex flex-col bg-card">
         {/* Market Session Timer */}
-        <div className="p-4 border-b border-zinc-800">
+        <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${session.status === 'live' ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />

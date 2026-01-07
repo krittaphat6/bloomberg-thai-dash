@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.macro-ai-stream]
 verify_jwt = false
+
+[functions.comprehensive-news-analyzer]
+verify_jwt = false
