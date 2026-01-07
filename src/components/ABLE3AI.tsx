@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { OllamaService, OllamaModel } from '@/services/FreeAIService';
 import { useMCP } from '@/contexts/MCPContext';
 import { supabase } from '@/integrations/supabase/client';
+import { UniversalDataService } from '@/services/UniversalDataService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +18,7 @@ import {
 import {
   Send, Bot, User, Settings, Sparkles, Zap, Cpu, X,
   RefreshCw, Wifi, WifiOff, Plug, Check, Loader2,
-  Newspaper, Calendar, FileText, Dice6
+  Newspaper, Calendar, FileText, Dice6, Brain
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -28,6 +29,8 @@ interface Message {
   timestamp: Date;
   model?: string;
 }
+
+type AIProvider = 'ollama' | 'gemini';
 
 const ABLE3AI = () => {
   const { isReady: mcpReady, tools, executeTool, getToolsList } = useMCP();
@@ -42,33 +45,44 @@ const ABLE3AI = () => {
   const [bridgeUrl, setBridgeUrl] = useState(OllamaService.getBridgeUrl());
   const scrollRef = useRef<HTMLDivElement>(null);
   
+  // AI Provider selection
+  const [aiProvider, setAIProvider] = useState<AIProvider>(() => {
+    return (localStorage.getItem('able-ai-provider') as AIProvider) || 'gemini';
+  });
+  
   // Loading time tracking
   const [loadingTime, setLoadingTime] = useState(0);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Save AI provider preference
+  useEffect(() => {
+    localStorage.setItem('able-ai-provider', aiProvider);
+  }, [aiProvider]);
+
   // Check Ollama connection on mount if bridge URL exists
   useEffect(() => {
-    if (OllamaService.getBridgeUrl()) {
+    if (OllamaService.getBridgeUrl() && aiProvider === 'ollama') {
       handleConnect();
     }
-  }, []);
+  }, [aiProvider]);
 
   // Initial greeting
   useEffect(() => {
     setMessages([{
       id: '1',
-      text: `🤖 **ABLE AI - Powered by Ollama**\n\n` +
+      text: `🤖 **ABLE AI - Powered by ${aiProvider === 'gemini' ? 'Gemini 2.5 Flash' : 'Ollama'}**\n\n` +
         `สวัสดีครับ! พร้อมช่วยวิเคราะห์ตลาดการเงิน\n\n` +
-        `**Ollama Status:** ${ollamaConnected ? '🟢 Connected' : '🔴 Disconnected'}\n` +
-        `**Model:** ${selectedModel}\n` +
-        `**MCP Tools:** ${mcpReady ? `${tools.length} พร้อมใช้` : 'กำลังโหลด...'}\n\n` +
+        `**AI Provider:** ${aiProvider === 'gemini' ? '🟢 Gemini (Cloud)' : ollamaConnected ? '🟢 Ollama (Local)' : '🔴 Ollama Offline'}\n` +
+        `**Model:** ${aiProvider === 'gemini' ? 'gemini-2.5-flash' : selectedModel}\n` +
+        `**MCP Tools:** ${mcpReady ? `${tools.length} พร้อมใช้` : 'กำลังโหลด...'}\n` +
+        `**Data Access:** ✅ เข้าถึงข้อมูลทุกอย่างในแอป\n\n` +
         `พิมพ์ "help" เพื่อดูคำสั่งทั้งหมด`,
       isUser: false,
       timestamp: new Date(),
       model: 'System'
     }]);
-  }, [mcpReady, tools.length, ollamaConnected, selectedModel]);
+  }, [mcpReady, tools.length, ollamaConnected, selectedModel, aiProvider]);
 
   // Auto-scroll
   useEffect(() => {
@@ -260,7 +274,7 @@ const ABLE3AI = () => {
     }
   };
 
-  // Detect special commands
+  // Detect special commands including universal data access
   const detectSpecialCommand = (message: string): { type: string } | null => {
     const lowerMsg = message.toLowerCase();
     
@@ -277,6 +291,11 @@ const ABLE3AI = () => {
     if (lowerMsg.includes('monte carlo') || lowerMsg.includes('simulation') || lowerMsg.includes('probability') ||
         lowerMsg.includes('risk analysis') || lowerMsg.includes('backtest')) {
       return { type: 'montecarlo' };
+    }
+    // Universal data access - ดึงข้อมูลทุกอย่าง
+    if (lowerMsg.includes('all data') || lowerMsg.includes('ทุกข้อมูล') || lowerMsg.includes('ข้อมูลทั้งหมด') ||
+        lowerMsg.includes('overview') || lowerMsg.includes('summary') || lowerMsg.includes('สรุป')) {
+      return { type: 'universal' };
     }
     
     return null;
@@ -331,14 +350,43 @@ const ABLE3AI = () => {
               specialResult = '📰 **Market News**\n\nUse the Top News panel for real-time news updates!\n\nTip: Check economic calendar for scheduled events.';
               model = 'News';
               break;
+            case 'universal':
+              // ดึงข้อมูลทุกอย่างในแอป
+              const universalData = await UniversalDataService.smartQuery(currentInput);
+              specialResult = UniversalDataService.formatForAI(universalData);
+              model = 'Universal Data';
+              break;
           }
           
-          // If Ollama is connected, ask it to analyze
-          if (ollamaConnected && specialResult) {
-            const analysisPrompt = `User asked: "${currentInput}"\n\nData:\n${specialResult}\n\nProvide analysis in the same language as the user.`;
-            const ollamaResponse = await OllamaService.chat(analysisPrompt, [], selectedModel);
-            aiResponse = `${specialResult}\n\n---\n\n**🤖 AI Analysis:**\n${ollamaResponse.text}`;
-            model = `${model} + Ollama`;
+          // If AI provider is selected, ask it to analyze
+          const useAI = aiProvider === 'gemini' || (aiProvider === 'ollama' && ollamaConnected);
+          
+          if (useAI && specialResult) {
+            if (aiProvider === 'gemini') {
+              // Use Gemini via edge function
+              try {
+                const { data } = await supabase.functions.invoke('macro-ai-analysis', {
+                  body: { 
+                    prompt: `User asked: "${currentInput}"\n\nData:\n${specialResult}\n\nProvide analysis in Thai.`,
+                    symbol: 'GENERAL'
+                  }
+                });
+                if (data?.analysis) {
+                  aiResponse = `${specialResult}\n\n---\n\n**🧠 Gemini Analysis:**\n${data.analysis}`;
+                  model = `${model} + Gemini`;
+                } else {
+                  aiResponse = specialResult;
+                }
+              } catch (e) {
+                aiResponse = specialResult;
+              }
+            } else {
+              // Use Ollama
+              const analysisPrompt = `User asked: "${currentInput}"\n\nData:\n${specialResult}\n\nProvide analysis in the same language as the user.`;
+              const ollamaResponse = await OllamaService.chat(analysisPrompt, [], selectedModel);
+              aiResponse = `${specialResult}\n\n---\n\n**🤖 AI Analysis:**\n${ollamaResponse.text}`;
+              model = `${model} + Ollama`;
+            }
           } else {
             aiResponse = specialResult;
           }
@@ -556,49 +604,90 @@ const ABLE3AI = () => {
         {/* Settings Panel */}
         {showSettings && (
           <div className="mt-3 p-4 bg-black/70 rounded-lg border border-green-500/30 space-y-4">
-            {/* Bridge URL */}
+            {/* AI Provider Selection */}
             <div>
               <h3 className="font-bold text-green-400 text-base mb-2 flex items-center gap-2">
-                🔗 Bridge URL (จาก localhost.run)
+                <Brain className="w-4 h-4" />
+                AI Provider
               </h3>
-              <div className="flex gap-2">
-                <Input
-                  value={bridgeUrl}
-                  onChange={(e) => setBridgeUrl(e.target.value)}
-                  placeholder="https://xxxx.localhost.run"
-                  className="h-10 text-sm bg-black/50 border-green-500/50 text-white flex-1"
-                />
-                <Button 
-                  onClick={handleSaveBridgeUrl} 
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant={aiProvider === 'gemini' ? 'default' : 'outline'}
                   size="sm"
-                  className="h-10 bg-green-600 hover:bg-green-700"
+                  onClick={() => setAIProvider('gemini')}
+                  className={aiProvider === 'gemini' 
+                    ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                    : 'border-purple-500/50 text-purple-400 hover:bg-purple-500/20'}
                 >
-                  Save
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Gemini (Cloud)
+                </Button>
+                <Button
+                  variant={aiProvider === 'ollama' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAIProvider('ollama')}
+                  className={aiProvider === 'ollama' 
+                    ? 'bg-green-600 hover:bg-green-700 text-white' 
+                    : 'border-green-500/50 text-green-400 hover:bg-green-500/20'}
+                >
+                  <Cpu className="w-4 h-4 mr-2" />
+                  Ollama (Local)
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                รัน API Server บน Mac แล้วใช้ localhost.run เพื่อได้ URL
+                {aiProvider === 'gemini' 
+                  ? '✅ Gemini พร้อมใช้งานทันที (Cloud)' 
+                  : 'ต้องตั้งค่า Bridge URL สำหรับ Ollama'}
               </p>
             </div>
 
-            {/* Ollama Status */}
+            {/* Bridge URL - Only show for Ollama */}
+            {aiProvider === 'ollama' && (
+              <div>
+                <h3 className="font-bold text-green-400 text-base mb-2 flex items-center gap-2">
+                  🔗 Bridge URL (จาก localhost.run)
+                </h3>
+                <div className="flex gap-2">
+                  <Input
+                    value={bridgeUrl}
+                    onChange={(e) => setBridgeUrl(e.target.value)}
+                    placeholder="https://xxxx.localhost.run"
+                    className="h-10 text-sm bg-black/50 border-green-500/50 text-white flex-1"
+                  />
+                  <Button 
+                    onClick={handleSaveBridgeUrl} 
+                    size="sm"
+                    className="h-10 bg-green-600 hover:bg-green-700"
+                  >
+                    Save
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  รัน API Server บน Mac แล้วใช้ localhost.run เพื่อได้ URL
+                </p>
+              </div>
+            )}
+
+            {/* Connection Status */}
             <div>
               <h3 className="font-bold text-green-400 text-base mb-2 flex items-center gap-2">
                 <Wifi className="w-4 h-4" />
-                Bridge Connection
+                Connection Status
               </h3>
               <Badge 
-                className={`text-sm px-3 py-1 ${ollamaConnected 
-                  ? 'bg-green-500 text-white font-bold' 
-                  : 'bg-red-500 text-white font-bold'}`}
+                className={`text-sm px-3 py-1 ${
+                  aiProvider === 'gemini' 
+                    ? 'bg-purple-500 text-white font-bold' 
+                    : ollamaConnected 
+                      ? 'bg-green-500 text-white font-bold' 
+                      : 'bg-red-500 text-white font-bold'}`}
               >
-                {ollamaConnected ? '🟢 Connected via Bridge' : '🔴 Disconnected'}
+                {aiProvider === 'gemini' 
+                  ? '🟢 Gemini Ready' 
+                  : ollamaConnected 
+                    ? '🟢 Ollama Connected' 
+                    : '🔴 Ollama Disconnected'}
               </Badge>
-              {!ollamaConnected && bridgeUrl && (
-                <p className="text-red-300 text-sm mt-2">
-                  ตรวจสอบ: API Server + localhost.run + Ollama serve
-                </p>
-              )}
             </div>
 
             {/* Model Selection */}
