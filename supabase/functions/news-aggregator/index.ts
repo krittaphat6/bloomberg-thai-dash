@@ -532,36 +532,109 @@ function generateAssetFallback(asset: string, news: RawNewsItem[]): MacroAnalysi
   };
 }
 
-// AI Analysis with ABLE-HF 3.0 Integration - Algorithm Only (Lovable AI disabled for cost savings)
+// AI Analysis with ABLE-HF 3.0 Integration - Using Gemini via Lovable AI
 async function analyzeWithAI(news: RawNewsItem[], pinnedAssets: string[], newsHistory: RawNewsItem[]): Promise<MacroAnalysis[]> {
-  // Use pinned assets if provided, otherwise default
   const symbols = pinnedAssets.length > 0 ? pinnedAssets : ['EURUSD', 'USDJPY', 'XAUUSD', 'GBPUSD'];
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
-  console.log(`📊 Using Algorithm Analysis (AI disabled) for ${symbols.join(', ')}`);
-  
-  // ✅ Always use fallback/algorithm analysis (free 100%)
-  const analyses = await Promise.all(
-    symbols.map(asset => {
-      // Combine current and historical news
-      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-      const relevantHistoricalNews = newsHistory.filter(n => 
-        n.timestamp >= thirtyDaysAgo &&
-        (n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset))
-      );
-      
-      const relevantCurrentNews = news.filter(n => 
+  if (!LOVABLE_API_KEY || news.length === 0) {
+    console.log('📊 Using fallback algorithm (no API key or no news)');
+    return symbols.map(asset => {
+      const relevantNews = news.filter(n => 
         n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset)
       );
-      
-      const allRelevantNews = [...relevantCurrentNews, ...relevantHistoricalNews];
-      
-      console.log(`Algorithm analyzing ${asset} with ${allRelevantNews.length} news items`);
-      
-      return generateAssetFallback(asset, allRelevantNews);
-    })
-  );
+      return generateAssetFallback(asset, relevantNews);
+    });
+  }
   
-  return analyses;
+  console.log(`🧠 Using Gemini AI for ${symbols.join(', ')}`);
+  
+  try {
+    // Combine current and historical news for deep analysis
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    
+    const analyses = await Promise.all(
+      symbols.map(async (asset) => {
+        const relevantHistoricalNews = newsHistory.filter(n => 
+          n.timestamp >= thirtyDaysAgo &&
+          (n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset))
+        );
+        
+        const relevantCurrentNews = news.filter(n => 
+          n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset)
+        );
+        
+        const allRelevantNews = [...relevantCurrentNews, ...relevantHistoricalNews];
+        const headlines = allRelevantNews.slice(0, 30).map(n => `- [${n.source}] ${n.title}`).join('\n');
+        
+        if (allRelevantNews.length === 0) {
+          return generateAssetFallback(asset, []);
+        }
+
+        try {
+          const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash',
+              messages: [
+                {
+                  role: 'system',
+                  content: `You are ABLE-HF 3.0 AI, elite trading analyst. Analyze news for ${asset}.
+Respond ONLY with valid JSON (no markdown):
+{"sentiment": "bullish|bearish|neutral", "confidence": 50-99, "analysis": "Thai summary 1-2 sentences with emoji", "estimatedChange": number}`
+                },
+                {
+                  role: 'user',
+                  content: `Analyze ${asset} from ${allRelevantNews.length} news:\n${headlines}`
+                }
+              ],
+              max_tokens: 500,
+            }),
+          });
+
+          if (!response.ok) {
+            console.error(`Gemini error for ${asset}:`, response.status);
+            return generateAssetFallback(asset, allRelevantNews);
+          }
+
+          const data = await response.json();
+          const content = data.choices?.[0]?.message?.content || '';
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          
+          if (!jsonMatch) {
+            return generateAssetFallback(asset, allRelevantNews);
+          }
+
+          const parsed = JSON.parse(jsonMatch[0]);
+          
+          return {
+            symbol: asset,
+            sentiment: parsed.sentiment as 'bullish' | 'bearish' | 'neutral',
+            confidence: Math.min(99, Math.max(50, parsed.confidence)),
+            analysis: parsed.analysis,
+            change: parsed.estimatedChange >= 0 ? `+${parsed.estimatedChange.toFixed(2)}%` : `${parsed.estimatedChange.toFixed(2)}%`,
+            changeValue: parsed.estimatedChange,
+            newsCount: allRelevantNews.length,
+            timeframe: 'live'
+          };
+        } catch (e) {
+          console.error(`Gemini parse error for ${asset}:`, e);
+          return generateAssetFallback(asset, allRelevantNews);
+        }
+      })
+    );
+    
+    return analyses;
+  } catch (error) {
+    console.error('Gemini batch error:', error);
+    return symbols.map(asset => generateAssetFallback(asset, news.filter(n => 
+      n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset)
+    )));
+  }
 }
 
 // ===== OPTIONAL: Gemini API Direct Integration (for future use) =====

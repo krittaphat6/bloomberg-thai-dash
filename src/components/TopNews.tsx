@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
 
-// AI Analysis Result from Algorithm
+// AI Analysis Result
 interface AIAnalysisResult {
   symbol: string;
   sentiment: 'bullish' | 'bearish' | 'neutral';
@@ -38,15 +38,6 @@ interface AIAnalysisResult {
   analyzed_at: string;
   model: string;
   news_count: number;
-}
-
-// AI Thinking Step
-interface ThinkingStep {
-  id: string;
-  label: string;
-  status: 'pending' | 'running' | 'complete';
-  detail?: string;
-  duration?: number;
 }
 
 // ============ TYPES ============
@@ -149,7 +140,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
   const [xNotifications, setXNotifications] = useState<XNotification[]>([]);
   const [rawNews, setRawNews] = useState<RawNewsItem[]>([]);
 
-  // ABLE-HF 3.0 State - Merged with AI Macro Desk
+  // ABLE-HF 3.0 State
   const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>(DEFAULT_PINNED_ASSETS);
   const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleNewsResult>>({});
   const [isAnalyzing, setIsAnalyzing] = useState<Record<string, boolean>>({});
@@ -157,11 +148,10 @@ const TopNews: React.FC<TopNewsProps> = () => {
   // Real-time price data
   const [assetPrices, setAssetPrices] = useState<Record<string, { price: number; change: number; changePercent: number }>>({});
   
-  // AI Thinking State for Macro Desk
-  const [macroThinkingSteps, setMacroThinkingSteps] = useState<Record<string, ThinkingStep[]>>({});
-  const [macroThinkingLogs, setMacroThinkingLogs] = useState<Record<string, string[]>>({});
+  // Gemini Streaming State
+  const [geminiStream, setGeminiStream] = useState<Record<string, string>>({});
   const [aiAnalysisResults, setAIAnalysisResults] = useState<Record<string, AIAnalysisResult>>({});
-  const [expandedThinking, setExpandedThinking] = useState<string | null>(null);
+  const streamRef = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Load pinned assets from localStorage
   useEffect(() => {
@@ -196,19 +186,9 @@ const TopNews: React.FC<TopNewsProps> = () => {
       hour: '2-digit', 
       minute: '2-digit', 
       second: '2-digit',
-      hour12: true 
+      hour12: false 
     });
   };
-
-  const getMarketSession = () => {
-    const hour = currentTime.getUTCHours();
-    if (hour >= 13 && hour < 21) return { name: 'US Session', status: 'live' };
-    if (hour >= 0 && hour < 9) return { name: 'Asian Session', status: 'live' };
-    if (hour >= 7 && hour < 16) return { name: 'London Session', status: 'live' };
-    return { name: 'After Hours', status: 'closed' };
-  };
-
-  const session = getMarketSession();
 
   // Get relevant keywords for asset
   const getRelevantKeywords = (symbol: string): string[] => {
@@ -270,51 +250,19 @@ const TopNews: React.FC<TopNewsProps> = () => {
     return () => clearInterval(interval);
   }, [fetchPrices]);
 
-  // ABLE-HF 3.0 Algorithm Analysis (No AI API - Free!)
-  const analyzeAssetWithAlgorithm = useCallback(async (symbol: string, newsItems?: RawNewsItem[]) => {
+  // ✅ Real-time Gemini AI Streaming Analysis
+  const analyzeAssetWithGemini = useCallback(async (symbol: string, newsItems?: RawNewsItem[]) => {
     const newsToUse = newsItems || rawNews;
     if (newsToUse.length === 0) {
+      console.log(`No news for ${symbol}`);
       return null;
     }
 
     setIsAnalyzing(prev => ({ ...prev, [symbol]: true }));
-    setExpandedThinking(symbol);
+    setGeminiStream(prev => ({ ...prev, [symbol]: '' }));
     
-    // Initialize thinking steps
-    const steps: ThinkingStep[] = [
-      { id: 'fetch', label: 'ดึงข่าว', status: 'pending' },
-      { id: 'analyze', label: 'Algorithm วิเคราะห์', status: 'pending' },
-      { id: 'compute', label: 'คำนวณ ABLE-HF', status: 'pending' }
-    ];
-    setMacroThinkingSteps(prev => ({ ...prev, [symbol]: steps }));
-    setMacroThinkingLogs(prev => ({ ...prev, [symbol]: [] }));
-
-    const addLog = (log: string) => {
-      setMacroThinkingLogs(prev => ({
-        ...prev,
-        [symbol]: [...(prev[symbol] || []), log]
-      }));
-    };
-
-    const updateStep = (stepId: string, status: ThinkingStep['status'], detail?: string, duration?: number) => {
-      setMacroThinkingSteps(prev => ({
-        ...prev,
-        [symbol]: (prev[symbol] || []).map(s => 
-          s.id === stepId ? { ...s, status, detail, duration } : s
-        )
-      }));
-    };
-
     try {
-      const startTime = Date.now();
-
-      // STEP 1: Fetch & Filter News
-      updateStep('fetch', 'running', 'กำลังค้นหาข่าวที่เกี่ยวข้อง...');
-      addLog(`🔍 เริ่มค้นหาข่าวสำหรับ ${symbol}...`);
-      
       const relevantKeywords = getRelevantKeywords(symbol);
-      addLog(`📋 Keywords: ${relevantKeywords.slice(0, 5).join(', ')}`);
-      
       const relevantNews = newsToUse.filter(item => {
         const titleLower = item.title.toLowerCase();
         return relevantKeywords.some(keyword => titleLower.includes(keyword));
@@ -324,113 +272,124 @@ const TopNews: React.FC<TopNewsProps> = () => {
         ? relevantNews.slice(0, 20).map(n => n.title)
         : newsToUse.slice(0, 20).map(n => n.title);
 
-      addLog(`✅ พบข่าวที่เกี่ยวข้อง ${relevantNews.length} ข่าว`);
-      addLog(`📰 ใช้ ${headlinesToAnalyze.length} ข่าวในการวิเคราะห์`);
-      
-      const step1Duration = Date.now() - startTime;
-      updateStep('fetch', 'complete', `${headlinesToAnalyze.length} ข่าว`, step1Duration);
-
-      // STEP 2: Algorithm Analysis (No AI - Free!)
-      updateStep('analyze', 'running', 'Algorithm กำลังวิเคราะห์...');
-      addLog(`📊 เริ่มวิเคราะห์ด้วย Algorithm (ฟรี 100%)...`);
-      
       const priceData = assetPrices[symbol];
-      const aiStartTime = Date.now();
 
-      // Sentiment analysis from keywords
-      const bullishKeywords = ['surge', 'rally', 'gain', 'rise', 'up', 'bull', 'profit', 'soar', 'jump', 'breakthrough', 'record', 'high', 'buy', 'growth', 'strong', 'beat', 'hawkish', 'breakout'];
-      const bearishKeywords = ['crash', 'fall', 'drop', 'down', 'bear', 'loss', 'plunge', 'decline', 'sell', 'weak', 'warning', 'fear', 'concern', 'risk', 'recession', 'collapse', 'miss', 'cut', 'dovish', 'dump'];
-      
-      let bullishScore = 0;
-      let bearishScore = 0;
-      
-      headlinesToAnalyze.forEach(headline => {
-        const lower = headline.toLowerCase();
-        bullishKeywords.forEach(w => { if (lower.includes(w)) bullishScore++; });
-        bearishKeywords.forEach(w => { if (lower.includes(w)) bearishScore++; });
+      console.log(`🧠 Starting Gemini stream for ${symbol} with ${headlinesToAnalyze.length} headlines`);
+
+      // Call streaming edge function
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/macro-ai-stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          symbol,
+          headlines: headlinesToAnalyze,
+          currentPrice: priceData?.price,
+          priceChange: priceData?.changePercent
+        })
       });
 
-      const totalScore = bullishScore + bearishScore || 1;
-      const P_up = Math.round((bullishScore / totalScore) * 100);
-      const P_down = 100 - P_up;
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Gemini stream error:', errorText);
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Parse SSE events
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+            
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                fullText += content;
+                setGeminiStream(prev => ({ ...prev, [symbol]: fullText }));
+                
+                // Auto-scroll
+                if (streamRef.current[symbol]) {
+                  streamRef.current[symbol]!.scrollTop = streamRef.current[symbol]!.scrollHeight;
+                }
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+
+      // Parse final result from stream
+      console.log(`✅ Gemini stream complete for ${symbol}`);
       
-      const sentiment = bullishScore > bearishScore + 2 ? 'bullish' : 
-                       bearishScore > bullishScore + 2 ? 'bearish' : 'neutral';
-      const confidence = Math.min(95, 55 + Math.abs(bullishScore - bearishScore) * 5);
-      
-      const sentimentEmoji = sentiment === 'bullish' ? '💹' : sentiment === 'bearish' ? '📉' : '⚖️';
-      const decision = sentiment === 'bullish' ? 'BUY' : sentiment === 'bearish' ? 'SELL' : 'HOLD';
+      // Extract JSON result from stream
+      const resultMatch = fullText.match(/<result>\s*(\{[\s\S]*?\})\s*<\/result>/);
+      if (resultMatch) {
+        try {
+          const result = JSON.parse(resultMatch[1]);
+          const aiResult: AIAnalysisResult = {
+            symbol,
+            sentiment: result.sentiment || 'neutral',
+            P_up_pct: result.P_up_pct || 50,
+            P_down_pct: result.P_down_pct || 50,
+            confidence: result.confidence || 60,
+            decision: result.decision || 'HOLD',
+            thai_summary: result.thai_summary || '',
+            key_drivers: result.key_drivers || [],
+            risk_warnings: result.risk_warnings || [],
+            market_regime: result.market_regime || 'ranging',
+            analyzed_at: new Date().toISOString(),
+            model: 'gemini-2.5-flash',
+            news_count: headlinesToAnalyze.length
+          };
+          
+          setAIAnalysisResults(prev => ({ ...prev, [symbol]: aiResult }));
+          return aiResult;
+        } catch (e) {
+          console.error('Error parsing result:', e);
+        }
+      }
 
-      const aiAnalysis: AIAnalysisResult = {
-        symbol,
-        sentiment,
-        P_up_pct: P_up,
-        P_down_pct: P_down,
-        confidence,
-        decision,
-        thai_summary: `${sentimentEmoji} ${symbol}: วิเคราะห์จาก ${headlinesToAnalyze.length} ข่าว | Bullish: ${bullishScore}, Bearish: ${bearishScore} | ${sentiment.toUpperCase()} ${confidence}%`,
-        key_drivers: [`Bullish signals: ${bullishScore}`, `Bearish signals: ${bearishScore}`],
-        risk_warnings: [],
-        market_regime: sentiment === 'neutral' ? 'ranging' : 'trending',
-        analyzed_at: new Date().toISOString(),
-        model: 'algorithm-v3',
-        news_count: headlinesToAnalyze.length
-      };
-
-      addLog(`✅ Algorithm: ${aiAnalysis.sentiment.toUpperCase()} | P(Up): ${aiAnalysis.P_up_pct}%`);
-      setAIAnalysisResults(prev => ({ ...prev, [symbol]: aiAnalysis }));
-
-      const step2Duration = Date.now() - aiStartTime;
-      updateStep('analyze', 'complete', `${aiAnalysis.decision}`, step2Duration);
-
-      // STEP 3: ABLE-HF Local Enhancement
-      updateStep('compute', 'running', 'รัน 40 Modules...');
-      addLog(`⚡ เริ่มรัน ABLE-HF 3.0 (40 Modules)...`);
-      
-      const computeStartTime = Date.now();
-      
-      const analyzer = new AbleNewsAnalyzer({
-        symbol,
-        headlines: headlinesToAnalyze,
-        currentPrice: priceData?.price,
-        priceChange24h: priceData?.changePercent
-      });
-
-      const result = analyzer.analyze();
-      
-      addLog(`📈 Module Macro: ${(result.category_performance.macro_economic * 100).toFixed(0)}%`);
-      addLog(`📊 Module Sentiment: ${(result.category_performance.sentiment_flow * 100).toFixed(0)}%`);
-      addLog(`🎯 Boost: +${result.quantum_enhancement + result.neural_enhancement}%`);
-      addLog(`✅ ABLE-HF: ${result.decision} (${result.regime_adjusted_confidence}%)`);
-
-      const step3Duration = Date.now() - computeStartTime;
-      updateStep('compute', 'complete', `${result.decision}`, step3Duration);
-      
-      setAbleAnalysis(prev => ({
-        ...prev,
-        [symbol]: result
-      }));
-
-      const totalDuration = Date.now() - startTime;
-      addLog(`🏁 Total: ${totalDuration}ms`);
-
-      return result;
+      return null;
 
     } catch (error) {
-      console.error('Analysis error:', error);
-      addLog(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Gemini analysis error:', error);
+      toast({ 
+        title: `AI Error for ${symbol}`, 
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive' 
+      });
       return null;
     } finally {
       setIsAnalyzing(prev => ({ ...prev, [symbol]: false }));
     }
-  }, [rawNews, assetPrices]);
+  }, [rawNews, assetPrices, toast]);
 
   // Analyze all pinned assets when news is loaded
   const analyzeAllPinnedAssets = useCallback(async (newsItems: RawNewsItem[]) => {
     for (const asset of pinnedAssets) {
-      await analyzeAssetWithAlgorithm(asset.symbol, newsItems);
+      await analyzeAssetWithGemini(asset.symbol, newsItems);
     }
-  }, [pinnedAssets, analyzeAssetWithAlgorithm]);
+  }, [pinnedAssets, analyzeAssetWithGemini]);
 
   // Fetch news from edge function
   const fetchNews = useCallback(async () => {
@@ -457,7 +416,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
         
         console.log(`Loaded ${data.macro?.length || 0} macro items, ${data.rawNews?.length || 0} raw news`);
         
-        // Auto-analyze all pinned assets
+        // Auto-analyze all pinned assets with Gemini
         if (data.rawNews?.length > 0) {
           analyzeAllPinnedAssets(data.rawNews);
         }
@@ -465,7 +424,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
         if (!initialLoading) {
           toast({ 
             title: '✅ News updated', 
-            description: `Algorithm analysis complete • ${data.processingTime}ms`
+            description: `${data.sourcesCount || 0} sources • ${data.processingTime}ms`
           });
         }
       }
@@ -496,9 +455,9 @@ const TopNews: React.FC<TopNewsProps> = () => {
     setPinnedAssets(prev => [...prev, { symbol, addedAt: Date.now() }]);
     toast({ title: `✅ ${ASSET_DISPLAY_NAMES[symbol] || symbol} added` });
     
-    // Immediately analyze the new asset
+    // Immediately analyze the new asset with Gemini
     if (rawNews.length > 0) {
-      analyzeAssetWithAlgorithm(symbol, rawNews);
+      analyzeAssetWithGemini(symbol, rawNews);
     }
   };
 
@@ -509,6 +468,16 @@ const TopNews: React.FC<TopNewsProps> = () => {
       const newAnalysis = { ...prev };
       delete newAnalysis[symbol];
       return newAnalysis;
+    });
+    setGeminiStream(prev => {
+      const newStream = { ...prev };
+      delete newStream[symbol];
+      return newStream;
+    });
+    setAIAnalysisResults(prev => {
+      const newResults = { ...prev };
+      delete newResults[symbol];
+      return newResults;
     });
   };
 
@@ -534,7 +503,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
 
   if (initialLoading) {
     return (
-      <div className="flex h-full bg-slate-950 text-white items-center justify-center">
+      <div className="flex h-full bg-zinc-950 text-white items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
           <p className="text-emerald-300/70">Loading ABLE-HF 3.0 Intelligence...</p>
@@ -544,156 +513,157 @@ const TopNews: React.FC<TopNewsProps> = () => {
   }
 
   return (
-    <div className="flex h-full bg-slate-950 text-white overflow-hidden">
+    <div className="flex h-full bg-zinc-950 text-white overflow-hidden">
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden border-2 border-emerald-500/30 rounded-lg m-1">
-        {/* Header - HybridTrader Style */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b-2 border-emerald-500/40 p-6">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header - Clean Dark Style */}
+        <div className="border-b border-zinc-800 px-4 py-3 md:px-6 md:py-4 bg-zinc-950">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-bold text-emerald-400 mb-2">🔥 TOP NEWS</h1>
-              <p className="text-lg text-slate-300 font-medium flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-emerald-400" />
-                ABLE-HF 3.0 News Intelligence • 63+ Sources Active
+              <h1 className="text-xl md:text-3xl font-semibold text-emerald-400 italic">
+                Good afternoon, Trader.
+              </h1>
+              <p className="text-xs md:text-sm text-zinc-500 flex items-center gap-1 mt-1">
+                <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
+                Your personal financial newspaper
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-4">
               {lastUpdated && (
-                <span className="text-sm text-emerald-300/60">
-                  Updated {lastUpdated.toLocaleTimeString()}
+                <span className="text-xs md:text-sm text-zinc-600 hidden sm:block">
+                  Updated {formatTime(lastUpdated)}
                 </span>
               )}
               <Button 
                 onClick={fetchNews}
                 disabled={loading}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-3 text-lg"
+                size="icon"
+                variant="ghost"
+                className="text-zinc-400 hover:text-white hover:bg-zinc-800"
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-                <span className="ml-2">Refresh</span>
+                {loading ? <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <RefreshCw className="w-4 h-4 md:w-5 md:h-5" />}
+              </Button>
+              <Button 
+                variant="outline"
+                size="sm"
+                className="border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800 text-xs md:text-sm"
+              >
+                <Settings className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Personalize</span>
               </Button>
             </div>
           </div>
         </div>
 
-        {/* Tabs - HybridTrader Style (Only 2 tabs) */}
-        <div className="border-b-2 border-slate-700 flex bg-slate-900/50">
+        {/* Tabs - Clean Style */}
+        <div className="border-b border-zinc-800 flex px-4 md:px-6 bg-zinc-950">
           <button 
             onClick={() => setActiveTab('macro')}
-            className={`px-8 py-4 text-lg font-bold transition-all ${
+            className={`px-3 py-2 md:px-4 md:py-3 text-sm md:text-base transition-all ${
               activeTab === 'macro' 
-                ? 'text-emerald-400 border-b-4 border-emerald-400 bg-emerald-500/10' 
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                ? 'text-emerald-400 border-b-2 border-emerald-400' 
+                : 'text-zinc-500 hover:text-white'
             }`}
           >
-            📊 AI Macro Desk
+            <span className="flex items-center gap-1 md:gap-2">
+              <Zap className="w-3 h-3 md:w-4 md:h-4" />
+              AI Macro Desk
+            </span>
           </button>
           <button 
             onClick={() => setActiveTab('reports')}
-            className={`px-8 py-4 text-lg font-bold transition-all ${
+            className={`px-3 py-2 md:px-4 md:py-3 text-sm md:text-base transition-all ${
               activeTab === 'reports' 
-                ? 'text-emerald-400 border-b-4 border-emerald-400 bg-emerald-500/10' 
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                ? 'text-emerald-400 border-b-2 border-emerald-400' 
+                : 'text-zinc-500 hover:text-white'
             }`}
           >
-            📄 Daily Reports
+            <span className="flex items-center gap-1 md:gap-2">
+              <FileText className="w-3 h-3 md:w-4 md:h-4" />
+              Daily Reports
+            </span>
           </button>
         </div>
 
         {/* Content Area */}
-        <ScrollArea className="flex-1 p-6 bg-slate-900">
+        <ScrollArea className="flex-1 p-3 md:p-6 bg-zinc-950">
           {activeTab === 'macro' ? (
             <>
               {/* AI Macro Desk Section */}
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <Zap className="w-6 h-6 text-emerald-400" />
+              <div className="mb-6 md:mb-8">
+                <div className="flex items-center justify-between mb-4 md:mb-6">
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <Zap className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
                     <div>
-                      <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                      <h2 className="text-base md:text-lg font-medium text-white flex items-center gap-2">
                         AI Macro Desk
+                        <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-emerald-400 animate-pulse" />
                       </h2>
-                      <p className="text-sm text-slate-400">Market bias analysis</p>
+                      <p className="text-xs md:text-sm text-zinc-500">Market bias analysis</p>
                     </div>
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    {/* Add Asset Dropdown */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button 
-                          variant="outline" 
+                          variant="ghost" 
                           size="sm" 
-                          className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 bg-transparent font-bold"
+                          className="text-zinc-400 hover:text-white hover:bg-zinc-800 text-xs md:text-sm"
                         >
-                          <Plus className="w-4 h-4 mr-1" />
-                          Add Asset
-                          <ChevronDown className="w-3 h-3 ml-1" />
+                          <Plus className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                          <span className="hidden sm:inline">Add</span>
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-48 bg-slate-900 border-slate-700" align="end">
+                      <DropdownMenuContent className="w-48 bg-zinc-900 border-zinc-700" align="end">
                         {getAvailableAssets().map((category) => (
                           category.assets.length > 0 && (
                             <div key={category.label}>
-                              <DropdownMenuLabel className="text-slate-400 text-xs">
+                              <DropdownMenuLabel className="text-zinc-400 text-xs">
                                 {category.label}
                               </DropdownMenuLabel>
                               {category.assets.map((asset) => (
                                 <DropdownMenuItem 
                                   key={asset}
                                   onClick={() => handleAddAsset(asset)}
-                                  className="text-white hover:bg-slate-800 cursor-pointer"
+                                  className="text-white hover:bg-zinc-800 cursor-pointer"
                                 >
                                   {ASSET_DISPLAY_NAMES[asset] || asset}
                                 </DropdownMenuItem>
                               ))}
-                              <DropdownMenuSeparator className="bg-slate-700" />
+                              <DropdownMenuSeparator className="bg-zinc-700" />
                             </div>
                           )
                         ))}
                       </DropdownMenuContent>
                     </DropdownMenu>
                     
-                    <button className="text-slate-500 hover:text-emerald-400 text-sm font-bold flex items-center gap-1">
-                      View All <ChevronRight className="w-4 h-4" />
+                    <button className="text-zinc-500 hover:text-emerald-400 text-xs md:text-sm flex items-center gap-1">
+                      View All <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
                     </button>
                   </div>
                 </div>
 
-                {/* Macro Cards Grid - HybridTrader Style */}
-                <div className="grid grid-cols-2 gap-6">
+                {/* Macro Cards Grid - Responsive */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                   {pinnedAssets.map((pinned) => {
-                    const analysis = ableAnalysis[pinned.symbol];
                     const aiResult = aiAnalysisResults[pinned.symbol];
                     const analyzing = isAnalyzing[pinned.symbol];
                     const priceData = assetPrices[pinned.symbol];
-                    const thinkingSteps = macroThinkingSteps[pinned.symbol] || [];
-                    const thinkingLogs = macroThinkingLogs[pinned.symbol] || [];
-                    const isExpanded = expandedThinking === pinned.symbol;
+                    const streamText = geminiStream[pinned.symbol] || '';
                     
-                    const sentiment = aiResult?.sentiment || (analysis 
-                      ? (analysis.P_up_pct > 55 ? 'bullish' : analysis.P_up_pct < 45 ? 'bearish' : 'neutral')
-                      : 'neutral');
-                    
-                    const confidence = aiResult?.confidence || (analysis 
-                      ? Math.min(100, Math.max(0, Math.round(analysis.regime_adjusted_confidence)))
-                      : 50);
-                    
-                    const analysisText = aiResult?.thai_summary || analysis?.thai_summary || 'คลิก Refresh เพื่อเริ่มวิเคราะห์...';
-                    
-                    const P_up = aiResult?.P_up_pct || analysis?.P_up_pct || 50;
-                    const decision = aiResult?.decision || analysis?.trading_signal?.signal || 'HOLD';
+                    const sentiment = aiResult?.sentiment || 'neutral';
+                    const confidence = aiResult?.confidence || 50;
+                    const analysisText = aiResult?.thai_summary || 'กำลังวิเคราะห์...';
+                    const P_up = aiResult?.P_up_pct || 50;
+                    const decision = aiResult?.decision || 'HOLD';
 
                     return (
                       <Card 
                         key={pinned.symbol} 
-                        className={`p-6 transition-all cursor-pointer relative group hover:scale-[1.02] ${
-                          sentiment === 'bullish' 
-                            ? 'bg-gradient-to-br from-emerald-500/20 via-emerald-500/10 to-transparent border-2 border-emerald-500 shadow-xl shadow-emerald-500/20' 
-                            : sentiment === 'bearish'
-                            ? 'bg-gradient-to-br from-red-500/20 via-red-500/10 to-transparent border-2 border-red-500 shadow-xl shadow-red-500/20'
-                            : 'bg-gradient-to-br from-blue-500/20 via-blue-500/10 to-transparent border-2 border-blue-500 shadow-xl shadow-blue-500/20'
-                        } ${analyzing ? 'ring-2 ring-purple-500 animate-pulse' : ''}`}
-                        onClick={() => setExpandedThinking(isExpanded ? null : pinned.symbol)}
+                        className={`p-3 md:p-4 transition-all relative group bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 ${
+                          analyzing ? 'border-emerald-500/50 animate-pulse' : ''
+                        }`}
                       >
                         {/* Remove button */}
                         <button
@@ -701,143 +671,97 @@ const TopNews: React.FC<TopNewsProps> = () => {
                             e.stopPropagation();
                             handleRemoveAsset(pinned.symbol);
                           }}
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white/10 rounded z-10"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded z-10"
                         >
-                          <X className="w-4 h-4 text-white/60" />
+                          <X className="w-3 h-3 md:w-4 md:h-4 text-zinc-400" />
                         </button>
                         
-                        {/* Symbol & Badge - Big Style */}
-                        <div className="flex items-center justify-between mb-4">
+                        {/* Symbol & Badge */}
+                        <div className="flex items-start justify-between mb-3">
                           <div>
-                            <span className="text-4xl font-black text-white">{pinned.symbol}</span>
+                            <span className="text-lg md:text-xl font-bold text-white">{pinned.symbol}</span>
                             {priceData && (
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-lg font-mono text-slate-300">
-                                  {priceData.price.toLocaleString('en-US', { 
-                                    minimumFractionDigits: priceData.price > 100 ? 2 : 4,
-                                    maximumFractionDigits: priceData.price > 100 ? 2 : 4
-                                  })}
-                                </span>
-                                <span className={`text-sm font-bold ${priceData.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                  {priceData.changePercent >= 0 ? '↑' : '↓'} {Math.abs(priceData.changePercent).toFixed(2)}%
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className={`text-xs md:text-sm font-medium ${priceData.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                  {priceData.changePercent >= 0 ? '↗' : '↘'} {Math.abs(priceData.changePercent).toFixed(2)}%
                                 </span>
                               </div>
                             )}
                           </div>
-                          <Badge className={`text-base px-4 py-2 font-black border-2 shadow-lg ${
-                            sentiment === 'bullish' ? 'bg-emerald-500 border-emerald-300 text-white' :
-                            sentiment === 'bearish' ? 'bg-red-500 border-red-300 text-white' :
-                            'bg-blue-500 border-blue-300 text-white'
+                          <Badge className={`text-xs px-2 py-0.5 ${
+                            sentiment === 'bullish' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                            sentiment === 'bearish' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                            'bg-zinc-500/10 text-zinc-400 border-zinc-500/30'
                           }`}>
-                            • {sentiment.toUpperCase()} {confidence}%
+                            • {sentiment.charAt(0).toUpperCase() + sentiment.slice(1)} {confidence}%
                           </Badge>
                         </div>
 
                         {/* Confidence Bar */}
-                        <div className="mb-4">
-                          <div className="text-sm text-slate-400 font-bold mb-2">Confidence</div>
-                          <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
+                        <div className="mb-3">
+                          <div className="text-xs text-zinc-500 mb-1">Confidence</div>
+                          <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
                             <div 
                               className={`h-full transition-all ${
-                                sentiment === 'bullish' ? 'bg-emerald-400' :
-                                sentiment === 'bearish' ? 'bg-red-400' : 'bg-blue-400'
+                                sentiment === 'bullish' ? 'bg-emerald-500' :
+                                sentiment === 'bearish' ? 'bg-red-500' : 'bg-zinc-500'
                               }`}
                               style={{ width: `${confidence}%` }}
                             />
                           </div>
                         </div>
 
-                        {/* Analysis Text - Big & Clear */}
-                        <div className="mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                          <div className="flex items-start gap-3">
-                            <BarChart3 className="w-6 h-6 text-emerald-400 flex-shrink-0 mt-1" />
-                            <p className="text-white font-semibold text-lg leading-relaxed">
-                              {analysisText}
-                            </p>
+                        {/* AI Analysis */}
+                        <div className="mb-3">
+                          <div className="flex items-center gap-1 mb-1">
+                            <Brain className="w-3 h-3 text-emerald-400" />
+                            <span className="text-xs text-emerald-400">AI Analysis</span>
+                            {analyzing && <Loader2 className="w-3 h-3 animate-spin text-emerald-400 ml-1" />}
                           </div>
+                          <p className="text-xs md:text-sm text-zinc-300 leading-relaxed line-clamp-3">
+                            {analysisText}
+                          </p>
                         </div>
+
+                        {/* Gemini Thinking Stream - Mobile Optimized */}
+                        {(analyzing || streamText) && (
+                          <div className="mb-3 bg-zinc-950 rounded-lg p-2 border border-zinc-800">
+                            <div className="flex items-center gap-1 mb-1.5">
+                              <Sparkles className="w-3 h-3 text-purple-400" />
+                              <span className="text-[10px] text-purple-400 font-medium">Gemini AI Thinking</span>
+                              {analyzing && (
+                                <div className="flex gap-0.5 ml-1">
+                                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                </div>
+                              )}
+                            </div>
+                            <div 
+                              ref={(el) => { streamRef.current[pinned.symbol] = el; }}
+                              className="font-mono text-[10px] md:text-xs text-purple-200/70 max-h-20 md:max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed"
+                            >
+                              {streamText.slice(-500)}
+                              {analyzing && <span className="inline-block w-1.5 h-3 bg-purple-400 ml-0.5 animate-pulse" />}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Footer */}
-                        <div className="flex items-center justify-between pt-4 border-t-2 border-slate-700">
+                        <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                           <div className="flex items-center gap-2">
-                            <Badge className={`text-sm px-3 py-1 ${
-                              P_up > 60 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                              P_up < 40 ? 'bg-red-500/20 text-red-400 border-red-500/30' :
-                              'bg-purple-500/20 text-purple-400 border-purple-500/30'
-                            }`}>
-                              P↑ {P_up.toFixed(0)}%
-                            </Badge>
-                            <Badge className={`text-sm font-bold px-3 py-1 ${
-                              decision.includes('BUY') ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/50' :
-                              decision.includes('SELL') ? 'bg-red-500/30 text-red-300 border border-red-500/50' :
-                              'bg-slate-500/20 text-slate-400 border border-slate-500/30'
-                            }`}>
-                              {decision.includes('BUY') ? '📈' : decision.includes('SELL') ? '📉' : '⚖️'} {decision}
-                            </Badge>
+                            <span className={`text-sm md:text-base font-bold ${P_up > 55 ? 'text-emerald-400' : P_up < 45 ? 'text-red-400' : 'text-zinc-400'}`}>
+                              {P_up > 50 ? '↗' : '↘'} +{(P_up > 50 ? (P_up - 50) * 0.05 : (50 - P_up) * -0.05).toFixed(2)}%
+                            </span>
                           </div>
-                          <span className="text-slate-400 text-sm font-bold flex items-center gap-2">
-                            <BarChart3 className="w-5 h-5" />
-                            Algorithm Analysis
-                          </span>
+                          <Badge className={`text-xs ${
+                            decision.includes('BUY') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                            decision.includes('SELL') ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                            'bg-zinc-500/10 text-zinc-400 border-zinc-500/30'
+                          }`}>
+                            {decision}
+                          </Badge>
                         </div>
-
-                        {/* Expandable Thinking Panel */}
-                        {isExpanded && thinkingLogs.length > 0 && (
-                          <div className="mt-4 pt-4 border-t border-slate-700">
-                            <div className="grid grid-cols-3 gap-2 mb-3">
-                              {thinkingSteps.map((step, idx) => (
-                                <div 
-                                  key={step.id}
-                                  className={`p-2 rounded text-center transition-all ${
-                                    step.status === 'running' ? 'bg-purple-500/20 border border-purple-500/50 animate-pulse' :
-                                    step.status === 'complete' ? 'bg-emerald-500/10 border border-emerald-500/30' :
-                                    'bg-slate-800/50 border border-slate-700'
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-center gap-1">
-                                    {step.status === 'running' ? (
-                                      <Loader2 className="w-3 h-3 text-purple-400 animate-spin" />
-                                    ) : step.status === 'complete' ? (
-                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                    ) : (
-                                      <div className="w-3 h-3 rounded-full bg-slate-600" />
-                                    )}
-                                    <span className="text-xs text-slate-400">Step {idx + 1}</span>
-                                  </div>
-                                  <p className="text-xs text-white truncate">{step.label}</p>
-                                  {step.duration && (
-                                    <p className="text-[10px] text-emerald-500">{step.duration}ms</p>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-
-                            <div className="bg-black/50 rounded p-3">
-                              <div className="space-y-1 font-mono text-xs max-h-24 overflow-y-auto">
-                                {thinkingLogs.slice(-6).map((log, i) => (
-                                  <div 
-                                    key={i} 
-                                    className={`flex items-start gap-1 ${
-                                      log.includes('✅') ? 'text-emerald-400' :
-                                      log.includes('📊') ? 'text-purple-400' :
-                                      'text-slate-400'
-                                    }`}
-                                  >
-                                    <span className="text-slate-600 flex-shrink-0">›</span>
-                                    <span className="break-words">{log}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Click to expand hint */}
-                        {thinkingLogs.length > 0 && !isExpanded && (
-                          <div className="mt-3 text-center">
-                            <span className="text-xs text-slate-600">คลิกเพื่อดูขั้นตอน AI</span>
-                          </div>
-                        )}
                       </Card>
                     );
                   })}
@@ -846,29 +770,29 @@ const TopNews: React.FC<TopNewsProps> = () => {
                   {pinnedAssets.length < 8 && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Card className="bg-slate-900/30 border-slate-800 border-dashed border-2 p-6 hover:border-emerald-500/30 transition-colors cursor-pointer flex flex-col items-center justify-center min-h-[300px]">
-                          <Plus className="w-12 h-12 text-slate-600 mb-3" />
-                          <span className="text-slate-500 text-lg font-bold">Add Asset</span>
-                          <span className="text-slate-600 text-sm mt-1">{pinnedAssets.length}/8 assets</span>
+                        <Card className="bg-zinc-900/30 border-zinc-800 border-dashed p-4 md:p-6 hover:border-emerald-500/30 transition-colors cursor-pointer flex flex-col items-center justify-center min-h-[150px] md:min-h-[200px]">
+                          <Plus className="w-6 h-6 md:w-8 md:h-8 text-zinc-600 mb-2" />
+                          <span className="text-zinc-500 text-sm font-medium">Add Asset</span>
+                          <span className="text-zinc-600 text-xs mt-1">{pinnedAssets.length}/8</span>
                         </Card>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-48 bg-slate-900 border-slate-700">
+                      <DropdownMenuContent className="w-48 bg-zinc-900 border-zinc-700">
                         {getAvailableAssets().map((category) => (
                           category.assets.length > 0 && (
                             <div key={category.label}>
-                              <DropdownMenuLabel className="text-slate-400 text-xs">
+                              <DropdownMenuLabel className="text-zinc-400 text-xs">
                                 {category.label}
                               </DropdownMenuLabel>
                               {category.assets.map((asset) => (
                                 <DropdownMenuItem 
                                   key={asset}
                                   onClick={() => handleAddAsset(asset)}
-                                  className="text-white hover:bg-slate-800 cursor-pointer"
+                                  className="text-white hover:bg-zinc-800 cursor-pointer"
                                 >
                                   {ASSET_DISPLAY_NAMES[asset] || asset}
                                 </DropdownMenuItem>
                               ))}
-                              <DropdownMenuSeparator className="bg-slate-700" />
+                              <DropdownMenuSeparator className="bg-zinc-700" />
                             </div>
                           )
                         ))}
@@ -878,156 +802,100 @@ const TopNews: React.FC<TopNewsProps> = () => {
                 </div>
               </div>
 
-              {/* Top Community Posts Section (was X Notifications) */}
-              <div className="bg-slate-800/50 rounded-2xl border-2 border-emerald-500/30 overflow-hidden">
-                <div className="p-6 border-b-2 border-emerald-500/30 bg-gradient-to-r from-emerald-900/20 to-blue-900/20">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Users className="w-7 h-7 text-emerald-400" />
-                      <div>
-                        <h3 className="text-2xl font-black text-white">Top Community Posts</h3>
-                        <p className="text-emerald-300 text-sm font-semibold">Reddit • Hacker News • Forums</p>
-                      </div>
-                    </div>
-                    <Badge className="bg-emerald-500 text-white font-black border-none px-4 py-2 text-sm">
-                      <span className="w-2 h-2 rounded-full bg-white mr-2 animate-pulse" />
-                      LIVE
-                    </Badge>
-                  </div>
-                </div>
-
-                <ScrollArea className="max-h-[500px]">
-                  <div className="p-6 space-y-4">
-                    {xNotifications.map((notif) => (
-                      <div 
-                        key={notif.id} 
-                        className="group cursor-pointer p-4 rounded-xl border-2 border-transparent hover:border-emerald-500/50 hover:bg-emerald-500/10 transition-all"
-                        onClick={() => window.open(notif.url, '_blank')}
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-black text-xl shadow-lg flex-shrink-0">
-                            {notif.source.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-white font-bold text-lg">{notif.source}</span>
-                              <span className="text-emerald-400 font-bold">·</span>
-                              <span className="text-emerald-300 text-sm font-semibold">{notif.time}</span>
-                              <ExternalLink className="w-5 h-5 text-emerald-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </div>
-                            <p className="text-white text-base font-medium leading-relaxed">
-                              {notif.content}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {xNotifications.length === 0 && (
-                      <div className="text-center text-slate-500 py-12">
-                        <Users className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                        <p className="text-lg font-semibold">No community posts yet</p>
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-              </div>
-
               {/* For You Section */}
-              <div className="mt-8">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <Target className="w-6 h-6 text-slate-400" />
+              <div className="mt-6 md:mt-8">
+                <div className="flex items-center justify-between mb-3 md:mb-4">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-4 h-4 text-zinc-400" />
                     <div>
-                      <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                      <h2 className="text-sm md:text-base font-medium text-white flex items-center gap-2">
                         For You
+                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
                       </h2>
-                      <p className="text-sm text-slate-500">Your personalized market briefing</p>
+                      <p className="text-xs text-zinc-500">Your personalized market briefing</p>
                     </div>
                   </div>
-                  <Badge variant="outline" className="border-slate-700 text-slate-400 bg-transparent font-bold">
+                  <Badge variant="outline" className="border-zinc-700 text-zinc-400 bg-transparent text-xs">
                     <RefreshCw className="w-3 h-3 mr-1" />
                     {forYouItems.filter(i => i.isNew).length} updates
                   </Badge>
                 </div>
 
-                <div className="space-y-2">
-                  {forYouItems.slice(0, 10).map((item) => (
+                <div className="space-y-1">
+                  {forYouItems.slice(0, 8).map((item) => (
                     <div 
                       key={item.id}
                       onClick={() => window.open(item.url, '_blank')}
-                      className="flex items-start gap-3 p-4 rounded-xl hover:bg-slate-800/50 transition-colors cursor-pointer border border-transparent hover:border-slate-700"
+                      className="flex items-start gap-2 p-2 md:p-3 rounded-lg hover:bg-zinc-900 transition-colors cursor-pointer"
                     >
                       {item.isNew && (
-                        <Badge className="text-xs px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 flex-shrink-0 mt-0.5">
+                        <Badge className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 border-red-500/30 flex-shrink-0">
                           Today
                         </Badge>
                       )}
-                      <div className="flex-1 text-base">
-                        <span className="text-white font-bold">{item.symbol}</span>
-                        <span className="text-slate-500 mx-2">bias updated:</span>
-                        <span className={`font-bold ${
+                      <div className="flex-1 text-xs md:text-sm min-w-0">
+                        <span className="text-white font-medium">{item.symbol}</span>
+                        <span className="text-zinc-600 mx-1">bias updated:</span>
+                        <span className={`font-medium ${
                           item.type.includes('BULLISH') ? 'text-emerald-400' : 
-                          item.type.includes('BEARISH') ? 'text-red-400' : 'text-slate-400'
+                          item.type.includes('BEARISH') ? 'text-red-400' : 'text-zinc-400'
                         }`}>{item.type}</span>
-                        <span className="text-slate-500 mx-2">–</span>
-                        <span className="text-slate-300">{item.title}</span>
+                        <span className="text-zinc-600 mx-1">–</span>
+                        <span className="text-zinc-300 truncate">{item.title}</span>
                       </div>
                     </div>
                   ))}
                   
                   {forYouItems.length === 0 && (
-                    <div className="text-center py-8 text-slate-500">
-                      <p>Add assets above to see personalized news</p>
+                    <div className="text-center py-8 text-zinc-500">
+                      <p className="text-sm">Add assets above to see personalized news</p>
                     </div>
                   )}
                 </div>
               </div>
             </>
           ) : (
-            /* Daily Reports Section - HybridTrader Style */
+            /* Daily Reports Section */
             <div>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4 md:mb-6">
                 <div>
-                  <h2 className="text-3xl font-black text-white mb-2">Daily Reports</h2>
-                  <p className="text-slate-400 text-lg font-semibold">Your daily pre-market report to build your bias</p>
+                  <h2 className="text-lg md:text-xl font-medium text-white mb-1">Daily Reports</h2>
+                  <p className="text-xs md:text-sm text-zinc-500">Your daily pre-market report to build your bias</p>
                 </div>
-                <Button className="border-2 border-slate-600 text-white hover:bg-slate-800 bg-transparent font-bold">
-                  <Eye className="w-5 h-5 mr-2" />
+                <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white text-xs md:text-sm">
+                  <Eye className="w-3 h-3 md:w-4 md:h-4 mr-1" />
                   Mark all as read
                 </Button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-2 md:space-y-3">
                 {dailyReports.map((report) => (
                   <Card 
                     key={report.id}
                     onClick={() => window.open(report.url, '_blank')}
-                    className={`p-6 border-2 transition-all cursor-pointer ${
-                      report.isHighlighted 
-                        ? 'bg-gradient-to-r from-emerald-500/20 to-blue-500/20 border-emerald-500 hover:border-emerald-400' 
-                        : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                    className={`p-3 md:p-4 transition-all cursor-pointer bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 ${
+                      report.isHighlighted ? 'border-emerald-500/30' : ''
                     }`}
                   >
-                    <div className="flex items-start gap-4">
-                      <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center">
-                        <FileText className="w-7 h-7 text-white" />
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-zinc-800 flex items-center justify-center">
+                        <FileText className="w-5 h-5 md:w-6 md:h-6 text-zinc-400" />
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between mb-1">
                           <div>
-                            <h3 className="text-xl font-black text-white mb-1">{report.title}</h3>
-                            <p className="text-slate-400 text-sm font-semibold">
-                              {report.date} • {report.time} • {report.assetsAnalyzed} assets analyzed
+                            <h3 className="text-sm md:text-base font-medium text-white line-clamp-1">{report.title}</h3>
+                            <p className="text-[10px] md:text-xs text-zinc-500">
+                              {report.date} • {report.time} • {report.assetsAnalyzed} assets
                             </p>
                           </div>
                           {report.isHighlighted && (
-                            <Badge className="bg-emerald-500 text-white font-bold">
+                            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] ml-2">
                               Featured
                             </Badge>
                           )}
                         </div>
-                        <p className="text-white text-base font-medium leading-relaxed">
+                        <p className="text-xs md:text-sm text-zinc-400 line-clamp-2">
                           {report.description}
                         </p>
                       </div>
@@ -1036,9 +904,9 @@ const TopNews: React.FC<TopNewsProps> = () => {
                 ))}
 
                 {dailyReports.length === 0 && (
-                  <div className="text-center py-12 text-slate-500">
-                    <FileText className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                    <p className="text-lg font-semibold">No reports yet</p>
+                  <div className="text-center py-12 text-zinc-500">
+                    <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                    <p className="text-sm">No reports yet</p>
                   </div>
                 )}
               </div>
