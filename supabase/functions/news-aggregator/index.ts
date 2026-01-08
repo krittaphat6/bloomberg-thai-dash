@@ -532,18 +532,120 @@ function generateAssetFallback(asset: string, news: RawNewsItem[]): MacroAnalysi
   };
 }
 
-// AI Analysis with ABLE-HF 3.0 Integration
+// AI Analysis with ABLE-HF 3.0 Integration - Algorithm Only (Lovable AI disabled for cost savings)
 async function analyzeWithAI(news: RawNewsItem[], pinnedAssets: string[], newsHistory: RawNewsItem[]): Promise<MacroAnalysis[]> {
   // Use pinned assets if provided, otherwise default
   const symbols = pinnedAssets.length > 0 ? pinnedAssets : ['EURUSD', 'USDJPY', 'XAUUSD', 'GBPUSD'];
   
-  // Deep analyze each asset with 30-day history
+  console.log(`📊 Using Algorithm Analysis (AI disabled) for ${symbols.join(', ')}`);
+  
+  // ✅ Always use fallback/algorithm analysis (free 100%)
   const analyses = await Promise.all(
-    symbols.map(asset => deepAnalyzeAsset(asset, news, newsHistory))
+    symbols.map(asset => {
+      // Combine current and historical news
+      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+      const relevantHistoricalNews = newsHistory.filter(n => 
+        n.timestamp >= thirtyDaysAgo &&
+        (n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset))
+      );
+      
+      const relevantCurrentNews = news.filter(n => 
+        n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset)
+      );
+      
+      const allRelevantNews = [...relevantCurrentNews, ...relevantHistoricalNews];
+      
+      console.log(`Algorithm analyzing ${asset} with ${allRelevantNews.length} news items`);
+      
+      return generateAssetFallback(asset, allRelevantNews);
+    })
   );
   
   return analyses;
 }
+
+// ===== OPTIONAL: Gemini API Direct Integration (for future use) =====
+// Set GEMINI_API_KEY in environment to enable
+async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): Promise<MacroAnalysis[]> {
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+  const symbols = pinnedAssets.length > 0 ? pinnedAssets : ['EURUSD', 'USDJPY', 'XAUUSD', 'GBPUSD'];
+  
+  if (!GEMINI_API_KEY || news.length === 0) {
+    console.log('No Gemini API key, using fallback');
+    return symbols.map(asset => generateAssetFallback(asset, news.filter(n => 
+      n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset)
+    )));
+  }
+
+  try {
+    const headlines = news.slice(0, 30).map(n => `- [${n.source}] ${n.title}`).join('\n');
+    
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `You are ABLE-HF 3.0, elite trading analyst. Analyze for: ${symbols.join(', ')}
+
+Headlines:
+${headlines}
+
+Respond ONLY with JSON:
+{
+  "analyses": [
+    {"symbol": "XAUUSD", "sentiment": "bullish", "confidence": 85, "analysis": "💹 XAUUSD: แนวโน้มขาขึ้นแรง เนื่องจาก Fed dovish + geopolitical risk | BUY target 2750", "estimatedChange": 1.2}
+  ]
+}`
+            }]
+          }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 2000 }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      console.log('Gemini API failed, using fallback');
+      return symbols.map(asset => generateAssetFallback(asset, news.filter(n => 
+        n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset)
+      )));
+    }
+
+    const data = await response.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    
+    if (!jsonMatch) {
+      return symbols.map(asset => generateAssetFallback(asset, news.filter(n => 
+        n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset)
+      )));
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    
+    return parsed.analyses.map((a: any) => ({
+      symbol: a.symbol,
+      sentiment: a.sentiment,
+      confidence: Math.min(99, Math.max(50, a.confidence)),
+      analysis: a.analysis,
+      change: a.estimatedChange >= 0 ? `+${a.estimatedChange.toFixed(2)}%` : `${a.estimatedChange.toFixed(2)}%`,
+      changeValue: a.estimatedChange,
+      newsCount: news.length,
+      timeframe: 'live'
+    }));
+
+  } catch (error) {
+    console.error('Gemini error:', error);
+    return symbols.map(asset => generateAssetFallback(asset, news.filter(n => 
+      n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset)
+    )));
+  }
+}
+
+// To use Gemini instead of Algorithm, replace analyzeWithAI call with:
+// const macroAnalysis = await analyzeWithGemini(allNews, pinnedAssets);
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
