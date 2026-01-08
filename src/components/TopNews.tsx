@@ -310,18 +310,19 @@ const TopNews: React.FC<TopNewsProps> = () => {
 
         buffer += decoder.decode(value, { stream: true });
         
-        // Parse SSE events
+        // Parse SSE events (Gemini direct API format)
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
+            const data = line.slice(6).trim();
+            if (data === '[DONE]' || !data) continue;
             
             try {
               const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content;
+              // Gemini direct API format: candidates[].content.parts[].text
+              const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
               if (content) {
                 fullText += content;
                 setGeminiStream(prev => ({ ...prev, [symbol]: fullText }));
@@ -332,7 +333,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                 }
               }
             } catch (e) {
-              // Ignore parse errors
+              // Ignore parse errors for partial chunks
             }
           }
         }
