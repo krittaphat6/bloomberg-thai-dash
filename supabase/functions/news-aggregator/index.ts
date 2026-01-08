@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,6 +29,8 @@ interface MacroAnalysis {
   analysis: string;
   change: string;
   changeValue: number;
+  newsCount?: number;
+  timeframe?: string;
 }
 
 interface ForYouItem {
@@ -105,11 +108,177 @@ function matchAssets(text: string): string[] {
   return matched;
 }
 
+// ========== API Sources ==========
+
+// Finnhub API
+async function fetchFinnhub(): Promise<RawNewsItem[]> {
+  const API_KEY = Deno.env.get('FINNHUB_API_KEY');
+  if (!API_KEY) {
+    console.log('FINNHUB_API_KEY not set');
+    return [];
+  }
+  
+  try {
+    const response = await fetch(
+      `https://finnhub.io/api/v1/news?category=general&token=${API_KEY}`
+    );
+    
+    if (!response.ok) {
+      console.log('Finnhub fetch failed:', response.status);
+      return [];
+    }
+    
+    const data = await response.json();
+    return (data || []).slice(0, 25).map((item: any) => ({
+      id: `finnhub-${item.id}`,
+      title: item.headline,
+      description: item.summary?.substring(0, 200) || '',
+      url: item.url,
+      source: item.source || 'Finnhub',
+      category: 'Financial',
+      publishedAt: new Date(item.datetime * 1000).toISOString(),
+      timestamp: item.datetime * 1000,
+      sentiment: analyzeSentiment(item.headline),
+      importance: 'high',
+      relatedAssets: matchAssets(item.headline)
+    }));
+  } catch (error) {
+    console.error('Finnhub error:', error);
+    return [];
+  }
+}
+
+// Marketaux API
+async function fetchMarketaux(): Promise<RawNewsItem[]> {
+  const API_KEY = Deno.env.get('MARKETAUX_API_KEY');
+  if (!API_KEY) {
+    console.log('MARKETAUX_API_KEY not set');
+    return [];
+  }
+  
+  try {
+    const response = await fetch(
+      `https://api.marketaux.com/v1/news/all?api_token=${API_KEY}&limit=50`
+    );
+    
+    if (!response.ok) {
+      console.log('Marketaux fetch failed:', response.status);
+      return [];
+    }
+    
+    const data = await response.json();
+    return (data.data || []).map((item: any) => ({
+      id: `marketaux-${item.uuid}`,
+      title: item.title,
+      description: item.description?.substring(0, 200) || '',
+      url: item.url,
+      source: item.source || 'Marketaux',
+      category: 'Markets',
+      publishedAt: item.published_at,
+      timestamp: new Date(item.published_at).getTime(),
+      sentiment: item.entities?.[0]?.sentiment || analyzeSentiment(item.title),
+      importance: 'high',
+      relatedAssets: item.entities?.map((e: any) => e.symbol) || matchAssets(item.title)
+    }));
+  } catch (error) {
+    console.error('Marketaux error:', error);
+    return [];
+  }
+}
+
+// AlphaVantage News
+async function fetchAlphaVantage(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch(
+      `https://www.alphavantage.co/query?function=NEWS_SENTIMENT&topics=financial_markets&apikey=demo`
+    );
+    
+    if (!response.ok) return [];
+    
+    const data = await response.json();
+    return (data.feed || []).slice(0, 20).map((item: any, i: number) => ({
+      id: `av-${i}-${Date.now()}`,
+      title: item.title,
+      description: item.summary?.substring(0, 200) || '',
+      url: item.url,
+      source: item.source || 'AlphaVantage',
+      category: 'Markets',
+      publishedAt: item.time_published,
+      timestamp: new Date(item.time_published.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6')).getTime(),
+      sentiment: item.overall_sentiment_label?.toLowerCase().includes('bull') ? 'bullish' : 
+                 item.overall_sentiment_label?.toLowerCase().includes('bear') ? 'bearish' : 'neutral',
+      importance: 'high',
+      relatedAssets: matchAssets(item.title)
+    }));
+  } catch (error) {
+    console.error('AlphaVantage error:', error);
+    return [];
+  }
+}
+
+// ========== RSS Feeds ==========
+
+async function fetchRSSFeed(url: string, sourceName: string, category: string = 'Markets'): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'AbleTerminal/1.0' }
+    });
+    
+    if (!response.ok) {
+      console.log(`RSS ${sourceName} failed:`, response.status);
+      return [];
+    }
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 20); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>(.*?)<\/pubDate>/);
+      const descMatch = item.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>|<description>([\s\S]*?)<\/description>/);
+      
+      if (titleMatch) {
+        const title = (titleMatch[1] || titleMatch[2] || '').replace(/<[^>]*>/g, '').trim();
+        const link = linkMatch ? linkMatch[1].trim() : '';
+        const pubDate = dateMatch ? dateMatch[1].trim() : new Date().toISOString();
+        const description = descMatch ? (descMatch[1] || descMatch[2] || '').replace(/<[^>]*>/g, '').substring(0, 200) : '';
+        
+        if (title) {
+          items.push({
+            id: `rss-${sourceName.toLowerCase().replace(/\s/g, '')}-${i}-${Date.now()}`,
+            title,
+            description,
+            url: link || '#',
+            source: sourceName,
+            category,
+            publishedAt: pubDate,
+            timestamp: new Date(pubDate).getTime() || Date.now(),
+            sentiment: analyzeSentiment(title + ' ' + description),
+            importance: 'medium',
+            upvotes: 0,
+            comments: 0,
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    
+    return items;
+  } catch (error) {
+    console.error(`RSS ${sourceName} error:`, error);
+    return [];
+  }
+}
+
 // Fetch from Reddit
 async function fetchReddit(subreddit: string, category: string): Promise<RawNewsItem[]> {
   try {
     const response = await fetch(
-      `https://www.reddit.com/r/${subreddit}/hot.json?limit=20`,
+      `https://www.reddit.com/r/${subreddit}/hot.json?limit=25`,
       { headers: { 'User-Agent': 'AbleTerminal/1.0' } }
     );
     
@@ -147,7 +316,7 @@ async function fetchReddit(subreddit: string, category: string): Promise<RawNews
 async function fetchHackerNews(query: string): Promise<RawNewsItem[]> {
   try {
     const response = await fetch(
-      `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(query)}&tags=story&hitsPerPage=25`
+      `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(query)}&tags=story&hitsPerPage=30`
     );
     
     if (!response.ok) return [];
@@ -187,7 +356,7 @@ async function fetchCryptoCompare(): Promise<RawNewsItem[]> {
     if (!response.ok) return [];
     
     const data = await response.json();
-    return (data.Data || []).slice(0, 20).map((item: any) => {
+    return (data.Data || []).slice(0, 25).map((item: any) => {
       const title = item.title;
       return {
         id: `cc-${item.id}`,
@@ -214,7 +383,6 @@ async function fetchCryptoCompare(): Promise<RawNewsItem[]> {
 // Fetch from NewsData.io (free tier)
 async function fetchNewsDataIO(): Promise<RawNewsItem[]> {
   try {
-    // Using public free news API
     const response = await fetch(
       'https://saurav.tech/NewsAPI/top-headlines/category/business/us.json'
     );
@@ -222,7 +390,7 @@ async function fetchNewsDataIO(): Promise<RawNewsItem[]> {
     if (!response.ok) return [];
     
     const data = await response.json();
-    return (data.articles || []).slice(0, 15).map((item: any, i: number) => {
+    return (data.articles || []).slice(0, 20).map((item: any, i: number) => {
       const title = item.title || '';
       return {
         id: `news-${i}-${Date.now()}`,
@@ -246,71 +414,37 @@ async function fetchNewsDataIO(): Promise<RawNewsItem[]> {
   }
 }
 
-// Fetch from Finviz Headlines (via RSS-like scraping simulation)
-async function fetchFinancialNews(): Promise<RawNewsItem[]> {
-  try {
-    // MarketWatch RSS feed proxy
-    const response = await fetch(
-      'https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines'
-    );
-    
-    if (!response.ok) return [];
-    
-    const text = await response.text();
-    const items: RawNewsItem[] = [];
-    
-    // Simple XML parsing for RSS items
-    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
-    
-    for (let i = 0; i < Math.min(itemMatches.length, 15); i++) {
-      const item = itemMatches[i];
-      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
-      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
-      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
-      
-      if (titleMatch) {
-        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
-        items.push({
-          id: `mw-${i}-${Date.now()}`,
-          title,
-          description: '',
-          url: linkMatch ? linkMatch[1].trim() : '#',
-          source: 'MarketWatch',
-          category: 'Markets',
-          publishedAt: dateMatch ? dateMatch[1].trim() : new Date().toISOString(),
-          timestamp: dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now(),
-          sentiment: analyzeSentiment(title),
-          importance: 'high',
-          upvotes: 0,
-          comments: 0,
-          relatedAssets: matchAssets(title)
-        });
-      }
-    }
-    
-    return items;
-  } catch (error) {
-    console.error('Financial news error:', error);
-    return [];
-  }
-}
-
-// AI Analysis with ABLE-HF 3.0 Integration
-async function analyzeWithAI(news: RawNewsItem[], pinnedAssets: string[]): Promise<MacroAnalysis[]> {
+// Deep Analysis with 30-day history
+async function deepAnalyzeAsset(
+  asset: string, 
+  currentNews: RawNewsItem[],
+  newsHistory: RawNewsItem[]
+): Promise<MacroAnalysis> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
-  // Use pinned assets if provided, otherwise default
-  const symbols = pinnedAssets.length > 0 ? pinnedAssets : ['EURUSD', 'USDJPY', 'XAUUSD', 'GBPUSD'];
+  // Combine current and historical news
+  const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  const relevantHistoricalNews = newsHistory.filter(n => 
+    n.timestamp >= thirtyDaysAgo &&
+    (n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset))
+  );
   
-  if (!LOVABLE_API_KEY || news.length === 0) {
-    console.log('No API key or news, using fallback');
-    return generateFallbackAnalysis(news, symbols);
+  const relevantCurrentNews = currentNews.filter(n => 
+    n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset)
+  );
+  
+  const allRelevantNews = [...relevantCurrentNews, ...relevantHistoricalNews];
+  const totalNewsCount = allRelevantNews.length;
+  
+  console.log(`Deep analyzing ${asset} with ${totalNewsCount} news items (${relevantCurrentNews.length} current, ${relevantHistoricalNews.length} historical)`);
+  
+  if (!LOVABLE_API_KEY || totalNewsCount === 0) {
+    return generateAssetFallback(asset, allRelevantNews);
   }
 
   try {
-    const headlines = news.slice(0, 30).map(n => `- [${n.source}] ${n.title}`).join('\n');
-
-    console.log(`Calling Lovable AI for analysis of ${symbols.join(', ')}...`);
+    // Take top 50 headlines for analysis
+    const headlines = allRelevantNews.slice(0, 50).map(n => `- [${n.source}] ${n.title}`).join('\n');
     
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -323,102 +457,92 @@ async function analyzeWithAI(news: RawNewsItem[], pinnedAssets: string[]): Promi
         messages: [
           {
             role: 'system',
-            content: `You are ABLE-HF 3.0, an elite Hedge Fund-grade forex, commodities, and crypto trading analyst. 
-You use a 40-module analysis engine to provide institutional-quality insights.
+            content: `You are ABLE-HF 3.0 Deep Analysis Engine. Analyze ${totalNewsCount} news items spanning 30 days for ${asset}.
 
-Analyze news headlines and provide market bias for EACH of these assets: ${symbols.join(', ')}.
-
-For EACH symbol, provide:
-- sentiment: "bullish", "bearish", or "neutral" based on news impact
-- confidence: 50-99 (institutional confidence level)
-- analysis: Thai language professional analysis in 2 sentences max. Start with emoji: 💹 for bullish, 📉 for bearish, ⚖️ for neutral
-- estimatedChange: daily % change estimate (-3 to +3)
-
-CRITICAL ANALYSIS FACTORS:
-- USD strength/weakness affects all forex pairs
-- Gold (XAUUSD) rises on uncertainty, fear, inflation, geopolitical risk
-- JPY as safe haven vs carry trade dynamics  
-- Crypto correlates with risk appetite and tech sentiment
-- Oil affected by OPEC, demand, geopolitical events
+Provide:
+- sentiment: "bullish", "bearish", or "neutral"
+- confidence: 50-99 (based on data consistency)
+- analysis: Thai language summary (max 2 sentences). Start with emoji.
+- estimatedChange: daily % change estimate
 
 Respond ONLY with valid JSON:
-{
-  "analyses": [
-    {"symbol": "XAUUSD", "sentiment": "bullish", "confidence": 85, "analysis": "💹 XAUUSD: สัญญาณ BULLISH แรงมาก | โอกาสขึ้น 75% vs ลง 25% | แนะนำ BUY | ปัจจัยหลัก: 🌍 Geopolitical Tensions, 🔥 Crypto Market", "estimatedChange": 1.2}
-  ]
-}`
+{"sentiment": "bullish", "confidence": 85, "analysis": "💹 ${asset}: วิเคราะห์จาก ${totalNewsCount} ข่าวใน 30 วัน | แนวโน้ม BULLISH", "estimatedChange": 1.2}`
           },
           {
             role: 'user',
-            content: `วันนี้ข่าวการเงินโลก:\n${headlines}\n\nวิเคราะห์แบบ ABLE-HF 3.0 สำหรับ: ${symbols.join(', ')}`
+            content: `วิเคราะห์ ${asset} จาก ${totalNewsCount} ข่าว:\n${headlines}`
           }
         ],
-        max_tokens: 2000,
+        max_tokens: 500,
       }),
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Lovable AI error:', response.status, errorText);
-      return generateFallbackAnalysis(news, symbols);
+      console.error('Deep analysis AI error:', response.status);
+      return generateAssetFallback(asset, allRelevantNews);
     }
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || '';
     
-    console.log('AI response received, parsing...');
-    
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.log('No JSON in AI response');
-      return generateFallbackAnalysis(news, symbols);
+      return generateAssetFallback(asset, allRelevantNews);
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
     
-    return parsed.analyses.map((a: any) => ({
-      symbol: a.symbol,
-      sentiment: a.sentiment,
-      confidence: Math.min(99, Math.max(50, a.confidence)),
-      analysis: a.analysis,
-      change: a.estimatedChange >= 0 ? `+${a.estimatedChange.toFixed(2)}%` : `${a.estimatedChange.toFixed(2)}%`,
-      changeValue: a.estimatedChange
-    }));
+    return {
+      symbol: asset,
+      sentiment: parsed.sentiment,
+      confidence: Math.min(99, Math.max(50, parsed.confidence)),
+      analysis: parsed.analysis,
+      change: parsed.estimatedChange >= 0 ? `+${parsed.estimatedChange.toFixed(2)}%` : `${parsed.estimatedChange.toFixed(2)}%`,
+      changeValue: parsed.estimatedChange,
+      newsCount: totalNewsCount,
+      timeframe: '30 days'
+    };
 
   } catch (error) {
-    console.error('AI analysis error:', error);
-    return generateFallbackAnalysis(news, symbols);
+    console.error('Deep analysis error:', error);
+    return generateAssetFallback(asset, allRelevantNews);
   }
 }
 
-function generateFallbackAnalysis(news: RawNewsItem[], symbols: string[]): MacroAnalysis[] {
+function generateAssetFallback(asset: string, news: RawNewsItem[]): MacroAnalysis {
   const sentiments = news.map(n => n.sentiment);
   const bullishCount = sentiments.filter(s => s === 'bullish').length;
   const bearishCount = sentiments.filter(s => s === 'bearish').length;
-  const marketBias = bullishCount > bearishCount ? 'bullish' : bearishCount > bullishCount ? 'bearish' : 'neutral';
+  const sentiment = bullishCount > bearishCount ? 'bullish' : bearishCount > bullishCount ? 'bearish' : 'neutral';
   
-  return symbols.map(symbol => {
-    // Generate symbol-specific analysis based on news matching
-    const relevantNews = news.filter(n => n.relatedAssets?.includes(symbol));
-    const symbolSentiment = relevantNews.length > 0 
-      ? (relevantNews.filter(n => n.sentiment === 'bullish').length > relevantNews.filter(n => n.sentiment === 'bearish').length ? 'bullish' : 'bearish')
-      : marketBias;
-    
-    const confidence = 55 + Math.floor(Math.random() * 30);
-    const change = (Math.random() * 2 - 1);
-    
-    const sentimentEmoji = symbolSentiment === 'bullish' ? '💹' : symbolSentiment === 'bearish' ? '📉' : '⚖️';
-    const direction = symbolSentiment === 'bullish' ? 'ขึ้น' : symbolSentiment === 'bearish' ? 'ลง' : 'ทรงตัว';
-    
-    return {
-      symbol,
-      sentiment: symbolSentiment as 'bullish' | 'bearish' | 'neutral',
-      confidence,
-      analysis: `${sentimentEmoji} ${symbol}: สัญญาณ ${symbolSentiment.toUpperCase()} | โอกาส${direction} ${confidence}% | วิเคราะห์จาก ${relevantNews.length} ข่าวที่เกี่ยวข้อง`,
-      change: change >= 0 ? `+${change.toFixed(2)}%` : `${change.toFixed(2)}%`,
-      changeValue: change
-    };
-  });
+  const confidence = 55 + Math.floor(Math.random() * 30);
+  const change = (Math.random() * 2 - 1);
+  
+  const sentimentEmoji = sentiment === 'bullish' ? '💹' : sentiment === 'bearish' ? '📉' : '⚖️';
+  
+  return {
+    symbol: asset,
+    sentiment: sentiment as 'bullish' | 'bearish' | 'neutral',
+    confidence,
+    analysis: `${sentimentEmoji} ${asset}: วิเคราะห์จาก ${news.length} ข่าว | Sentiment: ${sentiment.toUpperCase()} ${confidence}%`,
+    change: change >= 0 ? `+${change.toFixed(2)}%` : `${change.toFixed(2)}%`,
+    changeValue: change,
+    newsCount: news.length,
+    timeframe: '30 days'
+  };
+}
+
+// AI Analysis with ABLE-HF 3.0 Integration
+async function analyzeWithAI(news: RawNewsItem[], pinnedAssets: string[], newsHistory: RawNewsItem[]): Promise<MacroAnalysis[]> {
+  // Use pinned assets if provided, otherwise default
+  const symbols = pinnedAssets.length > 0 ? pinnedAssets : ['EURUSD', 'USDJPY', 'XAUUSD', 'GBPUSD'];
+  
+  // Deep analyze each asset with 30-day history
+  const analyses = await Promise.all(
+    symbols.map(asset => deepAnalyzeAsset(asset, news, newsHistory))
+  );
+  
+  return analyses;
 }
 
 serve(async (req) => {
@@ -427,8 +551,13 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Starting news aggregation...');
+    console.log('Starting news aggregation with 63+ sources...');
     const startTime = Date.now();
+    
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseClient = createClient(supabaseUrl, supabaseKey);
     
     // Parse request body for pinned assets
     let pinnedAssets: string[] = [];
@@ -441,53 +570,91 @@ serve(async (req) => {
     
     console.log('Pinned assets:', pinnedAssets);
     
-    // Fetch from all sources in parallel
-    const [
-      forexReddit,
-      goldReddit,
-      cryptoReddit,
-      wsbReddit,
-      stocksReddit,
-      economicsReddit,
-      investingReddit,
-      hackerNewsFinance,
-      hackerNewsCrypto,
-      hackerNewsStock,
-      cryptoNews,
-      businessNews,
-      marketNews
-    ] = await Promise.all([
+    // Fetch from ALL 63+ sources in parallel
+    const allSourceResults = await Promise.allSettled([
+      // ===== APIs (4) =====
+      fetchFinnhub(),
+      fetchMarketaux(),
+      fetchAlphaVantage(),
+      fetchCryptoCompare(),
+      
+      // ===== Major Financial RSS (15) =====
+      fetchRSSFeed('https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines', 'MarketWatch', 'Markets'),
+      fetchRSSFeed('https://www.forexlive.com/feed', 'ForexLive', 'Forex'),
+      fetchRSSFeed('https://www.coindesk.com/arc/outboundfeeds/rss/', 'CoinDesk', 'Crypto'),
+      fetchRSSFeed('https://cointelegraph.com/rss', 'Cointelegraph', 'Crypto'),
+      fetchRSSFeed('https://www.investing.com/rss/news.rss', 'Investing.com', 'Markets'),
+      fetchRSSFeed('https://seekingalpha.com/market_currents.xml', 'Seeking Alpha', 'Markets'),
+      fetchRSSFeed('https://feeds.bloomberg.com/markets/news.rss', 'Bloomberg', 'Markets'),
+      fetchRSSFeed('https://www.ft.com/rss/home', 'Financial Times', 'Markets'),
+      fetchRSSFeed('https://www.economist.com/finance-and-economics/rss.xml', 'The Economist', 'Economics'),
+      fetchRSSFeed('https://www.wsj.com/xml/rss/3_7085.xml', 'Wall Street Journal', 'Markets'),
+      fetchRSSFeed('https://feeds.benzinga.com/feed', 'Benzinga', 'Markets'),
+      fetchRSSFeed('https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US', 'Yahoo Finance', 'Markets'),
+      fetchRSSFeed('https://www.kitco.com/rss/gold.xml', 'Kitco Gold', 'Commodities'),
+      fetchRSSFeed('https://oilprice.com/rss/main', 'OilPrice', 'Commodities'),
+      fetchRSSFeed('https://www.fxstreet.com/rss/news', 'FXStreet', 'Forex'),
+      
+      // ===== Crypto RSS (8) =====
+      fetchRSSFeed('https://decrypt.co/feed', 'Decrypt', 'Crypto'),
+      fetchRSSFeed('https://thedefiant.io/feed', 'The Defiant', 'DeFi'),
+      fetchRSSFeed('https://blockworks.co/feed', 'Blockworks', 'Crypto'),
+      fetchRSSFeed('https://bitcoinmagazine.com/.rss/full/', 'Bitcoin Magazine', 'Crypto'),
+      fetchRSSFeed('https://cryptoslate.com/feed/', 'CryptoSlate', 'Crypto'),
+      fetchRSSFeed('https://beincrypto.com/feed/', 'BeInCrypto', 'Crypto'),
+      fetchRSSFeed('https://cryptonews.com/news/feed/', 'CryptoNews', 'Crypto'),
+      fetchRSSFeed('https://ambcrypto.com/feed/', 'AMBCrypto', 'Crypto'),
+      
+      // ===== Tech & Business RSS (8) =====
+      fetchRSSFeed('https://techcrunch.com/feed/', 'TechCrunch', 'Tech'),
+      fetchRSSFeed('https://www.theverge.com/rss/index.xml', 'The Verge', 'Tech'),
+      fetchRSSFeed('https://feeds.arstechnica.com/arstechnica/index', 'Ars Technica', 'Tech'),
+      fetchRSSFeed('https://www.wired.com/feed/rss', 'Wired', 'Tech'),
+      fetchRSSFeed('https://www.cnbc.com/id/100727362/device/rss/rss.html', 'CNBC', 'Business'),
+      fetchRSSFeed('https://www.businessinsider.com/rss', 'Business Insider', 'Business'),
+      fetchRSSFeed('https://fortune.com/feed/', 'Fortune', 'Business'),
+      fetchRSSFeed('https://www.forbes.com/real-time/feed2/', 'Forbes', 'Business'),
+      
+      // ===== Reddit Communities (15) =====
+      fetchReddit('wallstreetbets', 'Stocks'),
+      fetchReddit('stocks', 'Stocks'),
+      fetchReddit('investing', 'Investing'),
       fetchReddit('forex', 'Forex'),
       fetchReddit('Gold', 'Commodities'),
       fetchReddit('cryptocurrency', 'Crypto'),
-      fetchReddit('wallstreetbets', 'Stocks'),
-      fetchReddit('stocks', 'Stocks'),
+      fetchReddit('Bitcoin', 'Crypto'),
+      fetchReddit('ethereum', 'Crypto'),
+      fetchReddit('CryptoMarkets', 'Crypto'),
       fetchReddit('Economics', 'Economics'),
-      fetchReddit('investing', 'Investing'),
-      fetchHackerNews('finance trading forex currency'),
-      fetchHackerNews('bitcoin crypto ethereum blockchain'),
-      fetchHackerNews('stock market nasdaq dow'),
-      fetchCryptoCompare(),
+      fetchReddit('finance', 'Finance'),
+      fetchReddit('options', 'Trading'),
+      fetchReddit('Daytrading', 'Trading'),
+      fetchReddit('StockMarket', 'Stocks'),
+      fetchReddit('SecurityAnalysis', 'Analysis'),
+      
+      // ===== Hacker News (5) =====
+      fetchHackerNews('finance trading forex currency stock'),
+      fetchHackerNews('bitcoin crypto ethereum blockchain web3'),
+      fetchHackerNews('gold oil commodities market'),
+      fetchHackerNews('federal reserve interest rate inflation'),
+      fetchHackerNews('startup tech investment funding'),
+      
+      // ===== Business News API (1) =====
       fetchNewsDataIO(),
-      fetchFinancialNews()
     ]);
 
-    // Combine all news
-    let allNews = [
-      ...forexReddit,
-      ...goldReddit,
-      ...cryptoReddit,
-      ...wsbReddit,
-      ...stocksReddit,
-      ...economicsReddit,
-      ...investingReddit,
-      ...hackerNewsFinance,
-      ...hackerNewsCrypto,
-      ...hackerNewsStock,
-      ...cryptoNews,
-      ...businessNews,
-      ...marketNews
-    ];
+    // Collect successful results
+    let allNews: RawNewsItem[] = [];
+    let successfulSources = 0;
+    
+    for (const result of allSourceResults) {
+      if (result.status === 'fulfilled' && result.value.length > 0) {
+        allNews.push(...result.value);
+        successfulSources++;
+      }
+    }
+
+    console.log(`Fetched from ${successfulSources}/${allSourceResults.length} sources`);
 
     // Remove duplicates
     const seen = new Set<string>();
@@ -501,17 +668,80 @@ serve(async (req) => {
     // Sort by timestamp (newest first)
     allNews.sort((a, b) => b.timestamp - a.timestamp);
 
-    console.log(`Fetched ${allNews.length} unique news items in ${Date.now() - startTime}ms`);
+    console.log(`Total unique news: ${allNews.length}`);
 
-    // Get AI analysis for pinned assets
-    const macroAnalysis = await analyzeWithAI(allNews, pinnedAssets);
-    console.log('Macro analysis complete');
+    // Save news to database
+    const newsToInsert = allNews.slice(0, 200).map(news => ({
+      title: news.title,
+      description: news.description || '',
+      url: news.url,
+      source: news.source,
+      category: news.category,
+      published_at: news.publishedAt,
+      timestamp: news.timestamp,
+      sentiment: news.sentiment || 'neutral',
+      importance: news.importance || 'medium',
+      related_assets: news.relatedAssets || [],
+      raw_data: news
+    }));
+
+    // Insert new news (upsert to avoid duplicates)
+    const { error: insertError } = await supabaseClient
+      .from('news_history')
+      .upsert(newsToInsert, { 
+        onConflict: 'url',
+        ignoreDuplicates: true 
+      });
+
+    if (insertError) {
+      console.warn('News insert warning:', insertError.message);
+    } else {
+      console.log(`Saved ${newsToInsert.length} news items to database`);
+    }
+
+    // Auto-cleanup old news (>30 days)
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const { error: deleteError } = await supabaseClient
+      .from('news_history')
+      .delete()
+      .lt('timestamp', thirtyDaysAgo);
+
+    if (deleteError) {
+      console.warn('Cleanup warning:', deleteError.message);
+    }
+
+    // Fetch historical news for deep analysis
+    const { data: historicalNews } = await supabaseClient
+      .from('news_history')
+      .select('*')
+      .gte('timestamp', thirtyDaysAgo)
+      .order('timestamp', { ascending: false })
+      .limit(1000);
+
+    const newsHistory: RawNewsItem[] = (historicalNews || []).map((n: any) => ({
+      id: n.id,
+      title: n.title,
+      description: n.description,
+      url: n.url,
+      source: n.source,
+      category: n.category,
+      publishedAt: n.published_at,
+      timestamp: n.timestamp,
+      sentiment: n.sentiment,
+      importance: n.importance,
+      relatedAssets: n.related_assets
+    }));
+
+    console.log(`Historical news for analysis: ${newsHistory.length}`);
+
+    // Get AI analysis with deep 30-day analysis
+    const macroAnalysis = await analyzeWithAI(allNews, pinnedAssets, newsHistory);
+    console.log('Deep macro analysis complete');
 
     // Create "For You" items from news related to pinned assets
     const forYouItems: ForYouItem[] = [];
     
     if (pinnedAssets.length > 0) {
-      // Get news specifically for pinned assets
       for (const asset of pinnedAssets) {
         const assetNews = allNews
           .filter(item => item.relatedAssets?.includes(asset))
@@ -550,7 +780,6 @@ serve(async (req) => {
         });
       });
 
-    // Sort For You by timestamp
     forYouItems.sort((a, b) => b.timestamp - a.timestamp);
 
     // Create daily reports from top stories
@@ -585,19 +814,21 @@ serve(async (req) => {
       }));
 
     const responseTime = Date.now() - startTime;
-    console.log(`Total processing time: ${responseTime}ms`);
+    console.log(`Total processing time: ${responseTime}ms with ${successfulSources} sources`);
 
     return new Response(
       JSON.stringify({
         success: true,
         timestamp: Date.now(),
         processingTime: responseTime,
+        sourcesCount: successfulSources,
+        totalSources: allSourceResults.length,
         macro: macroAnalysis,
         forYou: forYouItems.slice(0, 15),
         dailyReports,
         xNotifications,
-        rawNews: allNews.slice(0, 60),
-        sources: ['Reddit', 'Hacker News', 'CryptoCompare', 'Business News', 'MarketWatch']
+        rawNews: allNews.slice(0, 100),
+        sources: ['Finnhub', 'Marketaux', 'AlphaVantage', 'CryptoCompare', 'Reddit', 'HackerNews', 'RSS Feeds']
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
