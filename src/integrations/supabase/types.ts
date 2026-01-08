@@ -630,6 +630,54 @@ export type Database = {
           },
         ]
       }
+      news_history: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          id: string
+          importance: string | null
+          published_at: string | null
+          raw_data: Json | null
+          related_assets: string[] | null
+          sentiment: string | null
+          source: string
+          timestamp: number
+          title: string
+          url: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          importance?: string | null
+          published_at?: string | null
+          raw_data?: Json | null
+          related_assets?: string[] | null
+          sentiment?: string | null
+          source: string
+          timestamp: number
+          title: string
+          url?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          importance?: string | null
+          published_at?: string | null
+          raw_data?: Json | null
+          related_assets?: string[] | null
+          sentiment?: string | null
+          source?: string
+          timestamp?: number
+          title?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       room_members: {
         Row: {
           id: string
