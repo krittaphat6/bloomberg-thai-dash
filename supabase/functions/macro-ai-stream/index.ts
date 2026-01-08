@@ -23,17 +23,24 @@ serve(async (req) => {
 
     console.log(`📊 Starting streaming analysis for ${symbol}`)
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
     
-    if (!LOVABLE_API_KEY) {
+    if (!GEMINI_API_KEY) {
       return new Response(
-        JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }),
+        JSON.stringify({ error: 'GEMINI_API_KEY not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Create structured prompt for financial analysis - ask AI to think step by step
-    const systemPrompt = `คุณเป็น ABLE-HF 3.0 AI นักวิเคราะห์การเงินระดับ Hedge Fund
+    // Create structured prompt for financial analysis
+    const prompt = `คุณเป็น ABLE-HF 3.0 AI นักวิเคราะห์การเงินระดับ Hedge Fund
+
+📊 **วิเคราะห์สินทรัพย์**: ${symbol}
+${currentPrice ? `💰 ราคาปัจจุบัน: ${currentPrice.toLocaleString()}` : ''}
+${priceChange ? `📈 เปลี่ยนแปลง 24h: ${priceChange > 0 ? '+' : ''}${priceChange.toFixed(2)}%` : ''}
+
+📰 **ข่าวล่าสุด** (${headlines.length} ข่าว):
+${headlines.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n')}
 
 **คำสั่ง**: วิเคราะห์ข่าวอย่างละเอียดและแสดงขั้นตอนการคิดทีละขั้นเป็นภาษาไทย
 
@@ -55,51 +62,41 @@ serve(async (req) => {
 {"sentiment":"bullish","P_up_pct":62,"P_down_pct":38,"confidence":75,"decision":"BUY","thai_summary":"ทองมีแนวโน้มขึ้นจากเงินเฟ้อสูง","key_drivers":["Inflation","Fed policy","Safe haven demand"],"risk_warnings":["DXY strength","Rate hikes"],"market_regime":"trending_up"}
 </result>
 
-**สิ่งที่ต้องวิเคราะห์**:
-- อ่านข่าวแต่ละข่าวและประเมิน sentiment
-- นับ bullish vs bearish signals
-- คำนวณ probability
-- ให้ decision ชัดเจน`
+กรุณาวิเคราะห์ทีละขั้นตอนแบบละเอียด`
 
-    const userPrompt = `
-📊 **วิเคราะห์สินทรัพย์**: ${symbol}
-${currentPrice ? `💰 ราคาปัจจุบัน: ${currentPrice.toLocaleString()}` : ''}
-${priceChange ? `📈 เปลี่ยนแปลง 24h: ${priceChange > 0 ? '+' : ''}${priceChange.toFixed(2)}%` : ''}
+    console.log(`📤 Sending streaming request to Gemini Direct API...`)
 
-📰 **ข่าวล่าสุด** (${headlines.length} ข่าว):
-${headlines.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n')}
-
-🧠 กรุณาวิเคราะห์ทีละขั้นตอนแบบละเอียด`
-
-    console.log(`📤 Sending streaming request to Gemini...`)
-
-    // Make streaming request to Lovable AI
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        stream: true,
-        max_tokens: 2000
-      })
-    })
+    // Make streaming request to Google Gemini directly
+    const aiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2000
+          }
+        })
+      }
+    )
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text()
-      console.error('AI API Error:', errorText)
+      console.error('Gemini API Error:', errorText)
       
       return new Response(
-        JSON.stringify({ error: `AI API error: ${aiResponse.status}` }),
+        JSON.stringify({ error: `Gemini API error: ${aiResponse.status}`, details: errorText }),
         { status: aiResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    console.log(`✅ Gemini streaming response started`)
 
     // Return the stream directly to client
     return new Response(aiResponse.body, {
