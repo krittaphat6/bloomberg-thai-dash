@@ -721,34 +721,34 @@ const TopNews: React.FC<TopNewsProps> = () => {
 
   if (initialLoading) {
     return (
-      <div className="flex h-full bg-background text-foreground items-center justify-center">
+      <div className="flex h-full bg-slate-950 text-white items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading ABLE-HF 3.0 Intelligence...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+          <p className="text-emerald-300/70">Loading ABLE-HF 3.0 Intelligence...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full bg-background text-foreground overflow-hidden">
+    <div className="flex h-full bg-slate-950 text-white overflow-hidden">
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="p-6 border-b border-border">
+      <div className="flex-1 flex flex-col overflow-hidden border-2 border-emerald-500/30 rounded-lg m-1">
+        {/* Header - Bright Gradient */}
+        <div className="p-6 bg-gradient-to-r from-emerald-900/30 to-blue-900/30 border-b-2 border-emerald-500/50">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-light text-primary">
-                Good afternoon, Trader.
+              <h1 className="text-3xl font-bold text-emerald-400">
+                🔥 TOP NEWS
               </h1>
-              <p className="text-muted-foreground flex items-center gap-2 mt-1">
-                <Sparkles className="w-4 h-4 text-primary" />
-                ABLE-HF 3.0 News Intelligence • 40 Modules Active
+              <p className="text-emerald-300/80 flex items-center gap-2 mt-1">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                ABLE-HF 3.0 News Intelligence • 63+ Sources Active
               </p>
             </div>
             <div className="flex items-center gap-2">
               {lastUpdated && (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-emerald-300/60">
                   Updated {lastUpdated.toLocaleTimeString()}
                 </span>
               )}
@@ -757,11 +757,11 @@ const TopNews: React.FC<TopNewsProps> = () => {
                 size="sm" 
                 onClick={fetchNews}
                 disabled={loading}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-emerald-300 hover:text-emerald-100 hover:bg-emerald-500/20"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               </Button>
-              <Button variant="outline" className="border-border text-muted-foreground hover:bg-secondary bg-transparent">
+              <Button variant="outline" className="border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/20 bg-transparent">
                 <Settings className="w-4 h-4 mr-2" />
                 Personalize
               </Button>
@@ -771,14 +771,14 @@ const TopNews: React.FC<TopNewsProps> = () => {
 
         <ScrollArea className="flex-1">
           <div className="p-6 space-y-6">
-            {/* Tab Selector */}
-            <div className="flex gap-6 border-b border-border">
+            {/* Tab Selector - Bright Colors */}
+            <div className="flex gap-6 border-b-2 border-emerald-500/30">
               <button
                 onClick={() => setActiveTab('macro')}
-                className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 pb-3 text-sm font-bold transition-colors ${
                   activeTab === 'macro' 
-                    ? 'text-primary border-b-2 border-primary' 
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'text-emerald-400 border-b-2 border-emerald-400' 
+                    : 'text-emerald-300/60 hover:text-emerald-300'
                 }`}
               >
                 <Zap className="w-4 h-4" />
@@ -786,26 +786,26 @@ const TopNews: React.FC<TopNewsProps> = () => {
               </button>
               <button
                 onClick={() => setActiveTab('twitter')}
-                className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 pb-3 text-sm font-bold transition-colors ${
                   activeTab === 'twitter' 
                     ? 'text-blue-400 border-b-2 border-blue-400' 
-                    : 'text-muted-foreground hover:text-foreground'
+                    : 'text-blue-300/60 hover:text-blue-300'
                 }`}
               >
                 <Twitter className="w-4 h-4" />
                 Twitter Intelligence
                 {twitterPosts.filter(p => p.urgency === 'critical' || p.urgency === 'high').length > 0 && (
-                  <Badge className="text-[10px] bg-red-500/20 text-red-400 border-red-500/30 ml-1">
+                  <Badge className="text-[10px] bg-red-500 text-white animate-pulse ml-1">
                     {twitterPosts.filter(p => p.urgency === 'critical' || p.urgency === 'high').length}
                   </Badge>
                 )}
               </button>
               <button
                 onClick={() => setActiveTab('reports')}
-                className={`flex items-center gap-2 pb-3 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 pb-3 text-sm font-bold transition-colors ${
                   activeTab === 'reports' 
-                    ? 'text-primary border-b-2 border-primary' 
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'text-purple-400 border-b-2 border-purple-400' 
+                    : 'text-purple-300/60 hover:text-purple-300'
                 }`}
               >
                 <FileText className="w-4 h-4" />
@@ -901,7 +901,13 @@ const TopNews: React.FC<TopNewsProps> = () => {
                       return (
                         <Card 
                           key={pinned.symbol} 
-                          className={`bg-zinc-900/50 border-zinc-800 p-4 hover:border-emerald-500/30 transition-colors cursor-pointer relative group ${analyzing ? 'ring-1 ring-purple-500/30' : ''}`}
+                          className={`p-4 transition-all cursor-pointer relative group ${
+                            sentiment === 'bullish' 
+                              ? 'bg-emerald-500/10 border-2 border-emerald-500 hover:bg-emerald-500/20' 
+                              : sentiment === 'bearish'
+                              ? 'bg-red-500/10 border-2 border-red-500 hover:bg-red-500/20'
+                              : 'bg-blue-500/10 border-2 border-blue-500 hover:bg-blue-500/20'
+                          } ${analyzing ? 'ring-2 ring-purple-500 animate-pulse' : ''}`}
                           onClick={() => setExpandedThinking(isExpanded ? null : pinned.symbol)}
                         >
                           {/* Remove button */}
@@ -910,15 +916,15 @@ const TopNews: React.FC<TopNewsProps> = () => {
                               e.stopPropagation();
                               handleRemoveAsset(pinned.symbol);
                             }}
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded z-10"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white/10 rounded z-10"
                           >
-                            <X className="w-3 h-3 text-zinc-400" />
+                            <X className="w-3 h-3 text-white/60" />
                           </button>
                           
                           {/* Header with Price */}
-                          <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center justify-between mb-3">
                             <div>
-                              <h3 className="text-lg font-semibold text-white">{pinned.symbol}</h3>
+                              <h3 className="text-2xl font-bold text-white">{pinned.symbol}</h3>
                               {priceData ? (
                                 <div className="flex items-center gap-2 mt-0.5">
                                   <span className="text-sm font-mono text-zinc-300">
@@ -938,21 +944,17 @@ const TopNews: React.FC<TopNewsProps> = () => {
                                 </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-2">
-                              {/* Show Sentiment with Confidence in same format */}
-                              <Badge 
-                                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                  sentiment === 'bullish' 
-                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                                    : sentiment === 'bearish'
-                                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                                    : 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
-                                }`}
-                              >
-                                • {sentiment.charAt(0).toUpperCase() + sentiment.slice(1)}
-                              </Badge>
-                              <span className="text-sm font-medium text-white">{confidence}%</span>
-                            </div>
+                            <Badge 
+                              className={`text-sm px-3 py-1 font-bold ${
+                                sentiment === 'bullish' 
+                                  ? 'bg-emerald-500 text-white' 
+                                  : sentiment === 'bearish'
+                                  ? 'bg-red-500 text-white'
+                                  : 'bg-blue-500 text-white'
+                              }`}
+                            >
+                              {sentiment.toUpperCase()} {confidence}%
+                            </Badge>
                           </div>
 
                           {/* Confidence Bar */}
