@@ -234,7 +234,7 @@ async function fetchRSSFeed(url: string, sourceName: string, category: string = 
     
     const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
     
-    for (let i = 0; i < Math.min(itemMatches.length, 20); i++) {
+    for (let i = 0; i < Math.min(itemMatches.length, 30); i++) {
       const item = itemMatches[i];
       const titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/);
       const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
@@ -278,7 +278,7 @@ async function fetchRSSFeed(url: string, sourceName: string, category: string = 
 async function fetchReddit(subreddit: string, category: string): Promise<RawNewsItem[]> {
   try {
     const response = await fetch(
-      `https://www.reddit.com/r/${subreddit}/hot.json?limit=25`,
+      `https://www.reddit.com/r/${subreddit}/hot.json?limit=100`,
       { headers: { 'User-Agent': 'AbleTerminal/1.0' } }
     );
     
@@ -316,7 +316,7 @@ async function fetchReddit(subreddit: string, category: string): Promise<RawNews
 async function fetchHackerNews(query: string): Promise<RawNewsItem[]> {
   try {
     const response = await fetch(
-      `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(query)}&tags=story&hitsPerPage=30`
+      `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(query)}&tags=story&hitsPerPage=50`
     );
     
     if (!response.ok) return [];
@@ -356,7 +356,7 @@ async function fetchCryptoCompare(): Promise<RawNewsItem[]> {
     if (!response.ok) return [];
     
     const data = await response.json();
-    return (data.Data || []).slice(0, 25).map((item: any) => {
+    return (data.Data || []).slice(0, 40).map((item: any) => {
       const title = item.title;
       return {
         id: `cc-${item.id}`,
@@ -390,7 +390,7 @@ async function fetchNewsDataIO(): Promise<RawNewsItem[]> {
     if (!response.ok) return [];
     
     const data = await response.json();
-    return (data.articles || []).slice(0, 20).map((item: any, i: number) => {
+    return (data.articles || []).slice(0, 30).map((item: any, i: number) => {
       const title = item.title || '';
       return {
         id: `news-${i}-${Date.now()}`,
@@ -532,13 +532,13 @@ function generateAssetFallback(asset: string, news: RawNewsItem[]): MacroAnalysi
   };
 }
 
-// AI Analysis with ABLE-HF 3.0 Integration - Using Gemini via Lovable AI
+// AI Analysis with ABLE-HF 3.0 Integration - Using Gemini via Direct API
 async function analyzeWithAI(news: RawNewsItem[], pinnedAssets: string[], newsHistory: RawNewsItem[]): Promise<MacroAnalysis[]> {
   const symbols = pinnedAssets.length > 0 ? pinnedAssets : ['EURUSD', 'USDJPY', 'XAUUSD', 'GBPUSD'];
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
   
-  if (!LOVABLE_API_KEY || news.length === 0) {
-    console.log('📊 Using fallback algorithm (no API key or no news)');
+  if (!GEMINI_API_KEY || news.length === 0) {
+    console.log('📊 Using fallback algorithm (no Gemini API key or no news)');
     return symbols.map(asset => {
       const relevantNews = news.filter(n => 
         n.relatedAssets?.includes(asset) || matchAssets(n.title).includes(asset)
@@ -547,7 +547,7 @@ async function analyzeWithAI(news: RawNewsItem[], pinnedAssets: string[], newsHi
     });
   }
   
-  console.log(`🧠 Using Gemini AI for ${symbols.join(', ')}`);
+  console.log(`🧠 Using ABLE-HF 3.0 with Gemini AI for ${symbols.join(', ')}`);
   
   try {
     // Combine current and historical news for deep analysis
@@ -565,36 +565,95 @@ async function analyzeWithAI(news: RawNewsItem[], pinnedAssets: string[], newsHi
         );
         
         const allRelevantNews = [...relevantCurrentNews, ...relevantHistoricalNews];
-        const headlines = allRelevantNews.slice(0, 30).map(n => `- [${n.source}] ${n.title}`).join('\n');
+        const headlines = allRelevantNews.slice(0, 50).map(n => `- [${n.source}] ${n.title}`).join('\n');
         
         if (allRelevantNews.length === 0) {
           return generateAssetFallback(asset, []);
         }
 
         try {
-          const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'google/gemini-2.5-flash',
-              messages: [
-                {
-                  role: 'system',
-                  content: `You are ABLE-HF 3.0 AI, elite trading analyst. Analyze news for ${asset}.
-Respond ONLY with valid JSON (no markdown):
-{"sentiment": "bullish|bearish|neutral", "confidence": 50-99, "analysis": "Thai summary 1-2 sentences with emoji", "estimatedChange": number}`
-                },
-                {
-                  role: 'user',
-                  content: `Analyze ${asset} from ${allRelevantNews.length} news:\n${headlines}`
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  parts: [{
+                    text: `คุณคือ ABLE-HF 3.0 นักวิเคราะห์ระดับ Hedge Fund ที่ใช้ระบบ 40 โมดูลในการวิเคราะห์
+
+## 40 MODULES SYSTEM (ต้องใช้ทั้งหมด):
+
+### CATEGORY 1: Macro & Economic (8 modules)
+1. macro_neural_forecast (6.5%) - การคาดการณ์เศรษฐกิจด้วย Neural Network
+2. central_bank_sentiment (7.0%) - ความเชื่อมั่นธนาคารกลาง (Fed, ECB, BOJ)
+3. yield_curve_signal (4.5%) - สัญญาณจาก Yield Curve
+4. inflation_momentum (4.0%) - แนวโน้มเงินเฟ้อ
+5. gdp_growth_trajectory (3.5%) - ทิศทาง GDP
+6. employment_dynamics (3.0%) - ตลาดแรงงาน
+7. trade_balance_flow (2.5%) - ดุลการค้า
+8. fiscal_policy_impact (2.0%) - นโยบายการคลัง
+
+### CATEGORY 2: Sentiment & Flow (8 modules)
+9. news_sentiment_cfa (7.5%) - วิเคราะห์ sentiment ข่าว
+10. social_media_pulse (5.5%) - แนวโน้ม social media
+11. institutional_flow (5.0%) - การไหลเข้าออกของสถาบัน
+12. retail_sentiment (4.0%) - ความเชื่อมั่นนักลงทุนรายย่อย
+13. options_sentiment (3.5%) - Put/Call ratio
+14. cot_positioning (3.0%) - COT Report
+15. dark_pool_activity (2.5%) - Dark pool trading
+16. etf_flow_momentum (2.0%) - การไหลของ ETF
+
+### CATEGORY 3: Technical & Regime (8 modules)
+17. trend_regime_detector (4.5%) - ระบอบเทรนด์
+18. momentum_oscillator (4.0%) - momentum indicators
+19. volatility_regime (3.5%) - ระบอบความผันผวน
+20. support_resistance (3.0%) - แนวรับแนวต้าน
+21. pattern_recognition (2.5%) - รูปแบบกราฟ
+22. volume_analysis (2.0%) - volume profile
+23. market_breadth (1.5%) - ความกว้างตลาด
+24. intermarket_correlation (1.5%) - correlation ข้ามตลาด
+
+### CATEGORY 4: Risk & Event (8 modules)
+25. event_shock (6.5%) - เหตุการณ์สำคัญ
+26. geopolitical_risk (4.5%) - ความเสี่ยงทางการเมือง
+27. black_swan_detector (4.0%) - ตรวจจับ Black Swan
+28. liquidity_risk (3.0%) - ความเสี่ยงสภาพคล่อง
+29. correlation_breakdown (2.5%) - การแตก correlation
+30. tail_risk_monitor (2.0%) - Tail risk
+31. regulatory_risk (1.5%) - ความเสี่ยงกฎระเบียบ
+32. systemic_risk (1.5%) - ความเสี่ยงระบบ
+
+### CATEGORY 5: Alternative & AI (8 modules)
+33. quantum_sentiment (5.5%) - Quantum computing sentiment
+34. neural_ensemble (4.5%) - Neural network ensemble
+35. nlp_deep_analysis (3.5%) - NLP ลึก
+36. satellite_data (2.0%) - ข้อมูลดาวเทียม
+37. alternative_data (2.0%) - Alternative data
+38. machine_learning_signal (1.5%) - ML signals
+39. sentiment_network (1.5%) - Sentiment network graph
+40. predictive_analytics (1.0%) - Predictive models
+
+## วิธีการวิเคราะห์:
+1. อ่านข่าวทั้งหมด
+2. ให้คะแนนแต่ละโมดูล -100 ถึง +100
+3. คำนวณ weighted score ตามน้ำหนัก
+4. สรุปเป็น sentiment, confidence, thai_summary
+
+วิเคราะห์ ${asset} จาก ${allRelevantNews.length} ข่าว:
+${headlines}
+
+ตอบเป็น JSON format เท่านั้น (ไม่มี markdown):
+{"sentiment": "bullish", "confidence": 85, "analysis": "💹 ${asset}: วิเคราะห์จาก 40 modules แนวโน้ม...", "estimatedChange": 1.2}`
+                  }]
+                }],
+                generationConfig: { 
+                  temperature: 0.3, 
+                  maxOutputTokens: 500 
                 }
-              ],
-              max_tokens: 500,
-            }),
-          });
+              })
+            }
+          );
 
           if (!response.ok) {
             console.error(`Gemini error for ${asset}:`, response.status);
@@ -602,7 +661,7 @@ Respond ONLY with valid JSON (no markdown):
           }
 
           const data = await response.json();
-          const content = data.choices?.[0]?.message?.content || '';
+          const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
           const jsonMatch = content.match(/\{[\s\S]*\}/);
           
           if (!jsonMatch) {
@@ -619,7 +678,7 @@ Respond ONLY with valid JSON (no markdown):
             change: parsed.estimatedChange >= 0 ? `+${parsed.estimatedChange.toFixed(2)}%` : `${parsed.estimatedChange.toFixed(2)}%`,
             changeValue: parsed.estimatedChange,
             newsCount: allRelevantNews.length,
-            timeframe: 'live'
+            timeframe: 'ABLE-HF 3.0'
           };
         } catch (e) {
           console.error(`Gemini parse error for ${asset}:`, e);
