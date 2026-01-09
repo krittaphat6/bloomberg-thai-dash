@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { OllamaService, OllamaModel } from '@/services/FreeAIService';
+import { GeminiService } from '@/services/GeminiService';
 import { useMCP } from '@/contexts/MCPContext';
 import { supabase } from '@/integrations/supabase/client';
 import { UniversalDataService } from '@/services/UniversalDataService';
@@ -304,6 +305,21 @@ const ABLE3AI = () => {
   const sendMessage = async () => {
     if (!inputMessage.trim()) return;
 
+    // Check if AI is ready
+    const geminiReady = aiProvider === 'gemini';
+    const ollamaReady = aiProvider === 'ollama' && ollamaConnected;
+    
+    if (!geminiReady && !ollamaReady) {
+      toast({
+        title: "❌ ยังไม่ได้เชื่อมต่อ AI",
+        description: aiProvider === 'ollama' 
+          ? "กรุณาตั้งค่า Bridge URL และกด Connect" 
+          : "กรุณาเลือก AI Provider ใน Settings",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       text: inputMessage,
@@ -318,16 +334,15 @@ const ABLE3AI = () => {
 
     try {
       let aiResponse: string;
-      let model = selectedModel;
+      let model = geminiReady ? 'Gemini 2.5 Flash' : selectedModel;
 
       // Check for help command
       if (currentInput.toLowerCase() === 'help' || currentInput.includes('ช่วย')) {
         aiResponse = getHelpText();
         model = 'System';
       }
-      // Check for MCP tool calls
+      // Check for special commands (news, calendar, notes, monte carlo)
       else {
-        // First check for special commands (news, calendar, notes, monte carlo)
         const specialCmd = detectSpecialCommand(currentInput);
         
         if (specialCmd) {
@@ -351,56 +366,67 @@ const ABLE3AI = () => {
               model = 'News';
               break;
             case 'universal':
-              // ดึงข้อมูลทุกอย่างในแอป
               const universalData = await UniversalDataService.smartQuery(currentInput);
               specialResult = UniversalDataService.formatForAI(universalData);
               model = 'Universal Data';
               break;
           }
           
-          // If AI provider is selected, ask it to analyze
-          const useAI = aiProvider === 'gemini' || (aiProvider === 'ollama' && ollamaConnected);
-          
-          if (useAI && specialResult) {
-            if (aiProvider === 'gemini') {
-              // Use Gemini via edge function
+          // Use AI to analyze the result
+          if (specialResult) {
+            if (geminiReady) {
               try {
-                const { data } = await supabase.functions.invoke('macro-ai-analysis', {
-                  body: { 
-                    prompt: `User asked: "${currentInput}"\n\nData:\n${specialResult}\n\nProvide analysis in Thai.`,
-                    symbol: 'GENERAL'
-                  }
-                });
-                if (data?.analysis) {
-                  aiResponse = `${specialResult}\n\n---\n\n**🧠 Gemini Analysis:**\n${data.analysis}`;
-                  model = `${model} + Gemini`;
-                } else {
-                  aiResponse = specialResult;
-                }
+                const geminiResponse = await GeminiService.chat(
+                  `User asked: "${currentInput}"\n\nData:\n${specialResult}\n\nProvide analysis in Thai.`,
+                  [],
+                  'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน'
+                );
+                aiResponse = `${specialResult}\n\n---\n\n**🧠 Gemini Analysis:**\n${geminiResponse.text}`;
+                model = `${model} + Gemini`;
               } catch (e) {
+                console.error('Gemini analysis error:', e);
                 aiResponse = specialResult;
               }
-            } else {
-              // Use Ollama
+            } else if (ollamaReady) {
               const analysisPrompt = `User asked: "${currentInput}"\n\nData:\n${specialResult}\n\nProvide analysis in the same language as the user.`;
               const ollamaResponse = await OllamaService.chat(analysisPrompt, [], selectedModel);
               aiResponse = `${specialResult}\n\n---\n\n**🤖 AI Analysis:**\n${ollamaResponse.text}`;
               model = `${model} + Ollama`;
+            } else {
+              aiResponse = specialResult;
             }
           } else {
-            aiResponse = specialResult;
+            aiResponse = '❌ ไม่พบข้อมูล';
           }
         }
-        // Then check for MCP tool calls
+        // Check for MCP tool calls
         else {
-          const toolCall = OllamaService.detectToolCall(currentInput);
+          const toolCall = geminiReady 
+            ? GeminiService.detectToolCall(currentInput) 
+            : OllamaService.detectToolCall(currentInput);
 
           if (toolCall && mcpReady) {
             try {
               const result = await executeTool(toolCall.tool, toolCall.params);
-              const toolResult = OllamaService.formatToolResult(toolCall.tool, result);
+              const toolResult = geminiReady
+                ? GeminiService.formatToolResult(toolCall.tool, result)
+                : OllamaService.formatToolResult(toolCall.tool, result);
 
-              if (ollamaConnected) {
+              // Get AI analysis of the tool result
+              if (geminiReady) {
+                try {
+                  const geminiResponse = await GeminiService.chat(
+                    `User asked: "${currentInput}"\n\nHere is the data from ${toolCall.tool}:\n\n${toolResult}\n\nPlease provide a brief analysis and any insights based on this data. Respond in Thai.`,
+                    [],
+                    undefined
+                  );
+                  aiResponse = `${toolResult}\n\n---\n\n**🧠 Gemini Analysis:**\n${geminiResponse.text}`;
+                  model = `MCP + Gemini`;
+                } catch (e) {
+                  aiResponse = toolResult;
+                  model = `MCP: ${toolCall.tool}`;
+                }
+              } else if (ollamaReady) {
                 const analysisPrompt = `User asked: "${currentInput}"\n\nHere is the data from ${toolCall.tool}:\n\n${toolResult}\n\nPlease provide a brief analysis and any insights based on this data. Respond in the same language as the user.`;
                 
                 const ollamaResponse = await OllamaService.chat(
@@ -420,7 +446,31 @@ const ABLE3AI = () => {
               aiResponse = `❌ Error executing tool: ${error instanceof Error ? error.message : 'Unknown error'}`;
               model = 'Error';
             }
-          } else if (ollamaConnected) {
+          } 
+          // Regular AI chat
+          else if (geminiReady) {
+            try {
+              const response = await GeminiService.chat(
+                currentInput,
+                messages.slice(-10).map(m => ({
+                  role: m.isUser ? 'user' as const : 'assistant' as const,
+                  content: m.text
+                })),
+                'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาเดียวกับผู้ใช้อย่างเป็นมิตร'
+              );
+              aiResponse = response.text;
+              model = response.model;
+            } catch (error: any) {
+              console.error('Gemini error:', error);
+              if (error.message?.includes('402')) {
+                aiResponse = '⚠️ **Gemini Rate Limit**\n\nโควต้า AI หมดชั่วคราว กรุณาลองใหม่ภายหลัง หรือเปลี่ยนไปใช้ Ollama (Local)';
+              } else {
+                aiResponse = `❌ เกิดข้อผิดพลาดจาก Gemini: ${error.message || 'Unknown error'}`;
+              }
+              model = 'Error';
+            }
+          } 
+          else if (ollamaReady) {
             const response = await OllamaService.chat(
               currentInput,
               messages.slice(-10).map(m => ({
@@ -432,15 +482,10 @@ const ABLE3AI = () => {
             aiResponse = response.text;
             model = response.model;
           } else {
-            aiResponse = '❌ ยังไม่ได้เชื่อมต่อ Bridge API\n\n' +
-              '**ขั้นตอนการตั้งค่า:**\n' +
-              '1. รัน API Server บน Mac\n' +
-              '2. ใช้ localhost.run เพื่อได้ URL\n' +
-              '3. กดปุ่ม ⚙️ Settings\n' +
-              '4. ใส่ Bridge URL แล้วกด Save\n' +
-              '5. กดปุ่ม Connect\n\n' +
-              '**ตัวอย่าง URL:**\n' +
-              '`https://xxxx.localhost.run`';
+            aiResponse = '❌ ยังไม่ได้เชื่อมต่อ AI\n\n' +
+              '**วิธีใช้งาน:**\n' +
+              '• **Gemini (Cloud):** เลือกใน Settings พร้อมใช้ทันที\n' +
+              '• **Ollama (Local):** ตั้งค่า Bridge URL และกด Connect';
             model = 'System';
           }
         }
@@ -550,12 +595,17 @@ const ABLE3AI = () => {
               <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-cyan-500 rounded-lg flex items-center justify-center">
                 <Bot className="w-5 h-5 text-black" />
               </div>
-              <div className={`absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-black ${ollamaConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+              <div className={`absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-black ${aiProvider === 'gemini' || ollamaConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-white">ABLE AI</span>
               <span className="text-xs font-normal flex items-center gap-1">
-                {ollamaConnected ? (
+                {aiProvider === 'gemini' ? (
+                  <span className="text-purple-400 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Gemini 2.5 Flash (Cloud)
+                  </span>
+                ) : ollamaConnected ? (
                   <span className="text-green-400 flex items-center gap-1">
                     <Wifi className="w-3 h-3" />
                     Ollama • {selectedModel}
@@ -829,7 +879,7 @@ const ABLE3AI = () => {
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
-            placeholder={ollamaConnected ? "ถามอะไรก็ได้..." : "Click 'Connect' to start..."}
+            placeholder={aiProvider === 'gemini' || ollamaConnected ? "ถามอะไรก็ได้..." : "เลือก AI Provider ใน Settings..."}
             disabled={isLoading}
             className="h-10 text-sm bg-black/50 border-green-500/50 text-white placeholder:text-gray-500"
           />
