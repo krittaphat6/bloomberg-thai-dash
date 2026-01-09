@@ -52,7 +52,27 @@ class GeminiServiceClass {
 
       if (error) {
         console.error('Gemini API error:', error);
+        
+        // Handle specific error codes
+        if (error.message?.includes('402') || error.message?.includes('credits exhausted')) {
+          throw new Error('⚠️ AI Credits หมด - กรุณาเติมเครดิตที่ Settings → Workspace → Usage');
+        }
+        if (error.message?.includes('429') || error.message?.includes('rate limit')) {
+          throw new Error('⚠️ คำขอมากเกินไป - กรุณารอสักครู่แล้วลองใหม่');
+        }
+        
         throw new Error(error.message);
+      }
+
+      // Check for error in response data
+      if (data?.error) {
+        if (data.error.includes('credits exhausted') || data.error.includes('402')) {
+          throw new Error('⚠️ AI Credits หมด - กรุณาเติมเครดิตที่ Settings → Workspace → Usage');
+        }
+        if (data.error.includes('rate limit') || data.error.includes('429')) {
+          throw new Error('⚠️ คำขอมากเกินไป - กรุณารอสักครู่แล้วลองใหม่');
+        }
+        throw new Error(data.error);
       }
 
       return {
