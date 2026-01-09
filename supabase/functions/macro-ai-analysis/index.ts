@@ -6,10 +6,12 @@ const corsHeaders = {
 }
 
 interface AnalysisRequest {
-  symbol: string;
-  headlines: string[];
+  symbol?: string;
+  headlines?: string[];
   currentPrice?: number;
   priceChange?: number;
+  prompt?: string; // For direct prompt mode
+  systemPrompt?: string;
 }
 
 serve(async (req) => {
@@ -19,7 +21,7 @@ serve(async (req) => {
 
   try {
     const request: AnalysisRequest = await req.json()
-    const { symbol, headlines, currentPrice, priceChange } = request
+    const { symbol, headlines, currentPrice, priceChange, prompt, systemPrompt: customSystemPrompt } = request
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
     
@@ -33,6 +35,54 @@ serve(async (req) => {
       )
     }
 
+    // Direct prompt mode (for GeminiService chat)
+    if (prompt) {
+      const directResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: customSystemPrompt || 'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาเดียวกับผู้ใช้อย่างเป็นมิตร' },
+            { role: 'user', content: prompt }
+          ],
+          max_tokens: 1500,
+          temperature: 0.5
+        })
+      })
+
+      if (!directResponse.ok) {
+        const errorStatus = directResponse.status
+        if (errorStatus === 429) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Rate limit exceeded' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        if (errorStatus === 402) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'AI credits exhausted' }),
+            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        throw new Error(`AI API error: ${errorStatus}`)
+      }
+
+      const directResult = await directResponse.json()
+      const directContent = directResult.choices?.[0]?.message?.content || 'ไม่สามารถประมวลผลได้'
+
+      return new Response(
+        JSON.stringify({ success: true, analysis: directContent }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // News analysis mode (original functionality)
+    const headlinesList = Array.isArray(headlines) ? headlines : []
+    
     // Create structured prompt for financial analysis
     const systemPrompt = `คุณเป็น ABLE-HF 3.0 AI นักวิเคราะห์การเงินระดับ Hedge Fund ที่มีความเชี่ยวชาญสูง
     
@@ -56,12 +106,12 @@ serve(async (req) => {
 ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น`
 
     const userPrompt = `
-วิเคราะห์สินทรัพย์: ${symbol}
+วิเคราะห์สินทรัพย์: ${symbol || 'GENERAL'}
 ${currentPrice ? `ราคาปัจจุบัน: ${currentPrice}` : ''}
 ${priceChange ? `การเปลี่ยนแปลง 24h: ${priceChange > 0 ? '+' : ''}${priceChange.toFixed(2)}%` : ''}
 
-ข่าวล่าสุด (${headlines.length} ข่าว):
-${headlines.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n')}
+ข่าวล่าสุด (${headlinesList.length} ข่าว):
+${headlinesList.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n') || 'ไม่มีข่าว'}
 
 วิเคราะห์และตอบเป็น JSON`
 
@@ -150,7 +200,7 @@ ${headlines.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n')}
       market_regime: analysis.market_regime || 'ranging',
       analyzed_at: new Date().toISOString(),
       model: 'gemini-2.5-flash',
-      news_count: headlines.length
+      news_count: headlinesList.length
     }
 
     return new Response(
