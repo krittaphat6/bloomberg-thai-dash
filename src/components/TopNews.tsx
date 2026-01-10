@@ -488,7 +488,10 @@ const TopNews: React.FC<TopNewsProps> = () => {
                       ? (analysis.P_up_pct > 55 ? 'bullish' : analysis.P_up_pct < 45 ? 'bearish' : 'neutral')
                       : 'neutral';
                     const confidence = analysis?.confidence || 50;
-                    const analysisText = analysis?.thai_summary || 'กำลังวิเคราะห์...';
+                    const isFallback = analysis?.risk_warnings?.includes('Using fallback analysis') || false;
+                    const analysisText = isFallback 
+                      ? '⚠️ AI Credits หมด - ใช้ Fallback Analysis (เติมเครดิตที่ Settings → Workspace → Usage)'
+                      : (analysis?.thai_summary || 'กำลังวิเคราะห์...');
                     const P_up = analysis?.P_up_pct || 50;
                     const decision = analysis?.decision || 'HOLD';
 
@@ -551,11 +554,13 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         {/* AI Analysis */}
                         <div className="mb-3">
                           <div className="flex items-center gap-1 mb-1">
-                            <Brain className="w-3 h-3 text-emerald-400" />
-                            <span className="text-xs text-emerald-400">ABLE-HF 3.0 Analysis</span>
+                            <Brain className={`w-3 h-3 ${isFallback ? 'text-yellow-400' : 'text-emerald-400'}`} />
+                            <span className={`text-xs ${isFallback ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                              {isFallback ? '⚠️ Fallback Mode' : 'ABLE-HF 3.0 Analysis'}
+                            </span>
                             {analyzing && <Loader2 className="w-3 h-3 animate-spin text-emerald-400 ml-1" />}
                           </div>
-                          <p className="text-xs md:text-sm text-zinc-300 leading-relaxed line-clamp-3">
+                          <p className={`text-xs md:text-sm leading-relaxed line-clamp-3 ${isFallback ? 'text-yellow-300/70' : 'text-zinc-300'}`}>
                             {analysisText}
                           </p>
                         </div>
