@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { AbleNewsResult, AbleNewsAnalyzer, ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
+import { ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,21 +23,27 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
 
-// AI Analysis Result
-interface AIAnalysisResult {
-  symbol: string;
-  sentiment: 'bullish' | 'bearish' | 'neutral';
+// ABLE-HF 3.0 Analysis Result from Backend
+interface AbleAnalysisResult {
   P_up_pct: number;
   P_down_pct: number;
-  confidence: number;
   decision: string;
-  thai_summary: string;
-  key_drivers: string[];
-  risk_warnings: string[];
-  market_regime: string;
-  analyzed_at: string;
-  model: string;
-  news_count: number;
+  confidence: number;
+  market_regime?: string;
+  scores?: Record<string, number>;
+  category_performance?: Record<string, number>;
+  trading_signal?: {
+    signal: string;
+    icon: string;
+    color?: string;
+    strength: number;
+  };
+  thai_summary?: string;
+  key_drivers?: string[];
+  risk_warnings?: string[];
+  analyzed_at?: string;
+  news_count?: number;
+  relevant_news_count?: number;
 }
 
 // ============ TYPES ============
@@ -46,8 +52,9 @@ interface MacroAnalysis {
   sentiment: 'bullish' | 'bearish' | 'neutral';
   confidence: number;
   analysis: string;
-  change: string;
-  changeValue: number;
+  change?: string;
+  changeValue?: number;
+  ableAnalysis?: AbleAnalysisResult;
 }
 
 interface ForYouItem {
@@ -140,18 +147,12 @@ const TopNews: React.FC<TopNewsProps> = () => {
   const [xNotifications, setXNotifications] = useState<XNotification[]>([]);
   const [rawNews, setRawNews] = useState<RawNewsItem[]>([]);
 
-  // ABLE-HF 3.0 State
+  // ABLE-HF 3.0 State - Analysis comes from backend now
   const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>(DEFAULT_PINNED_ASSETS);
-  const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleNewsResult>>({});
-  const [isAnalyzing, setIsAnalyzing] = useState<Record<string, boolean>>({});
+  const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleAnalysisResult>>({});
   
   // Real-time price data
   const [assetPrices, setAssetPrices] = useState<Record<string, { price: number; change: number; changePercent: number }>>({});
-  
-  // Gemini Streaming State
-  const [geminiStream, setGeminiStream] = useState<Record<string, string>>({});
-  const [aiAnalysisResults, setAIAnalysisResults] = useState<Record<string, AIAnalysisResult>>({});
-  const streamRef = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Load pinned assets from localStorage
   useEffect(() => {
@@ -190,33 +191,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
     });
   };
 
-  // Get relevant keywords for asset
-  const getRelevantKeywords = (symbol: string): string[] => {
-    const keywordMap: Record<string, string[]> = {
-      XAUUSD: ['gold', 'xau', 'precious', 'bullion', 'safe haven', 'fed', 'inflation'],
-      XAGUSD: ['silver', 'xag', 'precious', 'industrial metal'],
-      EURUSD: ['euro', 'eur', 'ecb', 'europe', 'eurozone', 'lagarde'],
-      GBPUSD: ['pound', 'gbp', 'sterling', 'boe', 'bank of england', 'uk', 'britain'],
-      USDJPY: ['yen', 'jpy', 'japan', 'boj', 'bank of japan', 'japanese'],
-      AUDUSD: ['aussie', 'aud', 'australia', 'rba', 'iron ore'],
-      USDCHF: ['swiss', 'chf', 'snb', 'switzerland', 'franc'],
-      USDCAD: ['loonie', 'cad', 'canada', 'boc', 'oil'],
-      NZDUSD: ['kiwi', 'nzd', 'new zealand', 'rbnz'],
-      BTCUSD: ['bitcoin', 'btc', 'crypto', 'satoshi', 'halving', 'etf'],
-      ETHUSD: ['ethereum', 'eth', 'vitalik', 'defi', 'smart contract'],
-      SOLUSD: ['solana', 'sol'],
-      XRPUSD: ['xrp', 'ripple'],
-      USOIL: ['oil', 'wti', 'crude', 'opec', 'petroleum', 'energy'],
-      UKOIL: ['brent', 'oil', 'crude', 'opec'],
-      US500: ['s&p', 'spx', 'sp500', 'stock', 'wall street'],
-      US30: ['dow', 'djia', 'dow jones'],
-      US100: ['nasdaq', 'tech', 'qqq'],
-      DE40: ['dax', 'german', 'germany'],
-      JP225: ['nikkei', 'japan', 'japanese stock']
-    };
-    return keywordMap[symbol] || [symbol.toLowerCase()];
-  };
-
   // Fetch real-time prices for pinned assets
   const fetchPrices = useCallback(async () => {
     const prices: Record<string, { price: number; change: number; changePercent: number }> = {};
@@ -250,153 +224,11 @@ const TopNews: React.FC<TopNewsProps> = () => {
     return () => clearInterval(interval);
   }, [fetchPrices]);
 
-  // ✅ Real-time Gemini AI Streaming Analysis
-  const analyzeAssetWithGemini = useCallback(async (symbol: string, newsItems?: RawNewsItem[]) => {
-    const newsToUse = newsItems || rawNews;
-    if (newsToUse.length === 0) {
-      console.log(`No news for ${symbol}`);
-      return null;
-    }
-
-    setIsAnalyzing(prev => ({ ...prev, [symbol]: true }));
-    setGeminiStream(prev => ({ ...prev, [symbol]: '' }));
-    
-    try {
-      const relevantKeywords = getRelevantKeywords(symbol);
-      const relevantNews = newsToUse.filter(item => {
-        const titleLower = item.title.toLowerCase();
-        return relevantKeywords.some(keyword => titleLower.includes(keyword));
-      });
-
-      const headlinesToAnalyze = relevantNews.length > 5 
-        ? relevantNews.slice(0, 20).map(n => n.title)
-        : newsToUse.slice(0, 20).map(n => n.title);
-
-      const priceData = assetPrices[symbol];
-
-      console.log(`🧠 Starting Gemini stream for ${symbol} with ${headlinesToAnalyze.length} headlines`);
-
-      // Call streaming edge function
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/macro-ai-stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          symbol,
-          headlines: headlinesToAnalyze,
-          currentPrice: priceData?.price,
-          priceChange: priceData?.changePercent
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Gemini stream error:', errorText);
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No response body');
-
-      const decoder = new TextDecoder();
-      let fullText = '';
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        
-        // Parse SSE events (Gemini direct API format)
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]' || !data) continue;
-            
-            try {
-              const parsed = JSON.parse(data);
-              // Gemini direct API format: candidates[].content.parts[].text
-              const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (content) {
-                fullText += content;
-                setGeminiStream(prev => ({ ...prev, [symbol]: fullText }));
-                
-                // Auto-scroll
-                if (streamRef.current[symbol]) {
-                  streamRef.current[symbol]!.scrollTop = streamRef.current[symbol]!.scrollHeight;
-                }
-              }
-            } catch (e) {
-              // Ignore parse errors for partial chunks
-            }
-          }
-        }
-      }
-
-      // Parse final result from stream
-      console.log(`✅ Gemini stream complete for ${symbol}`);
-      
-      // Extract JSON result from stream
-      const resultMatch = fullText.match(/<result>\s*(\{[\s\S]*?\})\s*<\/result>/);
-      if (resultMatch) {
-        try {
-          const result = JSON.parse(resultMatch[1]);
-          const aiResult: AIAnalysisResult = {
-            symbol,
-            sentiment: result.sentiment || 'neutral',
-            P_up_pct: result.P_up_pct || 50,
-            P_down_pct: result.P_down_pct || 50,
-            confidence: result.confidence || 60,
-            decision: result.decision || 'HOLD',
-            thai_summary: result.thai_summary || '',
-            key_drivers: result.key_drivers || [],
-            risk_warnings: result.risk_warnings || [],
-            market_regime: result.market_regime || 'ranging',
-            analyzed_at: new Date().toISOString(),
-            model: 'gemini-2.5-flash',
-            news_count: headlinesToAnalyze.length
-          };
-          
-          setAIAnalysisResults(prev => ({ ...prev, [symbol]: aiResult }));
-          return aiResult;
-        } catch (e) {
-          console.error('Error parsing result:', e);
-        }
-      }
-
-      return null;
-
-    } catch (error) {
-      console.error('Gemini analysis error:', error);
-      toast({ 
-        title: `AI Error for ${symbol}`, 
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive' 
-      });
-      return null;
-    } finally {
-      setIsAnalyzing(prev => ({ ...prev, [symbol]: false }));
-    }
-  }, [rawNews, assetPrices, toast]);
-
-  // Analyze all pinned assets when news is loaded
-  const analyzeAllPinnedAssets = useCallback(async (newsItems: RawNewsItem[]) => {
-    for (const asset of pinnedAssets) {
-      await analyzeAssetWithGemini(asset.symbol, newsItems);
-    }
-  }, [pinnedAssets, analyzeAssetWithGemini]);
-
-  // Fetch news from edge function
+  // Fetch news from edge function - ABLE analysis comes from backend
   const fetchNews = useCallback(async () => {
     setLoading(true);
     try {
-      console.log('Fetching news from edge function...');
+      console.log('🚀 Fetching ABLE-HF 3.0 analysis from backend...');
       
       const { data, error } = await supabase.functions.invoke('news-aggregator', {
         body: { pinnedAssets: pinnedAssets.map(p => p.symbol) }
@@ -415,16 +247,27 @@ const TopNews: React.FC<TopNewsProps> = () => {
         setRawNews(data.rawNews || []);
         setLastUpdated(new Date());
         
-        console.log(`Loaded ${data.macro?.length || 0} macro items, ${data.rawNews?.length || 0} raw news`);
+        console.log(`✅ Loaded ${data.macro?.length || 0} macro items, ${data.rawNews?.length || 0} news`);
         
-        // Auto-analyze all pinned assets with Gemini
-        if (data.rawNews?.length > 0) {
-          analyzeAllPinnedAssets(data.rawNews);
+        // Extract ABLE analysis from backend response
+        const ableResults: Record<string, AbleAnalysisResult> = {};
+        (data.macro || []).forEach((macro: MacroAnalysis) => {
+          if (macro.ableAnalysis) {
+            ableResults[macro.symbol] = macro.ableAnalysis;
+            console.log(`✅ ABLE analysis loaded: ${macro.symbol} - ${macro.ableAnalysis.decision}`);
+          }
+        });
+        
+        setAbleAnalysis(ableResults);
+        
+        // Check if analysis available
+        if (Object.keys(ableResults).length === 0 && pinnedAssets.length > 0) {
+          console.warn('⚠️ No ABLE analysis from backend');
         }
         
         if (!initialLoading) {
           toast({ 
-            title: '✅ News updated', 
+            title: '✅ ABLE-HF 3.0 Updated', 
             description: `${data.sourcesCount || 0} sources • ${data.processingTime}ms`
           });
         }
@@ -440,7 +283,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
       setLoading(false);
       setInitialLoading(false);
     }
-  }, [toast, initialLoading, analyzeAllPinnedAssets, pinnedAssets]);
+  }, [toast, initialLoading, pinnedAssets]);
 
   // Add asset handler
   const handleAddAsset = (symbol: string) => {
@@ -456,10 +299,8 @@ const TopNews: React.FC<TopNewsProps> = () => {
     setPinnedAssets(prev => [...prev, { symbol, addedAt: Date.now() }]);
     toast({ title: `✅ ${ASSET_DISPLAY_NAMES[symbol] || symbol} added` });
     
-    // Immediately analyze the new asset with Gemini
-    if (rawNews.length > 0) {
-      analyzeAssetWithGemini(symbol, rawNews);
-    }
+    // Trigger re-fetch to get analysis for new asset
+    setTimeout(() => fetchNews(), 500);
   };
 
   // Remove asset handler
@@ -469,16 +310,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
       const newAnalysis = { ...prev };
       delete newAnalysis[symbol];
       return newAnalysis;
-    });
-    setGeminiStream(prev => {
-      const newStream = { ...prev };
-      delete newStream[symbol];
-      return newStream;
-    });
-    setAIAnalysisResults(prev => {
-      const newResults = { ...prev };
-      delete newResults[symbol];
-      return newResults;
     });
   };
 
@@ -508,6 +339,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
           <p className="text-emerald-300/70">Loading ABLE-HF 3.0 Intelligence...</p>
+          <p className="text-zinc-500 text-xs">Powered by Gemini AI</p>
         </div>
       </div>
     );
@@ -526,7 +358,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
               </h1>
               <p className="text-xs md:text-sm text-zinc-500 flex items-center gap-1 mt-1">
                 <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
-                Your personal financial newspaper
+                ABLE-HF 3.0 • Gemini AI Analysis
               </p>
             </div>
             <div className="flex items-center gap-2 md:gap-4">
@@ -600,7 +432,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         AI Macro Desk
                         <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-emerald-400 animate-pulse" />
                       </h2>
-                      <p className="text-xs md:text-sm text-zinc-500">Market bias analysis</p>
+                      <p className="text-xs md:text-sm text-zinc-500">40-Module ABLE-HF 3.0 Analysis</p>
                     </div>
                   </div>
                   
@@ -648,16 +480,17 @@ const TopNews: React.FC<TopNewsProps> = () => {
                 {/* Macro Cards Grid - Responsive */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                   {pinnedAssets.map((pinned) => {
-                    const aiResult = aiAnalysisResults[pinned.symbol];
-                    const analyzing = isAnalyzing[pinned.symbol];
+                    const analysis = ableAnalysis[pinned.symbol];
+                    const analyzing = !analysis && loading;
                     const priceData = assetPrices[pinned.symbol];
-                    const streamText = geminiStream[pinned.symbol] || '';
                     
-                    const sentiment = aiResult?.sentiment || 'neutral';
-                    const confidence = aiResult?.confidence || 50;
-                    const analysisText = aiResult?.thai_summary || 'กำลังวิเคราะห์...';
-                    const P_up = aiResult?.P_up_pct || 50;
-                    const decision = aiResult?.decision || 'HOLD';
+                    const sentiment = analysis 
+                      ? (analysis.P_up_pct > 55 ? 'bullish' : analysis.P_up_pct < 45 ? 'bearish' : 'neutral')
+                      : 'neutral';
+                    const confidence = analysis?.confidence || 50;
+                    const analysisText = analysis?.thai_summary || 'กำลังวิเคราะห์...';
+                    const P_up = analysis?.P_up_pct || 50;
+                    const decision = analysis?.decision || 'HOLD';
 
                     return (
                       <Card 
@@ -700,14 +533,17 @@ const TopNews: React.FC<TopNewsProps> = () => {
 
                         {/* Confidence Bar */}
                         <div className="mb-3">
-                          <div className="text-xs text-zinc-500 mb-1">Confidence</div>
+                          <div className="text-xs text-zinc-500 mb-1 flex justify-between">
+                            <span>P↓ {(100 - P_up).toFixed(1)}%</span>
+                            <span>P↑ {P_up.toFixed(1)}%</span>
+                          </div>
                           <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
                             <div 
                               className={`h-full transition-all ${
-                                sentiment === 'bullish' ? 'bg-emerald-500' :
-                                sentiment === 'bearish' ? 'bg-red-500' : 'bg-zinc-500'
+                                P_up > 55 ? 'bg-emerald-500' :
+                                P_up < 45 ? 'bg-red-500' : 'bg-zinc-500'
                               }`}
-                              style={{ width: `${confidence}%` }}
+                              style={{ width: `${P_up}%` }}
                             />
                           </div>
                         </div>
@@ -716,7 +552,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         <div className="mb-3">
                           <div className="flex items-center gap-1 mb-1">
                             <Brain className="w-3 h-3 text-emerald-400" />
-                            <span className="text-xs text-emerald-400">AI Analysis</span>
+                            <span className="text-xs text-emerald-400">ABLE-HF 3.0 Analysis</span>
                             {analyzing && <Loader2 className="w-3 h-3 animate-spin text-emerald-400 ml-1" />}
                           </div>
                           <p className="text-xs md:text-sm text-zinc-300 leading-relaxed line-clamp-3">
@@ -724,26 +560,15 @@ const TopNews: React.FC<TopNewsProps> = () => {
                           </p>
                         </div>
 
-                        {/* Gemini Thinking Stream - Mobile Optimized */}
-                        {(analyzing || streamText) && (
-                          <div className="mb-3 bg-zinc-950 rounded-lg p-2 border border-zinc-800">
-                            <div className="flex items-center gap-1 mb-1.5">
-                              <Sparkles className="w-3 h-3 text-purple-400" />
-                              <span className="text-[10px] text-purple-400 font-medium">Gemini AI Thinking</span>
-                              {analyzing && (
-                                <div className="flex gap-0.5 ml-1">
-                                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                </div>
-                              )}
-                            </div>
-                            <div 
-                              ref={(el) => { streamRef.current[pinned.symbol] = el; }}
-                              className="font-mono text-[10px] md:text-xs text-purple-200/70 max-h-20 md:max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed"
-                            >
-                              {streamText.slice(-500)}
-                              {analyzing && <span className="inline-block w-1.5 h-3 bg-purple-400 ml-0.5 animate-pulse" />}
+                        {/* Key Drivers */}
+                        {analysis?.key_drivers && analysis.key_drivers.length > 0 && (
+                          <div className="mb-3">
+                            <div className="flex flex-wrap gap-1">
+                              {analysis.key_drivers.slice(0, 3).map((driver, i) => (
+                                <Badge key={i} variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">
+                                  {driver}
+                                </Badge>
+                              ))}
                             </div>
                           </div>
                         )}
@@ -752,8 +577,13 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                           <div className="flex items-center gap-2">
                             <span className={`text-sm md:text-base font-bold ${P_up > 55 ? 'text-emerald-400' : P_up < 45 ? 'text-red-400' : 'text-zinc-400'}`}>
-                              {P_up > 50 ? '↗' : '↘'} +{(P_up > 50 ? (P_up - 50) * 0.05 : (50 - P_up) * -0.05).toFixed(2)}%
+                              {P_up > 50 ? '↗' : '↘'} {P_up > 50 ? '+' : ''}{((P_up - 50) * 0.05).toFixed(2)}%
                             </span>
+                            {analysis?.news_count && (
+                              <span className="text-[10px] text-zinc-600">
+                                ({analysis.relevant_news_count || 0}/{analysis.news_count} news)
+                              </span>
+                            )}
                           </div>
                           <Badge className={`text-xs ${
                             decision.includes('BUY') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
@@ -838,79 +668,94 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         <span className="text-white font-medium">{item.symbol}</span>
                         <span className="text-zinc-600 mx-1">bias updated:</span>
                         <span className={`font-medium ${
-                          item.type.includes('BULLISH') ? 'text-emerald-400' : 
+                          item.type.includes('BULLISH') ? 'text-emerald-400' :
                           item.type.includes('BEARISH') ? 'text-red-400' : 'text-zinc-400'
-                        }`}>{item.type}</span>
-                        <span className="text-zinc-600 mx-1">–</span>
-                        <span className="text-zinc-300 truncate">{item.title}</span>
+                        }`}>
+                          {item.type}
+                        </span>
+                        <p className="text-zinc-500 truncate mt-0.5">{item.title}</p>
                       </div>
+                      <ExternalLink className="w-3 h-3 text-zinc-600 flex-shrink-0" />
                     </div>
                   ))}
-                  
-                  {forYouItems.length === 0 && (
-                    <div className="text-center py-8 text-zinc-500">
-                      <p className="text-sm">Add assets above to see personalized news</p>
-                    </div>
-                  )}
                 </div>
               </div>
+
+              {/* X Notifications */}
+              {xNotifications.length > 0 && (
+                <div className="mt-6 md:mt-8">
+                  <div className="flex items-center gap-2 mb-3 md:mb-4">
+                    <Users className="w-4 h-4 text-zinc-400" />
+                    <h2 className="text-sm md:text-base font-medium text-white">Social Signals</h2>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {xNotifications.slice(0, 4).map((notif) => (
+                      <div 
+                        key={notif.id}
+                        onClick={() => window.open(notif.url, '_blank')}
+                        className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700 cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-zinc-400">{notif.source}</span>
+                          <span className="text-[10px] text-zinc-600">{notif.time}</span>
+                        </div>
+                        <p className="text-xs text-zinc-300 line-clamp-2">{notif.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
-            /* Daily Reports Section */
-            <div>
-              <div className="flex items-center justify-between mb-4 md:mb-6">
-                <div>
-                  <h2 className="text-lg md:text-xl font-medium text-white mb-1">Daily Reports</h2>
-                  <p className="text-xs md:text-sm text-zinc-500">Your daily pre-market report to build your bias</p>
-                </div>
-                <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white text-xs md:text-sm">
-                  <Eye className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                  Mark all as read
-                </Button>
+            /* Daily Reports Tab */
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-4">
+                <FileText className="w-4 h-4 text-zinc-400" />
+                <h2 className="text-base font-medium text-white">Daily Reports</h2>
               </div>
-
-              <div className="space-y-2 md:space-y-3">
-                {dailyReports.map((report) => (
-                  <Card 
-                    key={report.id}
-                    onClick={() => window.open(report.url, '_blank')}
-                    className={`p-3 md:p-4 transition-all cursor-pointer bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 ${
-                      report.isHighlighted ? 'border-emerald-500/30' : ''
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-zinc-800 flex items-center justify-center">
-                        <FileText className="w-5 h-5 md:w-6 md:h-6 text-zinc-400" />
+              
+              {dailyReports.map((report) => (
+                <Card 
+                  key={report.id}
+                  onClick={() => window.open(report.url, '_blank')}
+                  className={`p-4 cursor-pointer transition-colors bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 ${
+                    report.isHighlighted ? 'border-emerald-500/30' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs text-zinc-500">{report.date}</span>
+                        <span className="text-xs text-zinc-600">•</span>
+                        <span className="text-xs text-zinc-500">{report.time}</span>
+                        {report.isHighlighted && (
+                          <Badge className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                            Latest
+                          </Badge>
+                        )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between mb-1">
-                          <div>
-                            <h3 className="text-sm md:text-base font-medium text-white line-clamp-1">{report.title}</h3>
-                            <p className="text-[10px] md:text-xs text-zinc-500">
-                              {report.date} • {report.time} • {report.assetsAnalyzed} assets
-                            </p>
-                          </div>
-                          {report.isHighlighted && (
-                            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] ml-2">
-                              Featured
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs md:text-sm text-zinc-400 line-clamp-2">
-                          {report.description}
-                        </p>
-                      </div>
+                      <h3 className="text-sm font-medium text-white mb-1 line-clamp-2">{report.title}</h3>
+                      <p className="text-xs text-zinc-500 line-clamp-2">{report.description}</p>
                     </div>
-                  </Card>
-                ))}
-
-                {dailyReports.length === 0 && (
-                  <div className="text-center py-12 text-zinc-500">
-                    <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                    <p className="text-sm">No reports yet</p>
+                    <ExternalLink className="w-4 h-4 text-zinc-600 flex-shrink-0 ml-2" />
                   </div>
-                )}
-              </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">
+                      {report.source}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">
+                      {report.assetsAnalyzed} assets
+                    </Badge>
+                  </div>
+                </Card>
+              ))}
+              
+              {dailyReports.length === 0 && (
+                <div className="text-center py-8 text-zinc-500">
+                  <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No reports available</p>
+                </div>
+              )}
             </div>
           )}
         </ScrollArea>
