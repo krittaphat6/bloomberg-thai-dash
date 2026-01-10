@@ -377,23 +377,30 @@ ${JSON.stringify(news.slice(0, 40), null, 2)}
 }
 
 // ============================================
-// GEMINI ANALYSIS
+// GEMINI API DIRECT (ไม่ผ่าน Lovable Gateway)
 // ============================================
 
 async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): Promise<MacroAnalysis[]> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  // ใช้ GEMINI_API_KEY โดยตรงแทน LOVABLE_API_KEY
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
   const symbols = pinnedAssets.length > 0 ? pinnedAssets : ['XAUUSD', 'EURUSD', 'BTCUSD'];
   
-  if (!LOVABLE_API_KEY || news.length === 0) {
-    console.log('⚠️ No API key or news, using fallback');
+  if (!GEMINI_API_KEY) {
+    console.error('❌ GEMINI_API_KEY not found in secrets');
+    return generateFallbackAnalysis(news, symbols);
+  }
+  
+  if (news.length === 0) {
+    console.log('⚠️ No news to analyze, using fallback');
     return generateFallbackAnalysis(news, symbols);
   }
 
+  console.log(`🔑 Using Gemini API Direct (not Lovable Gateway)`);
   const results: MacroAnalysis[] = [];
 
   for (const symbol of symbols) {
     try {
-      console.log(`🧠 Analyzing ${symbol} with Gemini...`);
+      console.log(`🧠 Analyzing ${symbol} with Gemini API Direct...`);
       
       // Get relevant news for this symbol
       const symbolKeywords = getSymbolKeywords(symbol);
@@ -408,33 +415,37 @@ async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): P
 
       const prompt = buildFullAnalysisPrompt(newsToAnalyze, symbol);
 
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 2000
-        })
-      });
+      // เรียก Gemini API โดยตรง (ไม่ผ่าน Lovable Gateway)
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 3000,
+              responseMimeType: "application/json"
+            }
+          })
+        }
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`❌ Gemini error for ${symbol}:`, response.status, errorText);
+        console.error(`❌ Gemini API error for ${symbol}:`, response.status, errorText);
         
-        // Handle rate limits and payment errors
-        if (response.status === 429 || response.status === 402) {
-          console.log('⚠️ Rate limit or credits exhausted, using fallback');
-          return generateFallbackAnalysis(news, symbols);
+        // Handle rate limits
+        if (response.status === 429) {
+          console.log('⚠️ Rate limit hit, waiting...');
+          await new Promise(r => setTimeout(r, 2000));
         }
         continue;
       }
 
       const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || '';
+      const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       
       let analysisResult;
       try {
@@ -444,10 +455,11 @@ async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): P
           analysisResult = JSON.parse(jsonMatch[0]);
           console.log(`✅ ${symbol}: ${analysisResult.decision} (P_up: ${analysisResult.P_up_pct}%)`);
         } else {
-          throw new Error('No JSON found');
+          throw new Error('No JSON found in response');
         }
       } catch (parseError) {
         console.error(`❌ Parse error for ${symbol}:`, parseError);
+        console.log('Raw content:', content.substring(0, 300));
         continue;
       }
 
