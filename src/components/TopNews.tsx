@@ -13,6 +13,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
+import { GeminiThinkingModal } from './TopNews/GeminiThinkingModal';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -153,6 +154,9 @@ const TopNews: React.FC<TopNewsProps> = () => {
   
   // Real-time price data
   const [assetPrices, setAssetPrices] = useState<Record<string, { price: number; change: number; changePercent: number }>>({});
+  
+  // Modal state for Gemini thinking
+  const [selectedAssetForModal, setSelectedAssetForModal] = useState<string | null>(null);
 
   // Load pinned assets from localStorage
   useEffect(() => {
@@ -498,9 +502,10 @@ const TopNews: React.FC<TopNewsProps> = () => {
                     return (
                       <Card 
                         key={pinned.symbol} 
-                        className={`p-3 md:p-4 transition-all relative group bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 ${
+                        onClick={() => analysis && setSelectedAssetForModal(pinned.symbol)}
+                        className={`p-3 md:p-4 transition-all relative group bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 cursor-pointer ${
                           analyzing ? 'border-emerald-500/50 animate-pulse' : ''
-                        }`}
+                        } ${analysis ? 'hover:border-purple-500/50 hover:bg-zinc-900' : ''}`}
                       >
                         {/* Remove button */}
                         <button
@@ -598,6 +603,16 @@ const TopNews: React.FC<TopNewsProps> = () => {
                             {decision}
                           </Badge>
                         </div>
+                        
+                        {/* Click hint */}
+                        {analysis && (
+                          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-[10px] text-purple-400 flex items-center gap-1">
+                              <Sparkles className="w-3 h-3" />
+                              คลิกเพื่อดูการคิดของ AI
+                            </span>
+                          </div>
+                        )}
                       </Card>
                     );
                   })}
@@ -765,6 +780,14 @@ const TopNews: React.FC<TopNewsProps> = () => {
           )}
         </ScrollArea>
       </div>
+      
+      {/* Gemini Thinking Modal */}
+      <GeminiThinkingModal
+        isOpen={!!selectedAssetForModal}
+        onClose={() => setSelectedAssetForModal(null)}
+        symbol={selectedAssetForModal || ''}
+        analysis={selectedAssetForModal ? ableAnalysis[selectedAssetForModal] : null}
+      />
     </div>
   );
 };
