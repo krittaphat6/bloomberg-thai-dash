@@ -1,5 +1,5 @@
 // supabase/functions/news-aggregator/index.ts
-// ABLE-HF 3.0 Full Analysis via Gemini
+// ABLE-HF 3.0 Full Analysis via Direct Gemini API
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -261,7 +261,7 @@ async function fetchFinancialNews(): Promise<RawNewsItem[]> {
 }
 
 // ============================================
-// ABLE-HF 3.0 PROMPT BUILDER
+// ABLE-HF 3.0 PROMPT BUILDER (40 Modules)
 // ============================================
 
 function buildFullAnalysisPrompt(news: any[], symbol: string): string {
@@ -274,13 +274,13 @@ function buildFullAnalysisPrompt(news: any[], symbol: string): string {
 วิเคราะห์สินทรัพย์: **${symbol}**
 
 ## INPUT (${news.length} news items)
-${JSON.stringify(news.slice(0, 40), null, 2)}
+${JSON.stringify(news, null, 2)}
 
 ## 40 MODULES SYSTEM
 
 ### CATEGORY 1: MACRO & ECONOMIC (33%)
 1. macro_neural_forecast (6.5%)
-2. central_bank_sentiment (7.0%)
+2. central_bank_sentiment (7.0%) ⭐
 3. yield_curve_signal (4.5%)
 4. inflation_momentum (4.0%)
 5. gdp_growth_trajectory (3.5%)
@@ -289,7 +289,7 @@ ${JSON.stringify(news.slice(0, 40), null, 2)}
 8. fiscal_policy_impact (2.0%)
 
 ### CATEGORY 2: SENTIMENT & FLOW (29%)
-9. news_sentiment_cfa (7.5%)
+9. news_sentiment_cfa (7.5%) ⭐
 10. social_media_pulse (5.5%)
 11. institutional_flow (5.0%)
 12. retail_sentiment (4.0%)
@@ -309,7 +309,7 @@ ${JSON.stringify(news.slice(0, 40), null, 2)}
 24. intermarket_correlation (1.5%)
 
 ### CATEGORY 4: RISK & EVENT (23.5%)
-25. event_shock (6.5%)
+25. event_shock (6.5%) ⭐
 26. geopolitical_risk (4.5%)
 27. black_swan_detector (4.0%)
 28. liquidity_risk (3.0%)
@@ -328,31 +328,73 @@ ${JSON.stringify(news.slice(0, 40), null, 2)}
 39. sentiment_network (1.5%)
 40. predictive_analytics (1.0%)
 
-## PROCESS
+## ANALYSIS PROCESS
 1. กรองข่าวที่เกี่ยวกับ ${symbol}
-2. ให้คะแนนแต่ละ module -100 ถึง +100
-3. คำนวณ weighted sum
-4. P_up = sigmoid(total/10) where sigmoid(x) = 1/(1+exp(-x))
-5. P_down = 1 - P_up
-6. Trading signal: P_up >= 70% BUY, P_up >= 55% HOLD, P_up < 45% SELL
+2. ให้คะแนนแต่ละ module: -100 ถึง +100
+3. คำนวณ weighted_sum = Σ(score_i × weight_i)
+4. Apply sigmoid: P_up = 1/(1+exp(-weighted_sum/10))
+5. Enhancements:
+   - quantum_boost: 0.05-0.15 (based on pattern recognition)
+   - neural_boost: 0.03-0.10 (based on deep learning signals)
+6. Final P_up = P_up × (1 + quantum_boost + neural_boost)
+7. Trading signal:
+   - P_up ≥ 90%: STRONG_BUY
+   - P_up ≥ 70%: BUY
+   - P_up ≥ 40%: HOLD
+   - P_up ≥ 20%: SELL
+   - P_up < 20%: STRONG_SELL
 
-## OUTPUT (JSON ONLY, NO MARKDOWN)
+## OUTPUT FORMAT (JSON ONLY - NO MARKDOWN, NO BACKTICKS)
 {
   "P_up_pct": 78.5,
   "P_down_pct": 21.5,
   "decision": "🟢 BUY",
   "confidence": 76,
+  "regime_adjusted_confidence": 76.3,
   "market_regime": "MODERATE_VOLATILITY",
+  "quantum_enhancement": 0.12,
+  "neural_enhancement": 0.08,
   "scores": {
     "macro_neural_forecast": 65,
     "central_bank_sentiment": 80,
-    "yield_curve_signal": 40,
-    "inflation_momentum": 55,
-    "news_sentiment_cfa": 72,
-    "social_media_pulse": 60,
-    "trend_regime_detector": 45,
-    "event_shock": 30,
-    "geopolitical_risk": -20
+    "yield_curve_signal": 55,
+    "inflation_momentum": 60,
+    "gdp_growth_trajectory": 50,
+    "employment_dynamics": 45,
+    "trade_balance_flow": 40,
+    "fiscal_policy_impact": 35,
+    "news_sentiment_cfa": 75,
+    "social_media_pulse": 70,
+    "institutional_flow": 65,
+    "retail_sentiment": 60,
+    "options_sentiment": 55,
+    "cot_positioning": 50,
+    "dark_pool_activity": 45,
+    "etf_flow_momentum": 40,
+    "trend_regime_detector": 60,
+    "momentum_oscillator": 55,
+    "volatility_regime": 50,
+    "support_resistance": 45,
+    "pattern_recognition": 40,
+    "volume_analysis": 35,
+    "market_breadth": 30,
+    "intermarket_correlation": 25,
+    "event_shock": 70,
+    "geopolitical_risk": 65,
+    "black_swan_detector": 60,
+    "liquidity_risk": 55,
+    "correlation_breakdown": 50,
+    "tail_risk_monitor": 45,
+    "regulatory_risk": 40,
+    "systemic_risk": 35,
+    "quantum_sentiment": 65,
+    "neural_ensemble": 60,
+    "nlp_deep_analysis": 55,
+    "satellite_data": 50,
+    "alternative_data": 45,
+    "machine_learning_signal": 40,
+    "sentiment_network": 35,
+    "predictive_analytics": 30
   },
   "category_performance": {
     "macro_economic": 68.5,
@@ -361,15 +403,21 @@ ${JSON.stringify(news.slice(0, 40), null, 2)}
     "risk_event": 45.2,
     "alternative_ai": 60.1
   },
+  "meta_insights": {
+    "dominant_paradigm": "Risk-On",
+    "consensus_level": 75,
+    "volatility_regime": "Moderate",
+    "trend_alignment": 82
+  },
   "trading_signal": {
     "signal": "BUY",
     "icon": "🟢",
     "color": "#22C55E",
     "strength": 75
   },
-  "thai_summary": "ทองคำมีแนวโน้มขาขึ้นจากความกังวลเรื่องเงินเฟ้อและนโยบาย Fed ที่ผ่อนคลาย ข่าวส่วนใหญ่ bullish",
-  "key_drivers": ["นโยบาย Fed", "เงินเฟ้อ", "Safe Haven Demand"],
-  "risk_warnings": ["ระวังถ้า Fed เปลี่ยนนโยบาย", "Dollar แข็งค่าอาจกดดัน"],
+  "thai_summary": "ทองคำมีแนวโน้มขึ้นแรง จากปัจจัยนโยบายธนาคารกลางและความกังวลเงินเฟ้อ ควรพิจารณาเข้า Long Position",
+  "key_drivers": ["นโยบาย Fed", "เงินเฟ้อ", "ความเสี่ยงภูมิรัฐศาสตร์"],
+  "risk_warnings": ["ถ้า Fed เปลี่ยนนโยบายกะทันหัน", "ดอลลาร์แข็งค่าเร็ว"],
   "analyzed_at": "${new Date().toISOString()}",
   "news_count": ${news.length},
   "relevant_news_count": 18
@@ -377,13 +425,12 @@ ${JSON.stringify(news.slice(0, 40), null, 2)}
 }
 
 // ============================================
-// GEMINI API DIRECT (ไม่ผ่าน Lovable Gateway)
+// GEMINI API DIRECT CALL
 // ============================================
 
 async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): Promise<MacroAnalysis[]> {
-  // ใช้ GEMINI_API_KEY โดยตรงแทน LOVABLE_API_KEY
   const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-  const symbols = pinnedAssets.length > 0 ? pinnedAssets : ['XAUUSD', 'EURUSD', 'BTCUSD'];
+  const symbols = pinnedAssets.length > 0 ? pinnedAssets : ['EURUSD', 'USDJPY', 'XAUUSD', 'GBPUSD'];
   
   if (!GEMINI_API_KEY) {
     console.error('❌ GEMINI_API_KEY not found in secrets');
@@ -395,38 +442,42 @@ async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): P
     return generateFallbackAnalysis(news, symbols);
   }
 
-  console.log(`🔑 Using Gemini API Direct (not Lovable Gateway)`);
+  console.log(`🔑 Using Gemini API Direct (gemini-2.0-flash-exp)`);
   const results: MacroAnalysis[] = [];
 
   for (const symbol of symbols) {
     try {
       console.log(`🧠 Analyzing ${symbol} with Gemini API Direct...`);
       
-      // Get relevant news for this symbol
-      const symbolKeywords = getSymbolKeywords(symbol);
-      const relevantNews = news.filter(n => {
-        const text = (n.title + ' ' + (n.description || '')).toLowerCase();
-        return symbolKeywords.some(kw => text.includes(kw));
-      });
-      
-      const newsToAnalyze = relevantNews.length > 5 
-        ? relevantNews.slice(0, 40) 
-        : news.slice(0, 40);
+      const allNewsDetailed = news.slice(0, 60).map(n => ({
+        title: n.title,
+        source: n.source,
+        timestamp: new Date(n.timestamp).toISOString(),
+        category: n.category,
+        relatedAssets: n.relatedAssets || []
+      }));
 
-      const prompt = buildFullAnalysisPrompt(newsToAnalyze, symbol);
+      const prompt = buildFullAnalysisPrompt(allNewsDetailed, symbol);
 
-      // เรียก Gemini API โดยตรง (ไม่ผ่าน Lovable Gateway)
+      // 🔴 DIRECT GEMINI API CALL (ไม่ผ่าน Lovable Gateway)
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
+            contents: [{
+              parts: [{
+                text: prompt
+              }]
+            }],
             generationConfig: {
               temperature: 0.3,
-              maxOutputTokens: 3000,
-              responseMimeType: "application/json"
+              maxOutputTokens: 4000,
+              topP: 0.8,
+              topK: 40
             }
           })
         }
@@ -434,11 +485,11 @@ async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): P
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`❌ Gemini API error for ${symbol}:`, response.status, errorText);
+        console.error(`❌ Gemini API error for ${symbol}: ${response.status}`, errorText);
         
         // Handle rate limits
         if (response.status === 429) {
-          console.log('⚠️ Rate limit hit, waiting...');
+          console.log('⚠️ Rate limit hit, waiting 2s...');
           await new Promise(r => setTimeout(r, 2000));
         }
         continue;
@@ -447,9 +498,19 @@ async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): P
       const data = await response.json();
       const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       
+      if (!content) {
+        console.error(`❌ No content from Gemini for ${symbol}`);
+        continue;
+      }
+
       let analysisResult;
       try {
-        const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        // Clean response (remove markdown if present)
+        const cleanContent = content
+          .replace(/```json\n?/g, '')
+          .replace(/```\n?/g, '')
+          .trim();
+        
         const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           analysisResult = JSON.parse(jsonMatch[0]);
@@ -465,8 +526,8 @@ async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): P
 
       results.push({
         symbol,
-        sentiment: analysisResult.P_up_pct > 55 ? 'bullish' : analysisResult.P_up_pct < 45 ? 'bearish' : 'neutral',
-        confidence: Math.round(analysisResult.confidence || analysisResult.P_up_pct),
+        sentiment: analysisResult.P_up_pct > 60 ? 'bullish' : analysisResult.P_up_pct < 40 ? 'bearish' : 'neutral',
+        confidence: Math.round(analysisResult.regime_adjusted_confidence || analysisResult.confidence || analysisResult.P_up_pct),
         analysis: analysisResult.thai_summary || `${symbol}: Analysis complete`,
         change: `${analysisResult.P_up_pct > 50 ? '+' : ''}${(analysisResult.P_up_pct - 50).toFixed(1)}%`,
         changeValue: (analysisResult.P_up_pct - 50) / 100,
@@ -481,76 +542,38 @@ async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): P
   return results.length > 0 ? results : generateFallbackAnalysis(news, symbols);
 }
 
-function getSymbolKeywords(symbol: string): string[] {
-  const keywordMap: Record<string, string[]> = {
-    XAUUSD: ['gold', 'xau', 'bullion', 'precious', 'safe haven'],
-    XAGUSD: ['silver', 'xag'],
-    EURUSD: ['euro', 'eur', 'ecb', 'eurozone', 'lagarde'],
-    GBPUSD: ['pound', 'gbp', 'sterling', 'boe', 'uk'],
-    USDJPY: ['yen', 'jpy', 'japan', 'boj'],
-    BTCUSD: ['bitcoin', 'btc', 'crypto', 'halving'],
-    ETHUSD: ['ethereum', 'eth', 'defi'],
-    USOIL: ['oil', 'wti', 'crude', 'opec'],
-    US500: ['s&p', 'sp500', 'stock market'],
-    US100: ['nasdaq', 'tech stocks', 'qqq']
-  };
-  return keywordMap[symbol] || [symbol.toLowerCase()];
-}
-
 function generateFallbackAnalysis(news: RawNewsItem[], symbols: string[]): MacroAnalysis[] {
   const bullishCount = news.filter(n => n.sentiment === 'bullish').length;
   const bearishCount = news.filter(n => n.sentiment === 'bearish').length;
-  const totalSentiment = news.length > 0 ? (bullishCount - bearishCount) / news.length : 0;
+  const marketBias = bullishCount > bearishCount ? 'bullish' : bearishCount > bullishCount ? 'bearish' : 'neutral';
   
   return symbols.map(symbol => {
-    const symbolKeywords = getSymbolKeywords(symbol);
-    const relevantNews = news.filter(n => {
-      const text = n.title.toLowerCase();
-      return symbolKeywords.some(kw => text.includes(kw));
-    });
+    const relevantNews = news.filter(n => n.relatedAssets?.includes(symbol));
+    const symbolSentiment = relevantNews.length > 0 
+      ? (relevantNews.filter(n => n.sentiment === 'bullish').length > relevantNews.filter(n => n.sentiment === 'bearish').length ? 'bullish' : 'bearish')
+      : marketBias;
     
-    const relevantBullish = relevantNews.filter(n => n.sentiment === 'bullish').length;
-    const relevantBearish = relevantNews.filter(n => n.sentiment === 'bearish').length;
-    
-    let sentiment: 'bullish' | 'bearish' | 'neutral' = 'neutral';
-    let P_up = 50;
-    
-    if (relevantNews.length > 0) {
-      const score = (relevantBullish - relevantBearish) / relevantNews.length;
-      P_up = Math.round(50 + score * 30);
-      sentiment = score > 0.1 ? 'bullish' : score < -0.1 ? 'bearish' : 'neutral';
-    } else {
-      P_up = Math.round(50 + totalSentiment * 20);
-      sentiment = totalSentiment > 0.1 ? 'bullish' : totalSentiment < -0.1 ? 'bearish' : 'neutral';
-    }
-    
-    const confidence = 55 + Math.floor(Math.random() * 20);
+    const confidence = 55 + Math.floor(Math.random() * 30);
+    const change = (Math.random() * 2 - 1);
+    const P_up = symbolSentiment === 'bullish' ? 60 + Math.random() * 20 : symbolSentiment === 'bearish' ? 30 + Math.random() * 15 : 45 + Math.random() * 10;
     
     return {
       symbol,
-      sentiment,
+      sentiment: symbolSentiment as any,
       confidence,
-      analysis: `${symbol}: ${sentiment.toUpperCase()} | ${confidence}% (Fallback - ${relevantNews.length} related news)`,
-      change: `${P_up >= 50 ? '+' : ''}${(P_up - 50).toFixed(1)}%`,
-      changeValue: (P_up - 50) / 100,
+      analysis: `${symbol}: ${symbolSentiment.toUpperCase()} | ${confidence}% (Fallback - Gemini unavailable)`,
+      change: `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`,
+      changeValue: change,
       ableAnalysis: {
-        P_up_pct: P_up,
-        P_down_pct: 100 - P_up,
-        decision: P_up >= 55 ? '🟢 BUY' : P_up <= 45 ? '🔴 SELL' : '🟡 HOLD',
+        P_up_pct: Math.round(P_up * 10) / 10,
+        P_down_pct: Math.round((100 - P_up) * 10) / 10,
+        decision: symbolSentiment === 'bullish' ? '🟢 BUY' : symbolSentiment === 'bearish' ? '🔴 SELL' : '🟡 HOLD',
         confidence,
-        thai_summary: `${symbol}: วิเคราะห์จาก ${relevantNews.length} ข่าวที่เกี่ยวข้อง | ${sentiment.toUpperCase()}`,
-        key_drivers: ['Market Sentiment', 'News Flow'],
-        risk_warnings: ['Using fallback analysis'],
-        market_regime: 'NORMAL',
-        scores: {},
-        category_performance: {},
-        trading_signal: {
-          signal: P_up >= 55 ? 'BUY' : P_up <= 45 ? 'SELL' : 'HOLD',
-          icon: P_up >= 55 ? '🟢' : P_up <= 45 ? '🔴' : '🟡',
-          strength: confidence
-        },
-        news_count: news.length,
-        relevant_news_count: relevantNews.length
+        market_regime: 'FALLBACK_MODE',
+        thai_summary: `${symbol}: ใช้ Fallback Analysis (Gemini API unavailable)`,
+        risk_warnings: ['Using fallback analysis - Gemini API unavailable'],
+        analyzed_at: new Date().toISOString(),
+        news_count: news.length
       }
     };
   });
@@ -566,7 +589,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log('🚀 Starting ABLE-HF 3.0...');
+    console.log('🚀 Starting ABLE-HF 3.0 with Direct Gemini API...');
     const startTime = Date.now();
     
     let pinnedAssets: string[] = [];
@@ -575,7 +598,8 @@ serve(async (req) => {
       pinnedAssets = body.pinnedAssets || [];
     } catch {}
     
-    console.log(`📡 Fetching news from 13 sources... (pinned: ${pinnedAssets.join(', ') || 'none'})`);
+    console.log(`📌 Pinned assets: ${pinnedAssets.join(', ') || 'default'}`);
+    console.log('📡 Fetching 13 news sources...');
     
     const [
       forexReddit, goldReddit, cryptoReddit, wsbReddit, stocksReddit,
@@ -614,78 +638,77 @@ serve(async (req) => {
 
     // Sort by timestamp
     allNews.sort((a, b) => b.timestamp - a.timestamp);
-    console.log(`✅ ${allNews.length} unique news items collected`);
+    console.log(`✅ ${allNews.length} unique news items fetched`);
 
-    // Run Gemini analysis
+    // Gemini Analysis
     const macroAnalysis = await analyzeWithGemini(allNews, pinnedAssets);
-    console.log(`✅ Analysis complete: ${macroAnalysis.length} assets analyzed`);
+    console.log(`✅ Gemini analysis complete: ${macroAnalysis.length} assets analyzed`);
 
-    // Build For You items
+    // Build forYou items
     const forYouItems: any[] = [];
     if (pinnedAssets.length > 0) {
       for (const asset of pinnedAssets) {
-        const assetKeywords = getSymbolKeywords(asset);
-        allNews.filter(item => {
-          const text = item.title.toLowerCase();
-          return assetKeywords.some(kw => text.includes(kw));
-        }).slice(0, 3).forEach(item => {
+        allNews.filter(item => item.relatedAssets?.includes(asset)).slice(0, 3)
+          .forEach(item => {
+            forYouItems.push({
+              id: item.id,
+              symbol: asset,
+              type: `${item.sentiment?.toUpperCase() || 'NEUTRAL'} (${item.importance?.toUpperCase() || 'MEDIUM'})`,
+              title: item.title,
+              source: item.source,
+              timestamp: item.timestamp,
+              url: item.url,
+              isNew: Date.now() - item.timestamp < 3600000
+            });
+          });
+      }
+    }
+    
+    allNews.filter(item => item.importance === 'high').slice(0, 5)
+      .forEach(item => {
+        const symbol = item.relatedAssets?.[0] || item.category;
+        if (!forYouItems.find(f => f.id === item.id)) {
           forYouItems.push({
             id: item.id,
-            symbol: asset,
-            type: `${item.sentiment?.toUpperCase() || 'NEUTRAL'} (${item.importance?.toUpperCase() || 'MEDIUM'})`,
+            symbol,
+            type: `${item.sentiment?.toUpperCase() || 'NEUTRAL'} (HIGH)`,
             title: item.title,
             source: item.source,
             timestamp: item.timestamp,
             url: item.url,
             isNew: Date.now() - item.timestamp < 3600000
           });
-        });
-      }
-    }
-    
-    // Add high importance news
-    allNews.filter(item => item.importance === 'high').slice(0, 5).forEach(item => {
-      const symbol = item.relatedAssets?.[0] || item.category;
-      if (!forYouItems.find(f => f.id === item.id)) {
-        forYouItems.push({
-          id: item.id,
-          symbol,
-          type: `${item.sentiment?.toUpperCase() || 'NEUTRAL'} (HIGH)`,
-          title: item.title,
-          source: item.source,
-          timestamp: item.timestamp,
-          url: item.url,
-          isNew: Date.now() - item.timestamp < 3600000
-        });
-      }
-    });
+        }
+      });
 
     forYouItems.sort((a, b) => b.timestamp - a.timestamp);
 
-    // Build daily reports
-    const dailyReports = allNews.filter(item => item.importance === 'high').slice(0, 5).map((item, i) => {
-      const date = new Date(item.timestamp);
-      return {
-        id: item.id,
-        date: date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' }),
-        title: item.title,
-        description: item.description || item.title.substring(0, 150),
-        time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        assetsAnalyzed: Math.floor(Math.random() * 4) + 3,
-        isHighlighted: i === 0,
-        url: item.url,
-        source: item.source
-      };
-    });
+    // Daily Reports
+    const dailyReports = allNews.filter(item => item.importance === 'high').slice(0, 5)
+      .map((item, i) => {
+        const date = new Date(item.timestamp);
+        return {
+          id: item.id,
+          date: date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' }),
+          title: item.title,
+          description: item.description || item.title.substring(0, 150),
+          time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+          assetsAnalyzed: Math.floor(Math.random() * 4) + 3,
+          isHighlighted: i === 0,
+          url: item.url,
+          source: item.source
+        };
+      });
 
-    // Build X notifications
-    const xNotifications = allNews.filter(item => item.upvotes && item.upvotes > 50).slice(0, 6).map(item => ({
-      id: item.id,
-      source: item.source.replace('r/', ''),
-      time: formatTimeAgo(item.timestamp),
-      content: item.title.substring(0, 100),
-      url: item.url
-    }));
+    // X Notifications
+    const xNotifications = allNews.filter(item => item.upvotes && item.upvotes > 50).slice(0, 6)
+      .map(item => ({
+        id: item.id,
+        source: item.source.replace('r/', ''),
+        time: formatTimeAgo(item.timestamp),
+        content: item.title.substring(0, 100),
+        url: item.url
+      }));
 
     const processingTime = Date.now() - startTime;
     console.log(`✅ Total processing time: ${processingTime}ms`);
@@ -701,7 +724,8 @@ serve(async (req) => {
         xNotifications,
         rawNews: allNews.slice(0, 60),
         sourcesCount: 13,
-        sources: ['Reddit (7)', 'HN (3)', 'CryptoCompare', 'Business News', 'MarketWatch']
+        sources: ['Reddit', 'HN', 'CryptoCompare', 'Business', 'MarketWatch'],
+        gemini_api: 'direct' // Flag to indicate using direct Gemini
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -709,7 +733,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('❌ Error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
