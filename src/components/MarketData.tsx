@@ -47,6 +47,7 @@ import CVDChart from './CVDChart';
 import TopNews from './TopNews';
 import { BloombergMap } from './BloombergMap';
 import MonteCarloSimulator from './MonteCarloSimulator';
+import AbleHF40Modules from './AbleHF40Modules';
 
 interface PanelData {
   id: string;
@@ -343,6 +344,15 @@ const MarketData = () => {
       icon: <Brain className="w-5 h-5" />,
       description: 'Local AI powered by Ollama - Full access to all app data',
       tags: ['ai', 'ollama', 'local', 'mcp', 'trading']
+    },
+    { 
+      id: 'able-hf-40', 
+      title: '🧠 ABLE-HF 40 MODULES', 
+      component: <AbleHF40Modules />,
+      category: 'intelligence',
+      icon: <Brain className="w-5 h-5" />,
+      description: 'ABLE-HF 3.0 Hedge Fund Analysis System - 40 Modules with full scoring',
+      tags: ['ai', 'hedge-fund', 'modules', '40-modules', 'analysis', 'gemini']
     },
     
     // Utilities
