@@ -10,8 +10,9 @@ interface AnalysisRequest {
   headlines?: string[];
   currentPrice?: number;
   priceChange?: number;
-  prompt?: string; // For direct prompt mode
+  prompt?: string;
   systemPrompt?: string;
+  context?: any; // Universal data context
 }
 
 serve(async (req) => {
@@ -21,69 +22,78 @@ serve(async (req) => {
 
   try {
     const request: AnalysisRequest = await req.json()
-    const { symbol, headlines, currentPrice, priceChange, prompt, systemPrompt: customSystemPrompt } = request
+    const { symbol, headlines, currentPrice, priceChange, prompt, systemPrompt: customSystemPrompt, context } = request
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
+    // 🔴 USE DIRECT GEMINI API (not Lovable Gateway)
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
     
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'LOVABLE_API_KEY not configured' 
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    if (!GEMINI_API_KEY) {
+      // Fallback to Lovable Gateway if no Gemini key
+      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')
+      if (!LOVABLE_API_KEY) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'No AI API key configured (GEMINI_API_KEY or LOVABLE_API_KEY)' 
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      // Use Lovable Gateway as fallback
+      return await handleWithLovableGateway(request, LOVABLE_API_KEY, corsHeaders)
     }
 
     // Direct prompt mode (for GeminiService chat)
     if (prompt) {
-      const directResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: customSystemPrompt || 'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาเดียวกับผู้ใช้อย่างเป็นมิตร' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 1500,
-          temperature: 0.5
-        })
-      })
+      const contextInfo = context ? `\n\n--- App Data Context ---\n${JSON.stringify(context, null, 2)}` : ''
+      
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `${customSystemPrompt || 'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาเดียวกับผู้ใช้อย่างเป็นมิตร'}\n\n${prompt}${contextInfo}`
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.5,
+              maxOutputTokens: 2000,
+              topP: 0.8,
+              topK: 40
+            }
+          })
+        }
+      )
 
-      if (!directResponse.ok) {
-        const errorStatus = directResponse.status
-        if (errorStatus === 429) {
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Gemini API error:', response.status, errorText)
+        
+        if (response.status === 429) {
           return new Response(
             JSON.stringify({ success: false, error: 'Rate limit exceeded' }),
             { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
-        if (errorStatus === 402) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'AI credits exhausted' }),
-            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-        throw new Error(`AI API error: ${errorStatus}`)
+        
+        throw new Error(`Gemini API error: ${response.status}`)
       }
 
-      const directResult = await directResponse.json()
-      const directContent = directResult.choices?.[0]?.message?.content || 'ไม่สามารถประมวลผลได้'
+      const data = await response.json()
+      const content = data.candidates?.[0]?.content?.parts?.[0]?.text || 'ไม่สามารถประมวลผลได้'
 
       return new Response(
-        JSON.stringify({ success: true, analysis: directContent }),
+        JSON.stringify({ success: true, analysis: content }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // News analysis mode (original functionality)
+    // News analysis mode
     const headlinesList = Array.isArray(headlines) ? headlines : []
     
-    // Create structured prompt for financial analysis
     const systemPrompt = `คุณเป็น ABLE-HF 3.0 AI นักวิเคราะห์การเงินระดับ Hedge Fund ที่มีความเชี่ยวชาญสูง
     
 คุณต้องวิเคราะห์ข่าวและให้ผลลัพธ์เป็น JSON ที่มี:
@@ -97,12 +107,6 @@ serve(async (req) => {
 8. risk_warnings: คำเตือนความเสี่ยง (array 2 items)
 9. market_regime: "trending_up", "trending_down", "ranging", "volatile"
 
-วิเคราะห์อย่างละเอียดโดยพิจารณา:
-- Sentiment ของข่าว
-- ผลกระทบต่อสินทรัพย์
-- สภาพตลาดปัจจุบัน
-- ความเสี่ยงและโอกาส
-
 ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น`
 
     const userPrompt = `
@@ -115,64 +119,52 @@ ${headlinesList.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n') || 'ไ�
 
 วิเคราะห์และตอบเป็น JSON`
 
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: 1500,
-        temperature: 0.3
-      })
-    })
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
+          }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 2000,
+            topP: 0.8,
+            topK: 40,
+            responseMimeType: "application/json"
+          }
+        })
+      }
+    )
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text()
-      console.error('AI API Error:', errorText)
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Gemini API Error:', errorText)
       
-      if (aiResponse.status === 429) {
+      if (response.status === 429) {
         return new Response(
           JSON.stringify({ success: false, error: 'Rate limit exceeded' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Payment required' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
       
-      throw new Error(`AI API error: ${aiResponse.status}`)
+      throw new Error(`Gemini API error: ${response.status}`)
     }
 
-    const aiResult = await aiResponse.json()
-    const content = aiResult.choices?.[0]?.message?.content
+    const data = await response.json()
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text
 
-    // Parse JSON from response
     let analysis
     try {
-      // Clean markdown code blocks if present
       let jsonStr = content.trim()
-      if (jsonStr.startsWith('```json')) {
-        jsonStr = jsonStr.slice(7)
-      }
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.slice(3)
-      }
-      if (jsonStr.endsWith('```')) {
-        jsonStr = jsonStr.slice(0, -3)
-      }
+      if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7)
+      if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3)
+      if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3)
       analysis = JSON.parse(jsonStr.trim())
     } catch (parseError) {
-      console.error('JSON parse error:', parseError, 'Content:', content)
-      // Fallback analysis
+      console.error('JSON parse error:', parseError)
       analysis = {
         sentiment: 'neutral',
         P_up_pct: 50,
@@ -186,7 +178,6 @@ ${headlinesList.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n') || 'ไ�
       }
     }
 
-    // Ensure all required fields exist
     const result = {
       symbol,
       sentiment: analysis.sentiment || 'neutral',
@@ -199,7 +190,7 @@ ${headlinesList.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n') || 'ไ�
       risk_warnings: Array.isArray(analysis.risk_warnings) ? analysis.risk_warnings.slice(0, 2) : [],
       market_regime: analysis.market_regime || 'ranging',
       analyzed_at: new Date().toISOString(),
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.0-flash-exp',
       news_count: headlinesList.length
     }
 
@@ -216,3 +207,44 @@ ${headlinesList.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n') || 'ไ�
     )
   }
 })
+
+// Fallback to Lovable Gateway
+async function handleWithLovableGateway(request: AnalysisRequest, apiKey: string, corsHeaders: any) {
+  const { prompt, systemPrompt: customSystemPrompt } = request
+  
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [
+        { role: 'system', content: customSystemPrompt || 'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาเดียวกับผู้ใช้อย่างเป็นมิตร' },
+        { role: 'user', content: prompt || 'Hello' }
+      ],
+      max_tokens: 1500,
+      temperature: 0.5
+    })
+  })
+
+  if (!response.ok) {
+    const errorStatus = response.status
+    if (errorStatus === 429 || errorStatus === 402) {
+      return new Response(
+        JSON.stringify({ success: false, error: errorStatus === 429 ? 'Rate limit exceeded' : 'AI credits exhausted' }),
+        { status: errorStatus, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    throw new Error(`AI API error: ${errorStatus}`)
+  }
+
+  const result = await response.json()
+  const content = result.choices?.[0]?.message?.content || 'ไม่สามารถประมวลผลได้'
+
+  return new Response(
+    JSON.stringify({ success: true, analysis: content }),
+    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}

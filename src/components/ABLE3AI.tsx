@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { OllamaService, OllamaModel } from '@/services/FreeAIService';
 import { GeminiService } from '@/services/GeminiService';
+import { UniversalDataService } from '@/services/UniversalDataService';
 import { useMCP } from '@/contexts/MCPContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,7 @@ import {
 } from '@/components/ui/select';
 import {
   Send, Bot, User, Settings, Sparkles, Zap, X,
-  RefreshCw, Wifi, WifiOff, Plug, Check, Loader2
+  RefreshCw, Wifi, WifiOff, Plug, Check, Loader2, Database
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -53,6 +54,9 @@ const ABLE3AI = () => {
   // Loading time tracking
   const [loadingTime, setLoadingTime] = useState(0);
   const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Universal data context
+  const [dataContext, setDataContext] = useState<any>(null);
 
   const quickCommands = [
     { label: '📊 Market', cmd: 'What is the current market situation?' },
@@ -61,18 +65,38 @@ const ABLE3AI = () => {
     { label: '🎲 Monte Carlo', cmd: 'Show Monte Carlo simulation results' }
   ];
 
-  // Auto-connect Gemini on mount
-  useEffect(() => {
-    handleGeminiConnect();
+  // Fetch universal data context
+  const fetchDataContext = useCallback(async () => {
+    try {
+      const result = await UniversalDataService.getData(['all']);
+      if (result.success) {
+        setDataContext(result.data);
+        console.log('✅ Data context loaded:', result.sources);
+      }
+    } catch (error) {
+      console.error('Failed to fetch data context:', error);
+    }
   }, []);
 
-  // Initial greeting
+  // Auto-connect Gemini on mount and fetch data
   useEffect(() => {
+    handleGeminiConnect();
+    fetchDataContext();
+  }, [fetchDataContext]);
+
+  // Update greeting when state changes
+  const updateGreeting = useCallback(() => {
+    const providerStatus = geminiReady && aiProvider === 'gemini' 
+      ? '🟢 Gemini (Cloud)' 
+      : ollamaConnected && aiProvider === 'ollama' 
+        ? '🟢 Ollama (Local)' 
+        : '🔴 Disconnected';
+    
     setMessages([{
       id: '1',
-      text: `🤖 **ABLE AI - Powered by Gemini 2.5 Flash**\n\n` +
+      text: `🤖 **ABLE AI - Powered by ${aiProvider === 'gemini' ? 'Gemini 2.5 Flash' : selectedModel}**\n\n` +
         `สวัสดีครับ! พร้อมช่วยวิเคราะห์ตลาดการเงิน\n\n` +
-        `**AI Provider:** ${geminiReady ? '🟢 Gemini (Cloud)' : ollamaConnected ? '🟢 Ollama' : '🔴 Disconnected'}\n` +
+        `**AI Provider:** ${providerStatus}\n` +
         `**Model:** ${aiProvider === 'gemini' ? 'gemini-2.5-flash' : selectedModel}\n` +
         `**MCP Tools:** ${mcpReady ? `${tools.length} พร้อมใช้` : 'กำลังโหลด...'}\n` +
         `**Data Access:** ✅ เข้าถึงข้อมูลทุกอย่างในแอป\n\n` +
@@ -82,6 +106,11 @@ const ABLE3AI = () => {
       model: 'System'
     }]);
   }, [mcpReady, tools.length, ollamaConnected, selectedModel, geminiReady, aiProvider]);
+
+  // Initial greeting
+  useEffect(() => {
+    updateGreeting();
+  }, [updateGreeting]);
 
   // Auto-scroll
   useEffect(() => {
@@ -249,8 +278,12 @@ const ABLE3AI = () => {
       }
       // Handle based on AI provider
       else {
+        // Get fresh data context for AI
+        const freshContext = await UniversalDataService.getData(['all']);
+        const contextSummary = freshContext.success ? UniversalDataService.formatForAI(freshContext) : '';
+        
         if (aiProvider === 'gemini' && geminiReady) {
-          // Use Gemini
+          // Use Gemini with data context
           const toolCall = GeminiService.detectToolCall(currentInput);
 
           if (toolCall && mcpReady) {
@@ -258,7 +291,7 @@ const ABLE3AI = () => {
               const result = await executeTool(toolCall.tool, toolCall.params);
               const toolResult = GeminiService.formatToolResult(toolCall.tool, result);
 
-              const analysisPrompt = `User asked: "${currentInput}"\n\nHere is the data from ${toolCall.tool}:\n\n${toolResult}\n\nPlease provide a brief analysis and any insights based on this data. Respond in Thai.`;
+              const analysisPrompt = `User asked: "${currentInput}"\n\nHere is the data from ${toolCall.tool}:\n\n${toolResult}\n\n${contextSummary}\n\nPlease provide a brief analysis and any insights based on this data. Respond in Thai.`;
               
               const geminiResponse = await GeminiService.chat(
                 analysisPrompt,
@@ -274,20 +307,21 @@ const ABLE3AI = () => {
               model = 'Error';
             }
           } else {
-            // Regular Gemini chat
+            // Regular Gemini chat with context
+            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}`;
             const response = await GeminiService.chat(
-              currentInput,
+              enhancedPrompt,
               messages.slice(-10).map(m => ({
                 role: m.isUser ? 'user' as const : 'assistant' as const,
                 content: m.text
               })),
-              'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาไทยแบบเป็นมิตร มีความรู้เกี่ยวกับ COT data, ข่าวตลาด, การวิเคราะห์เทคนิค และสามารถช่วยเหลือในการตัดสินใจเทรดได้'
+              'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาไทยแบบเป็นมิตร มีความรู้เกี่ยวกับ COT data, ข่าวตลาด, การวิเคราะห์เทคนิค และสามารถช่วยเหลือในการตัดสินใจเทรดได้ คุณมีสิทธิ์เข้าถึงข้อมูลทุกอย่างในแอปพลิเคชัน'
             );
             aiResponse = response.text;
             model = response.model;
           }
         } else if (aiProvider === 'ollama' && ollamaConnected) {
-          // Use Ollama
+          // Use Ollama with data context
           const toolCall = OllamaService.detectToolCall(currentInput);
 
           if (toolCall && mcpReady) {
@@ -295,12 +329,13 @@ const ABLE3AI = () => {
               const result = await executeTool(toolCall.tool, toolCall.params);
               const toolResult = OllamaService.formatToolResult(toolCall.tool, result);
 
-              const analysisPrompt = `User asked: "${currentInput}"\n\nHere is the data from ${toolCall.tool}:\n\n${toolResult}\n\nPlease provide a brief analysis and any insights based on this data. Respond in Thai.`;
+              const analysisPrompt = `User asked: "${currentInput}"\n\nHere is the data from ${toolCall.tool}:\n\n${toolResult}\n\n${contextSummary}\n\nPlease provide a brief analysis and any insights based on this data. Respond in Thai.`;
               
               const ollamaResponse = await OllamaService.chat(
                 analysisPrompt,
                 [],
-                selectedModel
+                selectedModel,
+                'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน คุณมีสิทธิ์เข้าถึงข้อมูลทุกอย่างในแอปพลิเคชัน'
               );
 
               aiResponse = `${toolResult}\n\n---\n\n**AI Analysis:**\n${ollamaResponse.text}`;
@@ -311,14 +346,16 @@ const ABLE3AI = () => {
               model = 'Error';
             }
           } else {
-            // Regular Ollama chat
+            // Regular Ollama chat with context
+            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}`;
             const response = await OllamaService.chat(
-              currentInput,
+              enhancedPrompt,
               messages.slice(-10).map(m => ({
                 role: m.isUser ? 'user' as const : 'assistant' as const,
                 content: m.text
               })),
-              selectedModel
+              selectedModel,
+              'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาไทยแบบเป็นมิตร คุณมีสิทธิ์เข้าถึงข้อมูลทุกอย่างในแอปพลิเคชัน'
             );
             aiResponse = response.text;
             model = response.model;
@@ -443,15 +480,19 @@ const ABLE3AI = () => {
                 {geminiReady && aiProvider === 'gemini' && <Check className="w-4 h-4" />}
               </Button>
               <Button
-                variant={ollamaConnected && aiProvider === 'ollama' ? 'default' : 'outline'}
+                variant={aiProvider === 'ollama' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => {
-                  if (ollamaConnected) {
-                    setAiProvider('ollama');
+                  setAiProvider('ollama');
+                  if (!ollamaConnected) {
+                    toast({
+                      title: "🔌 Ollama Mode Selected",
+                      description: "Enter your Bridge URL below to connect",
+                    });
                   }
                 }}
                 className={`flex-1 gap-2 h-10 ${
-                  ollamaConnected && aiProvider === 'ollama'
+                  aiProvider === 'ollama'
                     ? 'bg-green-600 hover:bg-green-700 text-white border-green-500'
                     : 'border-green-500/50 text-green-400 hover:bg-green-500/20'
                 }`}
@@ -462,8 +503,8 @@ const ABLE3AI = () => {
               </Button>
             </div>
 
-            {/* Ollama Bridge URL (only if not connected) */}
-            {!ollamaConnected && (
+            {/* Ollama Bridge URL (show when Ollama is selected and not connected) */}
+            {aiProvider === 'ollama' && !ollamaConnected && (
               <div className="space-y-2">
                 <p className="text-xs text-green-400 font-medium">🔗 Ollama Bridge URL</p>
                 <div className="flex gap-2">
@@ -474,7 +515,7 @@ const ABLE3AI = () => {
                     className="h-9 text-xs bg-black/50 border-green-500/50 text-white flex-1"
                   />
                   <Button onClick={handleSaveBridgeUrl} size="sm" disabled={isConnecting} className="h-9 bg-green-600 hover:bg-green-700">
-                    {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save & Connect'}
+                    {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Connect'}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
