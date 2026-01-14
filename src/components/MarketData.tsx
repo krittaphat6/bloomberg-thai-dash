@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TabManager from './TabManager';
 import TabSelector from './TabSelector';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Expand, Minimize, LogOut, TrendingUp, BarChart3, Brain, Wrench, MessageSquare, Gamepad2, Globe } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useResponsiveContext } from '@/contexts/ResponsiveContext';
+import { usePanelCommander } from '@/contexts/PanelCommanderContext';
 import { MobileLayout } from './mobile/MobileLayout';
 import { TabletLayout } from './tablet/TabletLayout';
 import StockdioCharts from './StockdioCharts';
@@ -69,11 +70,13 @@ const MarketData = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { isMobile, isTablet, isDesktop } = useResponsiveContext();
+  const { registerPanelOpener, registerPanelCloser } = usePanelCommander();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [panels, setPanels] = useState<PanelData[]>([]);
   const [showTabSelector, setShowTabSelector] = useState(false);
   const [nextPanelId, setNextPanelId] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [panelIdCounter, setPanelIdCounter] = useState(1);
 
   useEffect(() => {
     const timeInterval = setInterval(() => {
@@ -504,6 +507,39 @@ const MarketData = () => {
     setNextPanelId(nextPanelId + 1);
     setShowTabSelector(false);
   };
+
+  // Open panel by ID (for AI control)
+  const openPanelById = useCallback((panelId: string) => {
+    const component = availableComponents.find(c => c.id === panelId);
+    if (component) {
+      const newPanel: PanelData = {
+        id: `${component.id}-${panelIdCounter}`,
+        title: component.title,
+        component: component.component
+      };
+      setPanels(prev => [...prev, newPanel]);
+      setPanelIdCounter(prev => prev + 1);
+      console.log(`✅ Panel opened via AI: ${component.title}`);
+    }
+  }, [availableComponents, panelIdCounter]);
+
+  // Close panel by ID pattern (for AI control)
+  const closePanelById = useCallback((panelId: string) => {
+    setPanels(prev => {
+      const panelToClose = prev.find(p => p.id.startsWith(panelId));
+      if (panelToClose) {
+        console.log(`✅ Panel closed via AI: ${panelToClose.title}`);
+        return prev.filter(p => p.id !== panelToClose.id);
+      }
+      return prev;
+    });
+  }, []);
+
+  // Register panel controls with PanelCommander
+  useEffect(() => {
+    registerPanelOpener(openPanelById);
+    registerPanelCloser(closePanelById);
+  }, [registerPanelOpener, registerPanelCloser, openPanelById, closePanelById]);
 
   // Mobile Layout
   if (isMobile) {
