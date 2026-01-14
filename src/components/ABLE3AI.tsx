@@ -3,6 +3,7 @@ import { OllamaService, OllamaModel } from '@/services/FreeAIService';
 import { GeminiService } from '@/services/GeminiService';
 import { UniversalDataService } from '@/services/UniversalDataService';
 import { useMCP } from '@/contexts/MCPContext';
+import { usePanelCommander, AVAILABLE_PANELS } from '@/contexts/PanelCommanderContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import {
   Send, Bot, User, Settings, Sparkles, Zap, X,
-  RefreshCw, Wifi, WifiOff, Plug, Check, Loader2, Database
+  RefreshCw, Wifi, WifiOff, Plug, Check, Loader2, Database, Layout
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -31,6 +32,7 @@ interface Message {
 
 const ABLE3AI = () => {
   const { isReady: mcpReady, tools, executeTool } = useMCP();
+  const { executeAICommand, getAvailablePanels } = usePanelCommander();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -61,8 +63,9 @@ const ABLE3AI = () => {
   const quickCommands = [
     { label: '📊 Market', cmd: 'What is the current market situation?' },
     { label: '📰 News', cmd: 'Get latest market news' },
-    { label: '📈 COT', cmd: 'Analyze COT data for gold' },
-    { label: '🎲 Monte Carlo', cmd: 'Show Monte Carlo simulation results' }
+    { label: '📋 COT', cmd: 'Analyze COT data for gold' },
+    { label: '📔 Journal', cmd: 'เปิด trading journal' },
+    { label: '🧠 40 Modules', cmd: 'เปิด 40 modules' }
   ];
 
   // Fetch universal data context
@@ -99,7 +102,9 @@ const ABLE3AI = () => {
         `**AI Provider:** ${providerStatus}\n` +
         `**Model:** ${aiProvider === 'gemini' ? 'gemini-2.5-flash' : selectedModel}\n` +
         `**MCP Tools:** ${mcpReady ? `${tools.length} พร้อมใช้` : 'กำลังโหลด...'}\n` +
+        `**🎛️ Panel Control:** ✅ พร้อมเปิด/ปิด functions\n` +
         `**Data Access:** ✅ เข้าถึงข้อมูลทุกอย่างในแอป\n\n` +
+        `💡 **ลองพิมพ์:** "เปิด trading journal" หรือ "list functions"\n\n` +
         `พิมพ์ "help" เพื่อดูคำสั่งทั้งหมด`,
       isUser: false,
       timestamp: new Date(),
@@ -227,32 +232,52 @@ const ABLE3AI = () => {
   };
 
   const getHelpText = () => {
+    const panelsList = AVAILABLE_PANELS.slice(0, 15).map(p => `• "${p.keywords[0]}"`).join('\n');
+    
     return `🤖 **ABLE AI Help**\n\n` +
-      `**คำสั่งพิเศษ:**\n` +
-      `• "news" / "ข่าว" - ดูข่าวตลาด\n` +
-      `• "calendar" / "ปฏิทิน" - ดูปฏิทินเศรษฐกิจ\n` +
-      `• "notes" / "โน้ต" - ดูบันทึกของคุณ\n` +
-      `• "monte carlo" - ดูผลการจำลอง\n\n` +
+      `**🎛️ Panel Commands (ควบคุมหน้าจอ):**\n` +
+      `• "เปิด trading journal" - เปิดฟังชัน Trading Journal\n` +
+      `• "open cot data" - เปิด COT Data\n` +
+      `• "เปิด 40 modules" - เปิด ABLE-HF 40 Modules\n` +
+      `• "ปิด notes" - ปิด Notes panel\n` +
+      `• "list functions" - ดูรายการฟังชันทั้งหมด\n\n` +
+      `**📊 Available Functions:**\n${panelsList}\n...และอื่นๆ\n\n` +
       `**MCP Tools (${tools.length} available):**\n` +
-      tools.map(t => `• ${t.name}: ${t.description || 'No description'}`).join('\n') + '\n\n' +
+      tools.slice(0, 5).map(t => `• ${t.name}`).join('\n') + '\n\n' +
       `**ตัวอย่างคำถาม:**\n` +
       `• "Analyze COT data for gold"\n` +
       `• "What's the market sentiment?"\n` +
-      `• "Show my recent trades"\n` +
-      `• "Calculate position size for..."`;
+      `• "เปิด trading chart แล้ววิเคราะห์ตลาด"`;
+  };
+
+  // Check if message is a panel command
+  const tryPanelCommand = (message: string): { handled: boolean; response?: string } => {
+    const lowerMessage = message.toLowerCase();
+    
+    // Check for panel commands
+    if (
+      lowerMessage.includes('เปิด') || 
+      lowerMessage.includes('open') || 
+      lowerMessage.includes('show') ||
+      lowerMessage.includes('ปิด') ||
+      lowerMessage.includes('close') ||
+      lowerMessage.includes('list') ||
+      lowerMessage.includes('functions') ||
+      lowerMessage.includes('panels') ||
+      lowerMessage.includes('รายการ')
+    ) {
+      const result = executeAICommand(message);
+      if (result.success || result.message) {
+        return { handled: true, response: result.message };
+      }
+    }
+    
+    return { handled: false };
   };
 
   const sendMessage = async () => {
     if (!inputMessage.trim()) return;
-    if (!geminiReady && !ollamaConnected) {
-      toast({
-        title: "❌ ยังไม่ได้เชื่อมต่อ AI",
-        description: "กรุณาเลือก Gemini (Cloud) หรือเชื่อมต่อ Ollama ก่อน",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    
     const currentInput = inputMessage;
     setInputMessage('');
     setIsLoading(true);
@@ -271,8 +296,19 @@ const ABLE3AI = () => {
       let aiResponse = '';
       let model = '';
 
+      // First, try panel commands (these work without AI connection)
+      const panelResult = tryPanelCommand(currentInput);
+      if (panelResult.handled && panelResult.response) {
+        aiResponse = panelResult.response;
+        model = '🎛️ Panel Commander';
+        
+        toast({
+          title: "✅ คำสั่งสำเร็จ",
+          description: "Panel opened/closed successfully",
+        });
+      }
       // Check for help command
-      if (currentInput.trim().toLowerCase() === 'help') {
+      else if (currentInput.trim().toLowerCase() === 'help') {
         aiResponse = getHelpText();
         model = 'System';
       }

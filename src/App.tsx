@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ResponsiveProvider } from "@/contexts/ResponsiveContext";
 import { MCPProvider } from "@/contexts/MCPContext";
+import { PanelCommanderProvider } from "@/contexts/PanelCommanderContext";
 import { AuthScreen } from "@/components/AuthScreen";
 
 // Lazy load page components to reduce initial bundle size
@@ -84,11 +85,13 @@ const App = () => {
       <AuthProvider>
         <ResponsiveProvider>
           <MCPProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <AppContent />
-            </TooltipProvider>
+            <PanelCommanderProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <AppContent />
+              </TooltipProvider>
+            </PanelCommanderProvider>
           </MCPProvider>
         </ResponsiveProvider>
       </AuthProvider>
