@@ -250,25 +250,52 @@ const ABLE3AI = () => {
       `• "เปิด trading chart แล้ววิเคราะห์ตลาด"`;
   };
 
-  // Check if message is a panel command
-  const tryPanelCommand = (message: string): { handled: boolean; response?: string } => {
-    const lowerMessage = message.toLowerCase();
+  // Check if message is a panel command - improved detection
+  const tryPanelCommand = (message: string): { handled: boolean; response?: string; skipAI?: boolean } => {
+    const lowerMessage = message.toLowerCase().trim();
     
-    // Check for panel commands
-    if (
-      lowerMessage.includes('เปิด') || 
-      lowerMessage.includes('open') || 
-      lowerMessage.includes('show') ||
-      lowerMessage.includes('ปิด') ||
-      lowerMessage.includes('close') ||
-      lowerMessage.includes('list') ||
-      lowerMessage.includes('functions') ||
-      lowerMessage.includes('panels') ||
-      lowerMessage.includes('รายการ')
-    ) {
-      const result = executeAICommand(message);
-      if (result.success || result.message) {
-        return { handled: true, response: result.message };
+    // Direct panel command patterns - must be explicit commands
+    const openPatterns = [
+      /^(?:เปิด|open|show|แสดง|launch|run|go to|ไปที่|เปิดฟังชัน|เปิดฟังก์ชัน|เปิด function)\s*(.+?)(?:\s*(?:ให้หน่อย|หน่อย|ด้วย|please|pls|now))?$/i,
+    ];
+    
+    const closePatterns = [
+      /^(?:ปิด|close|hide|ซ่อน)\s*(.+?)(?:\s*(?:ให้หน่อย|หน่อย|ด้วย|please))?$/i,
+    ];
+    
+    const listPatterns = [
+      /^(?:list|รายการ|show all|ดู)\s*(?:functions?|panels?|ฟังชัน|ฟังก์ชัน)?$/i,
+    ];
+    
+    // Check for list command
+    for (const pattern of listPatterns) {
+      if (pattern.test(lowerMessage)) {
+        const result = executeAICommand(message);
+        return { handled: true, response: result.message, skipAI: true };
+      }
+    }
+    
+    // Check for open commands
+    for (const pattern of openPatterns) {
+      const match = lowerMessage.match(pattern);
+      if (match) {
+        const result = executeAICommand(message);
+        if (result.success) {
+          return { handled: true, response: result.message, skipAI: true };
+        }
+        // If not found, return the error message and skip AI
+        if (result.message) {
+          return { handled: true, response: result.message, skipAI: true };
+        }
+      }
+    }
+    
+    // Check for close commands
+    for (const pattern of closePatterns) {
+      const match = lowerMessage.match(pattern);
+      if (match) {
+        const result = executeAICommand(message);
+        return { handled: true, response: result.message, skipAI: true };
       }
     }
     
@@ -298,19 +325,37 @@ const ABLE3AI = () => {
 
       // First, try panel commands (these work without AI connection)
       const panelResult = tryPanelCommand(currentInput);
-      if (panelResult.handled && panelResult.response) {
-        aiResponse = panelResult.response;
+      if (panelResult.handled) {
+        aiResponse = panelResult.response || '✅ เสร็จสิ้น';
         model = '🎛️ Panel Commander';
         
-        toast({
-          title: "✅ คำสั่งสำเร็จ",
-          description: "Panel opened/closed successfully",
-        });
+        if (panelResult.skipAI) {
+          // Don't send to AI, just show the response
+          setMessages(prev => [...prev, {
+            id: (Date.now() + 1).toString(),
+            text: aiResponse,
+            isUser: false,
+            timestamp: new Date(),
+            model
+          }]);
+          setIsLoading(false);
+          return;
+        }
       }
       // Check for help command
       else if (currentInput.trim().toLowerCase() === 'help') {
         aiResponse = getHelpText();
         model = 'System';
+        
+        setMessages(prev => [...prev, {
+          id: (Date.now() + 1).toString(),
+          text: aiResponse,
+          isUser: false,
+          timestamp: new Date(),
+          model
+        }]);
+        setIsLoading(false);
+        return;
       }
       // Handle based on AI provider
       else {
@@ -343,15 +388,24 @@ const ABLE3AI = () => {
               model = 'Error';
             }
           } else {
-            // Regular Gemini chat with context
+            // Regular Gemini chat with context - improved system prompt for concise answers
             const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}`;
+            const conciseSystemPrompt = `คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน
+
+กฎสำคัญ:
+1. ตอบสั้น กระชับ ตรงประเด็น (ไม่เกิน 3-4 ประโยค ยกเว้นเรื่องซับซ้อน)
+2. ถ้าผู้ใช้ถามเรื่องเดียว ตอบเรื่องนั้นเท่านั้น
+3. อย่าถามคำถามติดตามเพิ่ม ยกเว้นจำเป็นมาก
+4. ใช้ข้อมูลจาก context ที่ให้มาตอบ
+5. ตอบเป็นภาษาเดียวกับผู้ใช้`;
+            
             const response = await GeminiService.chat(
               enhancedPrompt,
               messages.slice(-10).map(m => ({
                 role: m.isUser ? 'user' as const : 'assistant' as const,
                 content: m.text
               })),
-              'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาไทยแบบเป็นมิตร มีความรู้เกี่ยวกับ COT data, ข่าวตลาด, การวิเคราะห์เทคนิค และสามารถช่วยเหลือในการตัดสินใจเทรดได้ คุณมีสิทธิ์เข้าถึงข้อมูลทุกอย่างในแอปพลิเคชัน'
+              conciseSystemPrompt
             );
             aiResponse = response.text;
             model = response.model;
@@ -382,8 +436,12 @@ const ABLE3AI = () => {
               model = 'Error';
             }
           } else {
-            // Regular Ollama chat with context
+            // Regular Ollama chat with context - improved system prompt
             const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}`;
+            const conciseSystemPrompt = `คุณคือ ABLE AI ผู้เชี่ยวชาญการเทรด
+
+กฎ: ตอบสั้นๆ ตรงประเด็น ไม่ถามคำถามติดตาม ใช้ข้อมูลจาก context ตอบ ตอบภาษาเดียวกับผู้ใช้`;
+            
             const response = await OllamaService.chat(
               enhancedPrompt,
               messages.slice(-10).map(m => ({
@@ -391,7 +449,7 @@ const ABLE3AI = () => {
                 content: m.text
               })),
               selectedModel,
-              'คุณคือ ABLE AI ผู้เชี่ยวชาญด้านการเทรดและการเงิน ตอบเป็นภาษาไทยแบบเป็นมิตร คุณมีสิทธิ์เข้าถึงข้อมูลทุกอย่างในแอปพลิเคชัน'
+              conciseSystemPrompt
             );
             aiResponse = response.text;
             model = response.model;
