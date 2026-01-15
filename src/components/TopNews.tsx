@@ -47,18 +47,6 @@ interface AbleAnalysisResult {
   relevant_news_count?: number;
 }
 
-// News Metadata from Backend
-interface NewsMetadata {
-  totalFetched: number;
-  freshNewsCount: number;
-  analyzedCount: number;
-  freshNewsHours: number;
-  oldestNewsAge: string;
-  newestNewsAge: string;
-  sources: string[];
-  sourcesCount: number;
-}
-
 // ============ TYPES ============
 interface MacroAnalysis {
   symbol: string;
@@ -79,7 +67,6 @@ interface ForYouItem {
   timestamp: number;
   url: string;
   isNew: boolean;
-  ageText?: string;
 }
 
 interface DailyReport {
@@ -92,7 +79,6 @@ interface DailyReport {
   isHighlighted: boolean;
   url: string;
   source: string;
-  ageText?: string;
 }
 
 interface XNotification {
@@ -136,7 +122,6 @@ const ASSET_CATEGORIES = {
 };
 
 const PINNED_ASSETS_STORAGE_KEY = 'able-pinned-assets';
-const AUTO_REFRESH_INTERVAL = 600000; // 10 minutes in ms
 
 interface TopNewsProps {
   onMaximize?: () => void;
@@ -162,10 +147,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
   const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
   const [xNotifications, setXNotifications] = useState<XNotification[]>([]);
   const [rawNews, setRawNews] = useState<RawNewsItem[]>([]);
-
-  // News metadata for debug display
-  const [newsMetadata, setNewsMetadata] = useState<NewsMetadata | null>(null);
-  const [isComponentActive, setIsComponentActive] = useState(false);
 
   // ABLE-HF 3.0 State - Analysis comes from backend now
   const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>(DEFAULT_PINNED_ASSETS);
@@ -213,14 +194,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
       hour12: false 
     });
   };
-
-  // Calculate next refresh time
-  const getNextRefreshText = useCallback(() => {
-    if (!lastUpdated) return 'now';
-    const nextRefresh = new Date(lastUpdated.getTime() + AUTO_REFRESH_INTERVAL);
-    const remaining = Math.floor((nextRefresh.getTime() - Date.now()) / 60000);
-    return remaining > 0 ? `${remaining} min` : 'now';
-  }, [lastUpdated]);
 
   // Fetch real-time prices for pinned assets
   const fetchPrices = useCallback(async () => {
@@ -276,20 +249,9 @@ const TopNews: React.FC<TopNewsProps> = () => {
         setDailyReports(data.dailyReports || []);
         setXNotifications(data.xNotifications || []);
         setRawNews(data.rawNews || []);
-        setNewsMetadata(data.newsMetadata || null);
         setLastUpdated(new Date());
         
         console.log(`✅ Loaded ${data.macro?.length || 0} macro items, ${data.rawNews?.length || 0} news`);
-        
-        // แสดง metadata ใน console
-        if (data.newsMetadata) {
-          console.log(`
-🔍 News Analysis Debug:
-   Fresh news: ${data.newsMetadata.freshNewsCount}/${data.newsMetadata.totalFetched}
-   Analyzed: ${data.newsMetadata.analyzedCount}
-   Age range: ${data.newsMetadata.newestNewsAge} - ${data.newsMetadata.oldestNewsAge}
-          `);
-        }
         
         // Extract ABLE analysis from backend response
         const ableResults: Record<string, AbleAnalysisResult> = {};
@@ -310,7 +272,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
         if (!initialLoading) {
           toast({ 
             title: '✅ ABLE-HF 3.0 Updated', 
-            description: `${data.newsMetadata?.freshNewsCount || 0} fresh news • ${data.processingTime}ms`
+            description: `${data.sourcesCount || 0} sources • ${data.processingTime}ms`
           });
         }
       }
@@ -355,27 +317,16 @@ const TopNews: React.FC<TopNewsProps> = () => {
     });
   };
 
-  // ✅ NEW: Fetch เมื่อเปิด component + Auto-refresh ทุก 10 นาที
+  // Initial load
   useEffect(() => {
-    console.log('🚀 TopNews component mounted - Starting AI analysis...');
-    setIsComponentActive(true);
-    
-    // 1. Fetch ทันทีที่เปิด component
     fetchNews();
-    
-    // 2. ตั้ง interval refresh ทุก 10 นาที (600,000 ms)
-    const refreshInterval = setInterval(() => {
-      console.log('🔄 10-minute auto-refresh triggered');
-      fetchNews();
-    }, AUTO_REFRESH_INTERVAL);
-    
-    // 3. Cleanup: หยุด interval เมื่อปิด component
-    return () => {
-      console.log('👋 TopNews component unmounted - Stopping auto-refresh');
-      clearInterval(refreshInterval);
-      setIsComponentActive(false);
-    };
-  }, []); // [] = run เฉพาะตอน mount/unmount เท่านั้น
+  }, []);
+
+  // Auto-refresh every 2 minutes
+  useEffect(() => {
+    const interval = setInterval(fetchNews, 120000);
+    return () => clearInterval(interval);
+  }, [fetchNews]);
 
   // Get available assets (not already pinned)
   const getAvailableAssets = () => {
@@ -392,7 +343,7 @@ const TopNews: React.FC<TopNewsProps> = () => {
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
           <p className="text-emerald-300/70">Loading ABLE-HF 3.0 Intelligence...</p>
-          <p className="text-zinc-500 text-xs">Powered by Gemini AI • Fresh news only (24h)</p>
+          <p className="text-zinc-500 text-xs">Powered by Gemini AI</p>
         </div>
       </div>
     );
@@ -411,38 +362,14 @@ const TopNews: React.FC<TopNewsProps> = () => {
               </h1>
               <p className="text-xs md:text-sm text-zinc-500 flex items-center gap-1 mt-1">
                 <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
-                ABLE-HF 3.0 • Gemini AI Analysis • Auto-refresh: 10 min
+                ABLE-HF 3.0 • Gemini AI Analysis
               </p>
-              
-              {/* News Metadata Badges */}
-              {newsMetadata && (
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-xs">
-                    <RefreshCw className="w-3 h-3 mr-1 inline" />
-                    {newsMetadata.freshNewsCount} fresh news (24h)
-                  </Badge>
-                  <Badge variant="outline" className="border-zinc-700 text-zinc-400 text-xs">
-                    <Clock className="w-3 h-3 mr-1 inline" />
-                    {newsMetadata.newestNewsAge} - {newsMetadata.oldestNewsAge}
-                  </Badge>
-                  {isComponentActive && (
-                    <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-xs animate-pulse">
-                      🟢 Live Analysis
-                    </Badge>
-                  )}
-                </div>
-              )}
             </div>
             <div className="flex items-center gap-2 md:gap-4">
               {lastUpdated && (
-                <div className="flex flex-col items-end">
-                  <span className="text-xs md:text-sm text-zinc-600 hidden sm:block">
-                    Updated {formatTime(lastUpdated)}
-                  </span>
-                  <span className="text-[10px] text-zinc-700">
-                    Next: {getNextRefreshText()}
-                  </span>
-                </div>
+                <span className="text-xs md:text-sm text-zinc-600 hidden sm:block">
+                  Updated {formatTime(lastUpdated)}
+                </span>
               )}
               <Button 
                 onClick={fetchNews}
@@ -667,12 +594,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
                                 ({analysis.relevant_news_count || 0}/{analysis.news_count} news)
                               </span>
                             )}
-                            {/* News age indicator */}
-                            {newsMetadata && (
-                              <span className="text-[10px] text-emerald-600">
-                                • {newsMetadata.newestNewsAge}
-                              </span>
-                            )}
                           </div>
                           <Badge className={`text-xs ${
                             decision.includes('BUY') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
@@ -772,11 +693,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         }`}>
                           {item.type}
                         </span>
-                        {item.ageText && (
-                          <span className="text-zinc-600 ml-1 text-[10px]">
-                            ({item.ageText})
-                          </span>
-                        )}
                         <p className="text-zinc-500 truncate mt-0.5">{item.title}</p>
                       </div>
                       <ExternalLink className="w-3 h-3 text-zinc-600 flex-shrink-0" />
@@ -832,12 +748,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
                         <span className="text-xs text-zinc-500">{report.date}</span>
                         <span className="text-xs text-zinc-600">•</span>
                         <span className="text-xs text-zinc-500">{report.time}</span>
-                        {report.ageText && (
-                          <>
-                            <span className="text-xs text-zinc-600">•</span>
-                            <span className="text-xs text-emerald-500">{report.ageText}</span>
-                          </>
-                        )}
                         {report.isHighlighted && (
                           <Badge className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
                             Latest
