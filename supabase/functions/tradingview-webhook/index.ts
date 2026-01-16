@@ -22,23 +22,57 @@ interface TradeSignal {
   message?: string;
 }
 
+// ============================================================================
+// 🔥 FIX: Retry Helper Function with Exponential Backoff
+// ============================================================================
+async function retryOperation<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 100
+): Promise<T> {
+  let lastError: any;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      console.error(`❌ Attempt ${attempt + 1} failed:`, error);
+      
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.log(`⏳ Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const startTime = Date.now();
+  const requestId = crypto.randomUUID();
+  
   try {
-    console.log('🔗 TradingView Webhook received')
+    console.log(`🔗 [${requestId}] TradingView Webhook received`)
     
     const url = new URL(req.url)
     const pathParts = url.pathname.split('/')
     const roomId = pathParts[pathParts.length - 1]
     
-    console.log('📊 Room ID:', roomId)
+    console.log(`📊 [${requestId}] Room ID:`, roomId)
     
     if (!roomId || roomId === 'tradingview-webhook') {
-      return new Response(JSON.stringify({ error: 'Room ID required' }), {
+      return new Response(JSON.stringify({ 
+        error: 'Room ID required',
+        requestId 
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
@@ -48,10 +82,13 @@ serve(async (req) => {
     let body: any
     try {
       body = await req.json()
-      console.log('📦 Webhook payload:', JSON.stringify(body, null, 2))
+      console.log(`📦 [${requestId}] Webhook payload:`, JSON.stringify(body, null, 2))
     } catch (e) {
-      console.error('❌ Failed to parse JSON:', e)
-      return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      console.error(`❌ [${requestId}] Failed to parse JSON:`, e)
+      return new Response(JSON.stringify({ 
+        error: 'Invalid JSON',
+        requestId 
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
@@ -63,88 +100,120 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Verify webhook room exists
-    const { data: webhook, error: webhookError } = await supabase
-      .from('webhooks')
-      .select('*')
-      .eq('room_id', roomId)
-      .single()
+    // ========================================================================
+    // 🔥 STEP 1: Verify webhook room exists (with retry)
+    // ========================================================================
+    const webhook = await retryOperation(async () => {
+      const { data, error } = await supabase
+        .from('webhooks')
+        .select('*')
+        .eq('room_id', roomId)
+        .single()
+      
+      if (error) throw error
+      if (!data) throw new Error('Webhook not found')
+      return data
+    })
 
-    if (webhookError || !webhook) {
-      console.error('❌ Webhook not found:', webhookError)
-      return new Response(JSON.stringify({ error: 'Webhook not found' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
+    console.log(`✅ [${requestId}] Webhook found:`, webhook.id)
 
-    console.log('✅ Webhook found:', webhook.id)
+    // ========================================================================
+    // 🔥 STEP 2: UPSERT tradingview user (FIX RACE CONDITION!)
+    // ========================================================================
+    await retryOperation(async () => {
+      const { error } = await supabase
+        .from('users')
+        .upsert({
+          id: 'tradingview',
+          username: '📊 TradingView',
+          color: '#2962FF',
+          status: 'online',
+          last_seen: new Date().toISOString()
+        }, {
+          onConflict: 'id',
+          ignoreDuplicates: true  // 🔥 FIX: ไม่ error ถ้า exist แล้ว
+        })
+      
+      if (error) throw error
+    })
 
-    // Ensure tradingview user exists
-    const { data: tvUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', 'tradingview')
-      .single()
+    console.log(`✅ [${requestId}] TradingView user ready`)
 
-    if (!tvUser) {
-      console.log('📝 Creating tradingview user...')
-      await supabase.from('users').insert({
-        id: 'tradingview',
-        username: '📊 TradingView',
-        color: '#2962FF',
-        status: 'online'
-      })
-    }
-
-    // Parse trade signal from webhook data
-    const tradeSignal = parseTradeSignal(body)
+    // ========================================================================
+    // 🔥 STEP 3: Parse trade signal
+    // ========================================================================
+    const tradeSignal = parseTradeSignal(body, requestId)
     
-    // Format TradingView alert message
+    // ========================================================================
+    // 🔥 STEP 4: Format TradingView alert message
+    // ========================================================================
     const alertContent = formatTradingViewAlert(body, tradeSignal)
 
-    // Insert message into chat room with enhanced trade data
-    const { data: message, error: messageError } = await supabase.from('messages').insert({
-      room_id: roomId,
-      user_id: 'tradingview',
-      username: '📊 TradingView',
-      color: '#2962FF',
-      content: alertContent,
-      message_type: 'webhook',
-      webhook_data: {
-        ...body,
-        parsed_trade: tradeSignal
+    // ========================================================================
+    // 🔥 STEP 5: Insert message with retry + transaction safety
+    // ========================================================================
+    const message = await retryOperation(async () => {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          room_id: roomId,
+          user_id: 'tradingview',
+          username: '📊 TradingView',
+          color: '#2962FF',
+          content: alertContent,
+          message_type: 'webhook',
+          webhook_data: {
+            ...body,
+            parsed_trade: tradeSignal,
+            request_id: requestId,  // 🔥 Track request
+            received_at: new Date().toISOString()
+          }
+        })
+        .select()
+        .single()
+      
+      if (error) {
+        console.error(`❌ [${requestId}] Failed to insert message:`, error)
+        throw error
       }
-    }).select().single()
+      
+      return data
+    }, 5, 200)  // 🔥 5 retries with 200ms base delay
 
-    if (messageError) {
-      console.error('❌ Failed to insert message:', messageError)
-      throw messageError
-    }
-
-    console.log('✅ Message created:', message.id)
-    console.log('📈 Trade signal:', tradeSignal)
+    const executionTime = Date.now() - startTime
+    console.log(`✅ [${requestId}] Message created:`, message.id, `in ${executionTime}ms`)
+    console.log(`📈 [${requestId}] Trade signal:`, tradeSignal)
 
     return new Response(JSON.stringify({ 
       success: true, 
       message: 'Alert received',
+      requestId,
       messageId: message.id,
-      tradeSignal
+      tradeSignal,
+      executionTime: `${executionTime}ms`
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
   } catch (error: any) {
-    console.error('💥 Error:', error)
-    return new Response(JSON.stringify({ error: error.message }), {
+    const executionTime = Date.now() - startTime
+    console.error(`💥 [${requestId}] Error:`, error)
+    
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      requestId,
+      executionTime: `${executionTime}ms`
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
 })
 
+// ============================================================================
 // Parse trade signal from various webhook formats
-function parseTradeSignal(data: any): TradeSignal {
+// ============================================================================
+function parseTradeSignal(data: any, requestId: string): TradeSignal {
   const { 
     ticker, symbol, action, side,
     price, close, entry, exit,
@@ -189,7 +258,7 @@ function parseTradeSignal(data: any): TradeSignal {
   const tradePnlPercent = parseFloat(pnlPercent || profitPercent || 0)
   
   return {
-    id: `tv-${Date.now()}`,
+    id: `tv-${requestId}-${Date.now()}`,  // 🔥 Unique ID
     date: new Date().toISOString().split('T')[0],
     symbol: ticker || symbol || 'UNKNOWN',
     side: tradeSide,

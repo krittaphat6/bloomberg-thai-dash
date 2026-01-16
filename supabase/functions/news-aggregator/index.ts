@@ -1,4 +1,5 @@
 // supabase/functions/news-aggregator/index.ts
+// ✅ FIXED VERSION - กรองข่าว 24 ชม. + newsMetadata + cache busting
 // ABLE-HF 3.0 Full Analysis via Direct Gemini API
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -7,6 +8,10 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// ✅ NEW: Constants for fresh news filtering
+const FRESH_NEWS_HOURS = 24; // วิเคราะห์เฉพาะข่าว 24 ชม. ล่าสุด
+const MIN_FRESH_NEWS_COUNT = 5; // ขั้นต่ำ 5 ข่าวใหม่
 
 interface RawNewsItem {
   id: string;
@@ -22,6 +27,7 @@ interface RawNewsItem {
   upvotes?: number;
   comments?: number;
   relatedAssets?: string[];
+  ageText?: string; // ✅ NEW
 }
 
 interface MacroAnalysis {
@@ -32,6 +38,23 @@ interface MacroAnalysis {
   change?: string;
   changeValue?: number;
   ableAnalysis?: any;
+}
+
+// ============================================
+// ✅ NEW: HELPER FUNCTIONS FOR FRESH NEWS
+// ============================================
+
+function isNewsFresh(timestamp: number): boolean {
+  const ageHours = (Date.now() - timestamp) / (1000 * 60 * 60);
+  return ageHours <= FRESH_NEWS_HOURS;
+}
+
+function getNewsAgeText(timestamp: number): string {
+  const ageMinutes = Math.floor((Date.now() - timestamp) / (1000 * 60));
+  if (ageMinutes < 60) return `${ageMinutes}m ago`;
+  const ageHours = Math.floor(ageMinutes / 60);
+  if (ageHours < 24) return `${ageHours}h ago`;
+  return `${Math.floor(ageHours / 24)}d ago`;
 }
 
 // ============================================
@@ -83,15 +106,16 @@ function formatTimeAgo(timestamp: number): string {
 async function fetchReddit(subreddit: string, displayName: string): Promise<RawNewsItem[]> {
   try {
     const response = await fetch(
-      `https://www.reddit.com/r/${subreddit}/hot.json?limit=100`,
+      `https://www.reddit.com/r/${subreddit}/hot.json?limit=100&_=${Date.now()}`, // ✅ cache busting
       { headers: { 'User-Agent': 'AbleTerminal/1.0' } }
     );
     
     if (!response.ok) return [];
     
     const data = await response.json();
-    return (data.data?.children || []).map((post: any) => {
+    const posts = (data.data?.children || []).map((post: any) => {
       const title = post.data.title;
+      const timestamp = post.data.created_utc * 1000;
       return {
         id: `r-${subreddit}-${post.data.id}`,
         title,
@@ -99,8 +123,9 @@ async function fetchReddit(subreddit: string, displayName: string): Promise<RawN
         url: `https://reddit.com${post.data.permalink}`,
         source: `r/${subreddit}`,
         category: displayName,
-        publishedAt: new Date(post.data.created_utc * 1000).toISOString(),
-        timestamp: post.data.created_utc * 1000,
+        publishedAt: new Date(timestamp).toISOString(),
+        timestamp,
+        ageText: getNewsAgeText(timestamp), // ✅ NEW
         sentiment: analyzeSentiment(title),
         importance: post.data.score > 500 ? 'high' : post.data.score > 100 ? 'medium' : 'low',
         upvotes: post.data.ups,
@@ -108,6 +133,12 @@ async function fetchReddit(subreddit: string, displayName: string): Promise<RawN
         relatedAssets: matchAssets(title)
       };
     });
+    
+    // ✅ NEW: กรองเฉพาะข่าวใหม่ 24 ชม.
+    const freshPosts = posts.filter((p: RawNewsItem) => isNewsFresh(p.timestamp));
+    console.log(`📰 r/${subreddit}: ${freshPosts.length}/${posts.length} fresh news`);
+    
+    return freshPosts;
   } catch (error) {
     console.error(`Reddit ${subreddit} error:`, error);
     return [];
@@ -116,15 +147,28 @@ async function fetchReddit(subreddit: string, displayName: string): Promise<RawN
 
 async function fetchHackerNews(query: string): Promise<RawNewsItem[]> {
   try {
+    // ✅ NEW: เพิ่ม timestamp filter + cache busting
+    const minTimestamp = Math.floor((Date.now() - (FRESH_NEWS_HOURS * 60 * 60 * 1000)) / 1000);
     const response = await fetch(
-      `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(query)}&tags=story&hitsPerPage=50`
+      `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(query)}&tags=story&hitsPerPage=100&numericFilters=created_at_i>${minTimestamp}&_=${Date.now()}`
     );
     
     if (!response.ok) return [];
     
     const data = await response.json();
-    return (data.hits || []).map((hit: any) => {
+    const allHits = (data.hits || []);
+    
+    // ✅ NEW: กรองเฉพาะข่าวใหม่อีกรอบ
+    const freshHits = allHits.filter((hit: any) => {
+      const timestamp = new Date(hit.created_at).getTime();
+      return isNewsFresh(timestamp);
+    });
+    
+    console.log(`📰 HackerNews (${query}): ${freshHits.length}/${allHits.length} fresh news`);
+    
+    return freshHits.map((hit: any) => {
       const title = hit.title || '';
+      const timestamp = new Date(hit.created_at).getTime();
       return {
         id: `hn-${hit.objectID}`,
         title,
@@ -133,7 +177,8 @@ async function fetchHackerNews(query: string): Promise<RawNewsItem[]> {
         source: 'Hacker News',
         category: 'Tech',
         publishedAt: hit.created_at,
-        timestamp: new Date(hit.created_at).getTime(),
+        timestamp,
+        ageText: getNewsAgeText(timestamp), // ✅ NEW
         sentiment: analyzeSentiment(title),
         importance: (hit.points || 0) > 100 ? 'high' : 'medium',
         upvotes: hit.points || 0,
@@ -150,14 +195,25 @@ async function fetchHackerNews(query: string): Promise<RawNewsItem[]> {
 async function fetchCryptoCompare(): Promise<RawNewsItem[]> {
   try {
     const response = await fetch(
-      'https://min-api.cryptocompare.com/data/v2/news/?lang=EN&categories=BTC,ETH,Trading,Market'
+      `https://min-api.cryptocompare.com/data/v2/news/?lang=EN&categories=BTC,ETH,Trading,Market&_=${Date.now()}` // ✅ cache busting
     );
     
     if (!response.ok) return [];
     
     const data = await response.json();
-    return (data.Data || []).slice(0, 40).map((item: any) => {
+    const allArticles = data.Data || [];
+    
+    // ✅ NEW: กรองเฉพาะข่าวใหม่ 24 ชม.
+    const freshNews = allArticles.filter((item: any) => {
+      const timestamp = item.published_on * 1000;
+      return isNewsFresh(timestamp);
+    });
+    
+    console.log(`📰 CryptoCompare: ${freshNews.length}/${allArticles.length} fresh news`);
+    
+    return freshNews.map((item: any) => {
       const title = item.title;
+      const timestamp = item.published_on * 1000;
       return {
         id: `cc-${item.id}`,
         title,
@@ -165,8 +221,9 @@ async function fetchCryptoCompare(): Promise<RawNewsItem[]> {
         url: item.url,
         source: item.source || 'CryptoCompare',
         category: 'Crypto',
-        publishedAt: new Date(item.published_on * 1000).toISOString(),
-        timestamp: item.published_on * 1000,
+        publishedAt: new Date(timestamp).toISOString(),
+        timestamp,
+        ageText: getNewsAgeText(timestamp), // ✅ NEW
         sentiment: analyzeSentiment(title),
         importance: 'medium',
         upvotes: 0,
@@ -183,14 +240,25 @@ async function fetchCryptoCompare(): Promise<RawNewsItem[]> {
 async function fetchNewsDataIO(): Promise<RawNewsItem[]> {
   try {
     const response = await fetch(
-      'https://saurav.tech/NewsAPI/top-headlines/category/business/us.json'
+      `https://saurav.tech/NewsAPI/top-headlines/category/business/us.json?_=${Date.now()}` // ✅ cache busting
     );
     
     if (!response.ok) return [];
     
     const data = await response.json();
-    return (data.articles || []).slice(0, 30).map((item: any, i: number) => {
+    const allArticles = data.articles || [];
+    
+    // ✅ NEW: กรองเฉพาะข่าวใหม่
+    const freshArticles = allArticles.filter((item: any) => {
+      const timestamp = new Date(item.publishedAt || Date.now()).getTime();
+      return isNewsFresh(timestamp);
+    });
+    
+    console.log(`📰 NewsData: ${freshArticles.length}/${allArticles.length} fresh articles`);
+    
+    return freshArticles.map((item: any, i: number) => {
       const title = item.title || '';
+      const timestamp = new Date(item.publishedAt || Date.now()).getTime();
       return {
         id: `news-${i}-${Date.now()}`,
         title,
@@ -199,7 +267,8 @@ async function fetchNewsDataIO(): Promise<RawNewsItem[]> {
         source: item.source?.name || 'News',
         category: 'Business',
         publishedAt: item.publishedAt || new Date().toISOString(),
-        timestamp: new Date(item.publishedAt || Date.now()).getTime(),
+        timestamp,
+        ageText: getNewsAgeText(timestamp), // ✅ NEW
         sentiment: analyzeSentiment(title),
         importance: 'medium',
         upvotes: 0,
@@ -235,24 +304,31 @@ async function fetchFinancialNews(): Promise<RawNewsItem[]> {
       
       if (titleMatch) {
         const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
-        items.push({
-          id: `mw-${i}-${Date.now()}`,
-          title,
-          description: '',
-          url: linkMatch ? linkMatch[1].trim() : '#',
-          source: 'MarketWatch',
-          category: 'Markets',
-          publishedAt: dateMatch ? dateMatch[1].trim() : new Date().toISOString(),
-          timestamp: dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now(),
-          sentiment: analyzeSentiment(title),
-          importance: 'high',
-          upvotes: 0,
-          comments: 0,
-          relatedAssets: matchAssets(title)
-        });
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        
+        // ✅ NEW: กรองเฉพาะข่าวใหม่
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `mw-${i}-${Date.now()}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'MarketWatch',
+            category: 'Markets',
+            publishedAt: dateMatch ? dateMatch[1].trim() : new Date().toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp), // ✅ NEW
+            sentiment: analyzeSentiment(title),
+            importance: 'high',
+            upvotes: 0,
+            comments: 0,
+            relatedAssets: matchAssets(title)
+          });
+        }
       }
     }
     
+    console.log(`📰 MarketWatch: ${items.length} fresh news`);
     return items;
   } catch (error) {
     console.error('Financial news error:', error);
@@ -273,8 +349,8 @@ function buildFullAnalysisPrompt(news: any[], symbol: string): string {
 ## TASK
 วิเคราะห์สินทรัพย์: **${symbol}**
 
-## INPUT (${news.length} news items)
-${JSON.stringify(news, null, 2)}
+## INPUT (${news.length} news items - LAST 24 HOURS ONLY)
+${JSON.stringify(news.slice(0, 30), null, 2)}
 
 ## 40 MODULES SYSTEM
 
@@ -333,16 +409,7 @@ ${JSON.stringify(news, null, 2)}
 2. ให้คะแนนแต่ละ module: -100 ถึง +100
 3. คำนวณ weighted_sum = Σ(score_i × weight_i)
 4. Apply sigmoid: P_up = 1/(1+exp(-weighted_sum/10))
-5. Enhancements:
-   - quantum_boost: 0.05-0.15 (based on pattern recognition)
-   - neural_boost: 0.03-0.10 (based on deep learning signals)
-6. Final P_up = P_up × (1 + quantum_boost + neural_boost)
-7. Trading signal:
-   - P_up ≥ 90%: STRONG_BUY
-   - P_up ≥ 70%: BUY
-   - P_up ≥ 40%: HOLD
-   - P_up ≥ 20%: SELL
-   - P_up < 20%: STRONG_SELL
+5. Final P_up adjusted with regime
 
 ## OUTPUT FORMAT (JSON ONLY - NO MARKDOWN, NO BACKTICKS)
 {
@@ -352,75 +419,18 @@ ${JSON.stringify(news, null, 2)}
   "confidence": 76,
   "regime_adjusted_confidence": 76.3,
   "market_regime": "MODERATE_VOLATILITY",
-  "quantum_enhancement": 0.12,
-  "neural_enhancement": 0.08,
-  "scores": {
-    "macro_neural_forecast": 65,
-    "central_bank_sentiment": 80,
-    "yield_curve_signal": 55,
-    "inflation_momentum": 60,
-    "gdp_growth_trajectory": 50,
-    "employment_dynamics": 45,
-    "trade_balance_flow": 40,
-    "fiscal_policy_impact": 35,
-    "news_sentiment_cfa": 75,
-    "social_media_pulse": 70,
-    "institutional_flow": 65,
-    "retail_sentiment": 60,
-    "options_sentiment": 55,
-    "cot_positioning": 50,
-    "dark_pool_activity": 45,
-    "etf_flow_momentum": 40,
-    "trend_regime_detector": 60,
-    "momentum_oscillator": 55,
-    "volatility_regime": 50,
-    "support_resistance": 45,
-    "pattern_recognition": 40,
-    "volume_analysis": 35,
-    "market_breadth": 30,
-    "intermarket_correlation": 25,
-    "event_shock": 70,
-    "geopolitical_risk": 65,
-    "black_swan_detector": 60,
-    "liquidity_risk": 55,
-    "correlation_breakdown": 50,
-    "tail_risk_monitor": 45,
-    "regulatory_risk": 40,
-    "systemic_risk": 35,
-    "quantum_sentiment": 65,
-    "neural_ensemble": 60,
-    "nlp_deep_analysis": 55,
-    "satellite_data": 50,
-    "alternative_data": 45,
-    "machine_learning_signal": 40,
-    "sentiment_network": 35,
-    "predictive_analytics": 30
-  },
-  "category_performance": {
-    "macro_economic": 68.5,
-    "sentiment_flow": 72.3,
-    "technical_regime": 55.8,
-    "risk_event": 45.2,
-    "alternative_ai": 60.1
-  },
-  "meta_insights": {
-    "dominant_paradigm": "Risk-On",
-    "consensus_level": 75,
-    "volatility_regime": "Moderate",
-    "trend_alignment": 82
-  },
   "trading_signal": {
     "signal": "BUY",
     "icon": "🟢",
     "color": "#22C55E",
     "strength": 75
   },
-  "thai_summary": "ทองคำมีแนวโน้มขึ้นแรง จากปัจจัยนโยบายธนาคารกลางและความกังวลเงินเฟ้อ ควรพิจารณาเข้า Long Position",
-  "key_drivers": ["นโยบาย Fed", "เงินเฟ้อ", "ความเสี่ยงภูมิรัฐศาสตร์"],
-  "risk_warnings": ["ถ้า Fed เปลี่ยนนโยบายกะทันหัน", "ดอลลาร์แข็งค่าเร็ว"],
+  "thai_summary": "สรุปภาษาไทย 2-3 ประโยค",
+  "key_drivers": ["driver1", "driver2", "driver3"],
+  "risk_warnings": ["risk1", "risk2"],
   "analyzed_at": "${new Date().toISOString()}",
   "news_count": ${news.length},
-  "relevant_news_count": 18
+  "relevant_news_count": 0
 }`;
 }
 
@@ -454,12 +464,13 @@ async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): P
         source: n.source,
         timestamp: new Date(n.timestamp).toISOString(),
         category: n.category,
+        ageText: n.ageText,
         relatedAssets: n.relatedAssets || []
       }));
 
       const prompt = buildFullAnalysisPrompt(allNewsDetailed, symbol);
 
-      // 🔴 DIRECT GEMINI API CALL (ไม่ผ่าน Lovable Gateway)
+      // 🔴 DIRECT GEMINI API CALL
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
         {
@@ -573,7 +584,8 @@ function generateFallbackAnalysis(news: RawNewsItem[], symbols: string[]): Macro
         thai_summary: `${symbol}: ใช้ Fallback Analysis (Gemini API unavailable)`,
         risk_warnings: ['Using fallback analysis - Gemini API unavailable'],
         analyzed_at: new Date().toISOString(),
-        news_count: news.length
+        news_count: news.length,
+        relevant_news_count: relevantNews.length
       }
     };
   });
@@ -589,7 +601,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log('🚀 Starting ABLE-HF 3.0 with Direct Gemini API...');
+    console.log('🚀 Starting ABLE-HF 3.0 with Fresh News Filter (24h)...');
     const startTime = Date.now();
     
     let pinnedAssets: string[] = [];
@@ -627,9 +639,28 @@ serve(async (req) => {
       ...hackerNewsStock, ...cryptoNews, ...businessNews, ...marketNews
     ];
 
+    // ✅ NEW: กรองเฉพาะข่าวใหม่อีกรอบ (double check)
+    const freshNews = allNews.filter(item => isNewsFresh(item.timestamp));
+
+    console.log(`
+📊 News Filter Report:
+   Total fetched: ${allNews.length}
+   Fresh (24h): ${freshNews.length}
+   Oldest: ${allNews.length > 0 ? getNewsAgeText(Math.min(...allNews.map(n => n.timestamp))) : 'N/A'}
+   Newest: ${allNews.length > 0 ? getNewsAgeText(Math.max(...allNews.map(n => n.timestamp))) : 'N/A'}
+    `);
+
+    // ถ้าข่าวใหม่น้อยเกินไป ให้แจ้งเตือน
+    if (freshNews.length < MIN_FRESH_NEWS_COUNT) {
+      console.warn(`⚠️ Only ${freshNews.length} fresh news found!`);
+    }
+
+    // ใช้ freshNews หรือ allNews (ถ้าข่าวใหม่น้อยเกินไป)
+    const newsToAnalyze = freshNews.length >= MIN_FRESH_NEWS_COUNT ? freshNews : allNews;
+
     // Deduplicate
     const seen = new Set<string>();
-    allNews = allNews.filter(n => {
+    const uniqueNews = newsToAnalyze.filter(n => {
       const key = n.title.toLowerCase().substring(0, 50);
       if (seen.has(key)) return false;
       seen.add(key);
@@ -637,18 +668,18 @@ serve(async (req) => {
     });
 
     // Sort by timestamp
-    allNews.sort((a, b) => b.timestamp - a.timestamp);
-    console.log(`✅ ${allNews.length} unique news items fetched`);
+    uniqueNews.sort((a, b) => b.timestamp - a.timestamp);
+    console.log(`✅ ${uniqueNews.length} unique news items ready for analysis`);
 
     // Gemini Analysis
-    const macroAnalysis = await analyzeWithGemini(allNews, pinnedAssets);
+    const macroAnalysis = await analyzeWithGemini(uniqueNews, pinnedAssets);
     console.log(`✅ Gemini analysis complete: ${macroAnalysis.length} assets analyzed`);
 
     // Build forYou items
     const forYouItems: any[] = [];
     if (pinnedAssets.length > 0) {
       for (const asset of pinnedAssets) {
-        allNews.filter(item => item.relatedAssets?.includes(asset)).slice(0, 3)
+        uniqueNews.filter(item => item.relatedAssets?.includes(asset)).slice(0, 3)
           .forEach(item => {
             forYouItems.push({
               id: item.id,
@@ -664,7 +695,7 @@ serve(async (req) => {
       }
     }
     
-    allNews.filter(item => item.importance === 'high').slice(0, 5)
+    uniqueNews.filter(item => item.importance === 'high').slice(0, 5)
       .forEach(item => {
         const symbol = item.relatedAssets?.[0] || item.category;
         if (!forYouItems.find(f => f.id === item.id)) {
@@ -684,7 +715,7 @@ serve(async (req) => {
     forYouItems.sort((a, b) => b.timestamp - a.timestamp);
 
     // Daily Reports
-    const dailyReports = allNews.filter(item => item.importance === 'high').slice(0, 5)
+    const dailyReports = uniqueNews.filter(item => item.importance === 'high').slice(0, 5)
       .map((item, i) => {
         const date = new Date(item.timestamp);
         return {
@@ -701,7 +732,7 @@ serve(async (req) => {
       });
 
     // X Notifications
-    const xNotifications = allNews.filter(item => item.upvotes && item.upvotes > 50).slice(0, 6)
+    const xNotifications = uniqueNews.filter(item => item.upvotes && item.upvotes > 50).slice(0, 6)
       .map(item => ({
         id: item.id,
         source: item.source.replace('r/', ''),
@@ -713,19 +744,32 @@ serve(async (req) => {
     const processingTime = Date.now() - startTime;
     console.log(`✅ Total processing time: ${processingTime}ms`);
 
+    // ✅ NEW: สร้าง newsMetadata
+    const newsMetadata = {
+      totalFetched: allNews.length,
+      freshNewsCount: freshNews.length,
+      analyzedCount: uniqueNews.length,
+      freshNewsHours: FRESH_NEWS_HOURS,
+      oldestNewsAge: uniqueNews.length > 0 ? getNewsAgeText(Math.min(...uniqueNews.map(n => n.timestamp))) : 'N/A',
+      newestNewsAge: uniqueNews.length > 0 ? getNewsAgeText(Math.max(...uniqueNews.map(n => n.timestamp))) : 'N/A',
+      sources: ['Reddit', 'HN', 'CryptoCompare', 'Business', 'MarketWatch'],
+      sourcesCount: 13
+    };
+
     return new Response(
       JSON.stringify({
         success: true,
         timestamp: Date.now(),
         processingTime,
+        newsMetadata, // ✅ NEW
         macro: macroAnalysis,
         forYou: forYouItems.slice(0, 15),
         dailyReports,
         xNotifications,
-        rawNews: allNews.slice(0, 60),
+        rawNews: uniqueNews.slice(0, 60),
         sourcesCount: 13,
         sources: ['Reddit', 'HN', 'CryptoCompare', 'Business', 'MarketWatch'],
-        gemini_api: 'direct' // Flag to indicate using direct Gemini
+        gemini_api: 'direct'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
