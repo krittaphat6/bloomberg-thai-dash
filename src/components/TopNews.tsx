@@ -1,3 +1,6 @@
+// src/components/TopNews.tsx
+// ✅ FIXED VERSION - Refresh ทุก 10 นาที + เฉพาะตอนเปิด component + แสดง metadata
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -89,119 +92,91 @@ interface XNotification {
   url: string;
 }
 
+interface RawNewsItem {
+  id: string;
+  title: string;
+  source: string;
+  timestamp: number;
+  sentiment?: string;
+  url: string;
+}
+
 interface PinnedAsset {
   symbol: string;
   addedAt: number;
 }
 
-interface RawNewsItem {
-  id: string;
-  title: string;
-  source: string;
-  category: string;
+interface AssetPrice {
+  price: number;
+  change: number;
+  changePercent: number;
 }
 
-// ============ CONSTANTS ============
+// ✅ NEW: News Metadata interface
+interface NewsMetadata {
+  totalFetched: number;
+  freshNewsCount: number;
+  analyzedCount: number;
+  freshNewsHours: number;
+  oldestNewsAge: string;
+  newestNewsAge: string;
+  sources: string[];
+  sourcesCount: number;
+}
+
 const ASSET_CATEGORIES = {
   forex: {
-    label: '💱 Forex',
-    assets: ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'USDCAD', 'NZDUSD']
+    label: 'Forex',
+    assets: ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD']
   },
   commodities: {
-    label: '🥇 Commodities',
-    assets: ['XAUUSD', 'XAGUSD', 'USOIL', 'UKOIL']
+    label: 'Commodities',
+    assets: ['XAUUSD', 'XAGUSD', 'USOIL', 'UKOIL', 'NATGAS']
   },
   crypto: {
-    label: '₿ Crypto',
-    assets: ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD']
+    label: 'Crypto',
+    assets: ['BTCUSD', 'ETHUSD', 'BNBUSD', 'ADAUSD', 'SOLUSD']
   },
   indices: {
-    label: '📊 Indices',
-    assets: ['US500', 'US30', 'US100', 'DE40', 'JP225']
+    label: 'Indices',
+    assets: ['US500', 'US100', 'US30', 'DE40', 'UK100', 'JP225']
   }
 };
 
-const PINNED_ASSETS_STORAGE_KEY = 'able-pinned-assets';
-
-interface TopNewsProps {
-  onMaximize?: () => void;
-  onClose?: () => void;
-}
-
-// Default pinned assets
-const DEFAULT_PINNED_ASSETS: PinnedAsset[] = [
-  { symbol: 'XAUUSD', addedAt: Date.now() }
-];
-
-const TopNews: React.FC<TopNewsProps> = () => {
+export const TopNews = () => {
   const { toast } = useToast();
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [activeTab, setActiveTab] = useState<'macro' | 'reports'>('macro');
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   
-  // Data state
+  // States
   const [macroData, setMacroData] = useState<MacroAnalysis[]>([]);
   const [forYouItems, setForYouItems] = useState<ForYouItem[]>([]);
   const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
   const [xNotifications, setXNotifications] = useState<XNotification[]>([]);
   const [rawNews, setRawNews] = useState<RawNewsItem[]>([]);
-
-  // ABLE-HF 3.0 State - Analysis comes from backend now
-  const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>(DEFAULT_PINNED_ASSETS);
-  const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleAnalysisResult>>({});
-  
-  // Real-time price data
-  const [assetPrices, setAssetPrices] = useState<Record<string, { price: number; change: number; changePercent: number }>>({});
-  
-  // Modal state for Gemini thinking
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState<'macro' | 'for-you' | 'daily' | 'x'>('macro');
   const [selectedAssetForModal, setSelectedAssetForModal] = useState<string | null>(null);
+  const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleAnalysisResult>>({});
+  const [analyzing, setAnalyzing] = useState(false);
+  const [showAddAsset, setShowAddAsset] = useState(false);
+  
+  // Asset management
+  const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>([
+    { symbol: 'XAUUSD', addedAt: Date.now() }
+  ]);
+  const [assetPrices, setAssetPrices] = useState<Record<string, AssetPrice>>({});
 
-  // Load pinned assets from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem(PINNED_ASSETS_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setPinnedAssets(parsed);
-        }
-      } catch (e) {
-        console.error('Error loading pinned assets:', e);
-      }
-    }
-  }, []);
+  // ✅ NEW: Metadata และ component active state
+  const [newsMetadata, setNewsMetadata] = useState<NewsMetadata | null>(null);
+  const [isComponentActive, setIsComponentActive] = useState(false);
 
-  // Save pinned assets to localStorage
-  useEffect(() => {
-    if (pinnedAssets.length > 0) {
-      localStorage.setItem(PINNED_ASSETS_STORAGE_KEY, JSON.stringify(pinnedAssets));
-    }
-  }, [pinnedAssets]);
-
-  // Time updates
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit',
-      hour12: false 
-    });
-  };
-
-  // Fetch real-time prices for pinned assets
+  // Fetch prices
   const fetchPrices = useCallback(async () => {
-    const prices: Record<string, { price: number; change: number; changePercent: number }> = {};
-    
+    const prices: Record<string, AssetPrice> = {};
     for (const asset of pinnedAssets) {
       try {
-        const isCrypto = ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD'].includes(asset.symbol);
+        const isCrypto = ['BTCUSD', 'ETHUSD', 'BNBUSD', 'ADAUSD', 'SOLUSD'].includes(asset.symbol);
         const priceData = isCrypto 
           ? await fetchCryptoPrice(asset.symbol)
           : await fetchRealTimePrice(asset.symbol);
@@ -249,9 +224,20 @@ const TopNews: React.FC<TopNewsProps> = () => {
         setDailyReports(data.dailyReports || []);
         setXNotifications(data.xNotifications || []);
         setRawNews(data.rawNews || []);
+        setNewsMetadata(data.newsMetadata || null); // ✅ NEW
         setLastUpdated(new Date());
         
         console.log(`✅ Loaded ${data.macro?.length || 0} macro items, ${data.rawNews?.length || 0} news`);
+        
+        // ✅ NEW: แสดง metadata ใน console
+        if (data.newsMetadata) {
+          console.log(`
+📊 News Analysis Debug:
+   Fresh news: ${data.newsMetadata.freshNewsCount}/${data.newsMetadata.totalFetched}
+   Analyzed: ${data.newsMetadata.analyzedCount}
+   Age range: ${data.newsMetadata.newestNewsAge} - ${data.newsMetadata.oldestNewsAge}
+          `);
+        }
         
         // Extract ABLE analysis from backend response
         const ableResults: Record<string, AbleAnalysisResult> = {};
@@ -264,7 +250,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
         
         setAbleAnalysis(ableResults);
         
-        // Check if analysis available
         if (Object.keys(ableResults).length === 0 && pinnedAssets.length > 0) {
           console.warn('⚠️ No ABLE analysis from backend');
         }
@@ -303,7 +288,6 @@ const TopNews: React.FC<TopNewsProps> = () => {
     setPinnedAssets(prev => [...prev, { symbol, addedAt: Date.now() }]);
     toast({ title: `✅ ${ASSET_DISPLAY_NAMES[symbol] || symbol} added` });
     
-    // Trigger re-fetch to get analysis for new asset
     setTimeout(() => fetchNews(), 500);
   };
 
@@ -317,16 +301,27 @@ const TopNews: React.FC<TopNewsProps> = () => {
     });
   };
 
-  // Initial load
+  // ✅ NEW: Fetch เมื่อเปิด component + Auto-refresh ทุก 10 นาที + Cleanup
   useEffect(() => {
+    console.log('🚀 TopNews component mounted - Starting AI analysis...');
+    setIsComponentActive(true);
+    
+    // 1. Fetch ทันทีที่เปิด component
     fetchNews();
-  }, []);
-
-  // Auto-refresh every 2 minutes
-  useEffect(() => {
-    const interval = setInterval(fetchNews, 120000);
-    return () => clearInterval(interval);
-  }, [fetchNews]);
+    
+    // 2. ตั้ง interval refresh ทุก 10 นาที (600,000 ms)
+    const refreshInterval = setInterval(() => {
+      console.log('🔄 10-minute auto-refresh triggered');
+      fetchNews();
+    }, 600000); // 600000ms = 10 minutes
+    
+    // 3. Cleanup: หยุด interval เมื่อปิด component
+    return () => {
+      console.log('👋 TopNews component unmounted - Stopping auto-refresh');
+      clearInterval(refreshInterval);
+      setIsComponentActive(false);
+    };
+  }, []); // [] = run เฉพาะตอน mount/unmount เท่านั้น
 
   // Get available assets (not already pinned)
   const getAvailableAssets = () => {
@@ -335,6 +330,26 @@ const TopNews: React.FC<TopNewsProps> = () => {
       ...category,
       assets: category.assets.filter(a => !pinnedSymbols.includes(a))
     }));
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatTimeAgo = (timestamp: number) => {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    return `${Math.floor(seconds / 86400)}d ago`;
+  };
+
+  // ✅ NEW: คำนวณเวลา next refresh
+  const getNextRefreshTime = () => {
+    if (!lastUpdated) return null;
+    const nextRefresh = new Date(lastUpdated.getTime() + 600000); // +10 min
+    const remaining = Math.floor((nextRefresh.getTime() - Date.now()) / 60000);
+    return remaining > 0 ? `${remaining} min` : 'now';
   };
 
   if (initialLoading) {
@@ -362,14 +377,39 @@ const TopNews: React.FC<TopNewsProps> = () => {
               </h1>
               <p className="text-xs md:text-sm text-zinc-500 flex items-center gap-1 mt-1">
                 <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
-                ABLE-HF 3.0 • Gemini AI Analysis
+                ABLE-HF 3.0 • Gemini AI Analysis • Auto-refresh: 10 min
               </p>
+              
+              {/* ✅ NEW: Debug badges */}
+              {newsMetadata && (
+                <div className="flex items-center gap-2 mt-2 text-xs flex-wrap">
+                  <Badge variant="outline" className="border-emerald-500/30 text-emerald-400">
+                    <RefreshCw className="w-3 h-3 mr-1 inline" />
+                    {newsMetadata.freshNewsCount} fresh news (24h)
+                  </Badge>
+                  <Badge variant="outline" className="border-zinc-700 text-zinc-400">
+                    <Clock className="w-3 h-3 mr-1 inline" />
+                    {newsMetadata.newestNewsAge} - {newsMetadata.oldestNewsAge}
+                  </Badge>
+                  {isComponentActive && (
+                    <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 animate-pulse">
+                      🟢 Live Analysis
+                    </Badge>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 md:gap-4">
+              {/* ✅ NEW: แสดง next refresh time */}
               {lastUpdated && (
-                <span className="text-xs md:text-sm text-zinc-600 hidden sm:block">
-                  Updated {formatTime(lastUpdated)}
-                </span>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs md:text-sm text-zinc-600 hidden sm:block">
+                    Updated {formatTime(lastUpdated)}
+                  </span>
+                  <span className="text-[10px] text-zinc-700">
+                    Next: {getNextRefreshTime()}
+                  </span>
+                </div>
               )}
               <Button 
                 onClick={fetchNews}
@@ -378,176 +418,182 @@ const TopNews: React.FC<TopNewsProps> = () => {
                 variant="ghost"
                 className="text-zinc-400 hover:text-white hover:bg-zinc-800"
               >
-                {loading ? <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <RefreshCw className="w-4 h-4 md:w-5 md:h-5" />}
-              </Button>
-              <Button 
-                variant="outline"
-                size="sm"
-                className="border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800 text-xs md:text-sm"
-              >
-                <Settings className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                <span className="hidden sm:inline">Personalize</span>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               </Button>
             </div>
           </div>
         </div>
 
-        {/* Tabs - Clean Style */}
-        <div className="border-b border-zinc-800 flex px-4 md:px-6 bg-zinc-950">
-          <button 
-            onClick={() => setActiveTab('macro')}
-            className={`px-3 py-2 md:px-4 md:py-3 text-sm md:text-base transition-all ${
-              activeTab === 'macro' 
-                ? 'text-emerald-400 border-b-2 border-emerald-400' 
-                : 'text-zinc-500 hover:text-white'
-            }`}
-          >
-            <span className="flex items-center gap-1 md:gap-2">
-              <Zap className="w-3 h-3 md:w-4 md:h-4" />
-              AI Macro Desk
-            </span>
-          </button>
-          <button 
-            onClick={() => setActiveTab('reports')}
-            className={`px-3 py-2 md:px-4 md:py-3 text-sm md:text-base transition-all ${
-              activeTab === 'reports' 
-                ? 'text-emerald-400 border-b-2 border-emerald-400' 
-                : 'text-zinc-500 hover:text-white'
-            }`}
-          >
-            <span className="flex items-center gap-1 md:gap-2">
-              <FileText className="w-3 h-3 md:w-4 md:h-4" />
-              Daily Reports
-            </span>
-          </button>
+        {/* Tabs */}
+        <div className="border-b border-zinc-800 px-4 md:px-6">
+          <div className="flex gap-4 md:gap-8">
+            {[
+              { key: 'macro', label: 'AI Macro Desk', icon: Brain },
+              { key: 'for-you', label: 'For You', icon: Target },
+              { key: 'daily', label: 'Daily Reports', icon: FileText },
+              { key: 'x', label: 'X Feed', icon: Users }
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key as any)}
+                className={`py-3 px-1 text-xs md:text-sm font-medium transition-colors relative flex items-center gap-1 md:gap-2 ${
+                  activeTab === tab.key
+                    ? 'text-emerald-400'
+                    : 'text-zinc-600 hover:text-zinc-400'
+                }`}
+              >
+                <tab.icon className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                {activeTab === tab.key && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Content Area */}
-        <ScrollArea className="flex-1 p-3 md:p-6 bg-zinc-950">
-          {activeTab === 'macro' ? (
-            <>
-              {/* AI Macro Desk Section */}
-              <div className="mb-6 md:mb-8">
-                <div className="flex items-center justify-between mb-4 md:mb-6">
-                  <div className="flex items-center gap-2 md:gap-3">
-                    <Zap className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
-                    <div>
-                      <h2 className="text-base md:text-lg font-medium text-white flex items-center gap-2">
-                        AI Macro Desk
-                        <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      </h2>
-                      <p className="text-xs md:text-sm text-zinc-500">40-Module ABLE-HF 3.0 Analysis</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-zinc-400 hover:text-white hover:bg-zinc-800 text-xs md:text-sm"
-                        >
-                          <Plus className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                          <span className="hidden sm:inline">Add</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-48 bg-zinc-900 border-zinc-700" align="end">
-                        {getAvailableAssets().map((category) => (
-                          category.assets.length > 0 && (
-                            <div key={category.label}>
-                              <DropdownMenuLabel className="text-zinc-400 text-xs">
-                                {category.label}
-                              </DropdownMenuLabel>
-                              {category.assets.map((asset) => (
-                                <DropdownMenuItem 
-                                  key={asset}
-                                  onClick={() => handleAddAsset(asset)}
-                                  className="text-white hover:bg-zinc-800 cursor-pointer"
-                                >
-                                  {ASSET_DISPLAY_NAMES[asset] || asset}
-                                </DropdownMenuItem>
-                              ))}
-                              <DropdownMenuSeparator className="bg-zinc-700" />
-                            </div>
-                          )
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    
-                    <button className="text-zinc-500 hover:text-emerald-400 text-xs md:text-sm flex items-center gap-1">
-                      View All <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
-                    </button>
-                  </div>
+        <ScrollArea className="flex-1">
+          {activeTab === 'macro' && (
+            <div className="p-4 md:p-6">
+              {/* Asset Management */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-medium text-zinc-400">Pinned Assets ({pinnedAssets.length}/8)</h2>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowAddAsset(!showAddAsset)}
+                    className="h-7 text-xs border-zinc-700 text-zinc-400 hover:text-white hover:border-emerald-500"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add Asset
+                  </Button>
                 </div>
 
-                {/* Macro Cards Grid - Responsive */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                  {pinnedAssets.map((pinned) => {
-                    const analysis = ableAnalysis[pinned.symbol];
-                    const analyzing = !analysis && loading;
-                    const priceData = assetPrices[pinned.symbol];
+                {showAddAsset && (
+                  <Card className="p-3 mb-3 bg-zinc-900 border-zinc-800">
+                    <div className="space-y-2">
+                      {getAvailableAssets().map(category => (
+                        category.assets.length > 0 && (
+                          <div key={category.label}>
+                            <p className="text-xs text-zinc-600 mb-1">{category.label}</p>
+                            <div className="flex flex-wrap gap-1">
+                              {category.assets.map(asset => (
+                                <Badge
+                                  key={asset}
+                                  variant="outline"
+                                  className="cursor-pointer border-zinc-700 text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 text-xs"
+                                  onClick={() => {
+                                    handleAddAsset(asset);
+                                    setShowAddAsset(false);
+                                  }}
+                                >
+                                  <Plus className="w-3 h-3 mr-1" />
+                                  {ASSET_DISPLAY_NAMES[asset] || asset}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </Card>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {pinnedAssets.map(asset => {
+                    const price = assetPrices[asset.symbol];
+                    const analysis = ableAnalysis[asset.symbol];
                     
-                    const sentiment = analysis 
-                      ? (analysis.P_up_pct > 55 ? 'bullish' : analysis.P_up_pct < 45 ? 'bearish' : 'neutral')
-                      : 'neutral';
-                    const confidence = analysis?.confidence || 50;
-                    const isFallback = analysis?.risk_warnings?.includes('Using fallback analysis') || false;
-                    const analysisText = isFallback 
-                      ? '⚠️ AI Credits หมด - ใช้ Fallback Analysis (เติมเครดิตที่ Settings → Workspace → Usage)'
-                      : (analysis?.thai_summary || 'กำลังวิเคราะห์...');
+                    return (
+                      <Badge
+                        key={asset.symbol}
+                        variant="outline"
+                        className="px-3 py-1.5 border-zinc-700 text-zinc-300 hover:border-emerald-500 group relative"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Pin className="w-3 h-3 text-emerald-500" />
+                          <span className="font-medium">{ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol}</span>
+                          {price && (
+                            <span className={`text-xs ${price.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {price.change >= 0 ? '+' : ''}{price.changePercent.toFixed(2)}%
+                            </span>
+                          )}
+                          {analysis && (
+                            <span className={`text-xs font-bold ${
+                              analysis.P_up_pct > 55 ? 'text-emerald-400' : 
+                              analysis.P_up_pct < 45 ? 'text-red-400' : 'text-zinc-400'
+                            }`}>
+                              {analysis.P_up_pct > 50 ? '↗' : '↘'}
+                            </span>
+                          )}
+                          <X
+                            className="w-3 h-3 opacity-0 group-hover:opacity-100 cursor-pointer hover:text-red-400 transition-opacity"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveAsset(asset.symbol);
+                            }}
+                          />
+                        </div>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Macro Analysis Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {macroData.length === 0 ? (
+                  <div className="col-span-2 text-center py-12 text-zinc-500">
+                    <Brain className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p className="text-lg">No assets pinned</p>
+                    <p className="text-sm mt-1">Add assets to see AI analysis</p>
+                  </div>
+                ) : (
+                  macroData.map(macro => {
+                    const analysis = macro.ableAnalysis;
+                    const isFallback = !analysis || analysis.decision?.includes('Fallback');
                     const P_up = analysis?.P_up_pct || 50;
                     const decision = analysis?.decision || 'HOLD';
-
+                    const analysisText = analysis?.thai_summary || macro.analysis;
+                    
                     return (
-                      <Card 
-                        key={pinned.symbol} 
-                        onClick={() => analysis && setSelectedAssetForModal(pinned.symbol)}
-                        className={`p-3 md:p-4 transition-all relative group bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 cursor-pointer ${
-                          analyzing ? 'border-emerald-500/50 animate-pulse' : ''
-                        } ${analysis ? 'hover:border-purple-500/50 hover:bg-zinc-900' : ''}`}
+                      <Card
+                        key={macro.symbol}
+                        className="p-4 bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
+                        onClick={() => setSelectedAssetForModal(macro.symbol)}
                       >
-                        {/* Remove button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveAsset(pinned.symbol);
-                          }}
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded z-10"
-                        >
-                          <X className="w-3 h-3 md:w-4 md:h-4 text-zinc-400" />
-                        </button>
-                        
-                        {/* Symbol & Badge */}
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <span className="text-lg md:text-xl font-bold text-white">{pinned.symbol}</span>
-                            {priceData && (
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className={`text-xs md:text-sm font-medium ${priceData.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                  {priceData.changePercent >= 0 ? '↗' : '↘'} {Math.abs(priceData.changePercent).toFixed(2)}%
-                                </span>
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-bold text-white">
+                              {ASSET_DISPLAY_NAMES[macro.symbol] || macro.symbol}
+                            </h3>
+                            {assetPrices[macro.symbol] && (
+                              <div className="text-sm text-zinc-500">
+                                ${assetPrices[macro.symbol].price.toFixed(2)}
                               </div>
                             )}
                           </div>
-                          <Badge className={`text-xs px-2 py-0.5 ${
-                            sentiment === 'bullish' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
-                            sentiment === 'bearish' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
-                            'bg-zinc-500/10 text-zinc-400 border-zinc-500/30'
+                          <Badge className={`${
+                            P_up > 55 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                            P_up < 45 ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                            'bg-zinc-700/10 text-zinc-400 border-zinc-700/30'
                           }`}>
-                            • {sentiment.charAt(0).toUpperCase() + sentiment.slice(1)} {confidence}%
+                            {P_up}%
                           </Badge>
                         </div>
 
-                        {/* Confidence Bar */}
+                        {/* Progress Bar */}
                         <div className="mb-3">
-                          <div className="text-xs text-zinc-500 mb-1 flex justify-between">
-                            <span>P↓ {(100 - P_up).toFixed(1)}%</span>
-                            <span>P↑ {P_up.toFixed(1)}%</span>
+                          <div className="flex justify-between text-xs text-zinc-500 mb-1">
+                            <span>Bearish</span>
+                            <span>Bullish</span>
                           </div>
-                          <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
-                            <div 
-                              className={`h-full transition-all ${
+                          <div className="relative h-2 bg-zinc-800 rounded-full overflow-hidden">
+                            <div
+                              className={`absolute left-0 top-0 h-full transition-all duration-500 ${
                                 P_up > 55 ? 'bg-emerald-500' :
                                 P_up < 45 ? 'bg-red-500' : 'bg-zinc-500'
                               }`}
@@ -594,153 +640,79 @@ const TopNews: React.FC<TopNewsProps> = () => {
                                 ({analysis.relevant_news_count || 0}/{analysis.news_count} news)
                               </span>
                             )}
+                            {/* ✅ NEW: แสดงอายุข่าว */}
+                            {newsMetadata && (
+                              <span className="text-[10px] text-emerald-600">
+                                • {newsMetadata.newestNewsAge}
+                              </span>
+                            )}
                           </div>
                           <Badge className={`text-xs ${
                             decision.includes('BUY') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
                             decision.includes('SELL') ? 'bg-red-500/10 text-red-400 border-red-500/30' :
-                            'bg-zinc-500/10 text-zinc-400 border-zinc-500/30'
+                            'bg-zinc-700/10 text-zinc-400 border-zinc-700/30'
                           }`}>
                             {decision}
                           </Badge>
                         </div>
-                        
-                        {/* Click hint */}
-                        {analysis && (
-                          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="text-[10px] text-purple-400 flex items-center gap-1">
-                              <Sparkles className="w-3 h-3" />
-                              คลิกเพื่อดูการคิดของ AI
-                            </span>
-                          </div>
-                        )}
                       </Card>
                     );
-                  })}
-                  
-                  {/* Add Asset Card */}
-                  {pinnedAssets.length < 8 && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Card className="bg-zinc-900/30 border-zinc-800 border-dashed p-4 md:p-6 hover:border-emerald-500/30 transition-colors cursor-pointer flex flex-col items-center justify-center min-h-[150px] md:min-h-[200px]">
-                          <Plus className="w-6 h-6 md:w-8 md:h-8 text-zinc-600 mb-2" />
-                          <span className="text-zinc-500 text-sm font-medium">Add Asset</span>
-                          <span className="text-zinc-600 text-xs mt-1">{pinnedAssets.length}/8</span>
-                        </Card>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-48 bg-zinc-900 border-zinc-700">
-                        {getAvailableAssets().map((category) => (
-                          category.assets.length > 0 && (
-                            <div key={category.label}>
-                              <DropdownMenuLabel className="text-zinc-400 text-xs">
-                                {category.label}
-                              </DropdownMenuLabel>
-                              {category.assets.map((asset) => (
-                                <DropdownMenuItem 
-                                  key={asset}
-                                  onClick={() => handleAddAsset(asset)}
-                                  className="text-white hover:bg-zinc-800 cursor-pointer"
-                                >
-                                  {ASSET_DISPLAY_NAMES[asset] || asset}
-                                </DropdownMenuItem>
-                              ))}
-                              <DropdownMenuSeparator className="bg-zinc-700" />
-                            </div>
-                          )
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
+                  })
+                )}
               </div>
+            </div>
+          )}
 
-              {/* For You Section */}
-              <div className="mt-6 md:mt-8">
-                <div className="flex items-center justify-between mb-3 md:mb-4">
-                  <div className="flex items-center gap-2">
-                    <Target className="w-4 h-4 text-zinc-400" />
-                    <div>
-                      <h2 className="text-sm md:text-base font-medium text-white flex items-center gap-2">
-                        For You
-                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
-                      </h2>
-                      <p className="text-xs text-zinc-500">Your personalized market briefing</p>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="border-zinc-700 text-zinc-400 bg-transparent text-xs">
-                    <RefreshCw className="w-3 h-3 mr-1" />
-                    {forYouItems.filter(i => i.isNew).length} updates
-                  </Badge>
+          {activeTab === 'for-you' && (
+            <div className="p-4 md:p-6 space-y-3">
+              {forYouItems.length === 0 ? (
+                <div className="text-center py-20 text-zinc-500">
+                  <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg">No personalized news yet</p>
+                  <p className="text-sm mt-1">Pin assets to get tailored news</p>
                 </div>
-
-                <div className="space-y-1">
-                  {forYouItems.slice(0, 8).map((item) => (
-                    <div 
-                      key={item.id}
-                      onClick={() => window.open(item.url, '_blank')}
-                      className="flex items-start gap-2 p-2 md:p-3 rounded-lg hover:bg-zinc-900 transition-colors cursor-pointer"
-                    >
-                      {item.isNew && (
-                        <Badge className="text-[10px] px-1.5 py-0.5 bg-red-500/20 text-red-400 border-red-500/30 flex-shrink-0">
-                          Today
-                        </Badge>
-                      )}
-                      <div className="flex-1 text-xs md:text-sm min-w-0">
-                        <span className="text-white font-medium">{item.symbol}</span>
-                        <span className="text-zinc-600 mx-1">bias updated:</span>
-                        <span className={`font-medium ${
-                          item.type.includes('BULLISH') ? 'text-emerald-400' :
-                          item.type.includes('BEARISH') ? 'text-red-400' : 'text-zinc-400'
-                        }`}>
-                          {item.type}
-                        </span>
-                        <p className="text-zinc-500 truncate mt-0.5">{item.title}</p>
-                      </div>
-                      <ExternalLink className="w-3 h-3 text-zinc-600 flex-shrink-0" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* X Notifications */}
-              {xNotifications.length > 0 && (
-                <div className="mt-6 md:mt-8">
-                  <div className="flex items-center gap-2 mb-3 md:mb-4">
-                    <Users className="w-4 h-4 text-zinc-400" />
-                    <h2 className="text-sm md:text-base font-medium text-white">Social Signals</h2>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {xNotifications.slice(0, 4).map((notif) => (
-                      <div 
-                        key={notif.id}
-                        onClick={() => window.open(notif.url, '_blank')}
-                        className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700 cursor-pointer transition-colors"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-medium text-zinc-400">{notif.source}</span>
-                          <span className="text-[10px] text-zinc-600">{notif.time}</span>
+              ) : (
+                forYouItems.map(item => (
+                  <Card
+                    key={item.id}
+                    className="p-3 bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
+                    onClick={() => window.open(item.url, '_blank')}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                            {ASSET_DISPLAY_NAMES[item.symbol] || item.symbol}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">
+                            {item.type}
+                          </Badge>
+                          {item.isNew && (
+                            <Badge className="text-[10px] bg-red-500/10 text-red-400 border-red-500/30 animate-pulse">
+                              NEW
+                            </Badge>
+                          )}
                         </div>
-                        <p className="text-xs text-zinc-300 line-clamp-2">{notif.content}</p>
+                        <h3 className="text-sm text-white mb-1 line-clamp-2">{item.title}</h3>
+                        <p className="text-xs text-zinc-500">{item.source} • {formatTimeAgo(item.timestamp)}</p>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <ExternalLink className="w-4 h-4 text-zinc-600 flex-shrink-0 ml-2" />
+                    </div>
+                  </Card>
+                ))
               )}
-            </>
-          ) : (
-            /* Daily Reports Tab */
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-4">
-                <FileText className="w-4 h-4 text-zinc-400" />
-                <h2 className="text-base font-medium text-white">Daily Reports</h2>
-              </div>
-              
-              {dailyReports.map((report) => (
-                <Card 
+            </div>
+          )}
+
+          {activeTab === 'daily' && (
+            <div className="p-4 md:p-6 space-y-3">
+              {dailyReports.map(report => (
+                <Card
                   key={report.id}
-                  onClick={() => window.open(report.url, '_blank')}
-                  className={`p-4 cursor-pointer transition-colors bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 ${
+                  className={`p-4 bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer ${
                     report.isHighlighted ? 'border-emerald-500/30' : ''
                   }`}
+                  onClick={() => window.open(report.url, '_blank')}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -771,9 +743,40 @@ const TopNews: React.FC<TopNewsProps> = () => {
               ))}
               
               {dailyReports.length === 0 && (
-                <div className="text-center py-8 text-zinc-500">
-                  <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>No reports available</p>
+                <div className="text-center py-20 text-zinc-500">
+                  <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg">No reports available</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'x' && (
+            <div className="p-4 md:p-6 space-y-3">
+              {xNotifications.map(notif => (
+                <Card
+                  key={notif.id}
+                  className="p-3 bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
+                  onClick={() => window.open(notif.url, '_blank')}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-medium text-emerald-400">@{notif.source}</span>
+                        <span className="text-xs text-zinc-600">•</span>
+                        <span className="text-xs text-zinc-500">{notif.time}</span>
+                      </div>
+                      <p className="text-sm text-zinc-300 line-clamp-2">{notif.content}</p>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-zinc-600 flex-shrink-0 ml-2" />
+                  </div>
+                </Card>
+              ))}
+              
+              {xNotifications.length === 0 && (
+                <div className="text-center py-20 text-zinc-500">
+                  <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg">No X notifications</p>
                 </div>
               )}
             </div>
