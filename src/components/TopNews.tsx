@@ -361,7 +361,7 @@ export const TopNews = () => {
             </h1>
               <p className="text-xs md:text-sm text-zinc-500 flex items-center gap-1 mt-1">
                 <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
-                ABLE-HF 3.0 • Gemini AI Analysis • Auto-refresh: 10 min
+                ABLE-HF 3.0 •
               </p>
               
               {/* ✅ NEW: Debug badges */}
