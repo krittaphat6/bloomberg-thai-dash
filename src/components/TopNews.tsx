@@ -137,7 +137,7 @@ export const TopNews = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [activeTab, setActiveTab] = useState<'macro' | 'daily'>('macro');
+  const [activeTab, setActiveTab] = useState<'macro' | 'for-you' | 'daily' | 'x'>('macro');
   const [selectedAssetForModal, setSelectedAssetForModal] = useState<string | null>(null);
   const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleAnalysisResult>>({});
   const [analyzing, setAnalyzing] = useState(false);
@@ -359,7 +359,7 @@ export const TopNews = () => {
             <div>
               <h1 className="text-xl md:text-3xl font-semibold italic text-[#1da52b]">
             </h1>
-              <p className="text-xs md:text-sm text-zinc-500 flex items-center gap-1 mt-1">
+              <p className="text-xs md:text-sm flex items-center gap-1 mt-1 text-secondary-foreground">
                 <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
                 ABLE-HF 3.0 •
               </p>
@@ -396,7 +396,7 @@ export const TopNews = () => {
           </div>
         </div>
 
-        {/* Tabs - ลบ X Feed และ For You (รวมเข้า Macro แล้ว) */}
+        {/* Tabs */}
         <div className="border-b border-zinc-800 px-4 md:px-6">
           <div className="flex gap-4 md:gap-8">
             {[{
@@ -404,9 +404,17 @@ export const TopNews = () => {
             label: 'AI Macro Desk',
             icon: Brain
           }, {
+            key: 'for-you',
+            label: 'For You',
+            icon: Target
+          }, {
             key: 'daily',
             label: 'Daily Reports',
             icon: FileText
+          }, {
+            key: 'x',
+            label: 'X Feed',
+            icon: Users
           }].map(tab => <button key={tab.key} onClick={() => setActiveTab(tab.key as any)} className={`py-3 px-1 text-xs md:text-sm font-medium transition-colors relative flex items-center gap-1 md:gap-2 ${activeTab === tab.key ? 'text-emerald-400' : 'text-zinc-600 hover:text-zinc-400'}`}>
                 <tab.icon className="w-3 h-3 md:w-4 md:h-4" />
                 <span className="hidden sm:inline">{tab.label}</span>
@@ -429,20 +437,14 @@ export const TopNews = () => {
                 </div>
 
                 {showAddAsset && <Card className="p-3 mb-3 bg-zinc-900 border-zinc-800">
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {getAvailableAssets().map(category => category.assets.length > 0 && <div key={category.label}>
-                            <p className="text-xs text-zinc-500 mb-2 font-medium">{category.label}</p>
-                            <div className="flex flex-wrap gap-2">
-                              {category.assets.map(asset => <Badge 
-                                key={asset} 
-                                variant="outline" 
-                                className="cursor-pointer border-zinc-700 text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 text-xs px-3 py-1.5 transition-all hover:bg-emerald-500/10" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  console.log('Adding asset:', asset);
-                                  handleAddAsset(asset);
-                                  setShowAddAsset(false);
-                                }}>
+                            <p className="text-xs text-zinc-600 mb-1">{category.label}</p>
+                            <div className="flex flex-wrap gap-1">
+                              {category.assets.map(asset => <Badge key={asset} variant="outline" className="cursor-pointer border-zinc-700 text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 text-xs" onClick={() => {
+                      handleAddAsset(asset);
+                      setShowAddAsset(false);
+                    }}>
                                   <Plus className="w-3 h-3 mr-1" />
                                   {ASSET_DISPLAY_NAMES[asset] || asset}
                                 </Badge>)}
@@ -560,207 +562,87 @@ export const TopNews = () => {
                       </Card>;
             })}
               </div>
-              
-              {/* For You - Real-time News Section */}
-              <div className="mt-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Target className="w-4 h-4 text-emerald-400" />
-                  <h2 className="text-sm font-medium text-zinc-400">For You - Related News</h2>
-                  {forYouItems.length > 0 && (
-                    <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-500">
-                      {forYouItems.length} items
-                    </Badge>
-                  )}
-                </div>
-                
-                {forYouItems.length === 0 ? (
-                  <div className="text-center py-8 text-zinc-600 text-sm">
-                    <p>No personalized news yet - pin assets above</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {forYouItems.slice(0, 9).map(item => (
-                      <Card 
-                        key={item.id} 
-                        className="p-3 bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
-                        onClick={() => window.open(item.url, '_blank')}
-                      >
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                              <Badge className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
-                                {ASSET_DISPLAY_NAMES[item.symbol] || item.symbol}
-                              </Badge>
-                              {item.isNew && (
-                                <Badge className="text-[10px] bg-red-500/10 text-red-400 border-red-500/30 animate-pulse">
-                                  NEW
-                                </Badge>
-                              )}
-                            </div>
-                            <h3 className="text-xs text-white line-clamp-2 leading-relaxed">{item.title}</h3>
-                            <p className="text-[10px] text-zinc-600 mt-1">{item.source} • {formatTimeAgo(item.timestamp)}</p>
-                          </div>
-                          <ExternalLink className="w-3 h-3 text-zinc-700 flex-shrink-0" />
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>}
 
-          {activeTab === 'daily' && <div className="p-4 md:p-6">
-              {/* AI Market Summary */}
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Brain className="w-5 h-5 text-emerald-400" />
-                  <h2 className="text-lg font-medium text-white">ABLE 3.0 Market Summary</h2>
-                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">
-                    AI Generated
-                  </Badge>
-                </div>
-                
-                <Card className="p-4 bg-gradient-to-br from-zinc-900 to-zinc-950 border-emerald-500/20">
-                  {macroData.length > 0 ? (
-                    <div className="space-y-4">
-                      {/* Summary Header */}
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="text-sm font-medium text-emerald-400 mb-1">
-                            📊 Market Focus Analysis
-                          </h3>
-                          <p className="text-xs text-zinc-500">
-                            Based on {newsMetadata?.freshNewsCount || 0} fresh news from {newsMetadata?.sourcesCount || 0} sources
-                          </p>
+          {activeTab === 'for-you' && <div className="p-4 md:p-6 space-y-3">
+              {forYouItems.length === 0 ? <div className="text-center py-20 text-zinc-500">
+                  <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg">No personalized news yet</p>
+                  <p className="text-sm mt-1">Pin assets to get tailored news</p>
+                </div> : forYouItems.map(item => <Card key={item.id} className="p-3 bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer" onClick={() => window.open(item.url, '_blank')}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                            {ASSET_DISPLAY_NAMES[item.symbol] || item.symbol}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">
+                            {item.type}
+                          </Badge>
+                          {item.isNew && <Badge className="text-[10px] bg-red-500/10 text-red-400 border-red-500/30 animate-pulse">
+                              NEW
+                            </Badge>}
                         </div>
-                        <Badge className={`text-xs ${
-                          macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55).length > macroData.length / 2 
-                            ? 'bg-emerald-500/10 text-emerald-400' 
-                            : macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45).length > macroData.length / 2
-                            ? 'bg-red-500/10 text-red-400'
-                            : 'bg-zinc-700/10 text-zinc-400'
-                        }`}>
-                          {macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55).length > macroData.length / 2 
-                            ? '📈 Bullish Bias' 
-                            : macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45).length > macroData.length / 2
-                            ? '📉 Bearish Bias'
-                            : '➡️ Mixed Sentiment'}
-                        </Badge>
+                        <h3 className="text-sm text-white mb-1 line-clamp-2">{item.title}</h3>
+                        <p className="text-xs text-zinc-500">{item.source} • {formatTimeAgo(item.timestamp)}</p>
                       </div>
-                      
-                      {/* Key Insights */}
-                      <div className="p-3 bg-zinc-800/50 rounded-lg">
-                        <p className="text-sm text-zinc-300 leading-relaxed">
-                          {(() => {
-                            const bullishAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55);
-                            const bearishAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45);
-                            const holdAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct >= 45 && m.ableAnalysis.P_up_pct <= 55);
-                            
-                            let summary = '🔍 สถานการณ์ตลาดปัจจุบัน: ';
-                            
-                            if (bullishAssets.length > 0) {
-                              summary += `สินทรัพย์ที่มีแนวโน้มขาขึ้น: ${bullishAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}. `;
-                            }
-                            if (bearishAssets.length > 0) {
-                              summary += `สินทรัพย์ที่มีแนวโน้มขาลง: ${bearishAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}. `;
-                            }
-                            if (holdAssets.length > 0) {
-                              summary += `สินทรัพย์ที่ควรรอดู: ${holdAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}.`;
-                            }
-                            
-                            // Add key drivers from first asset with analysis
-                            const firstWithDrivers = macroData.find(m => m.ableAnalysis?.key_drivers?.length);
-                            if (firstWithDrivers?.ableAnalysis?.key_drivers) {
-                              summary += ` ปัจจัยสำคัญ: ${firstWithDrivers.ableAnalysis.key_drivers.slice(0, 2).join(', ')}.`;
-                            }
-                            
-                            return summary || 'กำลังรอการวิเคราะห์...';
-                          })()}
-                        </p>
-                      </div>
-                      
-                      {/* Asset Cards Summary */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {macroData.slice(0, 4).map(macro => (
-                          <div key={macro.symbol} className="p-2 bg-zinc-800/30 rounded-lg">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-medium text-white">
-                                {ASSET_DISPLAY_NAMES[macro.symbol] || macro.symbol}
-                              </span>
-                              <span className={`text-[10px] font-bold ${
-                                macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct > 55 ? 'text-emerald-400' 
-                                : macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct < 45 ? 'text-red-400' 
-                                : 'text-zinc-400'
-                              }`}>
-                                {macro.ableAnalysis?.decision || 'HOLD'}
-                              </span>
-                            </div>
-                            <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full ${
-                                  macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct > 55 ? 'bg-emerald-500' 
-                                  : macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct < 45 ? 'bg-red-500' 
-                                  : 'bg-zinc-500'
-                                }`}
-                                style={{ width: `${macro.ableAnalysis?.P_up_pct || 50}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <ExternalLink className="w-4 h-4 text-zinc-600 flex-shrink-0 ml-2" />
                     </div>
-                  ) : (
-                    <div className="text-center py-8 text-zinc-500">
-                      <Brain className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p>เพิ่มสินทรัพย์เพื่อดูการวิเคราะห์ AI</p>
+                  </Card>)}
+            </div>}
+
+          {activeTab === 'daily' && <div className="p-4 md:p-6 space-y-3">
+              {dailyReports.map(report => <Card key={report.id} className={`p-4 bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer ${report.isHighlighted ? 'border-emerald-500/30' : ''}`} onClick={() => window.open(report.url, '_blank')}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs text-zinc-500">{report.date}</span>
+                        <span className="text-xs text-zinc-600">•</span>
+                        <span className="text-xs text-zinc-500">{report.time}</span>
+                        {report.isHighlighted && <Badge className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                            Latest
+                          </Badge>}
+                      </div>
+                      <h3 className="text-sm font-medium text-white mb-1 line-clamp-2">{report.title}</h3>
+                      <p className="text-xs text-zinc-500 line-clamp-2">{report.description}</p>
                     </div>
-                  )}
-                </Card>
-              </div>
+                    <ExternalLink className="w-4 h-4 text-zinc-600 flex-shrink-0 ml-2" />
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">
+                      {report.source}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">
+                      {report.assetsAnalyzed} assets
+                    </Badge>
+                  </div>
+                </Card>)}
               
-              {/* Daily Reports List */}
-              <div>
-                <h2 className="text-sm font-medium text-zinc-400 mb-3">Latest Reports</h2>
-                <div className="space-y-3">
-                  {dailyReports.map(report => (
-                    <Card 
-                      key={report.id} 
-                      className={`p-4 bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer ${report.isHighlighted ? 'border-emerald-500/30' : ''}`} 
-                      onClick={() => window.open(report.url, '_blank')}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs text-zinc-500">{report.date}</span>
-                            <span className="text-xs text-zinc-600">•</span>
-                            <span className="text-xs text-zinc-500">{report.time}</span>
-                            {report.isHighlighted && (
-                              <Badge className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
-                                Latest
-                              </Badge>
-                            )}
-                          </div>
-                          <h3 className="text-sm font-medium text-white mb-1 line-clamp-2">{report.title}</h3>
-                          <p className="text-xs text-zinc-500 line-clamp-2">{report.description}</p>
-                        </div>
-                        <ExternalLink className="w-4 h-4 text-zinc-600 flex-shrink-0 ml-2" />
+              {dailyReports.length === 0 && <div className="text-center py-20 text-zinc-500">
+                  <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg">No reports available</p>
+                </div>}
+            </div>}
+
+          {activeTab === 'x' && <div className="p-4 md:p-6 space-y-3">
+              {xNotifications.map(notif => <Card key={notif.id} className="p-3 bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer" onClick={() => window.open(notif.url, '_blank')}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-medium text-emerald-400">@{notif.source}</span>
+                        <span className="text-xs text-zinc-600">•</span>
+                        <span className="text-xs text-zinc-500">{notif.time}</span>
                       </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">
-                          {report.source}
-                        </Badge>
-                      </div>
-                    </Card>
-                  ))}
-                  
-                  {dailyReports.length === 0 && (
-                    <div className="text-center py-12 text-zinc-500">
-                      <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      <p className="text-lg">No reports available</p>
+                      <p className="text-sm text-zinc-300 line-clamp-2">{notif.content}</p>
                     </div>
-                  )}
-                </div>
-              </div>
+                    <ExternalLink className="w-4 h-4 text-zinc-600 flex-shrink-0 ml-2" />
+                  </div>
+                </Card>)}
+              
+              {xNotifications.length === 0 && <div className="text-center py-20 text-zinc-500">
+                  <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg">No X notifications</p>
+                </div>}
             </div>}
         </ScrollArea>
       </div>
