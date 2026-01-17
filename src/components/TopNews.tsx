@@ -382,7 +382,7 @@ export const TopNews = () => {
             <div className="flex items-center gap-2 md:gap-4">
               {/* ✅ NEW: แสดง next refresh time */}
               {lastUpdated && <div className="flex flex-col items-end">
-                  <span className="text-xs md:text-sm hidden sm:block text-terminal-cyan">
+                  <span className="text-xs md:text-sm text-zinc-600 hidden sm:block">
                     Updated {formatTime(lastUpdated)}
                   </span>
                   <span className="text-[10px] text-zinc-700">
