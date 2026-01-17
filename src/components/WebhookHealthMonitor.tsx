@@ -28,10 +28,42 @@ export function WebhookHealthMonitor({ roomId }: WebhookHealthMonitorProps) {
     try {
       setIsLoading(true);
 
-      // Get webhook stats from last 24 hours by counting messages
       const since = new Date();
       since.setHours(since.getHours() - 24);
 
+      // Try to get from webhook_delivery_logs first (new table)
+      const { data: logs, error: logsError } = await supabase
+        .from('webhook_delivery_logs')
+        .select('*')
+        .eq('room_id', roomId)
+        .gte('created_at', since.toISOString())
+        .order('created_at', { ascending: false });
+
+      if (!logsError && logs && logs.length > 0) {
+        const successful = logs.filter((l: any) => l.status === 'success').length;
+        const failed = logs.filter((l: any) => l.status === 'failed').length;
+        const total = logs.length;
+        const successRate = total > 0 ? (successful / total) * 100 : 100;
+
+        setHealth({
+          totalWebhooks: total,
+          successfulWebhooks: successful,
+          failedWebhooks: failed,
+          lastWebhookTime: logs[0].created_at,
+          successRate,
+        });
+
+        if (successRate < 80 && failed > 0) {
+          toast({
+            title: '⚠️ Webhook Delivery Issues',
+            description: `${failed} webhooks failed in last 24h (${successRate.toFixed(1)}% success)`,
+            variant: 'destructive',
+          });
+        }
+        return;
+      }
+
+      // Fallback to messages table
       const { data: messages, error } = await supabase
         .from('messages')
         .select('id, created_at, webhook_data')
@@ -53,18 +85,12 @@ export function WebhookHealthMonitor({ roomId }: WebhookHealthMonitorProps) {
         return;
       }
 
-      // All messages that reach the database are successful
-      const successful = messages.length;
-      const failed = 0; // We can't detect failed webhooks from messages table
-      const total = messages.length;
-      const successRate = 100;
-
       setHealth({
-        totalWebhooks: total,
-        successfulWebhooks: successful,
-        failedWebhooks: failed,
+        totalWebhooks: messages.length,
+        successfulWebhooks: messages.length,
+        failedWebhooks: 0,
         lastWebhookTime: messages[0].created_at,
-        successRate,
+        successRate: 100,
       });
 
     } catch (error: any) {
@@ -72,7 +98,7 @@ export function WebhookHealthMonitor({ roomId }: WebhookHealthMonitorProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [roomId]);
+  }, [roomId, toast]);
 
   // Check health on mount and every 5 minutes
   useEffect(() => {
@@ -81,7 +107,7 @@ export function WebhookHealthMonitor({ roomId }: WebhookHealthMonitorProps) {
     return () => clearInterval(interval);
   }, [checkHealth]);
 
-  // Subscribe to new webhook messages
+  // Subscribe to new webhook logs
   useEffect(() => {
     if (!roomId) return;
 
@@ -92,12 +118,25 @@ export function WebhookHealthMonitor({ roomId }: WebhookHealthMonitorProps) {
         {
           event: 'INSERT',
           schema: 'public',
+          table: 'webhook_delivery_logs',
+          filter: `room_id=eq.${roomId}`,
+        },
+        (payload: any) => {
+          console.log('📊 New webhook log:', payload.new?.request_id);
+          checkHealth();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
           table: 'messages',
           filter: `room_id=eq.${roomId}`,
         },
         (payload: any) => {
           if (payload.new?.message_type === 'webhook') {
-            console.log('📊 New webhook received:', payload.new?.id);
+            console.log('📊 New webhook message:', payload.new?.id);
             checkHealth();
           }
         }

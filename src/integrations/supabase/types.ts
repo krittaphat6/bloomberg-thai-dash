@@ -783,6 +783,73 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_delivery_logs: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          error_stack: string | null
+          execution_time_ms: number | null
+          id: string
+          message_id: string | null
+          payload: Json
+          request_id: string
+          retry_count: number | null
+          room_id: string | null
+          status: string
+          webhook_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          error_stack?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          message_id?: string | null
+          payload?: Json
+          request_id: string
+          retry_count?: number | null
+          room_id?: string | null
+          status: string
+          webhook_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          error_stack?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          message_id?: string | null
+          payload?: Json
+          request_id?: string
+          retry_count?: number | null
+          room_id?: string | null
+          status?: string
+          webhook_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_delivery_logs_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_delivery_logs_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_delivery_logs_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       webhooks: {
         Row: {
           created_at: string | null
@@ -830,10 +897,34 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      failed_webhooks: {
+        Row: {
+          action: string | null
+          created_at: string | null
+          error_message: string | null
+          execution_time_ms: number | null
+          id: string | null
+          lots: string | null
+          price: string | null
+          request_id: string | null
+          retry_count: number | null
+          room_id: string | null
+          room_name: string | null
+          symbol: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_delivery_logs_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      [_ in never]: never
+      cleanup_webhook_logs: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
