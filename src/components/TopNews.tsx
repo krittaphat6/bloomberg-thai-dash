@@ -138,7 +138,7 @@ export const TopNews = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [activeTab, setActiveTab] = useState<'macro' | 'daily'>('macro');
+  const [activeTab, setActiveTab] = useState<'macro' | 'daily' | 'sources'>('macro');
   const [selectedAssetForModal, setSelectedAssetForModal] = useState<string | null>(null);
   const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleAnalysisResult>>({});
   const [analyzing, setAnalyzing] = useState(false);
@@ -427,7 +427,7 @@ export const TopNews = () => {
           </div>
         </div>
 
-        {/* Tabs - ลบ X Feed และ For You (รวมเข้า Macro แล้ว) */}
+        {/* Tabs - AI Macro Desk, Daily Reports, News Sources */}
         <div className="border-b border-zinc-800 px-4 md:px-6">
           <div className="flex gap-4 md:gap-8">
             {[{
@@ -438,6 +438,10 @@ export const TopNews = () => {
             key: 'daily',
             label: 'Daily Reports',
             icon: FileText
+          }, {
+            key: 'sources',
+            label: 'News Sources',
+            icon: Zap
           }].map(tab => <button key={tab.key} onClick={() => setActiveTab(tab.key as any)} className={`py-3 px-1 text-xs md:text-sm font-medium transition-colors relative flex items-center gap-1 md:gap-2 ${activeTab === tab.key ? 'text-emerald-400' : 'text-zinc-600 hover:text-zinc-400'}`}>
                 <tab.icon className="w-3 h-3 md:w-4 md:h-4" />
                 <span className="hidden sm:inline">{tab.label}</span>
@@ -449,83 +453,36 @@ export const TopNews = () => {
         {/* Content Area */}
         <ScrollArea className="flex-1">
           {activeTab === 'macro' && <div className="p-4 md:p-6">
-              {/* Asset Management */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-medium text-zinc-400">Pinned Assets ({pinnedAssets.length}/8)</h2>
-                  <Button size="sm" variant="outline" onClick={() => setShowAddAsset(!showAddAsset)} className="h-7 text-xs border-zinc-700 text-zinc-400 hover:text-white hover:border-emerald-500">
-                    <Plus className="w-3 h-3 mr-1" />
-                    Add Asset
-                  </Button>
-                </div>
-
-                {showAddAsset && <Card className="p-3 mb-3 bg-zinc-900 border-zinc-800">
-                    <div className="space-y-3">
-                      {getAvailableAssets().map(category => category.assets.length > 0 && <div key={category.label}>
-                            <p className="text-xs text-zinc-500 mb-2 font-medium">{category.label}</p>
-                            <div className="flex flex-wrap gap-2">
-                              {category.assets.map(asset => <Badge 
-                                key={asset} 
-                                variant="outline" 
-                                className="cursor-pointer border-zinc-700 text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 text-xs px-3 py-1.5 transition-all hover:bg-emerald-500/10" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  console.log('Adding asset:', asset);
-                                  handleAddAsset(asset);
-                                  setShowAddAsset(false);
-                                }}>
-                                  <Plus className="w-3 h-3 mr-1" />
-                                  {ASSET_DISPLAY_NAMES[asset] || asset}
-                                </Badge>)}
-                            </div>
-                          </div>)}
-                    </div>
-                  </Card>}
-
-                {/* ✅ FIXED: Pinned Assets Grid with visible delete buttons */}
-                <div className="flex flex-wrap gap-2">
-                  {pinnedAssets.map(asset => {
-                    const price = assetPrices[asset.symbol];
-                    const analysis = ableAnalysis[asset.symbol];
-                    return (
-                      <div 
-                        key={asset.symbol} 
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-700 hover:border-emerald-500/50 bg-zinc-900/50 group transition-all"
-                      >
-                        <Pin className="w-3 h-3 text-emerald-500" />
-                        <span className="font-medium text-zinc-300 text-sm">
-                          {ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol}
-                        </span>
-                        {price && (
-                          <span className={`text-xs ${price.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {price.change >= 0 ? '+' : ''}{price.changePercent.toFixed(2)}%
-                          </span>
-                        )}
-                        {analysis && (
-                          <span className={`text-xs font-bold ${
-                            analysis.P_up_pct > 55 ? 'text-emerald-400' : 
-                            analysis.P_up_pct < 45 ? 'text-red-400' : 'text-zinc-400'
-                          }`}>
-                            {analysis.P_up_pct > 50 ? '↗' : '↘'}
-                          </span>
-                        )}
-                        {/* ✅ NEW: Always visible delete button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveAsset(asset.symbol);
-                            toast({ title: `❌ ${ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol} removed` });
-                          }}
-                          className="ml-1 p-0.5 rounded-full hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition-colors"
-                          title={`Remove ${ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol}`}
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
+              {/* Add Asset Button - ย้ายมาด้านบน */}
+              <div className="flex items-center justify-end mb-4">
+                <Button size="sm" variant="outline" onClick={() => setShowAddAsset(!showAddAsset)} className="h-8 text-xs border-zinc-700 text-zinc-400 hover:text-white hover:border-emerald-500">
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add Asset ({pinnedAssets.length}/8)
+                </Button>
               </div>
+
+              {showAddAsset && <Card className="p-3 mb-4 bg-zinc-900 border-zinc-800">
+                  <div className="space-y-3">
+                    {getAvailableAssets().map(category => category.assets.length > 0 && <div key={category.label}>
+                          <p className="text-xs text-zinc-500 mb-2 font-medium">{category.label}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {category.assets.map(asset => <Badge 
+                              key={asset} 
+                              variant="outline" 
+                              className="cursor-pointer border-zinc-700 text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 text-xs px-3 py-1.5 transition-all hover:bg-emerald-500/10" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                console.log('Adding asset:', asset);
+                                handleAddAsset(asset);
+                                setShowAddAsset(false);
+                              }}>
+                                <Plus className="w-3 h-3 mr-1" />
+                                {ASSET_DISPLAY_NAMES[asset] || asset}
+                              </Badge>)}
+                          </div>
+                        </div>)}
+                  </div>
+                </Card>}
 
               {/* Macro Analysis Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -919,6 +876,104 @@ export const TopNews = () => {
                       <p className="text-lg">No reports available</p>
                     </div>
                   )}
+                </div>
+              </div>
+            </div>}
+
+          {/* ✅ NEW: News Sources Tab */}
+          {activeTab === 'sources' && <div className="p-4 md:p-6">
+              <div className="max-w-4xl mx-auto">
+                {/* Header */}
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 rounded-xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/30">
+                    <Zap className="w-6 h-6 text-yellow-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">News Sources</h2>
+                    <p className="text-sm text-zinc-500">แหล่งข่าวที่เชื่อมต่ออยู่ในระบบ</p>
+                  </div>
+                  <Badge className="ml-auto text-sm bg-emerald-500/10 text-emerald-400 border-emerald-500/30 animate-pulse">
+                    🟢 Live
+                  </Badge>
+                </div>
+
+                {/* Stats Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <Card className="p-4 bg-zinc-900 border-zinc-800">
+                    <p className="text-xs text-zinc-500 mb-1">Total Sources</p>
+                    <p className="text-2xl font-bold text-white">{newsMetadata?.sourcesCount || 30}</p>
+                  </Card>
+                  <Card className="p-4 bg-zinc-900 border-zinc-800">
+                    <p className="text-xs text-zinc-500 mb-1">Total News</p>
+                    <p className="text-2xl font-bold text-white">{newsMetadata?.totalFetched || 0}</p>
+                  </Card>
+                  <Card className="p-4 bg-zinc-900 border-zinc-800">
+                    <p className="text-xs text-zinc-500 mb-1">Fresh (24h)</p>
+                    <p className="text-2xl font-bold text-emerald-400">{newsMetadata?.freshNewsCount || 0}</p>
+                  </Card>
+                  <Card className="p-4 bg-zinc-900 border-zinc-800">
+                    <p className="text-xs text-zinc-500 mb-1">Analyzed</p>
+                    <p className="text-2xl font-bold text-blue-400">{newsMetadata?.analyzedCount || 0}</p>
+                  </Card>
+                </div>
+
+                {/* Connected Sources */}
+                <Card className="p-6 bg-gradient-to-br from-zinc-900 to-zinc-950 border-zinc-800 mb-6">
+                  <h3 className="text-sm font-medium text-zinc-400 mb-4 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    Connected Sources ({newsMetadata?.sources?.length || 0})
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {(newsMetadata?.sources || [
+                      '📰 r/forex', '🥇 r/Gold', '₿ r/crypto', '🚀 r/WSB', '📊 r/stocks',
+                      '📉 r/Economics', '💰 r/investing', '📈 r/options', '⚡ r/Futures',
+                      '🥈 r/Silverbugs', '📊 r/Daytrading', '🤖 r/algotrading',
+                      '🔶 HackerNews', '₿ CryptoCompare', '🦎 CoinGecko', '😱 Fear&Greed',
+                      '📅 CoinPaprika', '🪨 CryptoSlate', '📦 TheBlock', '🗞️ NewsAPI',
+                      '📰 MarketWatch', '📈 SeekingAlpha', '💱 DailyFX', '💹 FXStreet',
+                      '📅 Investing.com', '🏦 Fed Watch', '🥇 Kitco', '📊 Finviz'
+                    ]).map((source, i) => (
+                      <Badge 
+                        key={i} 
+                        variant="outline" 
+                        className="text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/5 px-3 py-1.5"
+                      >
+                        {source}
+                      </Badge>
+                    ))}
+                  </div>
+                </Card>
+
+                {/* Categories */}
+                <Card className="p-6 bg-zinc-900 border-zinc-800">
+                  <h3 className="text-sm font-medium text-zinc-400 mb-4">Categories Covered</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    {[
+                      { name: 'Forex', icon: '💱', color: 'from-blue-500/20 to-blue-600/20', border: 'border-blue-500/30', text: 'text-blue-400' },
+                      { name: 'Crypto', icon: '₿', color: 'from-orange-500/20 to-orange-600/20', border: 'border-orange-500/30', text: 'text-orange-400' },
+                      { name: 'Commodities', icon: '🥇', color: 'from-yellow-500/20 to-yellow-600/20', border: 'border-yellow-500/30', text: 'text-yellow-400' },
+                      { name: 'Stocks', icon: '📈', color: 'from-purple-500/20 to-purple-600/20', border: 'border-purple-500/30', text: 'text-purple-400' },
+                      { name: 'Economics', icon: '🏦', color: 'from-emerald-500/20 to-emerald-600/20', border: 'border-emerald-500/30', text: 'text-emerald-400' }
+                    ].map((cat, i) => (
+                      <div 
+                        key={i} 
+                        className={`p-4 rounded-lg bg-gradient-to-br ${cat.color} border ${cat.border} text-center`}
+                      >
+                        <span className="text-2xl mb-2 block">{cat.icon}</span>
+                        <span className={`text-sm font-medium ${cat.text}`}>{cat.name}</span>
+                        <div className="flex items-center justify-center gap-1 mt-2">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                          <span className="text-[10px] text-emerald-400">Active</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+
+                {/* Last Sync Info */}
+                <div className="mt-6 flex items-center justify-between text-xs text-zinc-500">
+                  <span>Last synced: {newsMetadata?.newestNewsAge || 'just now'}</span>
+                  <span>Age range: {newsMetadata?.newestNewsAge || 'N/A'} - {newsMetadata?.oldestNewsAge || 'N/A'}</span>
                 </div>
               </div>
             </div>}
