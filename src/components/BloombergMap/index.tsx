@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, CircleMarker, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { cn } from '@/lib/utils';
 import { useEarthquakeData } from '@/hooks/useEarthquakeData';
@@ -393,13 +393,9 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
                   click: () => setSelectedItem(market),
                 }}
               >
-                <Popup>
-                  <div className="text-xs">
-                    <strong>{market.name}</strong>
-                    <br />
-                    Change: {market.changePercent > 0 ? '+' : ''}{market.changePercent.toFixed(2)}%
-                  </div>
-                </Popup>
+                <Tooltip>
+                  <span className="text-xs font-medium">{market.name}: {market.changePercent > 0 ? '+' : ''}{market.changePercent.toFixed(2)}%</span>
+                </Tooltip>
               </CircleMarker>
             ))}
 
@@ -419,13 +415,9 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
                   click: () => setSelectedItem(quake),
                 }}
               >
-                <Popup>
-                  <div className="text-xs">
-                    <strong>Magnitude: {quake.magnitude}</strong>
-                    <br />
-                    {quake.place}
-                  </div>
-                </Popup>
+                <Tooltip>
+                  <span className="text-xs font-medium">M{quake.magnitude} - {quake.place}</span>
+                </Tooltip>
               </CircleMarker>
             ))}
 
@@ -445,11 +437,9 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
                   click: () => setSelectedItem(bank),
                 }}
               >
-                <Popup>
-                  <div className="text-xs">
-                    <strong>🏦 {bank.name}</strong>
-                  </div>
-                </Popup>
+                <Tooltip>
+                  <span className="text-xs font-medium">🏦 {bank.name}</span>
+                </Tooltip>
               </CircleMarker>
             ))}
 
@@ -469,11 +459,9 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
                   click: () => setSelectedItem(port),
                 }}
               >
-                <Popup>
-                  <div className="text-xs">
-                    <strong>⚓ {port.name}</strong>
-                  </div>
-                </Popup>
+                <Tooltip>
+                  <span className="text-xs font-medium">⚓ {port.name}</span>
+                </Tooltip>
               </CircleMarker>
             ))}
 
@@ -493,11 +481,9 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
                   click: () => setSelectedItem(facility),
                 }}
               >
-                <Popup>
-                  <div className="text-xs">
-                    <strong>🛢️ {facility.name}</strong>
-                  </div>
-                </Popup>
+                <Tooltip>
+                  <span className="text-xs font-medium">🛢️ {facility.name}</span>
+                </Tooltip>
               </CircleMarker>
             ))}
 
@@ -513,15 +499,10 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
                   color: '#ff0000',
                   weight: 1,
                 }}
-                className="animate-pulse"
               >
-                <Popup>
-                  <div className="text-xs">
-                    <strong>🔥 Wildfire</strong>
-                    <br />
-                    Location: {fire.coordinates[1].toFixed(2)}, {fire.coordinates[0].toFixed(2)}
-                  </div>
-                </Popup>
+                <Tooltip>
+                  <span className="text-xs font-medium">🔥 Wildfire ({fire.coordinates[1].toFixed(2)}, {fire.coordinates[0].toFixed(2)})</span>
+                </Tooltip>
               </CircleMarker>
             ))}
 
@@ -545,15 +526,9 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
                   }),
                 }}
               >
-                <Popup>
-                  <div className="text-xs">
-                    <strong>{ship.name || 'Unknown Vessel'}</strong>
-                    <br />
-                    Type: {ship.shipTypeName}
-                    <br />
-                    Speed: {ship.speed?.toFixed(1) || 'N/A'} knots
-                  </div>
-                </Popup>
+                <Tooltip>
+                  <span className="text-xs font-medium">{ship.name || 'Unknown'} - {ship.shipTypeName}</span>
+                </Tooltip>
               </Marker>
             ))}
           </MapContainer>
