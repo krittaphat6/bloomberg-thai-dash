@@ -8,6 +8,8 @@ import { DataPanel } from './DataPanel';
 import { MarkerPopup } from './MarkerPopup';
 import { MarketData } from '@/services/GeoDataService';
 import { aisService, AISShipData } from '@/services/AISStreamService';
+import { flightService, FlightData } from '@/services/FlightTrackingService';
+import { stormService, StormData } from '@/services/StormTrackingService';
 import { LeafletMapCanvas } from './LeafletMapCanvas';
 import { 
   Search, 
@@ -19,6 +21,8 @@ import {
   Camera,
   Clock,
   Ship,
+  Plane,
+  CloudLightning,
   X,
   Trash2,
   Map,
@@ -74,6 +78,16 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
   const [showAISSettings, setShowAISSettings] = useState(false);
   const [aisApiKey, setAisApiKey] = useState(aisService.getApiKey());
 
+  // Flight tracking state
+  const [flights, setFlights] = useState<FlightData[]>([]);
+  const [flightsConnected, setFlightsConnected] = useState(false);
+  const [flightCount, setFlightCount] = useState(0);
+
+  // Storm tracking state
+  const [storms, setStorms] = useState<StormData[]>([]);
+  const [stormsConnected, setStormsConnected] = useState(false);
+  const [stormCount, setStormCount] = useState(0);
+
   // Fetch data
   const { data: earthquakes = [], isLoading: loadingEQ, refetch: refetchEQ } = useEarthquakeData();
   const { data: markets = [], isLoading: loadingMarkets, refetch: refetchMarkets } = useMarketMapData();
@@ -106,6 +120,64 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
     } else {
       setAisShips([]);
       setAisConnected(false);
+    }
+  }, [layers]);
+
+  // Flight tracking connection
+  useEffect(() => {
+    const flightLayerEnabled = layers.find(l => l.id === 'flights')?.enabled;
+    
+    if (flightLayerEnabled) {
+      flightService.startPolling(undefined, 15000); // Poll every 15s
+      
+      flightService.subscribeToConnection('bloomberg-map', (status) => {
+        setFlightsConnected(status.connected);
+        setFlightCount(status.count);
+      });
+      
+      flightService.subscribe('bloomberg-map', (flightData) => {
+        // Limit to 500 flights for performance, prioritize in-air flights
+        const inAir = flightData.filter(f => !f.onGround);
+        setFlights(inAir.slice(0, 500));
+      });
+      
+      return () => {
+        flightService.unsubscribe('bloomberg-map');
+        flightService.unsubscribeFromConnection('bloomberg-map');
+        flightService.stopPolling();
+      };
+    } else {
+      setFlights([]);
+      setFlightsConnected(false);
+      setFlightCount(0);
+    }
+  }, [layers]);
+
+  // Storm tracking connection
+  useEffect(() => {
+    const stormLayerEnabled = layers.find(l => l.id === 'storms')?.enabled;
+    
+    if (stormLayerEnabled) {
+      stormService.startPolling(300000); // Poll every 5 min
+      
+      stormService.subscribeToConnection('bloomberg-map', (status) => {
+        setStormsConnected(status.connected);
+        setStormCount(status.count);
+      });
+      
+      stormService.subscribe('bloomberg-map', (stormData) => {
+        setStorms(stormData);
+      });
+      
+      return () => {
+        stormService.unsubscribe('bloomberg-map');
+        stormService.unsubscribeFromConnection('bloomberg-map');
+        stormService.stopPolling();
+      };
+    } else {
+      setStorms([]);
+      setStormsConnected(false);
+      setStormCount(0);
     }
   }, [layers]);
 
@@ -341,6 +413,8 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
             oilGas={oilGas}
             wildfires={wildfires}
             aisShips={aisShips}
+            flights={flights}
+            storms={storms}
             onSelectItem={setSelectedItem}
             onZoomChange={setCurrentZoom}
             onTilesLoadingChange={setTilesLoading}
@@ -350,9 +424,10 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
             createShipIcon={createShipIcon}
           />
 
-          {/* AIS Status Badge */}
-          {isLayerEnabled('ais_ships') && (
-            <div className="absolute top-4 left-4 flex items-center gap-2 z-[1000]">
+          {/* Real-time Status Badges */}
+          <div className="absolute top-4 left-4 flex flex-col gap-2 z-[1000]">
+            {/* AIS Ships */}
+            {isLayerEnabled('ais_ships') && (
               <Badge className={cn(
                 "text-[10px] px-2 py-0.5",
                 aisConnected 
@@ -362,8 +437,41 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
                 <Ship className="w-3 h-3 mr-1" />
                 {aisConnected ? `${aisShipCount} Ships Live` : 'Connecting...'}
               </Badge>
-            </div>
-          )}
+            )}
+
+            {/* Flights */}
+            {isLayerEnabled('flights') && (
+              <Badge className={cn(
+                "text-[10px] px-2 py-0.5",
+                flightsConnected 
+                  ? "bg-amber-500/20 text-amber-400 border-amber-500/50" 
+                  : "bg-red-500/20 text-red-400 border-red-500/50"
+              )}>
+                <Plane className="w-3 h-3 mr-1" />
+                {flightsConnected ? `${flightCount} Flights Live` : 'Loading...'}
+              </Badge>
+            )}
+
+            {/* Storms */}
+            {isLayerEnabled('storms') && (
+              <Badge className={cn(
+                "text-[10px] px-2 py-0.5",
+                stormsConnected 
+                  ? stormCount > 0 
+                    ? "bg-red-500/20 text-red-400 border-red-500/50"
+                    : "bg-green-500/20 text-green-400 border-green-500/50"
+                  : "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
+              )}>
+                <CloudLightning className="w-3 h-3 mr-1" />
+                {stormsConnected 
+                  ? stormCount > 0 
+                    ? `${stormCount} Active Storms`
+                    : 'No Active Storms'
+                  : 'Loading...'
+                }
+              </Badge>
+            )}
+          </div>
 
           {/* Zoom Controls */}
           <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-[1000]">

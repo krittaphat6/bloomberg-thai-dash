@@ -147,6 +147,120 @@ export const MarkerPopup = ({ item, onClose }: MarkerPopupProps) => {
       );
     }
 
+    // Ship popup
+    if ((item as any).type === 'ship') {
+      const ship = item as any;
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[#00a0ff] font-bold">🚢 {ship.name || 'Unknown Vessel'}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[10px]">
+            <div>
+              <span className="text-white/50">Type:</span>
+              <span className="text-white ml-1">{ship.shipType}</span>
+            </div>
+            <div>
+              <span className="text-white/50">Flag:</span>
+              <span className="text-white ml-1">{ship.flag}</span>
+            </div>
+            <div>
+              <span className="text-white/50">Speed:</span>
+              <span className="text-white ml-1">{ship.speed?.toFixed(1)} kts</span>
+            </div>
+            <div>
+              <span className="text-white/50">Course:</span>
+              <span className="text-white ml-1">{ship.course?.toFixed(0)}°</span>
+            </div>
+            {ship.destination && (
+              <div className="col-span-2">
+                <span className="text-white/50">Destination:</span>
+                <span className="text-white ml-1">{ship.destination}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Flight popup
+    if ((item as any).type === 'flight') {
+      const flight = item as any;
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[#f59e0b] font-bold">✈️ {flight.callsign || flight.id}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[10px]">
+            <div>
+              <span className="text-white/50">Origin:</span>
+              <span className="text-white ml-1">{flight.originCountry}</span>
+            </div>
+            <div>
+              <span className="text-white/50">Status:</span>
+              <span className={cn("ml-1", flight.onGround ? "text-gray-400" : "text-green-400")}>
+                {flight.onGround ? 'On Ground' : 'In Flight'}
+              </span>
+            </div>
+            <div>
+              <span className="text-white/50">Altitude:</span>
+              <span className="text-white ml-1">{Math.round(flight.altitude)} m</span>
+            </div>
+            <div>
+              <span className="text-white/50">Speed:</span>
+              <span className="text-white ml-1">{Math.round(flight.velocity)} m/s</span>
+            </div>
+            <div>
+              <span className="text-white/50">Heading:</span>
+              <span className="text-white ml-1">{Math.round(flight.heading)}°</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Storm popup
+    if ((item as any).type === 'storm') {
+      const storm = item as any;
+      const categoryColor = storm.category >= 4 ? '#dc2626' : storm.category >= 3 ? '#ef4444' : storm.category >= 1 ? '#f97316' : '#eab308';
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[#ef4444] font-bold">🌀 {storm.name}</span>
+            {storm.category > 0 && (
+              <span className="text-lg font-bold" style={{ color: categoryColor }}>
+                Cat {storm.category}
+              </span>
+            )}
+          </div>
+          <div className="text-white text-xs capitalize">{storm.stormType?.replace('_', ' ')}</div>
+          <div className="grid grid-cols-2 gap-2 text-[10px]">
+            <div>
+              <span className="text-white/50">Wind:</span>
+              <span className="text-white ml-1">{storm.windSpeed} kts ({Math.round(storm.windSpeedMph)} mph)</span>
+            </div>
+            <div>
+              <span className="text-white/50">Pressure:</span>
+              <span className="text-white ml-1">{storm.pressure} mb</span>
+            </div>
+            <div className="col-span-2">
+              <span className="text-white/50">Movement:</span>
+              <span className="text-white ml-1">{storm.movement}</span>
+            </div>
+            <div className="col-span-2">
+              <span className="text-white/50">Basin:</span>
+              <span className="text-white ml-1 capitalize">{storm.basin?.replace('_', ' ')}</span>
+            </div>
+          </div>
+          {storm.headline && (
+            <div className="text-[9px] text-amber-400 border-t border-white/10 pt-2 mt-2">
+              {storm.headline}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     return null;
   };
 

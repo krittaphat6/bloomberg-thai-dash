@@ -100,7 +100,9 @@ export const MapLayers = ({ layers, onToggleLayer, onOpenSettings }: MapLayersPr
 export const DEFAULT_LAYERS: LayerConfig[] = [
   { id: 'markets', name: 'World Equity Markets', icon: '📈', enabled: true, color: '#00ff00', description: 'Stock exchanges worldwide' },
   { id: 'earthquakes', name: 'Earthquakes', icon: '🌋', enabled: false, color: '#ff4444', description: 'USGS real-time data' },
-  { id: 'ais_ships', name: 'Live AIS Ships', icon: '🚢', enabled: true, color: '#00a0ff', description: 'Real-time vessel tracking', hasSettings: true },
+  { id: 'ais_ships', name: 'Live AIS Ships', icon: '🚢', enabled: false, color: '#00a0ff', description: 'Real-time vessel tracking', hasSettings: true },
+  { id: 'flights', name: 'Live Flights', icon: '✈️', enabled: false, color: '#f59e0b', description: 'OpenSky Network real-time' },
+  { id: 'storms', name: 'Active Storms', icon: '🌀', enabled: false, color: '#ef4444', description: 'NOAA hurricanes & storms' },
   { id: 'wildfires', name: 'Wildfires', icon: '🔥', enabled: false, color: '#ff6600', description: 'NASA FIRMS data' },
   { id: 'banking', name: 'Central Banks', icon: '🏦', enabled: false, color: '#00a0ff', description: 'Interest rates & meetings' },
   { id: 'oil_gas', name: 'Oil & Gas', icon: '🛢️', enabled: false, color: '#8b4513', description: 'Fields, refineries, LNG' },
@@ -113,5 +115,4 @@ export const DEFAULT_LAYERS: LayerConfig[] = [
   { id: 'natgas', name: 'Natural Gas', icon: '🔵', enabled: false, color: '#87ceeb', description: 'LNG terminals, pipelines' },
   { id: 'infrastructure', name: 'Infrastructure', icon: '🏗️', enabled: false, color: '#708090', description: 'Major projects' },
   { id: 'disease', name: 'Disease Outbreaks', icon: '🦠', enabled: false, color: '#800080', description: 'WHO data' },
-  { id: 'weather', name: 'Weather Events', icon: '🌀', enabled: false, color: '#00ced1', description: 'Storms & hurricanes' },
 ];
