@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 
 import type { LayerConfig } from "./MapLayers";
@@ -82,14 +82,16 @@ export function LeafletMapCanvas({
   const baseLayerRef = useRef<L.TileLayer | null>(null);
   const labelLayerRef = useRef<L.TileLayer | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   const tileKey = useMemo(() => `${baseUrl}::${labelUrl ?? ""}::${attribution}`, [baseUrl, labelUrl, attribution]);
 
   // Init map
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    const el = containerRef.current;
+    if (!el || mapRef.current) return;
 
-    const map = L.map(containerRef.current, {
+    const map = L.map(el, {
       zoomControl: false,
       minZoom,
       maxZoom,
@@ -97,27 +99,46 @@ export function LeafletMapCanvas({
     }).setView(center, zoom);
 
     mapRef.current = map;
+    setMapReady(true);
     onMapReady(map);
     onZoomChange(map.getZoom());
 
+    const invalidate = () => map.invalidateSize();
+    // Ensure the map renders correctly inside flex/resizeable containers
+    requestAnimationFrame(invalidate);
+    setTimeout(invalidate, 100);
+
     const onZoomEnd = () => onZoomChange(map.getZoom());
     map.on("zoomend", onZoomEnd);
+
+    const onWindowResize = () => invalidate();
+    window.addEventListener("resize", onWindowResize);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => invalidate());
+      ro.observe(el);
+    }
 
     const markersLayer = L.layerGroup().addTo(map);
     markersLayerRef.current = markersLayer;
 
     return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", onWindowResize);
       map.off("zoomend", onZoomEnd);
       map.remove();
       mapRef.current = null;
       baseLayerRef.current = null;
       labelLayerRef.current = null;
       markersLayerRef.current = null;
+      setMapReady(false);
     };
   }, [center, zoom, minZoom, maxZoom, onMapReady, onZoomChange]);
 
   // Update tile layers
   useEffect(() => {
+    if (!mapReady) return;
     const map = mapRef.current;
     if (!map) return;
 
@@ -141,9 +162,11 @@ export function LeafletMapCanvas({
 
     const handleLoading = () => onTilesLoadingChange(true);
     const handleLoad = () => onTilesLoadingChange(false);
+    const handleTileError = () => onTilesLoadingChange(false);
 
     base.on("loading", handleLoading);
     base.on("load", handleLoad);
+    base.on("tileerror", handleTileError);
 
     base.addTo(map);
     baseLayerRef.current = base;
@@ -162,11 +185,13 @@ export function LeafletMapCanvas({
     return () => {
       base.off("loading", handleLoading);
       base.off("load", handleLoad);
+      base.off("tileerror", handleTileError);
     };
-  }, [tileKey, baseUrl, labelUrl, attribution, minZoom, maxZoom, onTilesLoadingChange]);
+  }, [mapReady, tileKey, baseUrl, labelUrl, attribution, minZoom, maxZoom, onTilesLoadingChange]);
 
   // Update markers
   useEffect(() => {
+    if (!mapReady) return;
     const map = mapRef.current;
     const group = markersLayerRef.current;
     if (!map || !group) return;
@@ -278,6 +303,7 @@ export function LeafletMapCanvas({
       });
     }
   }, [
+    mapReady,
     layers,
     isLayerEnabled,
     markets,
