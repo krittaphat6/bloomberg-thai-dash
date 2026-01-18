@@ -61,10 +61,11 @@ serve(async (req) => {
   try {
     const { news } = await req.json() as { news: NewsItem[] };
     
+    // Use GEMINI_API_KEY first, fallback to LOVABLE_API_KEY
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+    
+    const useDirectGemini = !!GEMINI_API_KEY;
 
     // Filter news from last 30 days
     const oneMonthAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
@@ -138,26 +139,54 @@ ${newsSummary}
 1. รายงานตลาดแบบละเอียด
 2. Flowchart กระบวนการตัดสินใจลงทุน (อย่างน้อย 8-12 nodes)`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 4000,
-      }),
-    });
+    let response: Response;
+    
+    if (useDirectGemini) {
+      // Use direct Gemini API
+      console.log("🔑 Using direct Gemini API");
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ 
+              parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] 
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 8000,
+              responseMimeType: "application/json"
+            }
+          })
+        }
+      );
+    } else if (LOVABLE_API_KEY) {
+      // Fallback to Lovable Gateway
+      console.log("🔑 Using Lovable Gateway");
+      response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 4000,
+        }),
+      });
+    } else {
+      throw new Error("No AI API key configured");
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
+      console.error("AI error:", response.status, errorText);
       
       if (response.status === 429) {
         return new Response(JSON.stringify({ 
@@ -177,16 +206,28 @@ ${newsSummary}
         });
       }
       
-      throw new Error(`AI Gateway error: ${response.status}`);
+      throw new Error(`AI error: ${response.status}`);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    
+    // Parse content based on API type
+    let content: string;
+    if (useDirectGemini) {
+      content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    } else {
+      content = data.choices?.[0]?.message?.content || '';
+    }
     
     // Parse JSON from response
     let result: DailyReportResult;
     try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      let jsonStr = content.trim();
+      if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+      if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+      if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+      
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         result = {
