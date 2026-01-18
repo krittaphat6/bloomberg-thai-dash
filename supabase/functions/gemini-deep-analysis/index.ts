@@ -270,9 +270,15 @@ ${newsText}
 
   if (!response.ok) {
     const status = response.status;
-    if (status === 429 || status === 402) {
+    if (status === 429) {
       return new Response(
-        JSON.stringify({ success: false, error: status === 429 ? 'Rate limit exceeded' : 'Credits exhausted' }),
+        JSON.stringify({ success: false, error: 'Rate limit exceeded - กรุณารอสักครู่แล้วลองใหม่' }),
+        { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (status === 402) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Credits หมด - กรุณาเติม Credits ที่ Settings → Workspace → Usage' }),
         { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

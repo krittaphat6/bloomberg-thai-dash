@@ -160,8 +160,19 @@ ${newsSummary}
       console.error("AI Gateway error:", response.status, errorText);
       
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+        return new Response(JSON.stringify({ 
+          error: "Rate limit exceeded - กรุณารอสักครู่แล้วลองใหม่" 
+        }), {
           status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ 
+          error: "Credits หมด - กรุณาเติม Credits ที่ Settings → Workspace → Usage" 
+        }), {
+          status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
