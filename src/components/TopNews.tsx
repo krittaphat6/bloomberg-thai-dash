@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, Sparkles, ExternalLink, Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3, Settings, Eye, FileText, Users, Zap, Loader2, Target, Plus, X, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Search, Pin } from 'lucide-react';
+import { RefreshCw, Sparkles, ExternalLink, Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3, Settings, Eye, FileText, Users, Zap, Loader2, Target, Plus, X, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Search, Pin, Newspaper } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
@@ -882,7 +882,7 @@ export const TopNews = () => {
 
           {/* ✅ NEW: News Sources Tab */}
           {activeTab === 'sources' && <div className="p-4 md:p-6">
-              <div className="max-w-4xl mx-auto">
+              <div className="max-w-6xl mx-auto">
                 {/* Header */}
                 <div className="flex items-center gap-3 mb-6">
                   <div className="p-3 rounded-xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/30">
@@ -890,91 +890,149 @@ export const TopNews = () => {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-white">News Sources</h2>
-                    <p className="text-sm text-zinc-500">แหล่งข่าวที่เชื่อมต่ออยู่ในระบบ</p>
+                    <p className="text-sm text-zinc-500">แหล่งข่าวที่เชื่อมต่อ + ข่าวทั้งหมดที่ดึงมา</p>
                   </div>
                   <Badge className="ml-auto text-sm bg-emerald-500/10 text-emerald-400 border-emerald-500/30 animate-pulse">
                     🟢 Live
                   </Badge>
                 </div>
 
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <Card className="p-4 bg-zinc-900 border-zinc-800">
-                    <p className="text-xs text-zinc-500 mb-1">Total Sources</p>
-                    <p className="text-2xl font-bold text-white">{newsMetadata?.sourcesCount || 30}</p>
-                  </Card>
-                  <Card className="p-4 bg-zinc-900 border-zinc-800">
-                    <p className="text-xs text-zinc-500 mb-1">Total News</p>
-                    <p className="text-2xl font-bold text-white">{newsMetadata?.totalFetched || 0}</p>
-                  </Card>
-                  <Card className="p-4 bg-zinc-900 border-zinc-800">
-                    <p className="text-xs text-zinc-500 mb-1">Fresh (24h)</p>
-                    <p className="text-2xl font-bold text-emerald-400">{newsMetadata?.freshNewsCount || 0}</p>
-                  </Card>
-                  <Card className="p-4 bg-zinc-900 border-zinc-800">
-                    <p className="text-xs text-zinc-500 mb-1">Analyzed</p>
-                    <p className="text-2xl font-bold text-blue-400">{newsMetadata?.analyzedCount || 0}</p>
-                  </Card>
-                </div>
-
-                {/* Connected Sources */}
-                <Card className="p-6 bg-gradient-to-br from-zinc-900 to-zinc-950 border-zinc-800 mb-6">
-                  <h3 className="text-sm font-medium text-zinc-400 mb-4 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    Connected Sources ({newsMetadata?.sources?.length || 0})
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {(newsMetadata?.sources || [
-                      '📰 r/forex', '🥇 r/Gold', '₿ r/crypto', '🚀 r/WSB', '📊 r/stocks',
-                      '📉 r/Economics', '💰 r/investing', '📈 r/options', '⚡ r/Futures',
-                      '🥈 r/Silverbugs', '📊 r/Daytrading', '🤖 r/algotrading',
-                      '🔶 HackerNews', '₿ CryptoCompare', '🦎 CoinGecko', '😱 Fear&Greed',
-                      '📅 CoinPaprika', '🪨 CryptoSlate', '📦 TheBlock', '🗞️ NewsAPI',
-                      '📰 MarketWatch', '📈 SeekingAlpha', '💱 DailyFX', '💹 FXStreet',
-                      '📅 Investing.com', '🏦 Fed Watch', '🥇 Kitco', '📊 Finviz'
-                    ]).map((source, i) => (
-                      <Badge 
-                        key={i} 
-                        variant="outline" 
-                        className="text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/5 px-3 py-1.5"
-                      >
-                        {source}
-                      </Badge>
-                    ))}
+                {/* Stats + Sources Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                  {/* Left: Stats */}
+                  <div className="space-y-4">
+                    <Card className="p-4 bg-zinc-900 border-zinc-800">
+                      <p className="text-xs text-zinc-500 mb-1">Total Sources</p>
+                      <p className="text-3xl font-bold text-white">{newsMetadata?.sourcesCount || 30}</p>
+                    </Card>
+                    <Card className="p-4 bg-zinc-900 border-zinc-800">
+                      <p className="text-xs text-zinc-500 mb-1">Total News Fetched</p>
+                      <p className="text-3xl font-bold text-emerald-400">{rawNews.length}</p>
+                    </Card>
+                    <Card className="p-4 bg-zinc-900 border-zinc-800">
+                      <p className="text-xs text-zinc-500 mb-1">Fresh (24h)</p>
+                      <p className="text-3xl font-bold text-blue-400">{newsMetadata?.freshNewsCount || 0}</p>
+                    </Card>
                   </div>
-                </Card>
 
-                {/* Categories */}
-                <Card className="p-6 bg-zinc-900 border-zinc-800">
-                  <h3 className="text-sm font-medium text-zinc-400 mb-4">Categories Covered</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    {[
-                      { name: 'Forex', icon: '💱', color: 'from-blue-500/20 to-blue-600/20', border: 'border-blue-500/30', text: 'text-blue-400' },
-                      { name: 'Crypto', icon: '₿', color: 'from-orange-500/20 to-orange-600/20', border: 'border-orange-500/30', text: 'text-orange-400' },
-                      { name: 'Commodities', icon: '🥇', color: 'from-yellow-500/20 to-yellow-600/20', border: 'border-yellow-500/30', text: 'text-yellow-400' },
-                      { name: 'Stocks', icon: '📈', color: 'from-purple-500/20 to-purple-600/20', border: 'border-purple-500/30', text: 'text-purple-400' },
-                      { name: 'Economics', icon: '🏦', color: 'from-emerald-500/20 to-emerald-600/20', border: 'border-emerald-500/30', text: 'text-emerald-400' }
-                    ].map((cat, i) => (
-                      <div 
-                        key={i} 
-                        className={`p-4 rounded-lg bg-gradient-to-br ${cat.color} border ${cat.border} text-center`}
-                      >
-                        <span className="text-2xl mb-2 block">{cat.icon}</span>
-                        <span className={`text-sm font-medium ${cat.text}`}>{cat.name}</span>
-                        <div className="flex items-center justify-center gap-1 mt-2">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          <span className="text-[10px] text-emerald-400">Active</span>
-                        </div>
+                  {/* Right: Connected Sources List */}
+                  <Card className="lg:col-span-2 p-4 bg-gradient-to-br from-zinc-900 to-zinc-950 border-zinc-800">
+                    <h3 className="text-sm font-medium text-zinc-400 mb-3 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      Connected Sources ({newsMetadata?.sources?.length || 28})
+                    </h3>
+                    <ScrollArea className="h-[200px]">
+                      <div className="flex flex-wrap gap-2 pr-4">
+                        {(newsMetadata?.sources || [
+                          '📰 r/forex', '🥇 r/Gold', '₿ r/crypto', '🚀 r/WSB', '📊 r/stocks',
+                          '📉 r/Economics', '💰 r/investing', '📈 r/options', '⚡ r/Futures',
+                          '🥈 r/Silverbugs', '📊 r/Daytrading', '🤖 r/algotrading',
+                          '🔶 HackerNews', '₿ CryptoCompare', '🦎 CoinGecko', '😱 Fear&Greed',
+                          '📅 CoinPaprika', '🪨 CryptoSlate', '📦 TheBlock', '🗞️ NewsAPI',
+                          '📰 MarketWatch', '📈 SeekingAlpha', '💱 DailyFX', '💹 FXStreet',
+                          '📅 Investing.com', '🏦 Fed Watch', '🥇 Kitco', '📊 Finviz'
+                        ]).map((source, i) => (
+                          <Badge 
+                            key={i} 
+                            variant="outline" 
+                            className="text-xs border-emerald-500/30 text-emerald-400 bg-emerald-500/5 px-3 py-1.5"
+                          >
+                            {source}
+                          </Badge>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </Card>
-
-                {/* Last Sync Info */}
-                <div className="mt-6 flex items-center justify-between text-xs text-zinc-500">
-                  <span>Last synced: {newsMetadata?.newestNewsAge || 'just now'}</span>
-                  <span>Age range: {newsMetadata?.newestNewsAge || 'N/A'} - {newsMetadata?.oldestNewsAge || 'N/A'}</span>
+                    </ScrollArea>
+                  </Card>
                 </div>
+
+                {/* All News Feed */}
+                <Card className="p-4 bg-zinc-900/50 border-zinc-800">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2">
+                      <Newspaper className="w-4 h-4" />
+                      All Fetched News ({rawNews.length})
+                    </h3>
+                    <span className="text-xs text-zinc-500">
+                      Last sync: {newsMetadata?.newestNewsAge || 'just now'}
+                    </span>
+                  </div>
+                  
+                  <ScrollArea className="h-[500px]">
+                    <div className="space-y-3 pr-4">
+                      {rawNews.length === 0 ? (
+                        <div className="text-center py-12 text-zinc-500">
+                          <Newspaper className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p>No news fetched yet</p>
+                          <p className="text-xs mt-1">กดปุ่ม Refresh เพื่อดึงข่าวใหม่</p>
+                        </div>
+                      ) : (
+                        rawNews.map((item, i) => (
+                          <div 
+                            key={item.id || i}
+                            className="p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50 hover:border-zinc-600 transition-colors group"
+                          >
+                            <div className="flex items-start gap-3">
+                              {/* Source Badge */}
+                              <Badge 
+                                variant="outline" 
+                                className={`text-[10px] shrink-0 ${
+                                  item.source?.includes('reddit') || item.source?.includes('r/') 
+                                    ? 'border-orange-500/30 text-orange-400 bg-orange-500/5'
+                                    : item.source?.includes('Crypto') || item.source?.includes('Bitcoin')
+                                    ? 'border-yellow-500/30 text-yellow-400 bg-yellow-500/5'
+                                    : item.source?.includes('Hacker')
+                                    ? 'border-amber-500/30 text-amber-400 bg-amber-500/5'
+                                    : 'border-blue-500/30 text-blue-400 bg-blue-500/5'
+                                }`}
+                              >
+                                {item.source || 'Unknown'}
+                              </Badge>
+
+                              {/* Sentiment */}
+                              {item.sentiment && (
+                                <Badge 
+                                  variant="outline"
+                                  className={`text-[10px] shrink-0 ${
+                                    item.sentiment === 'bullish' 
+                                      ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5'
+                                      : item.sentiment === 'bearish'
+                                      ? 'border-red-500/30 text-red-400 bg-red-500/5'
+                                      : 'border-zinc-500/30 text-zinc-400 bg-zinc-500/5'
+                                  }`}
+                                >
+                                  {item.sentiment === 'bullish' ? '📈' : item.sentiment === 'bearish' ? '📉' : '➡️'} {item.sentiment}
+                                </Badge>
+                              )}
+
+                              {/* Time */}
+                              <span className="text-[10px] text-zinc-500 shrink-0 ml-auto">
+                                {item.timestamp 
+                                  ? new Date(item.timestamp).toLocaleString('th-TH', { 
+                                      day: 'numeric', 
+                                      month: 'short', 
+                                      hour: '2-digit', 
+                                      minute: '2-digit' 
+                                    })
+                                  : 'N/A'
+                                }
+                              </span>
+                            </div>
+
+                            {/* Title */}
+                            <a 
+                              href={item.url || '#'} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="block mt-2 text-sm font-medium text-white group-hover:text-emerald-400 transition-colors line-clamp-2"
+                            >
+                              {item.title}
+                            </a>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </Card>
               </div>
             </div>}
         </ScrollArea>
