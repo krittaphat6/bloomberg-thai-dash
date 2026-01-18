@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
 import { GeminiThinkingModal } from './TopNews/GeminiThinkingModal';
+import { RelationshipDiagram } from './TopNews/RelationshipDiagram';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
 
@@ -141,6 +142,7 @@ export const TopNews = () => {
   const [selectedAssetForModal, setSelectedAssetForModal] = useState<string | null>(null);
   const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleAnalysisResult>>({});
   const [analyzing, setAnalyzing] = useState(false);
+  const [dailyReportAI, setDailyReportAI] = useState<any>(null);
   const [showAddAsset, setShowAddAsset] = useState(false);
 
   // Asset management
@@ -205,7 +207,8 @@ export const TopNews = () => {
         setDailyReports(data.dailyReports || []);
         setXNotifications(data.xNotifications || []);
         setRawNews(data.rawNews || []);
-        setNewsMetadata(data.newsMetadata || null); // ✅ NEW
+        setNewsMetadata(data.newsMetadata || null);
+        setDailyReportAI(data.dailyReportAI || null);
         setLastUpdated(new Date());
         console.log(`✅ Loaded ${data.macro?.length || 0} macro items, ${data.rawNews?.length || 0} news`);
 
@@ -251,7 +254,7 @@ export const TopNews = () => {
     }
   }, [toast, initialLoading, pinnedAssets]);
 
-  // Add asset handler
+  // Add asset handler - ✅ FIXED: แสดงผลทันที
   const handleAddAsset = (symbol: string) => {
     if (pinnedAssets.find(p => p.symbol === symbol)) {
       toast({
@@ -268,14 +271,25 @@ export const TopNews = () => {
       });
       return;
     }
-    setPinnedAssets(prev => [...prev, {
-      symbol,
-      addedAt: Date.now()
-    }]);
-    toast({
-      title: `✅ ${ASSET_DISPLAY_NAMES[symbol] || symbol} added`
+    
+    // ✅ NEW: อัพเดท state ทันที
+    const newAsset = { symbol, addedAt: Date.now() };
+    setPinnedAssets(prev => {
+      const updated = [...prev, newAsset];
+      console.log('✅ Asset added:', symbol, 'Total:', updated.length);
+      return updated;
     });
-    setTimeout(() => fetchNews(), 500);
+    
+    // Close dropdown
+    setShowAddAsset(false);
+    
+    toast({
+      title: `✅ ${ASSET_DISPLAY_NAMES[symbol] || symbol} added`,
+      description: 'Fetching AI analysis...'
+    });
+    
+    // Fetch analysis for new asset
+    setTimeout(() => fetchNews(), 300);
   };
 
   // Remove asset handler
@@ -451,27 +465,48 @@ export const TopNews = () => {
                     </div>
                   </Card>}
 
+                {/* ✅ FIXED: Pinned Assets Grid with visible delete buttons */}
                 <div className="flex flex-wrap gap-2">
                   {pinnedAssets.map(asset => {
-                const price = assetPrices[asset.symbol];
-                const analysis = ableAnalysis[asset.symbol];
-                return <Badge key={asset.symbol} variant="outline" className="px-3 py-1.5 border-zinc-700 text-zinc-300 hover:border-emerald-500 group relative">
-                        <div className="flex items-center gap-2">
-                          <Pin className="w-3 h-3 text-emerald-500" />
-                          <span className="font-medium">{ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol}</span>
-                          {price && <span className={`text-xs ${price.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {price.change >= 0 ? '+' : ''}{price.changePercent.toFixed(2)}%
-                            </span>}
-                          {analysis && <span className={`text-xs font-bold ${analysis.P_up_pct > 55 ? 'text-emerald-400' : analysis.P_up_pct < 45 ? 'text-red-400' : 'text-zinc-400'}`}>
-                              {analysis.P_up_pct > 50 ? '↗' : '↘'}
-                            </span>}
-                          <X className="w-3 h-3 opacity-0 group-hover:opacity-100 cursor-pointer hover:text-red-400 transition-opacity" onClick={e => {
-                      e.stopPropagation();
-                      handleRemoveAsset(asset.symbol);
-                    }} />
-                        </div>
-                      </Badge>;
-              })}
+                    const price = assetPrices[asset.symbol];
+                    const analysis = ableAnalysis[asset.symbol];
+                    return (
+                      <div 
+                        key={asset.symbol} 
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-700 hover:border-emerald-500/50 bg-zinc-900/50 group transition-all"
+                      >
+                        <Pin className="w-3 h-3 text-emerald-500" />
+                        <span className="font-medium text-zinc-300 text-sm">
+                          {ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol}
+                        </span>
+                        {price && (
+                          <span className={`text-xs ${price.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {price.change >= 0 ? '+' : ''}{price.changePercent.toFixed(2)}%
+                          </span>
+                        )}
+                        {analysis && (
+                          <span className={`text-xs font-bold ${
+                            analysis.P_up_pct > 55 ? 'text-emerald-400' : 
+                            analysis.P_up_pct < 45 ? 'text-red-400' : 'text-zinc-400'
+                          }`}>
+                            {analysis.P_up_pct > 50 ? '↗' : '↘'}
+                          </span>
+                        )}
+                        {/* ✅ NEW: Always visible delete button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveAsset(asset.symbol);
+                            toast({ title: `❌ ${ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol} removed` });
+                          }}
+                          className="ml-1 p-0.5 rounded-full hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition-colors"
+                          title={`Remove ${ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -717,6 +752,16 @@ export const TopNews = () => {
                   )}
                 </Card>
               </div>
+              
+              {/* AI Relationship Diagram */}
+              {dailyReportAI?.relationships && dailyReportAI.relationships.length > 0 && (
+                <div className="mb-6">
+                  <RelationshipDiagram 
+                    relationships={dailyReportAI.relationships}
+                    title={dailyReportAI.marketTheme || 'AI Relationship Analysis'}
+                  />
+                </div>
+              )}
               
               {/* Daily Reports List */}
               <div>
