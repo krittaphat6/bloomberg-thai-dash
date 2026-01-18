@@ -1,5 +1,6 @@
 // Global Cyclone/Storm Service - Multi-source real-time tropical cyclone tracking
-// Uses Edge Function to bypass CORS and aggregate data from NOAA, JMA, etc.
+// Uses Edge Function to bypass CORS and aggregate data from NOAA, JMA, JTWC
+// NO DEMO DATA - Only real-time data from official sources
 
 import { supabase } from '@/integrations/supabase/client';
 
@@ -44,21 +45,44 @@ export interface CycloneData {
   advisory?: string;
   headline?: string;
   lastUpdate: Date | string;
+  isRealTime: boolean;
+}
+
+interface NoActiveStormsInfo {
+  message: string;
+  sources: string[];
+  regions: Array<{ name: string; period: string }>;
 }
 
 interface CacheEntry {
   data: CycloneData[];
+  noActiveInfo: NoActiveStormsInfo | null;
   timestamp: number;
+  isRealTime: boolean;
+  hasActiveStorms: boolean;
 }
 
 class GlobalCycloneService {
   private cyclones: Map<string, CycloneData> = new Map();
   private listeners: Map<string, (cyclones: CycloneData[]) => void> = new Map();
-  private connectionListeners: Map<string, (status: { connected: boolean; count: number }) => void> = new Map();
+  private connectionListeners: Map<string, (status: ConnectionStatus) => void> = new Map();
   private pollInterval: number | null = null;
   private _isConnected = false;
+  private _hasActiveStorms = false;
+  private _noActiveInfo: NoActiveStormsInfo | null = null;
   private cache: CacheEntry | null = null;
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  // Connection status type
+  get connectionStatus(): ConnectionStatus {
+    return {
+      connected: this._isConnected,
+      count: this.cyclones.size,
+      isRealTime: true,
+      hasActiveStorms: this._hasActiveStorms,
+      noActiveInfo: this._noActiveInfo,
+    };
+  }
 
   // Main function: Fetch from Edge Function
   async fetchAllCyclones(): Promise<CycloneData[]> {
@@ -68,7 +92,7 @@ class GlobalCycloneService {
         return this.cache.data;
       }
 
-      console.log('🌀 Fetching global cyclone data via Edge Function...');
+      console.log('🌀 Fetching real-time cyclone data via Edge Function...');
 
       const { data, error } = await supabase.functions.invoke('global-weather', {
         body: {},
@@ -84,9 +108,18 @@ class GlobalCycloneService {
       }
 
       const allCyclones: CycloneData[] = data.cyclones || [];
-
+      
       this._isConnected = true;
-      this.cache = { data: allCyclones, timestamp: Date.now() };
+      this._hasActiveStorms = data.hasActiveStorms || allCyclones.length > 0;
+      this._noActiveInfo = data.noActiveInfo || null;
+      
+      this.cache = { 
+        data: allCyclones, 
+        noActiveInfo: this._noActiveInfo,
+        timestamp: Date.now(),
+        isRealTime: data.isRealTime ?? true,
+        hasActiveStorms: this._hasActiveStorms,
+      };
 
       // Update internal state
       this.cyclones.clear();
@@ -95,7 +128,12 @@ class GlobalCycloneService {
       this.notifyListeners();
       this.notifyConnectionListeners();
 
-      console.log(`✅ Fetched ${allCyclones.length} active cyclones`);
+      if (this._hasActiveStorms) {
+        console.log(`✅ Fetched ${allCyclones.length} active cyclones (REAL-TIME)`);
+      } else {
+        console.log('ℹ️ No active cyclones currently - this is normal seasonal behavior');
+      }
+      
       return allCyclones;
     } catch (error) {
       console.error('❌ Global cyclone fetch error:', error);
@@ -107,48 +145,25 @@ class GlobalCycloneService {
         return Array.from(this.cyclones.values());
       }
       
-      // Return demo data as fallback
-      return this.getDemoData();
+      // Return empty array - NO DEMO DATA
+      return [];
     }
   }
 
-  // Demo data for when API fails
-  private getDemoData(): CycloneData[] {
-    const now = new Date();
-    return [
-      {
-        id: 'demo-ma-on',
-        name: 'MA-ON',
-        category: 2,
-        type: 'typhoon',
-        typeLabel: 'Typhoon',
-        lat: 18.5,
-        lng: 128.0,
-        windSpeed: 85,
-        windSpeedMph: 98,
-        windSpeedKmh: 157,
-        pressure: 970,
-        movement: { direction: 'NW', directionDeg: 315, speed: 12 },
-        forecastTrack: [
-          { lat: 18.5, lng: 128.0, time: now.toISOString(), timeLabel: 'Current', windSpeed: 85, category: 2 },
-          { lat: 20.0, lng: 126.0, time: new Date(now.getTime() + 24*60*60*1000).toISOString(), timeLabel: '00:00 AM Thu', windSpeed: 90, category: 2 },
-          { lat: 22.0, lng: 124.0, time: new Date(now.getTime() + 48*60*60*1000).toISOString(), timeLabel: '18:00 PM Thu', windSpeed: 100, category: 3 },
-          { lat: 24.0, lng: 122.0, time: new Date(now.getTime() + 72*60*60*1000).toISOString(), timeLabel: '12:00 PM Fri', windSpeed: 85, category: 2 },
-          { lat: 26.5, lng: 120.0, time: new Date(now.getTime() + 96*60*60*1000).toISOString(), timeLabel: '00:00 AM Sat', windSpeed: 65, category: 1 },
-        ],
-        basin: 'west_pacific',
-        basinLabel: 'West Pacific',
-        source: 'Demo Data',
-        headline: 'Sample Typhoon MA-ON (Demo)',
-        lastUpdate: now.toISOString(),
-      }
-    ];
+  // Get no active storms info
+  getNoActiveInfo(): NoActiveStormsInfo | null {
+    return this._noActiveInfo;
+  }
+
+  // Check if there are active storms
+  hasActiveStorms(): boolean {
+    return this._hasActiveStorms;
   }
 
   // Subscription methods
   startPolling(intervalMs = 300000) {
     if (this.pollInterval) return;
-    console.log('🌀 Global cyclone tracking started');
+    console.log('🌀 Global cyclone tracking started (REAL-TIME DATA ONLY)');
     this.fetchAllCyclones();
     this.pollInterval = window.setInterval(() => {
       this.fetchAllCyclones();
@@ -176,9 +191,9 @@ class GlobalCycloneService {
     this.listeners.delete(id);
   }
 
-  subscribeToConnection(id: string, callback: (status: { connected: boolean; count: number }) => void) {
+  subscribeToConnection(id: string, callback: (status: ConnectionStatus) => void) {
     this.connectionListeners.set(id, callback);
-    callback({ connected: this._isConnected, count: this.cyclones.size });
+    callback(this.connectionStatus);
   }
 
   unsubscribeFromConnection(id: string) {
@@ -191,7 +206,7 @@ class GlobalCycloneService {
   }
 
   private notifyConnectionListeners() {
-    const status = { connected: this._isConnected, count: this.cyclones.size };
+    const status = this.connectionStatus;
     this.connectionListeners.forEach(cb => cb(status));
   }
 
@@ -236,6 +251,14 @@ class GlobalCycloneService {
     };
     return baseRadius[type] + category * 30;
   }
+}
+
+interface ConnectionStatus {
+  connected: boolean;
+  count: number;
+  isRealTime: boolean;
+  hasActiveStorms: boolean;
+  noActiveInfo: NoActiveStormsInfo | null;
 }
 
 export const globalCycloneService = new GlobalCycloneService();

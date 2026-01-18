@@ -671,13 +671,19 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
       </div>
 
       {/* Bottom Panel */}
-      <div className="h-24 bg-card border-t border-border">
+      <div className="h-28 bg-card border-t border-border">
         <DataPanel 
           markets={markets} 
           earthquakes={earthquakes} 
           banks={banks}
           cyclones={cyclones}
           selectedItem={selectedItem}
+          weatherLayersEnabled={{
+            clouds: isLayerEnabled('weather_clouds'),
+            rain: isLayerEnabled('weather_rain'),
+            temp: isLayerEnabled('weather_temp'),
+            wind: isLayerEnabled('weather_wind'),
+          }}
         />
       </div>
     </div>
