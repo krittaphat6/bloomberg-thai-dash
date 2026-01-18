@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import { cn } from '@/lib/utils';
 import { useEarthquakeData } from '@/hooks/useEarthquakeData';
@@ -58,7 +58,15 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
   const [currentZoom, setCurrentZoom] = useState(3);
   const [tilesLoading, setTilesLoading] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
-  
+
+  // Keep these stable so LeafletMapCanvas doesn't re-initialize the map on every rerender
+  const initialCenter = useMemo(() => [20, 100] as [number, number], []);
+  const initialZoom = 3;
+  const handleMapReady = useCallback((map: L.Map) => {
+    mapRef.current = map;
+    setCurrentZoom(map.getZoom());
+  }, []);
+
   // AIS Ships state
   const [aisShips, setAisShips] = useState<AISShipData[]>([]);
   const [aisConnected, setAisConnected] = useState(false);
@@ -317,8 +325,8 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
           <LeafletMapCanvas
             className="w-full h-full"
             background={mapStyle === 'dark' ? '#0a1628' : mapStyle === 'satellite' ? '#1a1a2e' : '#e0e0e0'}
-            center={[20, 100]}
-            zoom={3}
+            center={initialCenter}
+            zoom={initialZoom}
             minZoom={2}
             maxZoom={19}
             baseUrl={getTileLayerUrl()}
@@ -336,10 +344,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
             onSelectItem={setSelectedItem}
             onZoomChange={setCurrentZoom}
             onTilesLoadingChange={setTilesLoading}
-            onMapReady={(map) => {
-              mapRef.current = map;
-              setCurrentZoom(map.getZoom());
-            }}
+            onMapReady={handleMapReady}
             getMarketColor={getMarketColor}
             getEarthquakeRadius={getEarthquakeRadius}
             createShipIcon={createShipIcon}
