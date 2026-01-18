@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Circle, Polyline, useMap } from 'react-leaflet';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Circle, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { 
   RefreshCw, Plane, Ship, Cloud, Activity, Flame, BarChart3,
-  MapPin, Navigation, Download, Waves, Crosshair, Search, AlertTriangle, Wind, Settings, X, Anchor
+  MapPin, Navigation, Download, Waves, Crosshair, Search, AlertTriangle, Wind, Settings, X, Anchor, Map, Satellite, Moon
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { WeatherService, WeatherAlert } from '@/services/WeatherService';
@@ -72,6 +72,24 @@ const FlyToLocation = ({ location }: { location: [number, number] | null }) => {
   return null;
 };
 
+// Zoom level tracker component
+const ZoomTracker = ({ onZoomChange }: { onZoomChange: (zoom: number) => void }) => {
+  const map = useMapEvents({
+    zoomend: () => {
+      onZoomChange(map.getZoom());
+    },
+    load: () => {
+      onZoomChange(map.getZoom());
+    }
+  });
+  
+  useEffect(() => {
+    onZoomChange(map.getZoom());
+  }, [map, onZoomChange]);
+  
+  return null;
+};
+
 const GlobalMapView = () => {
   const [layers, setLayers] = useState<DataLayer[]>([
     { id: 'cyclones', name: '🌀 Active Cyclones', icon: <Wind className="w-4 h-4" />, enabled: true, color: '#ff00ff' },
@@ -105,6 +123,43 @@ const GlobalMapView = () => {
   const [showAISSettings, setShowAISSettings] = useState(false);
   const [aisConnected, setAisConnected] = useState(false);
   const [aisApiKey, setAisApiKey] = useState(localStorage.getItem('ais-api-key') || 'api20e05d4778974e70f1d2b1843ad61312fd29cf6d');
+
+  // Map style state
+  const [mapStyle, setMapStyle] = useState<'standard' | 'dark' | 'satellite'>('dark');
+  const [currentZoom, setCurrentZoom] = useState(3);
+  const [tilesLoading, setTilesLoading] = useState(false);
+
+  // Get tile layer URL based on map style
+  const getTileLayerUrl = () => {
+    switch(mapStyle) {
+      case 'standard':
+        return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      case 'dark':
+        return 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png';
+      case 'satellite':
+        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      default:
+        return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    }
+  };
+
+  const getLabelLayerUrl = () => {
+    if (mapStyle === 'standard') return null;
+    return 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png';
+  };
+
+  const getAttribution = () => {
+    switch(mapStyle) {
+      case 'standard':
+        return '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+      case 'dark':
+        return '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
+      case 'satellite':
+        return '&copy; <a href="https://www.esri.com/">Esri</a> World Imagery';
+      default:
+        return '&copy; OpenStreetMap';
+    }
+  };
 
   // Fetch Flights (with fallback to mock data)
   const fetchFlights = useCallback(async () => {
@@ -574,20 +629,50 @@ const GlobalMapView = () => {
           </div>
         )}
 
+        {/* Tiles Loading Indicator */}
+        {tilesLoading && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[1002] bg-[#0d1f3c]/95 border border-[#1e3a5f] rounded-lg px-4 py-2 flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-blue-400 animate-spin" />
+            <span className="text-white text-sm">Loading map tiles...</span>
+          </div>
+        )}
+
         <MapContainer
           center={[20, 100]}
           zoom={3}
           className="w-full h-full"
-          style={{ background: '#0a1628' }}
+          style={{ background: mapStyle === 'dark' ? '#0a1628' : mapStyle === 'satellite' ? '#1a1a2e' : '#e0e0e0' }}
           zoomControl={false}
+          maxZoom={19}
+          minZoom={2}
         >
           <FlyToLocation location={flyToTarget} />
+          <ZoomTracker onZoomChange={setCurrentZoom} />
           
-          {/* Dark Theme Tile Layer */}
+          {/* Main Tile Layer */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            key={`main-${mapStyle}`}
+            url={getTileLayerUrl()}
+            attribution={getAttribution()}
+            maxZoom={19}
+            minZoom={2}
+            eventHandlers={{
+              loading: () => setTilesLoading(true),
+              load: () => setTilesLoading(false),
+            }}
           />
+          
+          {/* Labels Layer (for dark and satellite modes) */}
+          {getLabelLayerUrl() && (
+            <TileLayer
+              key={`labels-${mapStyle}`}
+              url={getLabelLayerUrl()!}
+              attribution=''
+              pane="overlayPane"
+              zIndex={650}
+              maxZoom={19}
+            />
+          )}
 
           {/* Cyclones Layer */}
           {layers.find(l => l.id === 'cyclones')?.enabled && cyclones.map(cyclone => (
@@ -869,6 +954,17 @@ const GlobalMapView = () => {
               </p>
             )}
           </div>
+          
+          {/* Zoom Level Indicator */}
+          <div className="mt-2 pt-2 border-t border-[#1e3a5f]">
+            <p className="text-gray-400 flex items-center gap-1">
+              <Search className="w-3 h-3" />
+              Zoom: Level {currentZoom}
+            </p>
+            <p className="text-gray-500 text-[10px]">
+              {currentZoom < 5 ? 'Continent' : currentZoom < 8 ? 'Country' : currentZoom < 12 ? 'City' : currentZoom < 16 ? 'District' : 'Street'}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -888,6 +984,41 @@ const GlobalMapView = () => {
         </div>
 
         <ScrollArea className="flex-1">
+          {/* Map Style Selector */}
+          <div className="p-3 border-b border-[#1e3a5f]">
+            <p className="text-white font-bold text-sm mb-2">Map Style</p>
+            <div className="flex gap-1">
+              <Button 
+                size="sm" 
+                variant={mapStyle === 'standard' ? 'default' : 'outline'}
+                onClick={() => setMapStyle('standard')}
+                className={`flex-1 text-xs h-8 ${mapStyle === 'standard' ? 'bg-blue-600 hover:bg-blue-700' : 'border-[#2d4a6f] text-gray-300 hover:bg-[#1e3a5f]'}`}
+              >
+                <Map className="w-3 h-3 mr-1" />
+                Standard
+              </Button>
+              <Button 
+                size="sm" 
+                variant={mapStyle === 'dark' ? 'default' : 'outline'}
+                onClick={() => setMapStyle('dark')}
+                className={`flex-1 text-xs h-8 ${mapStyle === 'dark' ? 'bg-blue-600 hover:bg-blue-700' : 'border-[#2d4a6f] text-gray-300 hover:bg-[#1e3a5f]'}`}
+              >
+                <Moon className="w-3 h-3 mr-1" />
+                Dark
+              </Button>
+              <Button 
+                size="sm" 
+                variant={mapStyle === 'satellite' ? 'default' : 'outline'}
+                onClick={() => setMapStyle('satellite')}
+                className={`flex-1 text-xs h-8 ${mapStyle === 'satellite' ? 'bg-blue-600 hover:bg-blue-700' : 'border-[#2d4a6f] text-gray-300 hover:bg-[#1e3a5f]'}`}
+              >
+                <Satellite className="w-3 h-3 mr-1" />
+                Sat
+              </Button>
+            </div>
+          </div>
+
+          {/* Layer Controls */}
           <div className="p-3 space-y-2">
             {layers.map(layer => (
               <div
