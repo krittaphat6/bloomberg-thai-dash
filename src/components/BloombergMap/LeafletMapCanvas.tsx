@@ -3,7 +3,10 @@ import L from "leaflet";
 
 import type { LayerConfig } from "./MapLayers";
 import type { AISShipData } from "@/services/AISStreamService";
+import type { FlightData } from "@/services/FlightTrackingService";
+import type { StormData } from "@/services/StormTrackingService";
 import type { MarketData } from "@/services/GeoDataService";
+import { stormService } from "@/services/StormTrackingService";
 
 type LatLng = [number, number];
 
@@ -35,6 +38,8 @@ interface LeafletMapCanvasProps {
   oilGas: Array<{ id: string; coordinates: [number, number]; name: string }>;
   wildfires: Array<{ id: string; coordinates: [number, number] }>;
   aisShips: AISShipData[];
+  flights: FlightData[];
+  storms: StormData[];
 
   onSelectItem: (item: any) => void;
   onZoomChange: (zoom: number) => void;
@@ -69,6 +74,8 @@ export function LeafletMapCanvas({
   oilGas,
   wildfires,
   aisShips,
+  flights,
+  storms,
   onSelectItem,
   onZoomChange,
   onTilesLoadingChange,
@@ -302,6 +309,95 @@ export function LeafletMapCanvas({
         marker.addTo(group);
       });
     }
+
+    // Flights layer
+    if (isLayerEnabled("flights")) {
+      flights.forEach((f) => {
+        const color = f.onGround ? "#6b7280" : "#f59e0b";
+        const heading = f.heading || 0;
+        
+        const icon = L.divIcon({
+          className: 'custom-flight-icon',
+          html: `<div style="transform: rotate(${heading}deg); filter: drop-shadow(0 0 2px ${color});">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="1">
+              <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+            </svg>
+          </div>`,
+          iconSize: [14, 14],
+          iconAnchor: [7, 7],
+        });
+
+        const marker = L.marker([f.lat, f.lng], { icon });
+        marker.on("click", () =>
+          onSelectItem({
+            id: f.icao24,
+            name: f.callsign || f.icao24,
+            type: "flight",
+            callsign: f.callsign,
+            originCountry: f.originCountry,
+            altitude: f.altitude,
+            velocity: f.velocity,
+            heading: f.heading,
+            onGround: f.onGround,
+            coordinates: [f.lng, f.lat],
+          })
+        );
+        marker.addTo(group);
+      });
+    }
+
+    // Storms layer
+    if (isLayerEnabled("storms")) {
+      storms.forEach((s) => {
+        const color = stormService.getStormColor(s);
+        const radius = stormService.getStormRadius(s);
+        
+        // Pulsing circle for active storms
+        const marker = L.circleMarker([s.lat, s.lng], {
+          radius,
+          color: color,
+          weight: 3,
+          fillColor: color,
+          fillOpacity: 0.4,
+          className: 'storm-marker-pulse',
+        });
+        
+        marker.on("click", () =>
+          onSelectItem({
+            id: s.id,
+            name: s.name,
+            type: "storm",
+            stormType: s.type,
+            category: s.category,
+            windSpeed: s.windSpeed,
+            windSpeedMph: s.windSpeedMph,
+            pressure: s.pressure,
+            movement: s.movement,
+            basin: s.basin,
+            headline: s.headline,
+            coordinates: [s.lng, s.lat],
+          })
+        );
+        marker.addTo(group);
+
+        // Add storm name label for hurricanes
+        if (s.type === 'hurricane' || s.category >= 1) {
+          const nameLabel = L.divIcon({
+            className: 'storm-name-label',
+            html: `<div style="
+              color: white;
+              font-size: 10px;
+              font-weight: bold;
+              text-shadow: 0 0 4px ${color}, 0 0 2px black;
+              white-space: nowrap;
+            ">${s.name}</div>`,
+            iconSize: [60, 16],
+            iconAnchor: [30, -radius - 4],
+          });
+          L.marker([s.lat, s.lng], { icon: nameLabel }).addTo(group);
+        }
+      });
+    }
   }, [
     mapReady,
     layers,
@@ -313,6 +409,8 @@ export function LeafletMapCanvas({
     oilGas,
     wildfires,
     aisShips,
+    flights,
+    storms,
     onSelectItem,
     getMarketColor,
     getEarthquakeRadius,

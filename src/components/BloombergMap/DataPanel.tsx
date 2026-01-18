@@ -77,6 +77,9 @@ export const DataPanel = ({ markets, earthquakes, banks, selectedItem }: DataPan
                 {selectedItem.type === 'market' && `${selectedItem.changePercent?.toFixed(2)}%`}
                 {selectedItem.type === 'earthquake' && `M${selectedItem.magnitude}`}
                 {selectedItem.type === 'banking' && `${selectedItem.interestRate}%`}
+                {selectedItem.type === 'ship' && `${selectedItem.shipType} • ${selectedItem.speed?.toFixed(1)} kts`}
+                {selectedItem.type === 'flight' && `Alt: ${Math.round(selectedItem.altitude)}m • ${Math.round(selectedItem.velocity)} m/s`}
+                {selectedItem.type === 'storm' && `Cat ${selectedItem.category} • ${selectedItem.windSpeed} kts`}
               </div>
             </div>
           ) : (
@@ -108,6 +111,22 @@ export const DataPanel = ({ markets, earthquakes, banks, selectedItem }: DataPan
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-[#ff6600]" />
             <span className="text-white/80">Wildfire</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 flex items-center justify-center">
+              <span className="text-[8px]">✈️</span>
+            </div>
+            <span className="text-white/80">Flight</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#ef4444] animate-pulse" />
+            <span className="text-white/80">Storm</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 flex items-center justify-center">
+              <span className="text-[8px]">🚢</span>
+            </div>
+            <span className="text-white/80">Ship</span>
           </div>
         </div>
       </div>
