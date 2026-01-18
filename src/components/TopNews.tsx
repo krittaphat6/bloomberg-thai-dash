@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
 import { GeminiThinkingModal } from './TopNews/GeminiThinkingModal';
 import { RelationshipDiagram } from './TopNews/RelationshipDiagram';
+import { FlowchartDiagram } from './TopNews/FlowchartDiagram';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
 
@@ -150,6 +151,11 @@ export const TopNews = () => {
   const [geminiThinking, setGeminiThinking] = useState<string>('');
   const [geminiResult, setGeminiResult] = useState<any>(null);
   const [showGeminiPanel, setShowGeminiPanel] = useState(false);
+  
+  // ✅ NEW: Daily Report Gemini States
+  const [dailyReportLoading, setDailyReportLoading] = useState(false);
+  const [dailyReportData, setDailyReportData] = useState<any>(null);
+  const [dailyReportThinking, setDailyReportThinking] = useState<string>('');
 
   // Asset management
   const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>([{
@@ -819,200 +825,253 @@ export const TopNews = () => {
             </div>}
 
           {activeTab === 'daily' && <div className="p-4 md:p-6">
-              {/* Header Row: Daily Reports + News Sources Panel */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-                {/* AI Market Summary - Left Side */}
-                <div className="lg:col-span-2">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Brain className="w-5 h-5 text-emerald-400" />
-                    <h2 className="text-lg font-medium text-white">ABLE 3.0 Market Summary</h2>
-                    <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">
-                      AI Generated
-                    </Badge>
+              {/* Header with Run Gemini Analysis Button */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <Brain className="w-6 h-6 text-emerald-400" />
+                  <div>
+                    <h2 className="text-xl font-bold text-white">ABLE 3.0 Monthly Market Report</h2>
+                    <p className="text-xs text-zinc-500">วิเคราะห์ข่าว 1 เดือน + Flowchart กระบวนการตัดสินใจ</p>
                   </div>
-                  
-                  <Card className="p-4 bg-gradient-to-br from-zinc-900 to-zinc-950 border-emerald-500/20">
-                    {macroData.length > 0 ? (
-                      <div className="space-y-4">
-                        {/* Summary Header */}
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="text-sm font-medium text-emerald-400 mb-1">
-                              📊 Market Focus Analysis
-                            </h3>
-                            <p className="text-xs text-zinc-500">
-                              Based on {newsMetadata?.freshNewsCount || 0} fresh news from {newsMetadata?.sourcesCount || 0} sources
-                            </p>
-                          </div>
-                          <Badge className={`text-xs ${
-                            macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55).length > macroData.length / 2 
-                              ? 'bg-emerald-500/10 text-emerald-400' 
-                              : macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45).length > macroData.length / 2
-                              ? 'bg-red-500/10 text-red-400'
-                              : 'bg-zinc-700/10 text-zinc-400'
-                          }`}>
-                            {macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55).length > macroData.length / 2 
-                              ? '📈 Bullish Bias' 
-                              : macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45).length > macroData.length / 2
-                              ? '📉 Bearish Bias'
-                              : '➡️ Mixed Sentiment'}
-                          </Badge>
-                        </div>
-                        
-                        {/* Key Insights */}
-                        <div className="p-3 bg-zinc-800/50 rounded-lg">
-                          <p className="text-sm text-zinc-300 leading-relaxed">
-                            {(() => {
-                              const bullishAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55);
-                              const bearishAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45);
-                              const holdAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct >= 45 && m.ableAnalysis.P_up_pct <= 55);
-                              
-                              let summary = '🔍 สถานการณ์ตลาดปัจจุบัน: ';
-                              
-                              if (bullishAssets.length > 0) {
-                                summary += `สินทรัพย์ที่มีแนวโน้มขาขึ้น: ${bullishAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}. `;
-                              }
-                              if (bearishAssets.length > 0) {
-                                summary += `สินทรัพย์ที่มีแนวโน้มขาลง: ${bearishAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}. `;
-                              }
-                              if (holdAssets.length > 0) {
-                                summary += `สินทรัพย์ที่ควรรอดู: ${holdAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}.`;
-                              }
-                              
-                              const firstWithDrivers = macroData.find(m => m.ableAnalysis?.key_drivers?.length);
-                              if (firstWithDrivers?.ableAnalysis?.key_drivers) {
-                                summary += ` ปัจจัยสำคัญ: ${firstWithDrivers.ableAnalysis.key_drivers.slice(0, 2).join(', ')}.`;
-                              }
-                              
-                              return summary || 'กำลังรอการวิเคราะห์...';
-                            })()}
-                          </p>
-                        </div>
-                        
-                        {/* Asset Cards Summary */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                          {macroData.slice(0, 4).map(macro => (
-                            <div key={macro.symbol} className="p-2 bg-zinc-800/30 rounded-lg">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-medium text-white">
-                                  {ASSET_DISPLAY_NAMES[macro.symbol] || macro.symbol}
-                                </span>
-                                <span className={`text-[10px] font-bold ${
-                                  macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct > 55 ? 'text-emerald-400' 
-                                  : macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct < 45 ? 'text-red-400' 
-                                  : 'text-zinc-400'
-                                }`}>
-                                  {macro.ableAnalysis?.decision || 'HOLD'}
-                                </span>
-                              </div>
-                              <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full ${
-                                    macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct > 55 ? 'bg-emerald-500' 
-                                    : macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct < 45 ? 'bg-red-500' 
-                                    : 'bg-zinc-500'
-                                  }`}
-                                  style={{ width: `${macro.ableAnalysis?.P_up_pct || 50}%` }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-zinc-500">
-                        <Brain className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p>เพิ่มสินทรัพย์เพื่อดูการวิเคราะห์ AI</p>
-                      </div>
-                    )}
-                  </Card>
                 </div>
-
-                {/* ✅ NEWS SOURCES PANEL - Right Side */}
-                <div>
-                  <div className="flex items-center gap-2 mb-4">
-                    <Zap className="w-5 h-5 text-yellow-400" />
-                    <h2 className="text-lg font-medium text-white">News Sources</h2>
-                    <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400">
-                      {newsMetadata?.sourcesCount || 30}+ Active
-                    </Badge>
-                  </div>
-                  
-                  <Card className="p-4 bg-gradient-to-br from-zinc-900 to-zinc-950 border-yellow-500/20 h-[calc(100%-2.5rem)]">
-                    <div className="space-y-3">
-                      {/* Status */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-zinc-400">Connection Status</span>
-                        <Badge className="text-[10px] bg-emerald-500/10 text-emerald-400 animate-pulse">
-                          🟢 Live
-                        </Badge>
-                      </div>
+                
+                <Button
+                  size="default"
+                  onClick={async () => {
+                    if (rawNews.length === 0) {
+                      toast({ title: '⚠️ ไม่มีข่าว', description: 'กดปุ่ม Refresh เพื่อดึงข่าวก่อน', variant: 'destructive' });
+                      return;
+                    }
+                    
+                    setDailyReportLoading(true);
+                    setDailyReportThinking('🧠 กำลังอ่านข่าว 1 เดือนที่ผ่านมา (' + rawNews.length + ' ข่าว)...\n');
+                    
+                    try {
+                      setDailyReportThinking(prev => prev + '📊 วิเคราะห์ธีมตลาด, ปัจจัยเสี่ยง, โอกาสลงทุน...\n');
+                      setDailyReportThinking(prev => prev + '📈 สร้าง Flowchart กระบวนการตัดสินใจ...\n\n');
                       
-                      {/* Stats */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="p-2 bg-zinc-800/50 rounded">
-                          <p className="text-[10px] text-zinc-500">Total News</p>
-                          <p className="text-sm font-bold text-white">{newsMetadata?.totalFetched || 0}</p>
-                        </div>
-                        <div className="p-2 bg-zinc-800/50 rounded">
-                          <p className="text-[10px] text-zinc-500">Fresh (24h)</p>
-                          <p className="text-sm font-bold text-emerald-400">{newsMetadata?.freshNewsCount || 0}</p>
-                        </div>
-                      </div>
+                      const { data, error } = await supabase.functions.invoke('gemini-daily-report', {
+                        body: { news: rawNews }
+                      });
                       
-                      {/* Sources List - ✅ ดึงจาก backend จริง */}
-                      <div>
-                        <p className="text-[10px] text-zinc-500 mb-2">Connected Sources ({newsMetadata?.sources?.length || 0}):</p>
-                        <ScrollArea className="h-24">
-                          <div className="flex flex-wrap gap-1">
-                            {(newsMetadata?.sources || [
-                              'Reddit (12)', 'HackerNews (4)', 'CryptoCompare', 
-                              'MarketWatch', 'CoinGecko', 'Fear&Greed',
-                              'FX Calendar', 'CoinPaprika', 'Finviz',
-                              'NewsAPI', 'Investing', 'Fed Watch'
-                            ]).map((source, i) => (
-                              <Badge key={i} variant="outline" className="text-[9px] border-zinc-700 text-zinc-400 py-0.5">
-                                {source}
-                              </Badge>
-                            ))}
-                          </div>
-                        </ScrollArea>
-                      </div>
+                      if (error) throw error;
                       
-                      {/* Categories */}
-                      <div>
-                        <p className="text-[10px] text-zinc-500 mb-2">Categories:</p>
-                        <div className="space-y-1">
-                          {[
-                            { name: 'Forex', color: 'text-blue-400' },
-                            { name: 'Crypto', color: 'text-orange-400' },
-                            { name: 'Commodities', color: 'text-yellow-400' },
-                            { name: 'Stocks', color: 'text-purple-400' },
-                            { name: 'Economics', color: 'text-emerald-400' }
-                          ].map((cat, i) => (
-                            <div key={i} className="flex items-center justify-between">
-                              <span className={`text-xs ${cat.color}`}>• {cat.name}</span>
-                              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {/* Last Update */}
-                      <div className="pt-2 border-t border-zinc-800">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-zinc-600">Last Sync</span>
-                          <span className="text-[10px] text-emerald-400">
-                            {newsMetadata?.newestNewsAge || 'now'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                </div>
+                      if (data) {
+                        setDailyReportThinking(prev => prev + '✅ วิเคราะห์เสร็จสิ้น!\n\n');
+                        setDailyReportThinking(prev => prev + '💭 ' + (data.thinking || 'Analysis complete') + '\n');
+                        setDailyReportData(data);
+                        
+                        toast({
+                          title: '✅ รายงานพร้อมแล้ว',
+                          description: `วิเคราะห์ ${data.newsAnalyzed || rawNews.length} ข่าว สำเร็จ`
+                        });
+                      } else {
+                        throw new Error('No data returned');
+                      }
+                    } catch (err) {
+                      console.error('Daily report error:', err);
+                      setDailyReportThinking(prev => prev + '\n❌ เกิดข้อผิดพลาด: ' + (err instanceof Error ? err.message : 'Unknown error'));
+                      toast({
+                        title: '❌ การวิเคราะห์ล้มเหลว',
+                        description: err instanceof Error ? err.message : 'Unknown error',
+                        variant: 'destructive'
+                      });
+                    } finally {
+                      setDailyReportLoading(false);
+                    }
+                  }}
+                  disabled={dailyReportLoading || rawNews.length === 0}
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0"
+                >
+                  {dailyReportLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Run Gemini Analysis
+                    </>
+                  )}
+                </Button>
               </div>
               
-              {/* AI Relationship Diagram */}
+              {/* AI Thinking Panel */}
+              {dailyReportThinking && (
+                <Card className="p-4 bg-zinc-900/80 border-purple-500/30 mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Brain className="w-4 h-4 text-purple-400 animate-pulse" />
+                    <span className="text-sm font-medium text-purple-400">Gemini AI Thinking</span>
+                  </div>
+                  <ScrollArea className="h-[120px]">
+                    <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-mono">
+                      {dailyReportThinking}
+                    </pre>
+                  </ScrollArea>
+                </Card>
+              )}
+              
+              {/* Flowchart Diagram */}
+              {dailyReportData?.flowchart && (
+                <div className="mb-6">
+                  <FlowchartDiagram 
+                    nodes={dailyReportData.flowchart.nodes || []}
+                    edges={dailyReportData.flowchart.edges || []}
+                    title="AI Decision Flowchart"
+                  />
+                </div>
+              )}
+              
+              {/* Report Content */}
+              {dailyReportData?.report ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                  {/* Main Report - Left Side */}
+                  <div className="lg:col-span-2 space-y-4">
+                    {/* Summary */}
+                    <Card className="p-4 bg-gradient-to-br from-zinc-900 to-zinc-950 border-emerald-500/20">
+                      <h3 className="text-lg font-bold text-white mb-2">{dailyReportData.report.title}</h3>
+                      <p className="text-xs text-zinc-500 mb-3">{dailyReportData.report.dateRange} • {dailyReportData.newsAnalyzed} news analyzed</p>
+                      <p className="text-sm text-zinc-300 leading-relaxed">{dailyReportData.report.summary}</p>
+                    </Card>
+                    
+                    {/* Key Findings */}
+                    <Card className="p-4 bg-zinc-900/50 border-zinc-800">
+                      <h4 className="text-sm font-medium text-emerald-400 mb-3 flex items-center gap-2">
+                        <Target className="w-4 h-4" />
+                        Key Findings
+                      </h4>
+                      <ul className="space-y-2">
+                        {dailyReportData.report.keyFindings?.map((finding: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
+                            <span className="text-emerald-400">•</span>
+                            {finding}
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                    
+                    {/* Market Themes */}
+                    <Card className="p-4 bg-zinc-900/50 border-zinc-800">
+                      <h4 className="text-sm font-medium text-purple-400 mb-3 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        Market Themes
+                      </h4>
+                      <div className="space-y-3">
+                        {dailyReportData.report.marketThemes?.map((theme: any, i: number) => (
+                          <div key={i} className="p-3 bg-zinc-800/50 rounded-lg">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-white">{theme.theme}</span>
+                              <Badge 
+                                variant="outline" 
+                                className={`text-[10px] ${
+                                  theme.impact === 'high' ? 'border-red-500/30 text-red-400' :
+                                  theme.impact === 'medium' ? 'border-yellow-500/30 text-yellow-400' :
+                                  'border-zinc-500/30 text-zinc-400'
+                                }`}
+                              >
+                                {theme.impact} impact
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-zinc-400">{theme.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                    
+                    {/* Outlook & Recommendation */}
+                    <Card className="p-4 bg-gradient-to-br from-emerald-900/20 to-zinc-900 border-emerald-500/20">
+                      <h4 className="text-sm font-medium text-emerald-400 mb-2">📊 Outlook</h4>
+                      <p className="text-sm text-zinc-300 mb-4">{dailyReportData.report.outlook}</p>
+                      <h4 className="text-sm font-medium text-emerald-400 mb-2">💡 Recommendation</h4>
+                      <p className="text-sm text-zinc-300">{dailyReportData.report.recommendation}</p>
+                    </Card>
+                  </div>
+                  
+                  {/* Side Panel - Right Side */}
+                  <div className="space-y-4">
+                    {/* Risk Factors */}
+                    <Card className="p-4 bg-red-900/10 border-red-500/20">
+                      <h4 className="text-sm font-medium text-red-400 mb-3 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4" />
+                        Risk Factors
+                      </h4>
+                      <ul className="space-y-2">
+                        {dailyReportData.report.riskFactors?.map((risk: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2 text-xs text-red-300">
+                            <span>⚠️</span>
+                            {risk}
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                    
+                    {/* Opportunities */}
+                    <Card className="p-4 bg-emerald-900/10 border-emerald-500/20">
+                      <h4 className="text-sm font-medium text-emerald-400 mb-3 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4" />
+                        Opportunities
+                      </h4>
+                      <ul className="space-y-2">
+                        {dailyReportData.report.opportunities?.map((opp: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2 text-xs text-emerald-300">
+                            <span>✨</span>
+                            {opp}
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                    
+                    {/* News Sources Panel */}
+                    <Card className="p-4 bg-zinc-900/50 border-yellow-500/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Zap className="w-4 h-4 text-yellow-400" />
+                        <span className="text-sm font-medium text-white">News Sources</span>
+                        <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400 ml-auto">
+                          {newsMetadata?.sourcesCount || 30}+ Active
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div className="p-2 bg-zinc-800/50 rounded text-center">
+                          <p className="text-lg font-bold text-white">{newsMetadata?.totalFetched || rawNews.length}</p>
+                          <p className="text-[10px] text-zinc-500">Total News</p>
+                        </div>
+                        <div className="p-2 bg-zinc-800/50 rounded text-center">
+                          <p className="text-lg font-bold text-emerald-400">{newsMetadata?.freshNewsCount || 0}</p>
+                          <p className="text-[10px] text-zinc-500">Fresh (24h)</p>
+                        </div>
+                      </div>
+                      <ScrollArea className="h-20">
+                        <div className="flex flex-wrap gap-1">
+                          {(newsMetadata?.sources || ['CryptoCompare', 'CoinGecko', 'Reddit', 'HackerNews']).slice(0, 12).map((source, i) => (
+                            <Badge key={i} variant="outline" className="text-[9px] border-zinc-700 text-zinc-400 py-0.5">
+                              {source}
+                            </Badge>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </Card>
+                  </div>
+                </div>
+              ) : (
+                /* Waiting State - Before Analysis */
+                <Card className="p-8 bg-zinc-900/50 border-zinc-800 mb-6">
+                  <div className="text-center">
+                    <Brain className="w-16 h-16 mx-auto mb-4 text-zinc-700" />
+                    <h3 className="text-lg font-medium text-zinc-400 mb-2">รอคำสั่งจาก Gemini AI</h3>
+                    <p className="text-sm text-zinc-600 mb-4">
+                      กดปุ่ม "Run Gemini Analysis" เพื่อให้ AI วิเคราะห์ข่าว 1 เดือน
+                    </p>
+                    <div className="flex items-center justify-center gap-4 text-xs text-zinc-600">
+                      <span>📰 {rawNews.length} ข่าวพร้อมวิเคราะห์</span>
+                      <span>•</span>
+                      <span>🔗 {newsMetadata?.sourcesCount || 30}+ แหล่งข่าว</span>
+                    </div>
+                  </div>
+                </Card>
+              )}
+              
+              {/* AI Relationship Diagram (Legacy) */}
               {dailyReportAI?.relationships && dailyReportAI.relationships.length > 0 && (
                 <div className="mb-6">
                   <RelationshipDiagram 
