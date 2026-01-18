@@ -522,7 +522,20 @@ export const TopNews = () => {
               const P_up = analysis?.P_up_pct || 50;
               const decision = analysis?.decision || 'HOLD';
               const analysisText = analysis?.thai_summary || macro.analysis;
-              return <Card key={macro.symbol} className="p-4 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer bg-black" onClick={() => setSelectedAssetForModal(macro.symbol)}>
+              return <Card key={macro.symbol} className="p-4 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer bg-black relative group" onClick={() => setSelectedAssetForModal(macro.symbol)}>
+                        {/* ✅ DELETE BUTTON - เหมือน Gold card */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveAsset(macro.symbol);
+                            toast({ title: `❌ ${ASSET_DISPLAY_NAMES[macro.symbol] || macro.symbol} removed` });
+                          }}
+                          className="absolute top-2 right-2 p-1.5 rounded-full bg-zinc-800/80 hover:bg-red-500/30 text-zinc-500 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 z-10"
+                          title={`Remove ${ASSET_DISPLAY_NAMES[macro.symbol] || macro.symbol}`}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+
                         {/* Header */}
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
@@ -645,112 +658,195 @@ export const TopNews = () => {
             </div>}
 
           {activeTab === 'daily' && <div className="p-4 md:p-6">
-              {/* AI Market Summary */}
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Brain className="w-5 h-5 text-emerald-400" />
-                  <h2 className="text-lg font-medium text-white">ABLE 3.0 Market Summary</h2>
-                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">
-                    AI Generated
-                  </Badge>
-                </div>
-                
-                <Card className="p-4 bg-gradient-to-br from-zinc-900 to-zinc-950 border-emerald-500/20">
-                  {macroData.length > 0 ? (
-                    <div className="space-y-4">
-                      {/* Summary Header */}
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="text-sm font-medium text-emerald-400 mb-1">
-                            📊 Market Focus Analysis
-                          </h3>
-                          <p className="text-xs text-zinc-500">
-                            Based on {newsMetadata?.freshNewsCount || 0} fresh news from {newsMetadata?.sourcesCount || 0} sources
+              {/* Header Row: Daily Reports + News Sources Panel */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+                {/* AI Market Summary - Left Side */}
+                <div className="lg:col-span-2">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Brain className="w-5 h-5 text-emerald-400" />
+                    <h2 className="text-lg font-medium text-white">ABLE 3.0 Market Summary</h2>
+                    <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">
+                      AI Generated
+                    </Badge>
+                  </div>
+                  
+                  <Card className="p-4 bg-gradient-to-br from-zinc-900 to-zinc-950 border-emerald-500/20">
+                    {macroData.length > 0 ? (
+                      <div className="space-y-4">
+                        {/* Summary Header */}
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="text-sm font-medium text-emerald-400 mb-1">
+                              📊 Market Focus Analysis
+                            </h3>
+                            <p className="text-xs text-zinc-500">
+                              Based on {newsMetadata?.freshNewsCount || 0} fresh news from {newsMetadata?.sourcesCount || 0} sources
+                            </p>
+                          </div>
+                          <Badge className={`text-xs ${
+                            macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55).length > macroData.length / 2 
+                              ? 'bg-emerald-500/10 text-emerald-400' 
+                              : macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45).length > macroData.length / 2
+                              ? 'bg-red-500/10 text-red-400'
+                              : 'bg-zinc-700/10 text-zinc-400'
+                          }`}>
+                            {macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55).length > macroData.length / 2 
+                              ? '📈 Bullish Bias' 
+                              : macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45).length > macroData.length / 2
+                              ? '📉 Bearish Bias'
+                              : '➡️ Mixed Sentiment'}
+                          </Badge>
+                        </div>
+                        
+                        {/* Key Insights */}
+                        <div className="p-3 bg-zinc-800/50 rounded-lg">
+                          <p className="text-sm text-zinc-300 leading-relaxed">
+                            {(() => {
+                              const bullishAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55);
+                              const bearishAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45);
+                              const holdAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct >= 45 && m.ableAnalysis.P_up_pct <= 55);
+                              
+                              let summary = '🔍 สถานการณ์ตลาดปัจจุบัน: ';
+                              
+                              if (bullishAssets.length > 0) {
+                                summary += `สินทรัพย์ที่มีแนวโน้มขาขึ้น: ${bullishAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}. `;
+                              }
+                              if (bearishAssets.length > 0) {
+                                summary += `สินทรัพย์ที่มีแนวโน้มขาลง: ${bearishAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}. `;
+                              }
+                              if (holdAssets.length > 0) {
+                                summary += `สินทรัพย์ที่ควรรอดู: ${holdAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}.`;
+                              }
+                              
+                              const firstWithDrivers = macroData.find(m => m.ableAnalysis?.key_drivers?.length);
+                              if (firstWithDrivers?.ableAnalysis?.key_drivers) {
+                                summary += ` ปัจจัยสำคัญ: ${firstWithDrivers.ableAnalysis.key_drivers.slice(0, 2).join(', ')}.`;
+                              }
+                              
+                              return summary || 'กำลังรอการวิเคราะห์...';
+                            })()}
                           </p>
                         </div>
-                        <Badge className={`text-xs ${
-                          macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55).length > macroData.length / 2 
-                            ? 'bg-emerald-500/10 text-emerald-400' 
-                            : macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45).length > macroData.length / 2
-                            ? 'bg-red-500/10 text-red-400'
-                            : 'bg-zinc-700/10 text-zinc-400'
-                        }`}>
-                          {macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55).length > macroData.length / 2 
-                            ? '📈 Bullish Bias' 
-                            : macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45).length > macroData.length / 2
-                            ? '📉 Bearish Bias'
-                            : '➡️ Mixed Sentiment'}
+                        
+                        {/* Asset Cards Summary */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          {macroData.slice(0, 4).map(macro => (
+                            <div key={macro.symbol} className="p-2 bg-zinc-800/30 rounded-lg">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-medium text-white">
+                                  {ASSET_DISPLAY_NAMES[macro.symbol] || macro.symbol}
+                                </span>
+                                <span className={`text-[10px] font-bold ${
+                                  macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct > 55 ? 'text-emerald-400' 
+                                  : macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct < 45 ? 'text-red-400' 
+                                  : 'text-zinc-400'
+                                }`}>
+                                  {macro.ableAnalysis?.decision || 'HOLD'}
+                                </span>
+                              </div>
+                              <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full ${
+                                    macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct > 55 ? 'bg-emerald-500' 
+                                    : macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct < 45 ? 'bg-red-500' 
+                                    : 'bg-zinc-500'
+                                  }`}
+                                  style={{ width: `${macro.ableAnalysis?.P_up_pct || 50}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-zinc-500">
+                        <Brain className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p>เพิ่มสินทรัพย์เพื่อดูการวิเคราะห์ AI</p>
+                      </div>
+                    )}
+                  </Card>
+                </div>
+
+                {/* ✅ NEWS SOURCES PANEL - Right Side */}
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Zap className="w-5 h-5 text-yellow-400" />
+                    <h2 className="text-lg font-medium text-white">News Sources</h2>
+                    <Badge variant="outline" className="text-[10px] border-yellow-500/30 text-yellow-400">
+                      {newsMetadata?.sourcesCount || 30}+ Active
+                    </Badge>
+                  </div>
+                  
+                  <Card className="p-4 bg-gradient-to-br from-zinc-900 to-zinc-950 border-yellow-500/20 h-[calc(100%-2.5rem)]">
+                    <div className="space-y-3">
+                      {/* Status */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-zinc-400">Connection Status</span>
+                        <Badge className="text-[10px] bg-emerald-500/10 text-emerald-400 animate-pulse">
+                          🟢 Live
                         </Badge>
                       </div>
                       
-                      {/* Key Insights */}
-                      <div className="p-3 bg-zinc-800/50 rounded-lg">
-                        <p className="text-sm text-zinc-300 leading-relaxed">
-                          {(() => {
-                            const bullishAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct > 55);
-                            const bearishAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct < 45);
-                            const holdAssets = macroData.filter(m => m.ableAnalysis?.P_up_pct && m.ableAnalysis.P_up_pct >= 45 && m.ableAnalysis.P_up_pct <= 55);
-                            
-                            let summary = '🔍 สถานการณ์ตลาดปัจจุบัน: ';
-                            
-                            if (bullishAssets.length > 0) {
-                              summary += `สินทรัพย์ที่มีแนวโน้มขาขึ้น: ${bullishAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}. `;
-                            }
-                            if (bearishAssets.length > 0) {
-                              summary += `สินทรัพย์ที่มีแนวโน้มขาลง: ${bearishAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}. `;
-                            }
-                            if (holdAssets.length > 0) {
-                              summary += `สินทรัพย์ที่ควรรอดู: ${holdAssets.map(a => ASSET_DISPLAY_NAMES[a.symbol] || a.symbol).join(', ')}.`;
-                            }
-                            
-                            // Add key drivers from first asset with analysis
-                            const firstWithDrivers = macroData.find(m => m.ableAnalysis?.key_drivers?.length);
-                            if (firstWithDrivers?.ableAnalysis?.key_drivers) {
-                              summary += ` ปัจจัยสำคัญ: ${firstWithDrivers.ableAnalysis.key_drivers.slice(0, 2).join(', ')}.`;
-                            }
-                            
-                            return summary || 'กำลังรอการวิเคราะห์...';
-                          })()}
-                        </p>
+                      {/* Stats */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2 bg-zinc-800/50 rounded">
+                          <p className="text-[10px] text-zinc-500">Total News</p>
+                          <p className="text-sm font-bold text-white">{newsMetadata?.totalFetched || 0}</p>
+                        </div>
+                        <div className="p-2 bg-zinc-800/50 rounded">
+                          <p className="text-[10px] text-zinc-500">Fresh (24h)</p>
+                          <p className="text-sm font-bold text-emerald-400">{newsMetadata?.freshNewsCount || 0}</p>
+                        </div>
                       </div>
                       
-                      {/* Asset Cards Summary */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {macroData.slice(0, 4).map(macro => (
-                          <div key={macro.symbol} className="p-2 bg-zinc-800/30 rounded-lg">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-medium text-white">
-                                {ASSET_DISPLAY_NAMES[macro.symbol] || macro.symbol}
-                              </span>
-                              <span className={`text-[10px] font-bold ${
-                                macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct > 55 ? 'text-emerald-400' 
-                                : macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct < 45 ? 'text-red-400' 
-                                : 'text-zinc-400'
-                              }`}>
-                                {macro.ableAnalysis?.decision || 'HOLD'}
-                              </span>
+                      {/* Sources List */}
+                      <div>
+                        <p className="text-[10px] text-zinc-500 mb-2">Connected Sources:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {[
+                            '📰 Reddit (12)', '🔶 HN (4)', '₿ CryptoCompare', 
+                            '📊 MarketWatch', '🦎 CoinGecko', '😱 Fear&Greed',
+                            '📅 FX Calendar', '💰 CoinPaprika', '📈 Finviz',
+                            '🗞️ NewsAPI', '💹 Investing', '🏦 Fed Watch'
+                          ].map((source, i) => (
+                            <Badge key={i} variant="outline" className="text-[9px] border-zinc-700 text-zinc-400 py-0.5">
+                              {source}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Categories */}
+                      <div>
+                        <p className="text-[10px] text-zinc-500 mb-2">Categories:</p>
+                        <div className="space-y-1">
+                          {[
+                            { name: 'Forex', color: 'text-blue-400' },
+                            { name: 'Crypto', color: 'text-orange-400' },
+                            { name: 'Commodities', color: 'text-yellow-400' },
+                            { name: 'Stocks', color: 'text-purple-400' },
+                            { name: 'Economics', color: 'text-emerald-400' }
+                          ].map((cat, i) => (
+                            <div key={i} className="flex items-center justify-between">
+                              <span className={`text-xs ${cat.color}`}>• {cat.name}</span>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                             </div>
-                            <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full ${
-                                  macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct > 55 ? 'bg-emerald-500' 
-                                  : macro.ableAnalysis?.P_up_pct && macro.ableAnalysis.P_up_pct < 45 ? 'bg-red-500' 
-                                  : 'bg-zinc-500'
-                                }`}
-                                style={{ width: `${macro.ableAnalysis?.P_up_pct || 50}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Last Update */}
+                      <div className="pt-2 border-t border-zinc-800">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-zinc-600">Last Sync</span>
+                          <span className="text-[10px] text-emerald-400">
+                            {newsMetadata?.newestNewsAge || 'now'}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  ) : (
-                    <div className="text-center py-8 text-zinc-500">
-                      <Brain className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p>เพิ่มสินทรัพย์เพื่อดูการวิเคราะห์ AI</p>
-                    </div>
-                  )}
-                </Card>
+                  </Card>
+                </div>
               </div>
               
               {/* AI Relationship Diagram */}
