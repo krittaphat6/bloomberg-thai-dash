@@ -1,11 +1,6 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import {
-  ComposableMap,
-  Geographies,
-  Geography,
-  Marker,
-  ZoomableGroup,
-} from 'react-simple-maps';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, CircleMarker, useMap, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
 import { cn } from '@/lib/utils';
 import { useEarthquakeData } from '@/hooks/useEarthquakeData';
 import { useMarketMapData, useCentralBanks, usePorts, useOilGas, useWildfires, useShips } from '@/hooks/useMarketMapData';
@@ -25,14 +20,26 @@ import {
   Clock,
   Ship,
   X,
-  Trash2
+  Trash2,
+  Map,
+  Moon,
+  Satellite,
+  MapPin,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import 'leaflet/dist/leaflet.css';
 
-const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+// Fix Leaflet default markers
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
 
 interface BloombergMapProps {
   className?: string;
@@ -40,11 +47,35 @@ interface BloombergMapProps {
   onToggleFullscreen?: () => void;
 }
 
+type MapStyleType = 'standard' | 'dark' | 'satellite';
+
+// Custom component to track zoom level
+const ZoomTracker = ({ onZoomChange }: { onZoomChange: (zoom: number) => void }) => {
+  const map = useMapEvents({
+    zoomend: () => {
+      onZoomChange(map.getZoom());
+    },
+  });
+  return null;
+};
+
+// Map controller component for programmatic control
+const MapController = ({ center, zoom }: { center: [number, number]; zoom: number }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, zoom);
+  }, [center, zoom, map]);
+  return null;
+};
+
 export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: BloombergMapProps) => {
   const [layers, setLayers] = useState<LayerConfig[]>(DEFAULT_LAYERS);
-  const [position, setPosition] = useState({ coordinates: [0, 20] as [number, number], zoom: 1 });
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [mapStyle, setMapStyle] = useState<MapStyleType>('standard');
+  const [currentZoom, setCurrentZoom] = useState(3);
+  const [tilesLoading, setTilesLoading] = useState(false);
+  const mapRef = useRef<L.Map | null>(null);
   
   // AIS Ships state
   const [aisShips, setAisShips] = useState<AISShipData[]>([]);
@@ -99,15 +130,15 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
   }, []);
 
   const handleZoomIn = useCallback(() => {
-    setPosition(prev => ({ ...prev, zoom: Math.min(prev.zoom * 1.5, 8) }));
+    if (mapRef.current) {
+      mapRef.current.zoomIn();
+    }
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    setPosition(prev => ({ ...prev, zoom: Math.max(prev.zoom / 1.5, 1) }));
-  }, []);
-
-  const handleMoveEnd = useCallback((position: { coordinates: [number, number]; zoom: number }) => {
-    setPosition(position);
+    if (mapRef.current) {
+      mapRef.current.zoomOut();
+    }
   }, []);
 
   const handleRefresh = useCallback(() => {
@@ -127,6 +158,61 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
     }
   }, []);
 
+  const handleSearch = useCallback(async () => {
+    if (!searchQuery.trim()) return;
+    
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`
+      );
+      const results = await response.json();
+      
+      if (results.length > 0 && mapRef.current) {
+        const { lat, lon } = results[0];
+        mapRef.current.setView([parseFloat(lat), parseFloat(lon)], 12);
+        toast.success(`Found: ${results[0].display_name.split(',')[0]}`);
+      } else {
+        toast.error('Location not found');
+      }
+    } catch (error) {
+      toast.error('Search failed');
+    }
+  }, [searchQuery]);
+
+  // Get tile layer URL based on map style
+  const getTileLayerUrl = useCallback(() => {
+    switch(mapStyle) {
+      case 'standard':
+        return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      case 'dark':
+        return 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png';
+      case 'satellite':
+        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      default:
+        return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    }
+  }, [mapStyle]);
+
+  // Get label layer URL
+  const getLabelLayerUrl = useCallback(() => {
+    if (mapStyle === 'standard') return null;
+    return 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png';
+  }, [mapStyle]);
+
+  // Get attribution based on style
+  const getAttribution = useCallback(() => {
+    switch(mapStyle) {
+      case 'standard':
+        return '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+      case 'dark':
+        return '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
+      case 'satellite':
+        return '&copy; <a href="https://www.esri.com/">Esri</a> World Imagery';
+      default:
+        return '';
+    }
+  }, [mapStyle]);
+
   const getMarketColor = (market: MarketData) => {
     if (market.changePercent > 1) return '#00ff00';
     if (market.changePercent > 0) return '#00cc00';
@@ -135,7 +221,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
     return '#ffcc00';
   };
 
-  const getEarthquakeSize = (magnitude: number) => {
+  const getEarthquakeRadius = (magnitude: number) => {
     if (magnitude >= 7) return 16;
     if (magnitude >= 6) return 12;
     if (magnitude >= 5) return 8;
@@ -156,6 +242,21 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
     return colors[shipType] || '#00a0ff';
   };
 
+  // Create ship icon
+  const createShipIcon = (shipType: string, heading: number) => {
+    const color = getShipColor(shipType);
+    return L.divIcon({
+      className: 'custom-ship-icon',
+      html: `<div style="transform: rotate(${heading}deg); filter: drop-shadow(0 0 2px ${color});">
+        <svg width="12" height="16" viewBox="0 0 12 16">
+          <polygon points="6,0 12,14 6,11 0,14" fill="${color}" stroke="white" stroke-width="0.5"/>
+        </svg>
+      </div>`,
+      iconSize: [12, 16],
+      iconAnchor: [6, 8],
+    });
+  };
+
   return (
     <div className={cn(
       "flex flex-col bg-background text-foreground overflow-hidden",
@@ -172,12 +273,27 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
               placeholder="Search location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               className="w-48 h-7 pl-7 text-xs bg-background border-border"
             />
           </div>
         </div>
         
         <div className="flex items-center gap-2">
+          {/* Zoom Level Indicator */}
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground bg-background/50 px-2 py-1 rounded">
+            <MapPin className="w-3 h-3" />
+            Zoom: {currentZoom}
+          </div>
+
+          {/* Tiles Loading Indicator */}
+          {tilesLoading && (
+            <div className="flex items-center gap-1 text-[10px] text-blue-400">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Loading...
+            </div>
+          )}
+          
           <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
             <Clock className="w-3 h-3" />
             {new Date().toLocaleTimeString()}
@@ -216,155 +332,201 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
       <div className="flex-1 flex overflow-hidden">
         {/* Map */}
         <div className="flex-1 relative bg-background">
-          <ComposableMap
-            projection="geoMercator"
-            projectionConfig={{ scale: 100 }}
-            style={{ width: '100%', height: '100%' }}
+          <MapContainer
+            center={[20, 100]}
+            zoom={3}
+            className="w-full h-full"
+            style={{ 
+              background: mapStyle === 'dark' ? '#0a1628' : mapStyle === 'satellite' ? '#1a1a2e' : '#e0e0e0' 
+            }}
+            zoomControl={false}
+            maxZoom={19}
+            minZoom={2}
+            ref={mapRef}
           >
-            <ZoomableGroup
-              zoom={position.zoom}
-              center={position.coordinates}
-              onMoveEnd={handleMoveEnd}
-            >
-              <Geographies geography={geoUrl}>
-                {({ geographies }) =>
-                  geographies.map((geo) => (
-                    <Geography
-                      key={geo.rsmKey}
-                      geography={geo}
-                      fill="hsl(var(--card))"
-                      stroke="hsl(var(--border))"
-                      strokeWidth={0.5}
-                      style={{
-                        default: { outline: 'none' },
-                        hover: { fill: 'hsl(var(--accent))', outline: 'none' },
-                        pressed: { outline: 'none' },
-                      }}
-                    />
-                  ))
-                }
-              </Geographies>
+            <ZoomTracker onZoomChange={setCurrentZoom} />
+            
+            {/* Main Tile Layer */}
+            <TileLayer
+              key={`main-${mapStyle}`}
+              url={getTileLayerUrl()}
+              attribution={getAttribution()}
+              maxZoom={19}
+              minZoom={2}
+              eventHandlers={{
+                loading: () => setTilesLoading(true),
+                load: () => setTilesLoading(false),
+              }}
+            />
+            
+            {/* Labels Layer for Dark/Satellite modes */}
+            {getLabelLayerUrl() && (
+              <TileLayer
+                key={`labels-${mapStyle}`}
+                url={getLabelLayerUrl()!}
+                attribution=""
+                pane="overlayPane"
+                zIndex={650}
+                maxZoom={19}
+              />
+            )}
 
-              {/* Market Markers */}
-              {isLayerEnabled('markets') && markets.map((market) => (
-                <Marker
-                  key={market.id}
-                  coordinates={market.coordinates}
-                  onClick={() => setSelectedItem(market)}
-                >
-                  <circle
-                    r={6 / position.zoom}
-                    fill={getMarketColor(market)}
-                    stroke="#fff"
-                    strokeWidth={0.5 / position.zoom}
-                    style={{ cursor: 'pointer' }}
-                  />
-                </Marker>
-              ))}
+            {/* Market Markers */}
+            {isLayerEnabled('markets') && markets.map((market) => (
+              <CircleMarker
+                key={market.id}
+                center={[market.coordinates[1], market.coordinates[0]]}
+                radius={6}
+                pathOptions={{
+                  fillColor: getMarketColor(market),
+                  fillOpacity: 0.8,
+                  color: '#fff',
+                  weight: 1,
+                }}
+                eventHandlers={{
+                  click: () => setSelectedItem(market),
+                }}
+              >
+                <Popup>
+                  <div className="text-xs">
+                    <strong>{market.name}</strong>
+                    <br />
+                    Change: {market.changePercent > 0 ? '+' : ''}{market.changePercent.toFixed(2)}%
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
 
-              {/* Earthquake Markers */}
-              {isLayerEnabled('earthquakes') && earthquakes.map((quake) => (
-                <Marker
-                  key={quake.id}
-                  coordinates={quake.coordinates}
-                  onClick={() => setSelectedItem(quake)}
-                >
-                  <circle
-                    r={getEarthquakeSize(quake.magnitude) / position.zoom}
-                    fill="rgba(255, 68, 68, 0.6)"
-                    stroke="#ff4444"
-                    strokeWidth={1 / position.zoom}
-                    style={{ cursor: 'pointer' }}
-                    className="animate-pulse"
-                  />
-                </Marker>
-              ))}
+            {/* Earthquake Markers */}
+            {isLayerEnabled('earthquakes') && earthquakes.map((quake) => (
+              <CircleMarker
+                key={quake.id}
+                center={[quake.coordinates[1], quake.coordinates[0]]}
+                radius={getEarthquakeRadius(quake.magnitude)}
+                pathOptions={{
+                  fillColor: 'rgba(255, 68, 68, 0.6)',
+                  fillOpacity: 0.6,
+                  color: '#ff4444',
+                  weight: 2,
+                }}
+                eventHandlers={{
+                  click: () => setSelectedItem(quake),
+                }}
+              >
+                <Popup>
+                  <div className="text-xs">
+                    <strong>Magnitude: {quake.magnitude}</strong>
+                    <br />
+                    {quake.place}
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
 
-              {/* Banking Markers */}
-              {isLayerEnabled('banking') && banks.map((bank) => (
-                <Marker
-                  key={bank.id}
-                  coordinates={bank.coordinates}
-                  onClick={() => setSelectedItem(bank)}
-                >
-                  <circle
-                    r={8 / position.zoom}
-                    fill="#00a0ff"
-                    stroke="#fff"
-                    strokeWidth={0.5 / position.zoom}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <text
-                    textAnchor="middle"
-                    y={3 / position.zoom}
-                    style={{ 
-                      fontSize: `${8 / position.zoom}px`, 
-                      fill: '#fff',
-                      fontWeight: 'bold',
-                      pointerEvents: 'none'
-                    }}
-                  >
-                    🏦
-                  </text>
-                </Marker>
-              ))}
+            {/* Banking Markers */}
+            {isLayerEnabled('banking') && banks.map((bank) => (
+              <CircleMarker
+                key={bank.id}
+                center={[bank.coordinates[1], bank.coordinates[0]]}
+                radius={8}
+                pathOptions={{
+                  fillColor: '#00a0ff',
+                  fillOpacity: 0.8,
+                  color: '#fff',
+                  weight: 1,
+                }}
+                eventHandlers={{
+                  click: () => setSelectedItem(bank),
+                }}
+              >
+                <Popup>
+                  <div className="text-xs">
+                    <strong>🏦 {bank.name}</strong>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
 
-              {/* Shipping/Port Markers */}
-              {isLayerEnabled('shipping') && ports.map((port) => (
-                <Marker
-                  key={port.id}
-                  coordinates={port.coordinates}
-                  onClick={() => setSelectedItem(port)}
-                >
-                  <circle
-                    r={5 / position.zoom}
-                    fill="#4169e1"
-                    stroke="#fff"
-                    strokeWidth={0.5 / position.zoom}
-                    style={{ cursor: 'pointer' }}
-                  />
-                </Marker>
-              ))}
+            {/* Port Markers */}
+            {isLayerEnabled('shipping') && ports.map((port) => (
+              <CircleMarker
+                key={port.id}
+                center={[port.coordinates[1], port.coordinates[0]]}
+                radius={5}
+                pathOptions={{
+                  fillColor: '#4169e1',
+                  fillOpacity: 0.8,
+                  color: '#fff',
+                  weight: 1,
+                }}
+                eventHandlers={{
+                  click: () => setSelectedItem(port),
+                }}
+              >
+                <Popup>
+                  <div className="text-xs">
+                    <strong>⚓ {port.name}</strong>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
 
-              {/* Oil & Gas Markers */}
-              {isLayerEnabled('oil_gas') && oilGas.map((facility) => (
-                <Marker
-                  key={facility.id}
-                  coordinates={facility.coordinates}
-                  onClick={() => setSelectedItem(facility)}
-                >
-                  <circle
-                    r={5 / position.zoom}
-                    fill="#8b4513"
-                    stroke="#fff"
-                    strokeWidth={0.5 / position.zoom}
-                    style={{ cursor: 'pointer' }}
-                  />
-                </Marker>
-              ))}
+            {/* Oil & Gas Markers */}
+            {isLayerEnabled('oil_gas') && oilGas.map((facility) => (
+              <CircleMarker
+                key={facility.id}
+                center={[facility.coordinates[1], facility.coordinates[0]]}
+                radius={5}
+                pathOptions={{
+                  fillColor: '#8b4513',
+                  fillOpacity: 0.8,
+                  color: '#fff',
+                  weight: 1,
+                }}
+                eventHandlers={{
+                  click: () => setSelectedItem(facility),
+                }}
+              >
+                <Popup>
+                  <div className="text-xs">
+                    <strong>🛢️ {facility.name}</strong>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
 
-              {/* Wildfire Markers */}
-              {isLayerEnabled('wildfires') && wildfires.map((fire) => (
-                <Marker
-                  key={fire.id}
-                  coordinates={fire.coordinates}
-                >
-                  <circle
-                    r={4 / position.zoom}
-                    fill="#ff6600"
-                    stroke="#ff0000"
-                    strokeWidth={0.5 / position.zoom}
-                    className="animate-pulse"
-                  />
-                </Marker>
-              ))}
+            {/* Wildfire Markers */}
+            {isLayerEnabled('wildfires') && wildfires.map((fire) => (
+              <CircleMarker
+                key={fire.id}
+                center={[fire.coordinates[1], fire.coordinates[0]]}
+                radius={4}
+                pathOptions={{
+                  fillColor: '#ff6600',
+                  fillOpacity: 0.8,
+                  color: '#ff0000',
+                  weight: 1,
+                }}
+                className="animate-pulse"
+              >
+                <Popup>
+                  <div className="text-xs">
+                    <strong>🔥 Wildfire</strong>
+                    <br />
+                    Location: {fire.coordinates[1].toFixed(2)}, {fire.coordinates[0].toFixed(2)}
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
 
-              {/* AIS Ships Markers */}
-              {isLayerEnabled('ais_ships') && aisShips.map((ship) => (
-                <Marker
-                  key={ship.mmsi}
-                  coordinates={[ship.lng, ship.lat]}
-                  onClick={() => setSelectedItem({
+            {/* AIS Ships */}
+            {isLayerEnabled('ais_ships') && aisShips.map((ship) => (
+              <Marker
+                key={ship.mmsi}
+                position={[ship.lat, ship.lng]}
+                icon={createShipIcon(ship.shipTypeName, ship.heading || ship.course || 0)}
+                eventHandlers={{
+                  click: () => setSelectedItem({
                     id: ship.mmsi,
                     name: ship.name,
                     type: 'ship',
@@ -374,29 +536,25 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
                     course: ship.course,
                     destination: ship.destination,
                     coordinates: [ship.lng, ship.lat]
-                  })}
-                >
-                  <g transform={`rotate(${ship.heading || ship.course || 0})`}>
-                    <polygon
-                      points="0,-5 3,5 0,3 -3,5"
-                      fill={getShipColor(ship.shipTypeName)}
-                      stroke="#fff"
-                      strokeWidth={0.3 / position.zoom}
-                      style={{ 
-                        cursor: 'pointer',
-                        filter: `drop-shadow(0 0 2px ${getShipColor(ship.shipTypeName)})`
-                      }}
-                      transform={`scale(${1 / position.zoom})`}
-                    />
-                  </g>
-                </Marker>
-              ))}
-            </ZoomableGroup>
-          </ComposableMap>
+                  }),
+                }}
+              >
+                <Popup>
+                  <div className="text-xs">
+                    <strong>{ship.name || 'Unknown Vessel'}</strong>
+                    <br />
+                    Type: {ship.shipTypeName}
+                    <br />
+                    Speed: {ship.speed?.toFixed(1) || 'N/A'} knots
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
 
           {/* AIS Status Badge */}
           {isLayerEnabled('ais_ships') && (
-            <div className="absolute top-4 left-4 flex items-center gap-2">
+            <div className="absolute top-4 left-4 flex items-center gap-2 z-[1000]">
               <Badge className={cn(
                 "text-[10px] px-2 py-0.5",
                 aisConnected 
@@ -410,7 +568,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
           )}
 
           {/* Zoom Controls */}
-          <div className="absolute bottom-4 right-4 flex flex-col gap-1">
+          <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-[1000]">
             <Button
               variant="outline"
               size="sm"
@@ -434,7 +592,41 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
         </div>
 
         {/* Sidebar - Layer Controls */}
-        <div className="w-56 bg-card border-l border-border">
+        <div className="w-56 bg-card border-l border-border overflow-y-auto">
+          {/* Map Style Selector */}
+          <div className="p-3 border-b border-border">
+            <p className="text-foreground font-bold text-sm mb-2">Map Style</p>
+            <div className="flex gap-1">
+              <Button 
+                size="sm" 
+                variant={mapStyle === 'standard' ? 'default' : 'outline'}
+                onClick={() => setMapStyle('standard')}
+                className="flex-1 text-[10px] px-1"
+              >
+                <Map className="w-3 h-3 mr-1" />
+                Standard
+              </Button>
+              <Button 
+                size="sm" 
+                variant={mapStyle === 'dark' ? 'default' : 'outline'}
+                onClick={() => setMapStyle('dark')}
+                className="flex-1 text-[10px] px-1"
+              >
+                <Moon className="w-3 h-3 mr-1" />
+                Dark
+              </Button>
+              <Button 
+                size="sm" 
+                variant={mapStyle === 'satellite' ? 'default' : 'outline'}
+                onClick={() => setMapStyle('satellite')}
+                className="flex-1 text-[10px] px-1"
+              >
+                <Satellite className="w-3 h-3 mr-1" />
+                Sat
+              </Button>
+            </div>
+          </div>
+
           <MapLayers 
             layers={layers} 
             onToggleLayer={handleToggleLayer} 
@@ -444,7 +636,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
 
         {/* AIS Settings Panel */}
         {showAISSettings && (
-          <div className="absolute top-12 right-60 w-72 bg-card border border-border rounded-lg shadow-xl z-50">
+          <div className="absolute top-12 right-60 w-72 bg-card border border-border rounded-lg shadow-xl z-[1001]">
             <div className="flex items-center justify-between p-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <Ship className="w-4 h-4 text-[#00a0ff]" />
