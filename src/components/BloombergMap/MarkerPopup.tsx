@@ -219,7 +219,81 @@ export const MarkerPopup = ({ item, onClose }: MarkerPopupProps) => {
       );
     }
 
-    // Storm popup
+    // Cyclone popup
+    if ((item as any).type === 'cyclone') {
+      const cyclone = item as any;
+      const categoryColor = cyclone.category >= 5 ? '#dc2626' : cyclone.category >= 4 ? '#ef4444' : cyclone.category >= 3 ? '#f97316' : cyclone.category >= 1 ? '#eab308' : '#22c55e';
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[#ef4444] font-bold">🌀 {cyclone.name}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: categoryColor, color: '#fff' }}>
+                {cyclone.category > 0 ? `Cat ${cyclone.category}` : cyclone.typeLabel}
+              </span>
+            </div>
+          </div>
+          <div className="text-white text-xs">{cyclone.typeLabel}</div>
+          <div className="grid grid-cols-2 gap-2 text-[10px]">
+            <div>
+              <span className="text-white/50">Wind:</span>
+              <span className="text-white ml-1">{cyclone.windSpeed} kts</span>
+            </div>
+            <div>
+              <span className="text-white/50">Speed:</span>
+              <span className="text-white ml-1">{cyclone.windSpeedMph} mph / {cyclone.windSpeedKmh} km/h</span>
+            </div>
+            <div>
+              <span className="text-white/50">Pressure:</span>
+              <span className="text-white ml-1">{cyclone.pressure} mb</span>
+            </div>
+            <div>
+              <span className="text-white/50">Basin:</span>
+              <span className="text-white ml-1">{cyclone.basin}</span>
+            </div>
+            <div className="col-span-2">
+              <span className="text-white/50">Movement:</span>
+              <span className="text-white ml-1">
+                {cyclone.movement?.direction} at {cyclone.movement?.speed} mph
+              </span>
+            </div>
+          </div>
+          
+          {/* Forecast Track Summary */}
+          {cyclone.forecastTrack && cyclone.forecastTrack.length > 1 && (
+            <div className="border-t border-white/10 pt-2 mt-2">
+              <div className="text-[10px] text-white/50 mb-1">Forecast Track</div>
+              <div className="flex flex-wrap gap-1">
+                {cyclone.forecastTrack.slice(1, 6).map((fp: any, idx: number) => (
+                  <span 
+                    key={idx}
+                    className="text-[9px] px-1.5 py-0.5 rounded"
+                    style={{ 
+                      background: `${fp.category >= 1 ? categoryColor : '#22c55e'}33`,
+                      color: '#fff'
+                    }}
+                  >
+                    {fp.timeLabel}: {fp.windSpeed}kt
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {cyclone.headline && (
+            <div className="text-[9px] text-amber-400 border-t border-white/10 pt-2 mt-2">
+              {cyclone.headline}
+            </div>
+          )}
+          
+          <div className="text-[9px] text-white/40 pt-1">
+            Source: {cyclone.source}
+          </div>
+        </div>
+      );
+    }
+
+    // Legacy storm popup (backward compatibility)
     if ((item as any).type === 'storm') {
       const storm = item as any;
       const categoryColor = storm.category >= 4 ? '#dc2626' : storm.category >= 3 ? '#ef4444' : storm.category >= 1 ? '#f97316' : '#eab308';
