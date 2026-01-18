@@ -99,10 +99,14 @@ export const MapLayers = ({ layers, onToggleLayer, onOpenSettings }: MapLayersPr
 
 export const DEFAULT_LAYERS: LayerConfig[] = [
   { id: 'markets', name: 'World Equity Markets', icon: '📈', enabled: true, color: '#00ff00', description: 'Stock exchanges worldwide' },
+  { id: 'weather_clouds', name: 'Weather: Clouds', icon: '☁️', enabled: false, color: '#a0a0a0', description: 'Global cloud coverage' },
+  { id: 'weather_rain', name: 'Weather: Precipitation', icon: '🌧️', enabled: false, color: '#3b82f6', description: 'Rain radar overlay' },
+  { id: 'weather_temp', name: 'Weather: Temperature', icon: '🌡️', enabled: false, color: '#ef4444', description: 'Global temperature map' },
+  { id: 'weather_wind', name: 'Weather: Wind', icon: '💨', enabled: false, color: '#06b6d4', description: 'Wind speed & direction' },
+  { id: 'storms', name: 'Active Cyclones', icon: '🌀', enabled: false, color: '#ef4444', description: 'Hurricanes, Typhoons, Cyclones' },
   { id: 'earthquakes', name: 'Earthquakes', icon: '🌋', enabled: false, color: '#ff4444', description: 'USGS real-time data' },
   { id: 'ais_ships', name: 'Live AIS Ships', icon: '🚢', enabled: false, color: '#00a0ff', description: 'Real-time vessel tracking', hasSettings: true },
   { id: 'flights', name: 'Live Flights', icon: '✈️', enabled: false, color: '#f59e0b', description: 'OpenSky Network real-time' },
-  { id: 'storms', name: 'Active Storms', icon: '🌀', enabled: false, color: '#ef4444', description: 'NOAA hurricanes & storms' },
   { id: 'wildfires', name: 'Wildfires', icon: '🔥', enabled: false, color: '#ff6600', description: 'NASA FIRMS data' },
   { id: 'banking', name: 'Central Banks', icon: '🏦', enabled: false, color: '#00a0ff', description: 'Interest rates & meetings' },
   { id: 'oil_gas', name: 'Oil & Gas', icon: '🛢️', enabled: false, color: '#8b4513', description: 'Fields, refineries, LNG' },
