@@ -49,22 +49,26 @@ interface BloombergMapProps {
 
 type MapStyleType = 'standard' | 'dark' | 'satellite';
 
-// Custom component to track zoom level
-const ZoomTracker = ({ onZoomChange }: { onZoomChange: (zoom: number) => void }) => {
-  const map = useMapEvents({
+// Custom component to track zoom level and provide map ref
+const MapController = ({ 
+  onZoomChange, 
+  onMapReady 
+}: { 
+  onZoomChange: (zoom: number) => void;
+  onMapReady: (map: L.Map) => void;
+}) => {
+  const map = useMap();
+  
+  useEffect(() => {
+    onMapReady(map);
+  }, [map, onMapReady]);
+
+  useMapEvents({
     zoomend: () => {
       onZoomChange(map.getZoom());
     },
   });
-  return null;
-};
-
-// Map controller component for programmatic control
-const MapController = ({ center, zoom }: { center: [number, number]; zoom: number }) => {
-  const map = useMap();
-  useEffect(() => {
-    map.setView(center, zoom);
-  }, [center, zoom, map]);
+  
   return null;
 };
 
@@ -342,9 +346,11 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
             zoomControl={false}
             maxZoom={19}
             minZoom={2}
-            ref={mapRef}
           >
-            <ZoomTracker onZoomChange={setCurrentZoom} />
+            <MapController 
+              onZoomChange={setCurrentZoom} 
+              onMapReady={(map) => { mapRef.current = map; }}
+            />
             
             {/* Main Tile Layer */}
             <TileLayer
