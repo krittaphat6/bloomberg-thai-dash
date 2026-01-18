@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { cn } from '@/lib/utils';
 import { useEarthquakeData } from '@/hooks/useEarthquakeData';
@@ -7,8 +6,9 @@ import { useMarketMapData, useCentralBanks, usePorts, useOilGas, useWildfires, u
 import { MapLayers, DEFAULT_LAYERS, LayerConfig } from './MapLayers';
 import { DataPanel } from './DataPanel';
 import { MarkerPopup } from './MarkerPopup';
-import { MarketData, EarthquakeFeature, BankingFeature, ShipFeature } from '@/services/GeoDataService';
+import { MarketData } from '@/services/GeoDataService';
 import { aisService, AISShipData } from '@/services/AISStreamService';
+import { LeafletMapCanvas } from './LeafletMapCanvas';
 import { 
   Search, 
   Maximize2, 
@@ -49,28 +49,6 @@ interface BloombergMapProps {
 
 type MapStyleType = 'standard' | 'dark' | 'satellite';
 
-// Custom component to track zoom level and provide map ref
-const MapController = ({ 
-  onZoomChange, 
-  onMapReady 
-}: { 
-  onZoomChange: (zoom: number) => void;
-  onMapReady: (map: L.Map) => void;
-}) => {
-  const map = useMap();
-  
-  useEffect(() => {
-    onMapReady(map);
-  }, [map, onMapReady]);
-
-  useMapEvents({
-    zoomend: () => {
-      onZoomChange(map.getZoom());
-    },
-  });
-  
-  return null;
-};
 
 export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: BloombergMapProps) => {
   const [layers, setLayers] = useState<LayerConfig[]>(DEFAULT_LAYERS);
@@ -336,202 +314,36 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
       <div className="flex-1 flex overflow-hidden">
         {/* Map */}
         <div className="flex-1 relative bg-background">
-          <MapContainer
+          <LeafletMapCanvas
+            className="w-full h-full"
+            background={mapStyle === 'dark' ? '#0a1628' : mapStyle === 'satellite' ? '#1a1a2e' : '#e0e0e0'}
             center={[20, 100]}
             zoom={3}
-            className="w-full h-full"
-            style={{ 
-              background: mapStyle === 'dark' ? '#0a1628' : mapStyle === 'satellite' ? '#1a1a2e' : '#e0e0e0' 
-            }}
-            zoomControl={false}
-            maxZoom={19}
             minZoom={2}
-          >
-            <MapController 
-              onZoomChange={setCurrentZoom} 
-              onMapReady={(map) => { mapRef.current = map; }}
-            />
-            
-            {/* Main Tile Layer */}
-            <TileLayer
-              key={`main-${mapStyle}`}
-              url={getTileLayerUrl()}
-              attribution={getAttribution()}
-              maxZoom={19}
-              minZoom={2}
-              eventHandlers={{
-                loading: () => setTilesLoading(true),
-                load: () => setTilesLoading(false),
-              }}
-            />
-            
-            {/* Labels Layer for Dark/Satellite modes */}
-            {getLabelLayerUrl() && (
-              <TileLayer
-                key={`labels-${mapStyle}`}
-                url={getLabelLayerUrl()!}
-                attribution=""
-                pane="overlayPane"
-                zIndex={650}
-                maxZoom={19}
-              />
-            )}
-
-            {/* Market Markers */}
-            {isLayerEnabled('markets') && markets.map((market) => (
-              <CircleMarker
-                key={market.id}
-                center={[market.coordinates[1], market.coordinates[0]]}
-                radius={6}
-                pathOptions={{
-                  fillColor: getMarketColor(market),
-                  fillOpacity: 0.8,
-                  color: '#fff',
-                  weight: 1,
-                }}
-                eventHandlers={{
-                  click: () => setSelectedItem(market),
-                }}
-              >
-                <Tooltip>
-                  <span className="text-xs font-medium">{market.name}: {market.changePercent > 0 ? '+' : ''}{market.changePercent.toFixed(2)}%</span>
-                </Tooltip>
-              </CircleMarker>
-            ))}
-
-            {/* Earthquake Markers */}
-            {isLayerEnabled('earthquakes') && earthquakes.map((quake) => (
-              <CircleMarker
-                key={quake.id}
-                center={[quake.coordinates[1], quake.coordinates[0]]}
-                radius={getEarthquakeRadius(quake.magnitude)}
-                pathOptions={{
-                  fillColor: 'rgba(255, 68, 68, 0.6)',
-                  fillOpacity: 0.6,
-                  color: '#ff4444',
-                  weight: 2,
-                }}
-                eventHandlers={{
-                  click: () => setSelectedItem(quake),
-                }}
-              >
-                <Tooltip>
-                  <span className="text-xs font-medium">M{quake.magnitude} - {quake.place}</span>
-                </Tooltip>
-              </CircleMarker>
-            ))}
-
-            {/* Banking Markers */}
-            {isLayerEnabled('banking') && banks.map((bank) => (
-              <CircleMarker
-                key={bank.id}
-                center={[bank.coordinates[1], bank.coordinates[0]]}
-                radius={8}
-                pathOptions={{
-                  fillColor: '#00a0ff',
-                  fillOpacity: 0.8,
-                  color: '#fff',
-                  weight: 1,
-                }}
-                eventHandlers={{
-                  click: () => setSelectedItem(bank),
-                }}
-              >
-                <Tooltip>
-                  <span className="text-xs font-medium">🏦 {bank.name}</span>
-                </Tooltip>
-              </CircleMarker>
-            ))}
-
-            {/* Port Markers */}
-            {isLayerEnabled('shipping') && ports.map((port) => (
-              <CircleMarker
-                key={port.id}
-                center={[port.coordinates[1], port.coordinates[0]]}
-                radius={5}
-                pathOptions={{
-                  fillColor: '#4169e1',
-                  fillOpacity: 0.8,
-                  color: '#fff',
-                  weight: 1,
-                }}
-                eventHandlers={{
-                  click: () => setSelectedItem(port),
-                }}
-              >
-                <Tooltip>
-                  <span className="text-xs font-medium">⚓ {port.name}</span>
-                </Tooltip>
-              </CircleMarker>
-            ))}
-
-            {/* Oil & Gas Markers */}
-            {isLayerEnabled('oil_gas') && oilGas.map((facility) => (
-              <CircleMarker
-                key={facility.id}
-                center={[facility.coordinates[1], facility.coordinates[0]]}
-                radius={5}
-                pathOptions={{
-                  fillColor: '#8b4513',
-                  fillOpacity: 0.8,
-                  color: '#fff',
-                  weight: 1,
-                }}
-                eventHandlers={{
-                  click: () => setSelectedItem(facility),
-                }}
-              >
-                <Tooltip>
-                  <span className="text-xs font-medium">🛢️ {facility.name}</span>
-                </Tooltip>
-              </CircleMarker>
-            ))}
-
-            {/* Wildfire Markers */}
-            {isLayerEnabled('wildfires') && wildfires.map((fire) => (
-              <CircleMarker
-                key={fire.id}
-                center={[fire.coordinates[1], fire.coordinates[0]]}
-                radius={4}
-                pathOptions={{
-                  fillColor: '#ff6600',
-                  fillOpacity: 0.8,
-                  color: '#ff0000',
-                  weight: 1,
-                }}
-              >
-                <Tooltip>
-                  <span className="text-xs font-medium">🔥 Wildfire ({fire.coordinates[1].toFixed(2)}, {fire.coordinates[0].toFixed(2)})</span>
-                </Tooltip>
-              </CircleMarker>
-            ))}
-
-            {/* AIS Ships */}
-            {isLayerEnabled('ais_ships') && aisShips.map((ship) => (
-              <Marker
-                key={ship.mmsi}
-                position={[ship.lat, ship.lng]}
-                icon={createShipIcon(ship.shipTypeName, ship.heading || ship.course || 0)}
-                eventHandlers={{
-                  click: () => setSelectedItem({
-                    id: ship.mmsi,
-                    name: ship.name,
-                    type: 'ship',
-                    shipType: ship.shipTypeName,
-                    flag: ship.flag,
-                    speed: ship.speed,
-                    course: ship.course,
-                    destination: ship.destination,
-                    coordinates: [ship.lng, ship.lat]
-                  }),
-                }}
-              >
-                <Tooltip>
-                  <span className="text-xs font-medium">{ship.name || 'Unknown'} - {ship.shipTypeName}</span>
-                </Tooltip>
-              </Marker>
-            ))}
-          </MapContainer>
+            maxZoom={19}
+            baseUrl={getTileLayerUrl()}
+            labelUrl={getLabelLayerUrl()}
+            attribution={getAttribution()}
+            layers={layers}
+            isLayerEnabled={isLayerEnabled}
+            markets={markets}
+            earthquakes={earthquakes}
+            banks={banks}
+            ports={ports}
+            oilGas={oilGas}
+            wildfires={wildfires}
+            aisShips={aisShips}
+            onSelectItem={setSelectedItem}
+            onZoomChange={setCurrentZoom}
+            onTilesLoadingChange={setTilesLoading}
+            onMapReady={(map) => {
+              mapRef.current = map;
+              setCurrentZoom(map.getZoom());
+            }}
+            getMarketColor={getMarketColor}
+            getEarthquakeRadius={getEarthquakeRadius}
+            createShipIcon={createShipIcon}
+          />
 
           {/* AIS Status Badge */}
           {isLayerEnabled('ais_ships') && (
