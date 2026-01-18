@@ -84,9 +84,18 @@ export function LeafletMapCanvas({
   const baseLayerRef = useRef<L.TileLayer | null>(null);
   const labelLayerRef = useRef<L.TileLayer | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const weatherLayersRef = useRef<Map<string, L.TileLayer>>(new Map());
   const [mapReady, setMapReady] = useState(false);
 
   const tileKey = useMemo(() => `${baseUrl}::${labelUrl ?? ""}::${attribution}`, [baseUrl, labelUrl, attribution]);
+
+  // Weather tile URLs (free services)
+  const weatherTileUrls = useMemo(() => ({
+    weather_clouds: 'https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2',
+    weather_rain: 'https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2',
+    weather_temp: 'https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2',
+    weather_wind: 'https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2',
+  }), []);
 
   // Init map
   useEffect(() => {
@@ -190,6 +199,34 @@ export function LeafletMapCanvas({
       base.off("tileerror", handleTileError);
     };
   }, [mapReady, tileKey, baseUrl, labelUrl, attribution, minZoom, maxZoom, onTilesLoadingChange]);
+
+  // Update weather overlay layers
+  useEffect(() => {
+    if (!mapReady) return;
+    const map = mapRef.current;
+    if (!map) return;
+
+    const weatherLayerIds = ['weather_clouds', 'weather_rain', 'weather_temp', 'weather_wind'];
+    
+    weatherLayerIds.forEach(layerId => {
+      const enabled = isLayerEnabled(layerId);
+      const existingLayer = weatherLayersRef.current.get(layerId);
+      const url = weatherTileUrls[layerId as keyof typeof weatherTileUrls];
+      
+      if (enabled && !existingLayer && url) {
+        const layer = L.tileLayer(url, {
+          opacity: 0.6,
+          zIndex: 500,
+          attribution: '&copy; OpenWeatherMap',
+        });
+        layer.addTo(map);
+        weatherLayersRef.current.set(layerId, layer);
+      } else if (!enabled && existingLayer) {
+        map.removeLayer(existingLayer);
+        weatherLayersRef.current.delete(layerId);
+      }
+    });
+  }, [mapReady, isLayerEnabled, weatherTileUrls]);
 
   // Update markers
   useEffect(() => {
