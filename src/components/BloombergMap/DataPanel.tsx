@@ -1,7 +1,8 @@
-import { TrendingUp, TrendingDown, Activity, Globe, CloudLightning } from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, Globe, CloudLightning, AlertTriangle, CheckCircle, Radio, CloudRain, Thermometer, Wind, Cloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MarketData, EarthquakeFeature, BankingFeature } from '@/services/GeoDataService';
 import type { CycloneData } from '@/services/GlobalCycloneService';
+import { globalCycloneService } from '@/services/GlobalCycloneService';
 
 interface DataPanelProps {
   markets: MarketData[];
@@ -9,15 +10,31 @@ interface DataPanelProps {
   banks: BankingFeature[];
   cyclones?: CycloneData[];
   selectedItem: any | null;
+  weatherLayersEnabled?: {
+    clouds: boolean;
+    rain: boolean;
+    temp: boolean;
+    wind: boolean;
+  };
 }
 
-export const DataPanel = ({ markets, earthquakes, banks, cyclones = [], selectedItem }: DataPanelProps) => {
+export const DataPanel = ({ 
+  markets, 
+  earthquakes, 
+  banks, 
+  cyclones = [], 
+  selectedItem,
+  weatherLayersEnabled = { clouds: false, rain: false, temp: false, wind: false }
+}: DataPanelProps) => {
   const upMarkets = markets.filter(m => m.changePercent > 0).length;
   const downMarkets = markets.filter(m => m.changePercent < 0).length;
   const recentQuakes = earthquakes.filter(e => Date.now() - e.time < 24 * 60 * 60 * 1000).length;
   const avgMagnitude = earthquakes.length > 0 
     ? (earthquakes.reduce((acc, e) => acc + e.magnitude, 0) / earthquakes.length).toFixed(1)
     : '0.0';
+
+  const noActiveInfo = globalCycloneService.getNoActiveInfo();
+  const hasActiveStorms = cyclones.length > 0;
 
   return (
     <div className="h-full flex">
@@ -92,7 +109,54 @@ export const DataPanel = ({ markets, earthquakes, banks, cyclones = [], selected
       </div>
 
       {/* Legend */}
-      <div className="w-56 border-l border-[#2d4a6f] p-2 overflow-y-auto">
+      <div className="w-64 border-l border-[#2d4a6f] p-2 overflow-y-auto">
+        {/* Real-time Weather Status */}
+        <div className="mb-3">
+          <div className="flex items-center gap-1 text-[#00d4ff] text-[10px] font-bold mb-2">
+            <Radio className="w-3 h-3 animate-pulse" />
+            REAL-TIME WEATHER DATA
+          </div>
+          
+          <div className="grid grid-cols-2 gap-1 text-[8px]">
+            <div className={cn(
+              "flex items-center gap-1 px-1.5 py-0.5 rounded",
+              weatherLayersEnabled.clouds ? "bg-blue-500/20 text-blue-300" : "bg-gray-700/30 text-gray-500"
+            )}>
+              <Cloud className="w-2.5 h-2.5" />
+              <span>Clouds</span>
+              {weatherLayersEnabled.clouds && <CheckCircle className="w-2 h-2 ml-auto" />}
+            </div>
+            <div className={cn(
+              "flex items-center gap-1 px-1.5 py-0.5 rounded",
+              weatherLayersEnabled.rain ? "bg-cyan-500/20 text-cyan-300" : "bg-gray-700/30 text-gray-500"
+            )}>
+              <CloudRain className="w-2.5 h-2.5" />
+              <span>Rain</span>
+              {weatherLayersEnabled.rain && <CheckCircle className="w-2 h-2 ml-auto" />}
+            </div>
+            <div className={cn(
+              "flex items-center gap-1 px-1.5 py-0.5 rounded",
+              weatherLayersEnabled.temp ? "bg-orange-500/20 text-orange-300" : "bg-gray-700/30 text-gray-500"
+            )}>
+              <Thermometer className="w-2.5 h-2.5" />
+              <span>Temp</span>
+              {weatherLayersEnabled.temp && <CheckCircle className="w-2 h-2 ml-auto" />}
+            </div>
+            <div className={cn(
+              "flex items-center gap-1 px-1.5 py-0.5 rounded",
+              weatherLayersEnabled.wind ? "bg-teal-500/20 text-teal-300" : "bg-gray-700/30 text-gray-500"
+            )}>
+              <Wind className="w-2.5 h-2.5" />
+              <span>Wind</span>
+              {weatherLayersEnabled.wind && <CheckCircle className="w-2 h-2 ml-auto" />}
+            </div>
+          </div>
+          
+          <div className="text-[7px] text-white/40 mt-1">
+            Data from OpenWeatherMap (Real-time)
+          </div>
+        </div>
+
         <div className="text-[10px] font-bold text-[#ff6600] mb-2">LEGEND</div>
         <div className="space-y-1 text-[9px]">
           <div className="flex items-center gap-2">
@@ -129,70 +193,106 @@ export const DataPanel = ({ markets, earthquakes, banks, cyclones = [], selected
           </div>
         </div>
 
-        {/* Active Cyclones Section */}
+        {/* Active Cyclones Section - REAL-TIME ONLY */}
         <div className="mt-3 pt-2 border-t border-[#2d4a6f]">
-          <div className="flex items-center gap-1 text-[#ef4444] text-[10px] font-bold mb-2">
-            <CloudLightning className="w-3 h-3" />
-            ACTIVE CYCLONES
+          <div className="flex items-center gap-1 text-[10px] font-bold mb-2">
+            <CloudLightning className="w-3 h-3 text-[#ef4444]" />
+            <span className="text-[#ef4444]">TROPICAL CYCLONES</span>
+            <span className="text-[7px] text-green-400 ml-1">(REAL-TIME)</span>
           </div>
           
-          {cyclones.length > 0 ? (
+          {hasActiveStorms ? (
             <div className="space-y-1.5">
               {cyclones.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 text-[9px]">
-                  <div 
-                    className="w-2.5 h-2.5 rounded-full animate-pulse" 
-                    style={{ backgroundColor: getCategoryColor(c.category) }}
-                  />
-                  <span className="text-white/90">{c.name}</span>
+                <div key={c.id} className="bg-[#0a1628]/50 rounded p-1.5 border border-[#2d4a6f]/50">
+                  <div className="flex items-center gap-2 text-[9px]">
+                    <div 
+                      className="w-2.5 h-2.5 rounded-full animate-pulse" 
+                      style={{ backgroundColor: getCategoryColor(c.category) }}
+                    />
+                    <span className="text-white/90 font-medium">{c.name}</span>
+                    <span className="text-white/50 ml-auto">{c.typeLabel}</span>
+                  </div>
+                  
+                  {/* Forecast summary */}
+                  {c.forecastTrack && c.forecastTrack.length > 1 && (
+                    <div className="mt-1 text-[8px] text-white/60">
+                      <div className="flex items-center gap-1">
+                        <span>📍 {c.windSpeed}kts → </span>
+                        <span className={cn(
+                          c.forecastTrack[c.forecastTrack.length - 1].windSpeed > c.windSpeed 
+                            ? "text-red-400" 
+                            : "text-green-400"
+                        )}>
+                          {c.forecastTrack[c.forecastTrack.length - 1].windSpeed}kts
+                        </span>
+                        <span className="text-white/40">
+                          ({c.forecastTrack.length - 1} pts)
+                        </span>
+                      </div>
+                      <div className="text-white/40">
+                        Track: {c.movement.direction} @ {c.movement.speed}mph
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-[9px] text-white/50">No active cyclones</div>
-          )}
-
-          {/* Cyclone Wind Fields Forecast Legend */}
-          <div className="mt-3 text-[9px]">
-            <div className="text-white/60 mb-1">Cyclone Wind Fields Forecast</div>
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-2 rounded-sm opacity-60" style={{ background: 'linear-gradient(90deg, #ef4444 0%, #f97316 100%)' }} />
-                <span className="text-white/70">39.1 (mph) 57.5</span>
-                <span className="text-white/50">73.7</span>
+            <div className="bg-[#0a1628]/50 rounded p-2 border border-[#2d4a6f]/50">
+              <div className="flex items-center gap-1.5 text-[9px] text-green-400 mb-1">
+                <CheckCircle className="w-3 h-3" />
+                <span>No Active Cyclones</span>
+              </div>
+              
+              {noActiveInfo && (
+                <div className="text-[8px] text-white/50 space-y-1">
+                  <p>This is normal seasonal behavior.</p>
+                  <div className="mt-1.5">
+                    <p className="text-white/60 font-medium mb-0.5">Hurricane Seasons:</p>
+                    {noActiveInfo.regions.slice(0, 3).map((r, i) => (
+                      <div key={i} className="flex justify-between text-[7px]">
+                        <span>{r.name.replace(' Hurricane Season', '').replace(' Typhoon Season', '').replace(' Cyclone Season', '')}</span>
+                        <span className="text-white/40">{r.period}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div className="mt-1.5 text-[7px] text-white/40">
+                Sources: {noActiveInfo?.sources.join(', ') || 'NOAA NHC, JMA, JTWC'}
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Saffir-Simpson Scale */}
         <div className="mt-3 pt-2 border-t border-[#2d4a6f]">
           <div className="text-[9px] text-white/60 mb-1">Saffir-Simpson Scale</div>
           <div className="grid grid-cols-6 gap-0.5">
-            <div className="text-center">
-              <div className="w-3 h-3 mx-auto rounded-full bg-[#22c55e]" />
-              <span className="text-[7px] text-white/50">TS</span>
-            </div>
-            <div className="text-center">
-              <div className="w-3 h-3 mx-auto rounded-full bg-[#84cc16]" />
-              <span className="text-[7px] text-white/50">1</span>
-            </div>
-            <div className="text-center">
-              <div className="w-3 h-3 mx-auto rounded-full bg-[#eab308]" />
-              <span className="text-[7px] text-white/50">2</span>
-            </div>
-            <div className="text-center">
-              <div className="w-3 h-3 mx-auto rounded-full bg-[#f97316]" />
-              <span className="text-[7px] text-white/50">3</span>
-            </div>
-            <div className="text-center">
-              <div className="w-3 h-3 mx-auto rounded-full bg-[#ef4444]" />
-              <span className="text-[7px] text-white/50">4</span>
-            </div>
-            <div className="text-center">
-              <div className="w-3 h-3 mx-auto rounded-full bg-[#dc2626]" />
-              <span className="text-[7px] text-white/50">5</span>
-            </div>
+            {['TS', '1', '2', '3', '4', '5'].map((label, i) => (
+              <div key={label} className="text-center">
+                <div 
+                  className="w-3 h-3 mx-auto rounded-full" 
+                  style={{ backgroundColor: getCategoryColor(i) }}
+                />
+                <span className="text-[7px] text-white/50">{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Wind Field Forecast Legend */}
+        <div className="mt-2 text-[8px]">
+          <div className="text-white/60 mb-1">Forecast Track</div>
+          <div className="flex items-center gap-1">
+            <div className="w-8 border-t-2 border-dashed border-white/60" />
+            <span className="text-white/50">Projected Path</span>
+          </div>
+          <div className="flex items-center gap-1 mt-0.5">
+            <div className="w-2 h-2 rounded-full border-2 border-white/60" />
+            <span className="text-white/50">Time Points</span>
           </div>
         </div>
       </div>
