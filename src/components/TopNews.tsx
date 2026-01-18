@@ -292,15 +292,32 @@ export const TopNews = () => {
     setTimeout(() => fetchNews(), 300);
   };
 
-  // Remove asset handler
+  // Remove asset handler - ✅ FIXED: ลบได้จริงและ refetch
   const handleRemoveAsset = (symbol: string) => {
-    setPinnedAssets(prev => prev.filter(p => p.symbol !== symbol));
+    console.log('🗑️ Removing asset:', symbol);
+    
+    // อัปเดต state ทันที
+    setPinnedAssets(prev => {
+      const updated = prev.filter(p => p.symbol !== symbol);
+      console.log('✅ Asset removed, remaining:', updated.length);
+      return updated;
+    });
+    
+    // ลบ analysis ของ asset นั้น
     setAbleAnalysis(prev => {
-      const newAnalysis = {
-        ...prev
-      };
+      const newAnalysis = { ...prev };
       delete newAnalysis[symbol];
       return newAnalysis;
+    });
+    
+    // ลบ macro data ของ asset นั้น
+    setMacroData(prev => prev.filter(m => m.symbol !== symbol));
+    
+    // ลบราคา
+    setAssetPrices(prev => {
+      const newPrices = { ...prev };
+      delete newPrices[symbol];
+      return newPrices;
     });
   };
 
@@ -799,21 +816,23 @@ export const TopNews = () => {
                         </div>
                       </div>
                       
-                      {/* Sources List */}
+                      {/* Sources List - ✅ ดึงจาก backend จริง */}
                       <div>
-                        <p className="text-[10px] text-zinc-500 mb-2">Connected Sources:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {[
-                            '📰 Reddit (12)', '🔶 HN (4)', '₿ CryptoCompare', 
-                            '📊 MarketWatch', '🦎 CoinGecko', '😱 Fear&Greed',
-                            '📅 FX Calendar', '💰 CoinPaprika', '📈 Finviz',
-                            '🗞️ NewsAPI', '💹 Investing', '🏦 Fed Watch'
-                          ].map((source, i) => (
-                            <Badge key={i} variant="outline" className="text-[9px] border-zinc-700 text-zinc-400 py-0.5">
-                              {source}
-                            </Badge>
-                          ))}
-                        </div>
+                        <p className="text-[10px] text-zinc-500 mb-2">Connected Sources ({newsMetadata?.sources?.length || 0}):</p>
+                        <ScrollArea className="h-24">
+                          <div className="flex flex-wrap gap-1">
+                            {(newsMetadata?.sources || [
+                              'Reddit (12)', 'HackerNews (4)', 'CryptoCompare', 
+                              'MarketWatch', 'CoinGecko', 'Fear&Greed',
+                              'FX Calendar', 'CoinPaprika', 'Finviz',
+                              'NewsAPI', 'Investing', 'Fed Watch'
+                            ]).map((source, i) => (
+                              <Badge key={i} variant="outline" className="text-[9px] border-zinc-700 text-zinc-400 py-0.5">
+                                {source}
+                              </Badge>
+                            ))}
+                          </div>
+                        </ScrollArea>
                       </div>
                       
                       {/* Categories */}

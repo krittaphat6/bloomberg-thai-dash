@@ -1346,6 +1346,37 @@ serve(async (req) => {
     const processingTime = Date.now() - startTime;
     console.log(`✅ Total: ${processingTime}ms`);
 
+    // ✅ Dynamic sources based on actual fetch results
+    const activeSources: string[] = [];
+    if (forexReddit.length > 0) activeSources.push('📰 r/forex');
+    if (goldReddit.length > 0) activeSources.push('🥇 r/Gold');
+    if (cryptoReddit.length > 0) activeSources.push('₿ r/crypto');
+    if (wsbReddit.length > 0) activeSources.push('🚀 r/WSB');
+    if (stocksReddit.length > 0) activeSources.push('📊 r/stocks');
+    if (economicsReddit.length > 0) activeSources.push('📉 r/Economics');
+    if (investingReddit.length > 0) activeSources.push('💰 r/investing');
+    if (optionsReddit.length > 0) activeSources.push('📈 r/options');
+    if (futuresReddit.length > 0) activeSources.push('⚡ r/Futures');
+    if (silverReddit.length > 0) activeSources.push('🥈 r/Silverbugs');
+    if (tradingReddit.length > 0) activeSources.push('📊 r/Daytrading');
+    if (algoTradingReddit.length > 0) activeSources.push('🤖 r/algotrading');
+    if (hackerNewsFinance.length > 0 || hackerNewsCrypto.length > 0 || hackerNewsStock.length > 0 || hackerNewsEconomy.length > 0) activeSources.push('🔶 HackerNews');
+    if (cryptoNews.length > 0) activeSources.push('₿ CryptoCompare');
+    if (coingeckoTrending.length > 0) activeSources.push('🦎 CoinGecko');
+    if (fearGreed.length > 0) activeSources.push('😱 Fear&Greed');
+    if (coinPaprika.length > 0) activeSources.push('📅 CoinPaprika');
+    if (cryptoSlate.length > 0) activeSources.push('🪨 CryptoSlate');
+    if (theBlock.length > 0) activeSources.push('📦 TheBlock');
+    if (businessNews.length > 0) activeSources.push('🗞️ NewsAPI');
+    if (marketNews.length > 0) activeSources.push('📰 MarketWatch');
+    if (seekingAlpha.length > 0) activeSources.push('📈 SeekingAlpha');
+    if (dailyFX.length > 0) activeSources.push('💱 DailyFX');
+    if (fxStreet.length > 0) activeSources.push('💹 FXStreet');
+    if (investingCal.length > 0) activeSources.push('📅 Investing.com');
+    if (fxCalendar.length > 0) activeSources.push('🏦 Fed Watch');
+    if (kitco.length > 0) activeSources.push('🥇 Kitco');
+    if (finviz.length > 0) activeSources.push('📊 Finviz');
+    
     const newsMetadata = {
       totalFetched: allNews.length,
       freshNewsCount: freshNews.length,
@@ -1353,13 +1384,8 @@ serve(async (req) => {
       freshNewsHours: FRESH_NEWS_HOURS,
       oldestNewsAge: uniqueNews.length > 0 ? getNewsAgeText(Math.min(...uniqueNews.map(n => n.timestamp))) : 'N/A',
       newestNewsAge: uniqueNews.length > 0 ? getNewsAgeText(Math.max(...uniqueNews.map(n => n.timestamp))) : 'N/A',
-      sources: [
-        'Reddit (12)', 'HackerNews (4)', 'CryptoCompare', 'NewsAPI', 'MarketWatch', 
-        'CoinGecko', 'Fear&Greed', 'CoinPaprika', 'CryptoSlate', 'TheBlock',
-        'SeekingAlpha', 'DailyFX', 'FXStreet', 'Investing.com', 'Fed Watch',
-        'Kitco', 'Finviz'
-      ],
-      sourcesCount: 32
+      sources: activeSources,
+      sourcesCount: activeSources.length
     };
 
     return new Response(
@@ -1374,7 +1400,7 @@ serve(async (req) => {
         dailyReportAI,
         xNotifications,
         rawNews: uniqueNews.slice(0, 60),
-        sourcesCount: 32,
+        sourcesCount: newsMetadata.sourcesCount,
         sources: newsMetadata.sources,
         gemini_api: 'direct'
       }),
