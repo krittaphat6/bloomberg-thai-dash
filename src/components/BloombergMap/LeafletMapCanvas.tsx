@@ -4,16 +4,11 @@ import L from "leaflet";
 import type { LayerConfig } from "./MapLayers";
 import type { AISShipData } from "@/services/AISStreamService";
 import type { FlightData } from "@/services/FlightTrackingService";
-import type { StormData } from "@/services/StormTrackingService";
 import type { MarketData } from "@/services/GeoDataService";
-import { stormService } from "@/services/StormTrackingService";
+import type { CycloneData } from "@/services/GlobalCycloneService";
+import { globalCycloneService } from "@/services/GlobalCycloneService";
 
 type LatLng = [number, number];
-
-interface HasCoordinates {
-  id: string;
-  coordinates: [number, number]; // [lng, lat]
-}
 
 interface LeafletMapCanvasProps {
   className?: string;
@@ -39,7 +34,7 @@ interface LeafletMapCanvasProps {
   wildfires: Array<{ id: string; coordinates: [number, number] }>;
   aisShips: AISShipData[];
   flights: FlightData[];
-  storms: StormData[];
+  cyclones: CycloneData[];
 
   onSelectItem: (item: any) => void;
   onZoomChange: (zoom: number) => void;
@@ -75,7 +70,7 @@ export function LeafletMapCanvas({
   wildfires,
   aisShips,
   flights,
-  storms,
+  cyclones,
   onSelectItem,
   onZoomChange,
   onTilesLoadingChange,
@@ -346,56 +341,148 @@ export function LeafletMapCanvas({
       });
     }
 
-    // Storms layer
+    // Cyclones/Storms layer with forecast track and wind field
     if (isLayerEnabled("storms")) {
-      storms.forEach((s) => {
-        const color = stormService.getStormColor(s);
-        const radius = stormService.getStormRadius(s);
+      cyclones.forEach((c) => {
+        const color = globalCycloneService.getCategoryColor(c.category);
         
-        // Pulsing circle for active storms
-        const marker = L.circleMarker([s.lat, s.lng], {
-          radius,
+        // Draw wind field circles (gale, storm, hurricane force winds)
+        if (c.category >= 1) {
+          // Hurricane force wind radius (64kt)
+          const hurricaneRadius = globalCycloneService.getWindFieldRadius(c.category, 'hurricane');
+          L.circle([c.lat, c.lng], {
+            radius: hurricaneRadius * 1000, // km to meters
+            color: color,
+            weight: 1,
+            fillColor: color,
+            fillOpacity: 0.15,
+            dashArray: '5,5',
+          }).addTo(group);
+        }
+        
+        // Storm force wind radius (50kt)
+        const stormRadius = globalCycloneService.getWindFieldRadius(c.category, 'storm');
+        L.circle([c.lat, c.lng], {
+          radius: stormRadius * 1000,
           color: color,
-          weight: 3,
+          weight: 1,
           fillColor: color,
-          fillOpacity: 0.4,
-          className: 'storm-marker-pulse',
+          fillOpacity: 0.1,
+          dashArray: '3,3',
+        }).addTo(group);
+
+        // Gale force wind radius (34kt)
+        const galeRadius = globalCycloneService.getWindFieldRadius(c.category, 'gale');
+        L.circle([c.lat, c.lng], {
+          radius: galeRadius * 1000,
+          color: '#888',
+          weight: 1,
+          fillColor: '#888',
+          fillOpacity: 0.05,
+          dashArray: '2,4',
+        }).addTo(group);
+
+        // Draw forecast track line with time labels
+        if (c.forecastTrack && c.forecastTrack.length > 1) {
+          const trackPoints: LatLng[] = c.forecastTrack.map(p => [p.lat, p.lng] as LatLng);
+          
+          // Forecast cone/path
+          L.polyline(trackPoints, {
+            color: '#ffffff',
+            weight: 2,
+            opacity: 0.8,
+            dashArray: '8,8',
+          }).addTo(group);
+
+          // Forecast points with time labels
+          c.forecastTrack.forEach((fp, idx) => {
+            if (idx === 0) return; // Skip current position
+            
+            const pointColor = globalCycloneService.getCategoryColor(fp.category);
+            
+            // Forecast position circle
+            L.circleMarker([fp.lat, fp.lng], {
+              radius: 5,
+              color: '#fff',
+              weight: 1.5,
+              fillColor: pointColor,
+              fillOpacity: 0.8,
+            }).addTo(group);
+
+            // Time label
+            const timeLabel = L.divIcon({
+              className: 'forecast-time-label',
+              html: `<div style="
+                color: #fff;
+                font-size: 9px;
+                font-weight: 500;
+                text-shadow: 0 0 3px #000, 0 0 2px #000;
+                white-space: nowrap;
+                background: rgba(0,0,0,0.5);
+                padding: 1px 4px;
+                border-radius: 2px;
+              ">${fp.timeLabel}</div>`,
+              iconSize: [60, 14],
+              iconAnchor: [30, -8],
+            });
+            L.marker([fp.lat, fp.lng], { icon: timeLabel }).addTo(group);
+          });
+        }
+
+        // Main cyclone marker (pulsing)
+        const markerRadius = 8 + c.category * 2;
+        const marker = L.circleMarker([c.lat, c.lng], {
+          radius: markerRadius,
+          color: '#fff',
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 0.9,
+          className: 'cyclone-marker-pulse',
         });
-        
+
         marker.on("click", () =>
           onSelectItem({
-            id: s.id,
-            name: s.name,
-            type: "storm",
-            stormType: s.type,
-            category: s.category,
-            windSpeed: s.windSpeed,
-            windSpeedMph: s.windSpeedMph,
-            pressure: s.pressure,
-            movement: s.movement,
-            basin: s.basin,
-            headline: s.headline,
-            coordinates: [s.lng, s.lat],
+            id: c.id,
+            name: c.name,
+            type: "cyclone",
+            cycloneType: c.type,
+            typeLabel: c.typeLabel,
+            category: c.category,
+            windSpeed: c.windSpeed,
+            windSpeedMph: c.windSpeedMph,
+            windSpeedKmh: c.windSpeedKmh,
+            pressure: c.pressure,
+            movement: c.movement,
+            basin: c.basinLabel,
+            headline: c.headline,
+            source: c.source,
+            forecastTrack: c.forecastTrack,
+            coordinates: [c.lng, c.lat],
           })
         );
         marker.addTo(group);
 
-        // Add storm name label for hurricanes
-        if (s.type === 'hurricane' || s.category >= 1) {
-          const nameLabel = L.divIcon({
-            className: 'storm-name-label',
-            html: `<div style="
-              color: white;
-              font-size: 10px;
-              font-weight: bold;
-              text-shadow: 0 0 4px ${color}, 0 0 2px black;
-              white-space: nowrap;
-            ">${s.name}</div>`,
-            iconSize: [60, 16],
-            iconAnchor: [30, -radius - 4],
-          });
-          L.marker([s.lat, s.lng], { icon: nameLabel }).addTo(group);
-        }
+        // Cyclone name + category label
+        const catLabel = globalCycloneService.getCategoryLabel(c.category, c.type);
+        const nameLabel = L.divIcon({
+          className: 'cyclone-name-label',
+          html: `<div style="
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            text-shadow: 0 0 4px ${color}, 0 0 3px #000;
+            white-space: nowrap;
+          ">
+            <span style="background: ${color}; padding: 1px 4px; border-radius: 3px; font-size: 9px;">${catLabel}</span>
+            <span>${c.name}</span>
+          </div>`,
+          iconSize: [100, 20],
+          iconAnchor: [50, -markerRadius - 6],
+        });
+        L.marker([c.lat, c.lng], { icon: nameLabel }).addTo(group);
       });
     }
   }, [
@@ -410,7 +497,7 @@ export function LeafletMapCanvas({
     wildfires,
     aisShips,
     flights,
-    storms,
+    cyclones,
     onSelectItem,
     getMarketColor,
     getEarthquakeRadius,

@@ -9,7 +9,7 @@ import { MarkerPopup } from './MarkerPopup';
 import { MarketData } from '@/services/GeoDataService';
 import { aisService, AISShipData } from '@/services/AISStreamService';
 import { flightService, FlightData } from '@/services/FlightTrackingService';
-import { stormService, StormData } from '@/services/StormTrackingService';
+import { globalCycloneService, CycloneData } from '@/services/GlobalCycloneService';
 import { LeafletMapCanvas } from './LeafletMapCanvas';
 import { 
   Search, 
@@ -83,10 +83,10 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
   const [flightsConnected, setFlightsConnected] = useState(false);
   const [flightCount, setFlightCount] = useState(0);
 
-  // Storm tracking state
-  const [storms, setStorms] = useState<StormData[]>([]);
-  const [stormsConnected, setStormsConnected] = useState(false);
-  const [stormCount, setStormCount] = useState(0);
+  // Cyclone tracking state
+  const [cyclones, setCyclones] = useState<CycloneData[]>([]);
+  const [cyclonesConnected, setCyclonesConnected] = useState(false);
+  const [cycloneCount, setCycloneCount] = useState(0);
 
   // Fetch data
   const { data: earthquakes = [], isLoading: loadingEQ, refetch: refetchEQ } = useEarthquakeData();
@@ -153,31 +153,31 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
     }
   }, [layers]);
 
-  // Storm tracking connection
+  // Cyclone tracking connection
   useEffect(() => {
     const stormLayerEnabled = layers.find(l => l.id === 'storms')?.enabled;
     
     if (stormLayerEnabled) {
-      stormService.startPolling(300000); // Poll every 5 min
+      globalCycloneService.startPolling(300000); // Poll every 5 min
       
-      stormService.subscribeToConnection('bloomberg-map', (status) => {
-        setStormsConnected(status.connected);
-        setStormCount(status.count);
+      globalCycloneService.subscribeToConnection('bloomberg-map', (status) => {
+        setCyclonesConnected(status.connected);
+        setCycloneCount(status.count);
       });
       
-      stormService.subscribe('bloomberg-map', (stormData) => {
-        setStorms(stormData);
+      globalCycloneService.subscribe('bloomberg-map', (cycloneData) => {
+        setCyclones(cycloneData);
       });
       
       return () => {
-        stormService.unsubscribe('bloomberg-map');
-        stormService.unsubscribeFromConnection('bloomberg-map');
-        stormService.stopPolling();
+        globalCycloneService.unsubscribe('bloomberg-map');
+        globalCycloneService.unsubscribeFromConnection('bloomberg-map');
+        globalCycloneService.stopPolling();
       };
     } else {
-      setStorms([]);
-      setStormsConnected(false);
-      setStormCount(0);
+      setCyclones([]);
+      setCyclonesConnected(false);
+      setCycloneCount(0);
     }
   }, [layers]);
 
@@ -414,7 +414,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
             wildfires={wildfires}
             aisShips={aisShips}
             flights={flights}
-            storms={storms}
+            cyclones={cyclones}
             onSelectItem={setSelectedItem}
             onZoomChange={setCurrentZoom}
             onTilesLoadingChange={setTilesLoading}
@@ -452,21 +452,21 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
               </Badge>
             )}
 
-            {/* Storms */}
+            {/* Active Cyclones */}
             {isLayerEnabled('storms') && (
               <Badge className={cn(
                 "text-[10px] px-2 py-0.5",
-                stormsConnected 
-                  ? stormCount > 0 
+                cyclonesConnected 
+                  ? cycloneCount > 0 
                     ? "bg-red-500/20 text-red-400 border-red-500/50"
                     : "bg-green-500/20 text-green-400 border-green-500/50"
                   : "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
               )}>
                 <CloudLightning className="w-3 h-3 mr-1" />
-                {stormsConnected 
-                  ? stormCount > 0 
-                    ? `${stormCount} Active Storms`
-                    : 'No Active Storms'
+                {cyclonesConnected 
+                  ? cycloneCount > 0 
+                    ? `${cycloneCount} Active Cyclones`
+                    : 'No Active Cyclones'
                   : 'Loading...'
                 }
               </Badge>
@@ -676,6 +676,7 @@ export const BloombergMap = ({ className, isFullscreen, onToggleFullscreen }: Bl
           markets={markets} 
           earthquakes={earthquakes} 
           banks={banks}
+          cyclones={cyclones}
           selectedItem={selectedItem}
         />
       </div>

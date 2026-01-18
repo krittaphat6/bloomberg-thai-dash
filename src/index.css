@@ -1004,3 +1004,37 @@
   background: linear-gradient(180deg, #0a1628 0%, #0d1f3c 100%);
   font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
+
+/* Cyclone/Storm Marker Pulse Animation */
+.cyclone-marker-pulse {
+  animation: cyclonePulse 2s ease-in-out infinite;
+}
+
+@keyframes cyclonePulse {
+  0%, 100% {
+    opacity: 0.9;
+    stroke-width: 2;
+  }
+  50% {
+    opacity: 0.6;
+    stroke-width: 4;
+  }
+}
+
+/* Forecast Track Labels */
+.forecast-time-label {
+  pointer-events: none;
+}
+
+.cyclone-name-label {
+  pointer-events: none;
+}
+
+/* Wind Field Visualization */
+.leaflet-interactive.wind-field {
+  transition: fill-opacity 0.3s ease;
+}
+
+.leaflet-interactive.wind-field:hover {
+  fill-opacity: 0.25 !important;
+}
