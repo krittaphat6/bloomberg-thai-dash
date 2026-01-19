@@ -1,143 +1,90 @@
-import { 
-  BarChart2, 
-  MessageCircle, 
-  BookOpen, 
-  FileText, 
-  Sparkles, 
-  Globe, 
-  Bell,
-  TrendingUp,
-  ChevronRight,
-  Zap
-} from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, Globe } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface MobileHomeScreenProps {
   currentTime: Date;
-  onNavigate?: (tab: string, panelId?: string) => void;
 }
 
-export function MobileHomeScreen({ currentTime, onNavigate }: MobileHomeScreenProps) {
-  
-  const handleNavigate = (tab: string, panelId?: string) => {
-    if (onNavigate) {
-      onNavigate(tab, panelId);
-    }
-  };
-
-  const greeting = () => {
-    const hour = currentTime.getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
-  };
-
-  const mainFeatures = [
-    { 
-      id: 'charts', 
-      label: 'Trading Chart', 
-      description: 'Live markets',
-      icon: BarChart2, 
-      tab: 'panels',
-      panelId: 'trading-chart',
-      color: 'bg-blue-500/10 text-blue-500'
-    },
-    { 
-      id: 'messenger', 
-      label: 'Messenger', 
-      description: 'Team chat',
-      icon: MessageCircle, 
-      tab: 'chat',
-      color: 'bg-green-500/10 text-green-500'
-    },
-    { 
-      id: 'journal', 
-      label: 'Journal', 
-      description: 'Trade logs',
-      icon: BookOpen, 
-      tab: 'panels',
-      panelId: 'journal',
-      color: 'bg-amber-500/10 text-amber-500'
-    },
-    { 
-      id: 'ai', 
-      label: 'ABLE AI', 
-      description: 'AI analysis',
-      icon: Sparkles, 
-      tab: 'panels',
-      panelId: 'able-ai',
-      color: 'bg-purple-500/10 text-purple-500'
-    },
-  ];
-
-  const quickActions = [
-    { id: 'news', label: 'News', icon: Globe, tab: 'panels', panelId: 'news' },
-    { id: 'alerts', label: 'Alerts', icon: Bell, tab: 'panels', panelId: 'alerts' },
-    { id: 'notes', label: 'Notes', icon: FileText, tab: 'panels', panelId: 'notes' },
-    { id: 'markets', label: 'Markets', icon: TrendingUp, tab: 'panels', panelId: 'world-markets' },
+export function MobileHomeScreen({ currentTime }: MobileHomeScreenProps) {
+  // Sample market data - in real app would come from API
+  const marketOverview = [
+    { symbol: 'SPY', name: 'S&P 500', price: '594.23', change: '+1.24%', isUp: true },
+    { symbol: 'QQQ', name: 'NASDAQ', price: '518.67', change: '+1.89%', isUp: true },
+    { symbol: 'DIA', name: 'DOW', price: '445.12', change: '-0.32%', isUp: false },
+    { symbol: 'BTC', name: 'Bitcoin', price: '97,234', change: '+2.45%', isUp: true },
   ];
 
   return (
     <ScrollArea className="flex-1">
-      <div className="min-h-full flex flex-col px-5 py-6 pb-10">
-        
-        {/* Header */}
-        <div className="mb-8">
-          <p className="text-sm text-muted-foreground mb-1">{greeting()}</p>
-          <h1 className="text-2xl font-bold text-foreground">ABLE Terminal</h1>
+      <div className="p-4 space-y-6">
+        {/* Welcome Card */}
+        <div className="bg-gradient-to-br from-terminal-green/20 to-terminal-cyan/10 rounded-xl p-4 border border-terminal-green/30">
+          <div className="flex items-center gap-2 mb-2">
+            <Activity className="w-5 h-5 text-terminal-green" />
+            <span className="text-terminal-green font-bold">Market Overview</span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {currentTime.toLocaleDateString('en-US', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })}
+          </p>
         </div>
 
-        {/* Main Features - 2x2 Grid */}
-        <div className="grid grid-cols-2 gap-3 mb-8">
-          {mainFeatures.map((feature) => {
-            const Icon = feature.icon;
-            return (
-              <button
-                key={feature.id}
-                onClick={() => handleNavigate(feature.tab, feature.panelId)}
-                className="bg-card border border-border/50 rounded-2xl p-4 text-left active:scale-[0.98] transition-transform"
-              >
-                <div className={`w-10 h-10 rounded-xl ${feature.color} flex items-center justify-center mb-3`}>
-                  <Icon className="w-5 h-5" />
-                </div>
-                <h3 className="font-semibold text-foreground text-sm">{feature.label}</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">{feature.description}</p>
-              </button>
-            );
-          })}
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 gap-3">
+          {marketOverview.map((item) => (
+            <div 
+              key={item.symbol}
+              className="bg-card border border-border rounded-lg p-3"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-terminal-green">{item.symbol}</span>
+                {item.isUp ? (
+                  <TrendingUp className="w-4 h-4 text-green-500" />
+                ) : (
+                  <TrendingDown className="w-4 h-4 text-red-500" />
+                )}
+              </div>
+              <div className="text-lg font-mono">${item.price}</div>
+              <div className={item.isUp ? 'text-green-500 text-sm' : 'text-red-500 text-sm'}>
+                {item.change}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">{item.name}</div>
+            </div>
+          ))}
         </div>
 
         {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Quick Access</h2>
-          <div className="bg-card border border-border/50 rounded-2xl divide-y divide-border/30">
-            {quickActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <button
-                  key={action.id}
-                  onClick={() => handleNavigate(action.tab, action.panelId)}
-                  className="w-full flex items-center justify-between px-4 py-3.5 active:bg-accent/30 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm font-medium text-foreground">{action.label}</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
-                </button>
-              );
-            })}
+        <div>
+          <h3 className="text-sm font-bold text-terminal-green mb-3 flex items-center gap-2">
+            <Globe className="w-4 h-4" />
+            Quick Access
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            {['Charts', 'News', 'Calendar', 'Journal', 'Notes', 'AI'].map((action) => (
+              <div
+                key={action}
+                className="bg-card border border-border rounded-lg p-3 text-center text-sm font-medium text-terminal-green active:bg-accent/50"
+              >
+                {action}
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Status Footer */}
-        <div className="mt-auto">
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/60">
-            <Zap className="w-3 h-3" />
-            <span>All systems operational</span>
+        {/* Status Bar */}
+        <div className="bg-card border border-border rounded-lg p-3">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>System Status</span>
+            <span className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              All Systems Operational
+            </span>
           </div>
         </div>
-
       </div>
     </ScrollArea>
   );

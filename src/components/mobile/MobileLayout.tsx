@@ -67,30 +67,10 @@ export function MobileLayout({
     setActiveTab('panels');
   };
 
-  const handleHomeNavigate = (tab: string, panelId?: string) => {
-    setActiveTab(tab);
-    if (panelId) {
-      // Find the panel by panelId and select it, or trigger add panel
-      const existingPanel = panels.find(p => p.id.includes(panelId) || p.title.toLowerCase().includes(panelId));
-      if (existingPanel) {
-        setActivePanel(existingPanel);
-      } else {
-        // Find component in available components and add it
-        const component = availableComponents.find(c => 
-          c.id.toLowerCase().includes(panelId) || 
-          c.title.toLowerCase().includes(panelId)
-        );
-        if (component) {
-          onPanelAdd(component);
-        }
-      }
-    }
-  };
-
   const renderContent = () => {
     switch (activeTab) {
       case 'home':
-        return <MobileHomeScreen currentTime={currentTime} onNavigate={handleHomeNavigate} />;
+        return <MobileHomeScreen currentTime={currentTime} />;
       case 'panels':
         return (
           <MobilePanelStack
@@ -108,7 +88,7 @@ export function MobileLayout({
           </div>
         );
       default:
-        return <MobileHomeScreen currentTime={currentTime} onNavigate={handleHomeNavigate} />;
+        return <MobileHomeScreen currentTime={currentTime} />;
     }
   };
 
