@@ -6,8 +6,6 @@ import { MobileHeader } from './MobileHeader';
 import { MobileHomeScreen } from './MobileHomeScreen';
 import { MobileSettingsSheet } from './MobileSettingsSheet';
 import MobileMessenger from './MobileMessenger';
-import { MobileTopNews } from './MobileTopNews';
-
 interface Panel {
   id: string;
   title: string;
@@ -41,7 +39,6 @@ export function MobileLayout({
   const [activePanel, setActivePanel] = useState<Panel | null>(null);
   const [showPanelSelector, setShowPanelSelector] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showTopNews, setShowTopNews] = useState(false);
 
   const handleTabChange = (tab: string) => {
     if (tab === 'settings') {
@@ -49,7 +46,6 @@ export function MobileLayout({
     } else {
       setActiveTab(tab);
       setActivePanel(null);
-      setShowTopNews(false);
     }
   };
 
@@ -71,19 +67,10 @@ export function MobileLayout({
     setActiveTab('panels');
   };
 
-  const handleOpenTopNews = () => {
-    setShowTopNews(true);
-  };
-
   const renderContent = () => {
-    // Show TopNews full screen when opened from home
-    if (showTopNews) {
-      return <MobileTopNews onBack={() => setShowTopNews(false)} />;
-    }
-
     switch (activeTab) {
       case 'home':
-        return <MobileHomeScreen currentTime={currentTime} onOpenTopNews={handleOpenTopNews} />;
+        return <MobileHomeScreen currentTime={currentTime} />;
       case 'panels':
         return (
           <MobilePanelStack
@@ -101,7 +88,7 @@ export function MobileLayout({
           </div>
         );
       default:
-        return <MobileHomeScreen currentTime={currentTime} onOpenTopNews={handleOpenTopNews} />;
+        return <MobileHomeScreen currentTime={currentTime} />;
     }
   };
 
