@@ -49,7 +49,7 @@ import TopNews from './TopNews';
 import { BloombergMap } from './BloombergMap';
 import MonteCarloSimulator from './MonteCarloSimulator';
 import AbleHF40Modules from './AbleHF40Modules';
-import FaceSearch from './FaceSearch';
+import { FaceSearch } from './FaceSearch';
 
 interface PanelData {
   id: string;
