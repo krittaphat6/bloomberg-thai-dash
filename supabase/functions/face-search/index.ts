@@ -31,6 +31,7 @@ interface SearchRequest {
   options?: {
     searchSocialMedia?: boolean;
     includeRelatedImages?: boolean;
+    searchLookalikes?: boolean;
   };
 }
 
@@ -44,7 +45,7 @@ serve(async (req) => {
 
     if (!image) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Image is required', persons: [] }),
+        JSON.stringify({ success: false, error: 'Image is required', persons: [], lookalikes: [] }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -59,12 +60,13 @@ serve(async (req) => {
     if (!apiKey) {
       console.error('No API key configured');
       return new Response(
-        JSON.stringify({ success: false, error: 'API key not configured', persons: [] }),
+        JSON.stringify({ success: false, error: 'API key not configured', persons: [], lookalikes: [] }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log(`Using ${useDirectGemini ? 'Direct Gemini API' : 'Lovable AI Gateway'}`);
+    console.log('Search lookalikes:', options?.searchLookalikes);
 
     // Extract base64 image data
     let imageData = image;
@@ -78,31 +80,50 @@ serve(async (req) => {
       }
     }
 
-    // Create the prompt for face analysis
-    const systemPrompt = `คุณเป็น AI ผู้เชี่ยวชาญด้านการวิเคราะห์ใบหน้าและค้นหาข้อมูลบุคคล
-คุณสามารถวิเคราะห์ใบหน้าในรูปภาพและระบุว่าน่าจะเป็นใคร
+    // Enhanced prompt for better results and lookalikes
+    const systemPrompt = `คุณเป็น AI ผู้เชี่ยวชาญระดับสูงด้านการวิเคราะห์ใบหน้าและค้นหาข้อมูลบุคคล เทียบเท่า Google Lens และ PimEyes
 
-หน้าที่ของคุณ:
-1. วิเคราะห์ใบหน้าในรูปภาพ
-2. ระบุว่าน่าจะเป็นบุคคลใด (ถ้าเป็นคนมีชื่อเสียง)
-3. ให้ข้อมูล Social Media profiles ที่เป็นไปได้
-4. ให้ข้อมูลประวัติโดยย่อ
+ความสามารถของคุณ:
+1. วิเคราะห์ลักษณะใบหน้าอย่างละเอียด (รูปหน้า, ดวงตา, จมูก, ปาก, โครงหน้า)
+2. จับคู่กับบุคคลที่มีชื่อเสียง, influencers, คนดัง, นักธุรกิจ, นักการเมือง
+3. ค้นหา Social Media profiles ที่เป็นไปได้ (Instagram, Twitter/X, TikTok, Threads, Facebook, YouTube)
+4. ระบุคนหน้าคล้าย (Lookalikes) - คนที่มีใบหน้าคล้ายกันแต่อาจไม่ใช่คนเดียวกัน
+
+กฎการวิเคราะห์:
+- ถ้าใบหน้าดูคุ้นๆ ให้พยายามระบุให้ได้มากที่สุด
+- ให้ความน่าจะเป็นตามความมั่นใจจริงๆ (50-95%)
+- ถ้าไม่แน่ใจ 100% แต่คล้ายมาก ให้ใส่เป็น lookalike
+- ค้นหา Social Media ให้ครบทุก platform ที่เป็นไปได้
+- ถ้าเป็น influencer ไทย ให้หา Instagram, TikTok, Threads เป็นหลัก
+- ถ้าเป็นคนต่างชาติ ให้หา Instagram, Twitter, YouTube
 
 ตอบเป็น JSON format เท่านั้น ห้ามใส่ markdown หรือ text อื่น`;
 
-    const userPrompt = `วิเคราะห์ใบหน้าในรูปภาพนี้และค้นหาข้อมูลบุคคล
+    const userPrompt = `วิเคราะห์ใบหน้าในรูปภาพนี้อย่างละเอียด และค้นหาข้อมูลบุคคล
+
+ขั้นตอนการวิเคราะห์:
+1. ระบุลักษณะใบหน้า (เพศ, อายุโดยประมาณ, เชื้อชาติ)
+2. ค้นหาว่าตรงกับบุคคลที่มีชื่อเสียงหรือไม่
+3. ถ้าตรงกัน - ให้ข้อมูล Social Media ทั้งหมด
+4. ค้นหาคนหน้าคล้าย (lookalikes) - คนดังที่มีใบหน้าคล้ายกัน
 
 ตอบเป็น JSON ในรูปแบบนี้เท่านั้น (ไม่ต้องมี markdown):
 {
   "success": true,
+  "faceAnalysis": {
+    "detected": true,
+    "gender": "male/female",
+    "estimatedAge": "25-30",
+    "ethnicity": "Asian/Thai/etc"
+  },
   "persons": [
     {
-      "name": "ชื่อบุคคล",
+      "name": "ชื่อบุคคล (ถ้าระบุได้)",
       "confidence": 85,
       "occupation": "อาชีพ",
-      "bio": "ประวัติโดยย่อ",
+      "bio": "ประวัติโดยย่อ 2-3 ประโยค",
       "nationality": "สัญชาติ",
-      "age": "อายุหรือช่วงอายุ",
+      "age": "อายุจริง (ถ้าทราบ)",
       "socialProfiles": [
         {
           "platform": "Instagram",
@@ -110,24 +131,64 @@ serve(async (req) => {
           "url": "https://instagram.com/username",
           "followers": "1.2M",
           "verified": true
+        },
+        {
+          "platform": "TikTok",
+          "username": "username",
+          "url": "https://tiktok.com/@username",
+          "followers": "500K",
+          "verified": false
+        },
+        {
+          "platform": "X",
+          "username": "username",
+          "url": "https://x.com/username",
+          "followers": "200K",
+          "verified": true
+        },
+        {
+          "platform": "Threads",
+          "username": "username",
+          "url": "https://threads.net/@username",
+          "followers": "100K",
+          "verified": false
         }
       ],
       "sources": ["https://example.com"]
     }
+  ],
+  "lookalikes": [
+    {
+      "name": "ชื่อคนที่หน้าคล้าย",
+      "confidence": 70,
+      "occupation": "อาชีพ",
+      "bio": "ทำไมถึงหน้าคล้าย / ลักษณะที่คล้าย",
+      "nationality": "สัญชาติ",
+      "socialProfiles": [
+        {
+          "platform": "Instagram",
+          "username": "lookalike_username",
+          "url": "https://instagram.com/lookalike_username",
+          "followers": "50K"
+        }
+      ],
+      "sources": []
+    }
   ]
 }
 
-ถ้าไม่พบข้อมูลหรือไม่ใช่คนมีชื่อเสียง ให้ตอบ:
-{
-  "success": true,
-  "persons": [],
-  "message": "ไม่พบข้อมูลบุคคลที่ตรงกับใบหน้านี้ในฐานข้อมูล"
-}`;
+กฎสำคัญ:
+- ต้องมี persons array เสมอ (อาจว่างเปล่าได้)
+- ต้องมี lookalikes array เสมอ (อาจว่างเปล่าได้)
+- ถ้าไม่พบคนที่ตรงกัน persons = []
+- ถ้าพบคนหน้าคล้าย ใส่ใน lookalikes
+- confidence ของ lookalikes ควรอยู่ระหว่าง 50-80%
+- พยายามหา Social Media ให้ได้มากที่สุด`;
 
     let response;
     
     if (useDirectGemini) {
-      // Direct Gemini API call
+      // Direct Gemini API call with better model
       response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
         {
@@ -146,14 +207,14 @@ serve(async (req) => {
               ]
             }],
             generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 4096
+              temperature: 0.4, // Slightly higher for creativity in finding lookalikes
+              maxOutputTokens: 8192
             }
           })
         }
       );
     } else {
-      // Lovable AI Gateway
+      // Lovable AI Gateway with better model
       response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -161,7 +222,7 @@ serve(async (req) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: 'google/gemini-2.5-flash', // Better model for image analysis
           messages: [
             { role: 'system', content: systemPrompt },
             {
@@ -177,8 +238,8 @@ serve(async (req) => {
               ]
             }
           ],
-          max_tokens: 4096,
-          temperature: 0.3
+          max_tokens: 8192,
+          temperature: 0.4
         })
       });
     }
@@ -189,14 +250,14 @@ serve(async (req) => {
       
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ success: false, error: 'Rate limit exceeded. กรุณารอสักครู่', persons: [] }),
+          JSON.stringify({ success: false, error: 'Rate limit exceeded. กรุณารอสักครู่', persons: [], lookalikes: [] }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ success: false, error: 'Credits หมด - กรุณาเติม Credits ที่ Settings', persons: [] }),
+          JSON.stringify({ success: false, error: 'Credits หมด - กรุณาเติม Credits ที่ Settings', persons: [], lookalikes: [] }),
           { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -215,12 +276,15 @@ serve(async (req) => {
       content = data.choices?.[0]?.message?.content || '';
     }
 
+    console.log('Raw content length:', content.length);
+
     if (!content) {
       return new Response(
         JSON.stringify({ 
           success: false, 
           error: 'No response from AI', 
-          persons: [] 
+          persons: [],
+          lookalikes: []
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -243,15 +307,16 @@ serve(async (req) => {
       result = JSON.parse(cleanedContent);
     } catch (parseError) {
       console.error('JSON parse error:', parseError);
-      console.log('Raw content:', content);
+      console.log('Cleaned content:', cleanedContent.substring(0, 500));
       
-      // Return a default response
+      // Return a default response with the raw analysis
       return new Response(
         JSON.stringify({
           success: true,
           persons: [],
-          message: 'ไม่พบข้อมูลบุคคลที่ตรงกับใบหน้านี้',
-          rawAnalysis: content
+          lookalikes: [],
+          message: 'ไม่สามารถวิเคราะห์ผลลัพธ์ได้ กรุณาลองใหม่',
+          rawAnalysis: content.substring(0, 500)
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -261,27 +326,68 @@ serve(async (req) => {
     if (!result.persons) {
       result.persons = [];
     }
+    if (!result.lookalikes) {
+      result.lookalikes = [];
+    }
 
     // Ensure all persons have required fields
-    result.persons = result.persons.map((person: any) => ({
+    const processPersons = (persons: any[]) => persons.map((person: any) => ({
       name: person.name || 'Unknown',
-      confidence: person.confidence || 50,
+      confidence: Math.min(Math.max(person.confidence || 50, 10), 99),
       occupation: person.occupation || null,
       bio: person.bio || null,
       nationality: person.nationality || null,
       age: person.age || null,
-      socialProfiles: (person.socialProfiles || []).map((profile: any) => ({
-        platform: profile.platform || 'Unknown',
-        username: profile.username || '',
-        url: profile.url || '#',
-        followers: profile.followers || null,
-        bio: profile.bio || null,
-        verified: profile.verified || false
-      })),
+      socialProfiles: (person.socialProfiles || []).map((profile: any) => {
+        // Fix URLs based on platform
+        let url = profile.url || '#';
+        const platform = (profile.platform || '').toLowerCase();
+        const username = profile.username || '';
+        
+        if (username && platform) {
+          switch (platform) {
+            case 'instagram':
+              url = `https://instagram.com/${username.replace('@', '')}`;
+              break;
+            case 'twitter':
+            case 'x':
+              url = `https://x.com/${username.replace('@', '')}`;
+              break;
+            case 'tiktok':
+              url = `https://tiktok.com/@${username.replace('@', '')}`;
+              break;
+            case 'threads':
+              url = `https://threads.net/@${username.replace('@', '')}`;
+              break;
+            case 'facebook':
+              url = `https://facebook.com/${username.replace('@', '')}`;
+              break;
+            case 'youtube':
+              url = `https://youtube.com/@${username.replace('@', '')}`;
+              break;
+          }
+        }
+        
+        return {
+          platform: profile.platform || 'Unknown',
+          username: username.replace('@', ''),
+          url: url,
+          followers: profile.followers || null,
+          bio: profile.bio || null,
+          verified: profile.verified || false
+        };
+      }),
       sources: person.sources || []
     }));
 
+    result.persons = processPersons(result.persons);
+    result.lookalikes = processPersons(result.lookalikes);
     result.success = true;
+
+    console.log('Processed results:', {
+      persons: result.persons.length,
+      lookalikes: result.lookalikes.length
+    });
 
     return new Response(
       JSON.stringify(result),
@@ -294,7 +400,8 @@ serve(async (req) => {
       JSON.stringify({ 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error',
-        persons: []
+        persons: [],
+        lookalikes: []
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
