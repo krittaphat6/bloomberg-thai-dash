@@ -23,26 +23,34 @@ interface TradeSignal {
 }
 
 // ============================================================================
-// 🔥 Retry Helper with Exponential Backoff + Jitter
+// 🔥 Enhanced Retry Helper with Exponential Backoff + Jitter + Timeout
 // ============================================================================
 async function retryOperation<T>(
   operation: () => Promise<T>,
   maxRetries: number = 5,
-  baseDelay: number = 100
+  baseDelay: number = 100,
+  timeoutMs: number = 10000
 ): Promise<T> {
   let lastError: any;
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      return await operation();
+      // Add timeout to each operation
+      const result = await Promise.race([
+        operation(),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Operation timeout')), timeoutMs)
+        )
+      ]);
+      return result;
     } catch (error) {
       lastError = error;
       console.error(`❌ Attempt ${attempt + 1}/${maxRetries} failed:`, error);
       
       if (attempt < maxRetries - 1) {
         // Exponential backoff with jitter to prevent thundering herd
-        const jitter = Math.random() * 50;
-        const delay = (baseDelay * Math.pow(2, attempt)) + jitter;
+        const jitter = Math.random() * 100;
+        const delay = Math.min((baseDelay * Math.pow(2, attempt)) + jitter, 5000);
         console.log(`⏳ Retrying in ${delay.toFixed(0)}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -98,6 +106,63 @@ async function ensureTradingViewUser(supabase: ReturnType<typeof createClient>) 
   }
 }
 
+// ============================================================================
+// 🔥 Parse JSON safely with text fallback
+// ============================================================================
+function safeParseJSON(bodyText: string): { data: any; isRaw: boolean } {
+  // Try direct JSON parse first
+  try {
+    const parsed = JSON.parse(bodyText);
+    return { data: parsed, isRaw: false };
+  } catch (e) {
+    // Try to extract JSON from text that might have extra content
+    const jsonMatch = bodyText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return { data: parsed, isRaw: false };
+      } catch (e2) {
+        // Fall through to raw text handling
+      }
+    }
+    
+    // Handle plain text alerts (TradingView can send plain text)
+    return {
+      data: {
+        message: bodyText.trim(),
+        action: detectActionFromText(bodyText),
+        symbol: detectSymbolFromText(bodyText),
+        raw_text: true
+      },
+      isRaw: true
+    };
+  }
+}
+
+function detectActionFromText(text: string): string {
+  const lowerText = text.toLowerCase();
+  if (lowerText.includes('buy') || lowerText.includes('long') || lowerText.includes('ซื้อ')) return 'BUY';
+  if (lowerText.includes('sell') || lowerText.includes('short') || lowerText.includes('ขาย')) return 'SELL';
+  if (lowerText.includes('close') || lowerText.includes('exit') || lowerText.includes('ปิด')) return 'CLOSE';
+  return 'ALERT';
+}
+
+function detectSymbolFromText(text: string): string {
+  // Try to extract common forex/crypto symbols
+  const symbolPatterns = [
+    /\b(XAUUSD|XAGUSD|EURUSD|GBPUSD|USDJPY|AUDUSD|USDCHF|NZDUSD|USDCAD)\b/i,
+    /\b(BTCUSD|ETHUSD|BNBUSD|XRPUSD|SOLUSD|DOGEUSD|ADAUSD)\b/i,
+    /\b([A-Z]{3,6}USD[T]?)\b/,
+    /\b(BTC|ETH|XAU|XAG|EUR|GBP|JPY|AUD|CHF|NZD|CAD)\b/i
+  ];
+  
+  for (const pattern of symbolPatterns) {
+    const match = text.match(pattern);
+    if (match) return match[1].toUpperCase();
+  }
+  return 'UNKNOWN';
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -112,26 +177,47 @@ serve(async (req) => {
   let bodyText = '';
   let parsedBody: any = null;
   let roomId = '';
+  let webhookId: string | null = null;
   
   try {
     console.log(`🔗 [${requestId}] ============ WEBHOOK START ============`)
+    console.log(`🔗 [${requestId}] Method: ${req.method}`)
+    console.log(`🔗 [${requestId}] Timestamp: ${new Date().toISOString()}`)
     
     // ========================================================================
-    // STEP 1: Extract Room ID from URL
+    // STEP 1: Extract Room ID from URL (IMPROVED)
     // ========================================================================
     const url = new URL(req.url)
-    const pathParts = url.pathname.split('/')
-    roomId = pathParts[pathParts.length - 1]
+    const pathParts = url.pathname.split('/').filter(p => p && p !== 'tradingview-webhook')
+    roomId = pathParts[pathParts.length - 1] || ''
+    
+    // Also check query params as backup
+    if (!roomId || roomId.length < 10) {
+      roomId = url.searchParams.get('room') || url.searchParams.get('roomId') || roomId;
+    }
     
     console.log(`📊 [${requestId}] Room ID: ${roomId}`)
     console.log(`📊 [${requestId}] Full URL: ${req.url}`)
+    console.log(`📊 [${requestId}] Path Parts: ${JSON.stringify(pathParts)}`)
     
-    if (!roomId || roomId === 'tradingview-webhook') {
-      console.error(`❌ [${requestId}] Missing room ID`)
+    if (!roomId || roomId.length < 10) {
+      console.error(`❌ [${requestId}] Missing or invalid room ID: "${roomId}"`)
+      
+      // Try to find room from webhook URL in database
+      const { data: webhooks } = await supabase
+        .from('webhooks')
+        .select('room_id, id')
+        .eq('is_active', true)
+        .limit(5);
+      
+      console.log(`🔍 [${requestId}] Available webhooks:`, webhooks?.map(w => w.room_id));
+      
       return new Response(JSON.stringify({ 
         error: 'Room ID required in URL path',
         requestId,
-        hint: 'URL format: /tradingview-webhook/{room-id}'
+        hint: 'URL format: /tradingview-webhook/{room-id}',
+        received_path: url.pathname,
+        available_rooms: webhooks?.map(w => w.room_id) || []
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -144,6 +230,7 @@ serve(async (req) => {
     try {
       bodyText = await req.text();
       console.log(`📦 [${requestId}] Raw body length: ${bodyText.length}`)
+      console.log(`📦 [${requestId}] Raw body preview: ${bodyText.substring(0, 200)}`)
       
       if (!bodyText || bodyText.trim() === '') {
         console.error(`❌ [${requestId}] Empty body received`)
@@ -156,23 +243,30 @@ serve(async (req) => {
         })
       }
       
-      parsedBody = JSON.parse(bodyText);
+      // Use safe JSON parser with text fallback
+      const { data, isRaw } = safeParseJSON(bodyText);
+      parsedBody = data;
+      
+      if (isRaw) {
+        console.log(`⚠️ [${requestId}] Received plain text, converted to JSON structure`);
+      }
+      
       console.log(`📦 [${requestId}] Parsed payload:`, JSON.stringify(parsedBody, null, 2))
     } catch (e) {
-      console.error(`❌ [${requestId}] JSON parse error:`, e)
+      console.error(`❌ [${requestId}] Body processing error:`, e)
       
       // Log failed webhook
       await logWebhookDelivery(supabase, {
         request_id: requestId,
         room_id: roomId,
-        payload: { raw: bodyText },
+        payload: { raw: bodyText, error: String(e) },
         status: 'failed',
-        error_message: `JSON parse error: ${e}`,
+        error_message: `Body processing error: ${e}`,
         execution_time_ms: Date.now() - startTime
       });
       
       return new Response(JSON.stringify({ 
-        error: 'Invalid JSON format',
+        error: 'Failed to process request body',
         requestId,
         received: bodyText.substring(0, 100) 
       }), {
@@ -182,28 +276,65 @@ serve(async (req) => {
     }
 
     // ========================================================================
-    // STEP 3: Verify Webhook Room Exists
+    // STEP 3: Verify Webhook Room Exists (with fallback)
     // ========================================================================
-    const webhook = await retryOperation(async () => {
-      console.log(`🔍 [${requestId}] Looking for webhook with room_id: ${roomId}`)
+    let webhook: any = null;
+    
+    try {
+      webhook = await retryOperation(async () => {
+        console.log(`🔍 [${requestId}] Looking for webhook with room_id: ${roomId}`)
+        
+        const { data, error } = await supabase
+          .from('webhooks')
+          .select('id, room_id, is_active, webhook_url')
+          .eq('room_id', roomId)
+          .single()
+        
+        if (error) {
+          console.error(`❌ [${requestId}] Webhook lookup error:`, error)
+          throw error
+        }
+        if (!data) {
+          throw new Error(`Webhook not found for room: ${roomId}`)
+        }
+        
+        console.log(`✅ [${requestId}] Found webhook:`, data.id)
+        return data
+      }, 3, 100, 5000);
       
-      const { data, error } = await supabase
-        .from('webhooks')
-        .select('id, room_id, is_active, webhook_url')
-        .eq('room_id', roomId)
-        .single()
+      webhookId = webhook?.id || null;
+    } catch (webhookError) {
+      console.warn(`⚠️ [${requestId}] Webhook lookup failed, checking if room exists directly...`);
       
-      if (error) {
-        console.error(`❌ [${requestId}] Webhook lookup error:`, error)
-        throw error
+      // Fallback: check if room exists in chat_rooms
+      const { data: room } = await supabase
+        .from('chat_rooms')
+        .select('id, name, type')
+        .eq('id', roomId)
+        .single();
+      
+      if (!room) {
+        await logWebhookDelivery(supabase, {
+          request_id: requestId,
+          room_id: roomId,
+          payload: parsedBody,
+          status: 'failed',
+          error_message: `Room not found: ${roomId}`,
+          execution_time_ms: Date.now() - startTime
+        });
+        
+        return new Response(JSON.stringify({
+          error: 'Webhook room not found',
+          requestId,
+          roomId
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
-      if (!data) {
-        throw new Error(`Webhook not found for room: ${roomId}`)
-      }
       
-      console.log(`✅ [${requestId}] Found webhook:`, data.id)
-      return data
-    }, 3, 100);
+      console.log(`✅ [${requestId}] Room exists, proceeding without webhook record:`, room.name);
+    }
 
     // ========================================================================
     // STEP 4: Ensure TradingView User (background, don't block)
@@ -224,14 +355,18 @@ serve(async (req) => {
     const alertContent = formatTradingViewAlert(parsedBody, tradeSignal)
 
     // ========================================================================
-    // STEP 7: Insert Message (CRITICAL - with heavy retry)
+    // STEP 7: Insert Message with UPSERT to prevent duplicates
     // ========================================================================
+    const messageId = crypto.randomUUID();
+    
     const message = await retryOperation(async () => {
       console.log(`💾 [${requestId}] Inserting message to room: ${roomId}`)
       
+      // Use insert with conflict handling
       const { data, error } = await supabase
         .from('messages')
         .insert({
+          id: messageId,
           room_id: roomId,
           user_id: 'tradingview',
           username: '📊 TradingView',
@@ -249,13 +384,24 @@ serve(async (req) => {
         .single()
       
       if (error) {
+        // Check if it's a duplicate key error
+        if (error.code === '23505') {
+          console.log(`⚠️ [${requestId}] Duplicate message detected, fetching existing...`);
+          const { data: existing } = await supabase
+            .from('messages')
+            .select('id, created_at')
+            .eq('id', messageId)
+            .single();
+          return existing;
+        }
+        
         console.error(`❌ [${requestId}] Message insert error:`, error)
         throw error
       }
       
       console.log(`✅ [${requestId}] Message created: ${data.id}`)
       return data
-    }, 5, 200);  // 5 retries, 200ms base delay
+    }, 5, 200, 8000);  // 5 retries, 200ms base delay, 8s timeout
 
     const executionTime = Date.now() - startTime;
     
@@ -265,8 +411,8 @@ serve(async (req) => {
     await logWebhookDelivery(supabase, {
       request_id: requestId,
       room_id: roomId,
-      webhook_id: webhook.id,
-      message_id: message.id,
+      webhook_id: webhookId,
+      message_id: message?.id || messageId,
       payload: parsedBody,
       status: 'success',
       execution_time_ms: executionTime
@@ -278,7 +424,8 @@ serve(async (req) => {
       success: true, 
       message: 'Alert received and saved',
       requestId,
-      messageId: message.id,
+      messageId: message?.id || messageId,
+      roomId,
       symbol: tradeSignal.symbol,
       action: tradeSignal.action,
       executionTime: `${executionTime}ms`
@@ -296,6 +443,7 @@ serve(async (req) => {
     await logWebhookDelivery(supabase, {
       request_id: requestId,
       room_id: roomId || null,
+      webhook_id: webhookId,
       payload: parsedBody || { raw: bodyText },
       status: 'failed',
       error_message: error.message || 'Unknown error',
@@ -307,6 +455,7 @@ serve(async (req) => {
       success: false,
       error: error.message || 'Internal server error',
       requestId,
+      roomId,
       executionTime: `${executionTime}ms`
     }), {
       status: 500,
@@ -316,14 +465,14 @@ serve(async (req) => {
 })
 
 // ============================================================================
-// Log webhook delivery to database
+// Log webhook delivery to database (fire and forget)
 // ============================================================================
 async function logWebhookDelivery(
   supabase: ReturnType<typeof createClient>,
   data: {
     request_id: string;
     room_id: string | null;
-    webhook_id?: string;
+    webhook_id?: string | null;
     message_id?: string;
     payload: any;
     status: 'success' | 'failed';
@@ -333,7 +482,7 @@ async function logWebhookDelivery(
   }
 ) {
   try {
-    await supabase.from('webhook_delivery_logs').insert({
+    const { error } = await supabase.from('webhook_delivery_logs').insert({
       request_id: data.request_id,
       room_id: data.room_id,
       webhook_id: data.webhook_id || null,
@@ -343,9 +492,15 @@ async function logWebhookDelivery(
       error_message: data.error_message || null,
       error_stack: data.error_stack || null,
       execution_time_ms: data.execution_time_ms,
+      retry_count: 0,
       created_at: new Date().toISOString()
     });
-    console.log(`📝 [${data.request_id}] Logged to webhook_delivery_logs: ${data.status}`);
+    
+    if (error) {
+      console.warn(`⚠️ [${data.request_id}] Log insert error:`, error);
+    } else {
+      console.log(`📝 [${data.request_id}] Logged to webhook_delivery_logs: ${data.status}`);
+    }
   } catch (e) {
     console.warn(`⚠️ [${data.request_id}] Failed to log delivery:`, e);
   }
@@ -366,9 +521,9 @@ function parseTradeSignal(data: any, requestId: string): TradeSignal {
   
   // Determine action type
   let tradeAction: TradeSignal['action'] = 'BUY'
-  const actionStr = (action || order_action || signal || '').toString().toLowerCase()
+  const actionStr = (action || order_action || signal || message || '').toString().toLowerCase()
   
-  if (actionStr.includes('close') || actionStr.includes('exit') || actionStr.includes('ออก')) {
+  if (actionStr.includes('close') || actionStr.includes('exit') || actionStr.includes('ออก') || actionStr.includes('ปิด')) {
     tradeAction = 'CLOSE'
   } else if (actionStr.includes('take') || actionStr.includes('tp') || actionStr.includes('profit') || actionStr.includes('ทำกำไร')) {
     tradeAction = 'TAKE_PROFIT'
@@ -394,10 +549,16 @@ function parseTradeSignal(data: any, requestId: string): TradeSignal {
   const tradePnl = parseFloat(pnl || profit) || 0
   const tradePnlPercent = parseFloat(pnlPercent || profitPercent) || 0
   
+  // Try to extract symbol from various sources
+  let detectedSymbol = (ticker || symbol || 'UNKNOWN').toString().toUpperCase();
+  if (detectedSymbol === 'UNKNOWN' && message) {
+    detectedSymbol = detectSymbolFromText(message.toString());
+  }
+  
   return {
     id: `tv-${requestId.substring(0, 8)}-${Date.now()}`,
     date: new Date().toISOString().split('T')[0],
-    symbol: (ticker || symbol || 'UNKNOWN').toString().toUpperCase(),
+    symbol: detectedSymbol,
     side: tradeSide,
     type: 'CFD',
     action: tradeAction,
