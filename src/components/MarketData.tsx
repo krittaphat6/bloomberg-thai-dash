@@ -49,6 +49,7 @@ import TopNews from './TopNews';
 import { BloombergMap } from './BloombergMap';
 import MonteCarloSimulator from './MonteCarloSimulator';
 import AbleHF40Modules from './AbleHF40Modules';
+import FaceSearch from './FaceSearch';
 
 interface PanelData {
   id: string;
@@ -356,6 +357,15 @@ const MarketData = () => {
       icon: <Brain className="w-5 h-5" />,
       description: 'ABLE-HF 3.0 Hedge Fund Analysis System - 40 Modules with full scoring',
       tags: ['ai', 'hedge-fund', 'modules', '40-modules', 'analysis', 'gemini']
+    },
+    { 
+      id: 'face-search', 
+      title: '👤 FACE SEARCH', 
+      component: <FaceSearch />,
+      category: 'intelligence',
+      icon: <Brain className="w-5 h-5" />,
+      description: 'AI-powered face recognition to find social media profiles',
+      tags: ['face', 'search', 'recognition', 'instagram', 'social-media', 'ai']
     },
     
     // Utilities
