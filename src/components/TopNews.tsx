@@ -167,6 +167,15 @@ export const TopNews = () => {
   // ✅ NEW: Metadata และ component active state
   const [newsMetadata, setNewsMetadata] = useState<NewsMetadata | null>(null);
   const [isComponentActive, setIsComponentActive] = useState(false);
+  
+  // ✅ NEW: News Filter Stats from AI
+  const [newsFilterStats, setNewsFilterStats] = useState<{
+    totalNews: number;
+    filteredNews: number;
+    passRate: string;
+    marketMovingCount: number;
+    topNews: any[];
+  } | null>(null);
 
   // Fetch prices
   const fetchPrices = useCallback(async () => {
@@ -462,6 +471,44 @@ export const TopNews = () => {
           </div>
         </div>
 
+        {/* ✅ NEW: News Filter Stats Bar */}
+        {newsFilterStats && (
+          <div className="px-4 md:px-6 py-3 bg-zinc-900/50 border-b border-zinc-800">
+            <div className="flex items-center gap-4 text-xs flex-wrap">
+              <Badge variant="outline" className="border-blue-500/30 text-blue-400">
+                📰 Total: {newsFilterStats.totalNews}
+              </Badge>
+              <Badge variant="outline" className="border-emerald-500/30 text-emerald-400">
+                ✅ Filtered: {newsFilterStats.filteredNews}
+              </Badge>
+              <Badge variant="outline" className="border-purple-500/30 text-purple-400">
+                📊 Pass: {newsFilterStats.passRate}
+              </Badge>
+              {newsFilterStats.marketMovingCount > 0 && (
+                <Badge variant="outline" className="border-red-500/30 text-red-400 animate-pulse">
+                  🚨 Market Moving: {newsFilterStats.marketMovingCount}
+                </Badge>
+              )}
+            </div>
+            {newsFilterStats.topNews.length > 0 && (
+              <div className="mt-2">
+                <div className="text-[10px] text-zinc-500 mb-1">Top Filtered News:</div>
+                {newsFilterStats.topNews.slice(0, 3).map((news: any, i: number) => (
+                  <div key={i} className="text-[10px] text-zinc-400 flex gap-2 py-0.5">
+                    <span className="text-emerald-400 font-medium">#{i + 1}</span>
+                    <span className="flex-1 truncate">{news.title}</span>
+                    <span className="text-blue-400">R:{news.relevance}</span>
+                    <span className="text-orange-400">I:{news.impact}</span>
+                    {news.factors && news.factors.length > 0 && (
+                      <span className="text-purple-400 hidden md:inline">• {news.factors[0]}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Content Area */}
         <ScrollArea className="flex-1">
           {activeTab === 'macro' && <div className="p-4 md:p-6">
@@ -517,9 +564,27 @@ export const TopNews = () => {
                           setGeminiThinking(prev => prev + '📈 Decision: ' + data.analysis.decision + '\n');
                           setGeminiThinking(prev => prev + '🎯 P(Up): ' + data.analysis.P_up_pct?.toFixed(1) + '%\n');
                           setGeminiThinking(prev => prev + '💪 Confidence: ' + data.analysis.confidence + '%\n\n');
-                          setGeminiThinking(prev => prev + '💭 ' + (data.analysis.thinking_process || data.analysis.thai_summary || '') + '\n');
+                          
+                          // ✅ NEW: Show filter stats in thinking
+                          if (data.analysis.filtered_news_count) {
+                            setGeminiThinking(prev => prev + `📰 News Filter: ${data.analysis.filtered_news_count}/${data.analysis.news_count} (${data.analysis.filter_pass_rate})\n`);
+                            if (data.analysis.market_moving_news > 0) {
+                              setGeminiThinking(prev => prev + `🚨 Market Moving News: ${data.analysis.market_moving_news}\n`);
+                            }
+                          }
+                          
+                          setGeminiThinking(prev => prev + '\n💭 ' + (data.analysis.thinking_process || data.analysis.thai_summary || '') + '\n');
                           
                           setGeminiResult(data.analysis);
+                          
+                          // ✅ NEW: Update filter stats
+                          setNewsFilterStats({
+                            totalNews: data.analysis.news_count || 0,
+                            filteredNews: data.analysis.filtered_news_count || 0,
+                            passRate: data.analysis.filter_pass_rate || '0%',
+                            marketMovingCount: data.analysis.market_moving_news || 0,
+                            topNews: data.analysis.top_news || []
+                          });
                           
                           // Update ableAnalysis with new deep analysis
                           setAbleAnalysis(prev => ({
@@ -529,7 +594,7 @@ export const TopNews = () => {
                           
                           toast({
                             title: `✅ Gemini วิเคราะห์ ${targetSymbol} เสร็จสิ้น`,
-                            description: `${data.analysis.decision} • Confidence ${data.analysis.confidence}%`
+                            description: `${data.analysis.decision} • ${data.analysis.filtered_news_count}/${data.analysis.news_count} news filtered`
                           });
                         } else {
                           throw new Error(data?.error || 'Analysis failed');

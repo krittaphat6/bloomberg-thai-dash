@@ -18,9 +18,11 @@ import {
 } from '@/components/ui/select';
 import {
   Send, Bot, User, Settings, Sparkles, Zap, X,
-  RefreshCw, Wifi, WifiOff, Plug, Check, Loader2, Database, Layout
+  RefreshCw, Wifi, WifiOff, Plug, Check, Loader2, Database, Layout,
+  Paperclip, FileText, Image as ImageIcon
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Message {
   id: string;
@@ -28,6 +30,11 @@ interface Message {
   isUser: boolean;
   timestamp: Date;
   model?: string;
+  file?: {
+    name: string;
+    type: string;
+    preview?: string;
+  };
 }
 
 const ABLE3AI = () => {
@@ -59,6 +66,12 @@ const ABLE3AI = () => {
   
   // Universal data context
   const [dataContext, setDataContext] = useState<any>(null);
+
+  // ✅ NEW: File upload states
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const quickCommands = [
     { label: '📊 Market', cmd: 'What is the current market situation?' },
@@ -275,19 +288,65 @@ const ABLE3AI = () => {
     return { handled: false };
   };
 
+  // ✅ NEW: Handle file upload
+  const handleFileUpload = async (file: File) => {
+    setUploadedFile(file);
+    setIsUploadingFile(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFilePreview(reader.result as string);
+        toast({
+          title: "✅ ไฟล์อัพโหลดสำเร็จ",
+          description: `${file.name} (${(file.size / 1024).toFixed(1)} KB)`
+        });
+        setIsUploadingFile(false);
+      };
+      reader.onerror = () => {
+        toast({
+          title: "❌ อ่านไฟล์ไม่สำเร็จ",
+          variant: "destructive"
+        });
+        setIsUploadingFile(false);
+      };
+      if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+        reader.readAsDataURL(file);
+      } else {
+        reader.readAsDataURL(file); // Read all as data URL for consistency
+      }
+    } catch (error: any) {
+      toast({
+        title: "❌ อัพโหลดล้มเหลว",
+        description: error.message,
+        variant: "destructive"
+      });
+      setIsUploadingFile(false);
+    }
+  };
+
   const sendMessage = async () => {
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() && !uploadedFile) return;
     
     const currentInput = inputMessage;
+    const currentFile = uploadedFile;
+    const currentPreview = filePreview;
+    
     setInputMessage('');
+    setUploadedFile(null);
+    setFilePreview(null);
     setIsLoading(true);
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: currentInput,
+      text: currentInput || (currentFile ? `📎 ${currentFile.name}` : ''),
       isUser: true,
       timestamp: new Date(),
-      model: 'User'
+      model: 'User',
+      file: currentFile ? {
+        name: currentFile.name,
+        type: currentFile.type,
+        preview: currentFile.type.startsWith('image/') ? currentPreview || undefined : undefined
+      } : undefined
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -296,10 +355,37 @@ const ABLE3AI = () => {
       let aiResponse = '';
       let model = '';
 
+      // ✅ NEW: Handle file analysis first
+      if (currentFile && currentPreview) {
+        if (aiProvider !== 'gemini' || !geminiReady) {
+          aiResponse = '❌ การวิเคราะห์ไฟล์ต้องใช้ Gemini\n\nกรุณากดปุ่ม "Gemini (Cloud)" ในการตั้งค่าก่อน';
+          model = 'Error';
+        } else {
+          try {
+            const { data, error } = await supabase.functions.invoke('gemini-file-analysis', {
+              body: {
+                file: currentPreview,
+                fileName: currentFile.name,
+                fileType: currentFile.type,
+                prompt: currentInput || 'วิเคราะห์ไฟล์นี้อย่างละเอียด'
+              }
+            });
+            
+            if (error) throw error;
+            
+            aiResponse = data?.analysis || 'ไม่สามารถวิเคราะห์ไฟล์ได้';
+            model = `Gemini (${currentFile.type.startsWith('image/') ? 'Vision' : 'File'})`;
+          } catch (fileError: any) {
+            console.error('File analysis error:', fileError);
+            aiResponse = `❌ วิเคราะห์ไฟล์ล้มเหลว: ${fileError.message}`;
+            model = 'Error';
+          }
+        }
+      }
       // First, try panel commands (these work without AI connection)
-      const panelResult = tryPanelCommand(currentInput);
-      if (panelResult.handled && panelResult.response) {
-        aiResponse = panelResult.response;
+      else if (tryPanelCommand(currentInput).handled) {
+        const panelResult = tryPanelCommand(currentInput);
+        aiResponse = panelResult.response || '';
         model = '🎛️ Panel Commander';
         
         toast({
@@ -649,23 +735,89 @@ const ABLE3AI = () => {
           ))}
         </div>
 
+        {/* ✅ NEW: File Preview */}
+        {filePreview && uploadedFile && (
+          <div className="px-3 py-2 border-t border-green-500/20 bg-zinc-900/50">
+            <div className="flex items-center gap-2 justify-between">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {uploadedFile.type.startsWith('image/') ? (
+                  <img 
+                    src={filePreview} 
+                    alt="Preview" 
+                    className="w-12 h-12 object-cover rounded border border-green-500/30" 
+                  />
+                ) : (
+                  <div className="w-12 h-12 bg-green-500/10 rounded border border-green-500/30 flex items-center justify-center">
+                    <FileText className="w-6 h-6 text-green-400" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-green-400 truncate">{uploadedFile.name}</div>
+                  <div className="text-[10px] text-zinc-500">
+                    {(uploadedFile.size / 1024).toFixed(1)} KB • {uploadedFile.type.split('/')[1]?.toUpperCase() || 'FILE'}
+                  </div>
+                </div>
+              </div>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                onClick={() => { setUploadedFile(null); setFilePreview(null); }} 
+                className="h-8 w-8 text-zinc-500 hover:text-red-400"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Input */}
         <div className="p-3 flex gap-2 border-t border-green-500/20">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf,.csv,.xlsx,.xls,.txt,.json"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFileUpload(file);
+              e.target.value = ''; // Reset for same file selection
+            }}
+            className="hidden"
+          />
+          
+          {/* Attach button */}
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploadingFile || isLoading}
+            className="h-10 w-10 text-green-400 hover:bg-green-500/20 border border-green-500/30"
+            title="อัพโหลดไฟล์หรือรูปภาพ"
+          >
+            {isUploadingFile ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Paperclip className="w-5 h-5" />
+            )}
+          </Button>
+          
           <Input
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
             placeholder={
-              (geminiReady && aiProvider === 'gemini') || (ollamaConnected && aiProvider === 'ollama')
-                ? "ถามอะไรก็ได้..."
-                : "Select AI Provider first..."
+              uploadedFile 
+                ? `พิมพ์คำถามเกี่ยวกับ ${uploadedFile.name}...`
+                : (geminiReady && aiProvider === 'gemini') || (ollamaConnected && aiProvider === 'ollama')
+                  ? "ถามอะไรก็ได้ หรือแนบไฟล์..."
+                  : "Select AI Provider first..."
             }
             disabled={isLoading}
-            className="h-10 text-sm bg-black/50 border-green-500/50 text-white placeholder:text-gray-500"
+            className="h-10 text-sm bg-black/50 border-green-500/50 text-white placeholder:text-gray-500 flex-1"
           />
           <Button
             onClick={sendMessage}
-            disabled={isLoading || !inputMessage.trim()}
+            disabled={isLoading || (!inputMessage.trim() && !uploadedFile)}
             size="sm"
             className="h-10 w-10 p-0 bg-green-600 hover:bg-green-700"
           >
