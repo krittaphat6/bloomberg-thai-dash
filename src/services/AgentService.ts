@@ -83,18 +83,18 @@ class AgentServiceClass {
     style.textContent = `
       @keyframes vercept-pulse {
         0% { 
-          border-color: #a855f7; 
-          box-shadow: 0 0 10px rgba(168, 85, 247, 0.3), inset 0 0 0 rgba(168, 85, 247, 0.1);
+          border-color: hsl(var(--agent-accent)); 
+          box-shadow: 0 0 10px hsl(var(--agent-accent) / 0.3), inset 0 0 0 hsl(var(--agent-accent) / 0.1);
           transform: scale(1);
         }
         50% { 
-          border-color: #c084fc; 
-          box-shadow: 0 0 30px rgba(168, 85, 247, 0.6), inset 0 0 20px rgba(168, 85, 247, 0.15);
+          border-color: hsl(var(--agent-accent-2)); 
+          box-shadow: 0 0 30px hsl(var(--agent-accent) / 0.6), inset 0 0 20px hsl(var(--agent-accent) / 0.15);
           transform: scale(1.02);
         }
         100% { 
-          border-color: #a855f7; 
-          box-shadow: 0 0 10px rgba(168, 85, 247, 0.3), inset 0 0 0 rgba(168, 85, 247, 0.1);
+          border-color: hsl(var(--agent-accent)); 
+          box-shadow: 0 0 10px hsl(var(--agent-accent) / 0.3), inset 0 0 0 hsl(var(--agent-accent) / 0.1);
           transform: scale(1);
         }
       }
@@ -150,8 +150,8 @@ class AgentServiceClass {
         position: absolute;
         width: 100%;
         height: 100%;
-        background: radial-gradient(circle, #a855f7 0%, rgba(168, 85, 247, 0.3) 50%, transparent 70%);
-        border: 2px solid #a855f7;
+        background: radial-gradient(circle, hsl(var(--agent-accent)) 0%, hsl(var(--agent-accent) / 0.3) 50%, transparent 70%);
+        border: 2px solid hsl(var(--agent-accent));
         border-radius: 50%;
         animation: vercept-cursor-glow 1.5s ease-in-out infinite;
       }
@@ -162,17 +162,17 @@ class AgentServiceClass {
         left: -2px;
         width: 0;
         height: 0;
-        border-left: 8px solid #a855f7;
+        border-left: 8px solid hsl(var(--agent-accent));
         border-right: 8px solid transparent;
         border-bottom: 14px solid transparent;
-        filter: drop-shadow(0 0 4px rgba(168, 85, 247, 0.8));
+        filter: drop-shadow(0 0 4px hsl(var(--agent-accent) / 0.8));
       }
 
       .vercept-click-effect {
         position: absolute;
         width: 20px;
         height: 20px;
-        background: rgba(168, 85, 247, 0.5);
+        background: hsl(var(--agent-accent) / 0.5);
         border-radius: 50%;
         animation: vercept-click-ripple 0.6s ease-out forwards;
         pointer-events: none;
@@ -180,9 +180,9 @@ class AgentServiceClass {
 
       .vercept-highlight-box {
         position: fixed;
-        border: 3px solid #a855f7;
+        border: 3px solid hsl(var(--agent-accent));
         border-radius: 8px;
-        background: rgba(168, 85, 247, 0.08);
+        background: hsl(var(--agent-accent) / 0.08);
         pointer-events: none;
         z-index: 99998;
         animation: vercept-pulse 1.5s ease-in-out infinite;
@@ -193,14 +193,14 @@ class AgentServiceClass {
         position: absolute;
         top: -28px;
         left: 0;
-        background: linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%);
+        background: linear-gradient(135deg, hsl(var(--agent-accent)) 0%, hsl(var(--agent-accent-2)) 100%);
         color: white;
         font-size: 11px;
         font-weight: 600;
         padding: 4px 10px;
         border-radius: 4px;
         white-space: nowrap;
-        box-shadow: 0 2px 10px rgba(168, 85, 247, 0.4);
+        box-shadow: 0 2px 10px hsl(var(--agent-accent) / 0.4);
         animation: vercept-fade-in 0.2s ease-out;
       }
 
@@ -211,12 +211,12 @@ class AgentServiceClass {
         width: 320px;
         max-height: 400px;
         background: linear-gradient(135deg, rgba(0, 0, 0, 0.95) 0%, rgba(20, 10, 30, 0.95) 100%);
-        border: 1px solid rgba(168, 85, 247, 0.3);
+        border: 1px solid hsl(var(--agent-accent) / 0.3);
         border-radius: 16px;
         padding: 16px;
         z-index: 999997;
         backdrop-filter: blur(20px);
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(168, 85, 247, 0.15);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px hsl(var(--agent-accent) / 0.15);
         animation: vercept-slide-up 0.3s ease-out;
         overflow: hidden;
       }
@@ -227,13 +227,13 @@ class AgentServiceClass {
         gap: 10px;
         margin-bottom: 16px;
         padding-bottom: 12px;
-        border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+        border-bottom: 1px solid hsl(var(--agent-accent) / 0.2);
       }
 
       .vercept-thinking-icon {
         width: 36px;
         height: 36px;
-        background: linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%);
+        background: linear-gradient(135deg, hsl(var(--agent-accent)) 0%, hsl(var(--agent-accent-2)) 100%);
         border-radius: 10px;
         display: flex;
         align-items: center;
@@ -249,7 +249,7 @@ class AgentServiceClass {
 
       .vercept-thinking-subtitle {
         font-size: 11px;
-        color: rgba(168, 85, 247, 0.8);
+        color: hsl(var(--agent-accent) / 0.85);
       }
 
       .vercept-thinking-dots {
@@ -261,7 +261,7 @@ class AgentServiceClass {
       .vercept-thinking-dot {
         width: 6px;
         height: 6px;
-        background: #a855f7;
+        background: hsl(var(--agent-accent));
         border-radius: 50%;
         animation: vercept-thinking-dots 1.4s ease-in-out infinite;
       }
@@ -282,7 +282,7 @@ class AgentServiceClass {
         align-items: flex-start;
         gap: 10px;
         padding: 10px;
-        background: rgba(168, 85, 247, 0.05);
+        background: hsl(var(--agent-accent) / 0.05);
         border-radius: 8px;
         animation: vercept-fade-in 0.3s ease-out;
         border: 1px solid transparent;
@@ -290,8 +290,8 @@ class AgentServiceClass {
       }
 
       .vercept-step.active {
-        background: rgba(168, 85, 247, 0.15);
-        border-color: rgba(168, 85, 247, 0.3);
+        background: hsl(var(--agent-accent) / 0.15);
+        border-color: hsl(var(--agent-accent) / 0.3);
       }
 
       .vercept-step.completed {
@@ -315,7 +315,7 @@ class AgentServiceClass {
       }
 
       .vercept-step-icon.active {
-        background: linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%);
+        background: linear-gradient(135deg, hsl(var(--agent-accent)) 0%, hsl(var(--agent-accent-2)) 100%);
         color: white;
         animation: vercept-cursor-glow 1s ease-in-out infinite;
       }
@@ -352,16 +352,16 @@ class AgentServiceClass {
         left: 0;
         right: 0;
         height: 2px;
-        background: linear-gradient(90deg, transparent 0%, #a855f7 50%, transparent 100%);
+        background: linear-gradient(90deg, transparent 0%, hsl(var(--agent-accent)) 50%, transparent 100%);
         animation: vercept-scan-line 2s ease-in-out infinite;
-        box-shadow: 0 0 20px 5px rgba(168, 85, 247, 0.4);
+        box-shadow: 0 0 20px 5px hsl(var(--agent-accent) / 0.4);
       }
 
       .vercept-typing-cursor-indicator {
         display: inline-block;
         width: 2px;
         height: 14px;
-        background: #a855f7;
+        background: hsl(var(--agent-accent));
         margin-left: 2px;
         animation: vercept-typing-cursor 0.8s step-end infinite;
       }
