@@ -43,6 +43,7 @@ const ABLE3AI = () => {
   const { isReady: mcpReady, tools, executeTool } = useMCP();
   const panelCommander = usePanelCommander();
   const agent = useAgent();
+  // NOTE: keep panelCommander as a single object to avoid duplicate destructuring declarations
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
