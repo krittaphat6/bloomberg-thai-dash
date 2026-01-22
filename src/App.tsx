@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ResponsiveProvider } from "@/contexts/ResponsiveContext";
 import { MCPProvider } from "@/contexts/MCPContext";
 import { PanelCommanderProvider } from "@/contexts/PanelCommanderContext";
+import { AgentProvider } from "@/contexts/AgentContext";
 import { AuthScreen } from "@/components/AuthScreen";
 
 // Lazy load page components to reduce initial bundle size
@@ -86,11 +87,13 @@ const App = () => {
         <ResponsiveProvider>
           <MCPProvider>
             <PanelCommanderProvider>
-              <TooltipProvider>
-                <Toaster />
-                <Sonner />
-                <AppContent />
-              </TooltipProvider>
+              <AgentProvider>
+                <TooltipProvider>
+                  <Toaster />
+                  <Sonner />
+                  <AppContent />
+                </TooltipProvider>
+              </AgentProvider>
             </PanelCommanderProvider>
           </MCPProvider>
         </ResponsiveProvider>
