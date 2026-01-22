@@ -321,12 +321,32 @@ monte-carlo, calendar, investing, messenger, news, tv, wol, uamap, debtclock, bl
 | doubleClick | ดับเบิลคลิก | target: ".item" |
 | pressKey | กดปุ่มคีย์บอร์ด | value: "Enter" |
 
+### Vercept-style (Human-like) Actions
+| Type | ใช้ทำอะไร | ตัวอย่าง |
+|------|---------|---------|
+| clickAddMenu | คลิกปุ่ม ADD เพื่อเปิดหน้าต่างเลือก panel | - |
+| searchInModal | พิมพ์ค้นหาใน modal แล้วคลิกผลลัพธ์แรกที่ตรง | value: "COT" |
+| focusWindow | โฟกัสหน้าต่างที่เปิดอยู่ (ใช้ id หรือ title) | target: "cot" |
+| dragWindow | ลากหน้าต่างไปตำแหน่งใหม่แบบธรรมชาติ | target: "cot", coordinates: {"x": 180, "y": 120} |
+| resizeWindow | ย่อ/ขยายหน้าต่างแบบธรรมชาติ | target: "cot", value: {"width": 1100, "height": 800} |
+| wheelScroll | เลื่อนด้วยล้อเมาส์แบบธรรมชาติ | target: "[data-window-id*='cot' i]", value: "down" |
+
 ## กฎสำคัญ
 1. ทุก action ต้องมี "description" เป็นภาษาไทย
 2. ใส่ wait 500-1000ms หลัง openPanel เสมอ
 3. ถ้าไม่แน่ใจว่ามี element อะไร ให้ใช้ "analyze" ก่อน
 4. Max 15 actions ต่อ task
 5. ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น
+
+## รูปแบบที่ต้องการ (เหมือน Vercept)
+ถ้าผู้ใช้สั่ง “เปิด COT DATA แล้วขยายเต็มจอ” ให้ทำตามลำดับนี้เป็นหลัก:
+1) clickAddMenu
+2) searchInModal value: "COT" (หรือ "COT DATA")
+3) focusWindow target: "cot"
+4) dragWindow target: "cot" ไปกึ่งกลางหน้าจอ
+5) resizeWindow target: "cot" ให้ใหญ่เกือบเต็มจอ (เว้นขอบเล็กน้อย)
+6) wheelScroll ภายในหน้าต่าง COT 1-2 ครั้งเพื่อให้เห็นว่าระบบเลื่อนแบบธรรมชาติ
+ใส่ wait สั้นๆ ระหว่างขั้นตอนเพื่อให้ดูเป็นมนุษย์
 
 ## ตัวอย่างคำสั่ง
 - "เปิด chart" → openPanel trading-chart

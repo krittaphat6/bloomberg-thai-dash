@@ -56,10 +56,12 @@ export function useAgentExecutor() {
 
   // Subscribe to AgentService logs
   useEffect(() => {
-    const unsubscribe = AgentService.onAction((log) => {
+    const unsubscribe: () => void = AgentService.onAction((log) => {
       setLogs(prev => [...prev.slice(-99), log]);
     });
-    return () => { unsubscribe(); };
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const addLog = useCallback((message: string) => {
