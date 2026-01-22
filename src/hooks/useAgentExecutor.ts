@@ -59,7 +59,7 @@ export function useAgentExecutor() {
     const unsubscribe = AgentService.onAction((log) => {
       setLogs(prev => [...prev.slice(-99), log]);
     });
-    return unsubscribe;
+    return () => { unsubscribe(); };
   }, []);
 
   const addLog = useCallback((message: string) => {
