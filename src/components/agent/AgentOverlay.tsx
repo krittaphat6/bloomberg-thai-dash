@@ -1,10 +1,12 @@
-// AgentOverlay.tsx - Visual feedback component for Agent Mode
+// AgentOverlay.tsx - Vercept-style Visual Feedback Component
+// Full-featured agent overlay with thinking panel, step tracking, and visual effects
 
-import React from 'react';
-import { Bot, Square, Trash2 } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Bot, Square, Trash2, Sparkles, Eye, Zap, CheckCircle, XCircle, Loader2, Play, Pause, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { AgentAction, AgentTask } from '@/services/AgentService';
 
 interface AgentOverlayProps {
@@ -24,159 +26,364 @@ export const AgentOverlay: React.FC<AgentOverlayProps> = ({
   onStop,
   onClearLogs
 }) => {
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [showLogs, setShowLogs] = useState(false);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Timer for elapsed time
+  useEffect(() => {
+    if (isRunning && currentTask?.startTime) {
+      const interval = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - currentTask.startTime!) / 1000));
+      }, 100);
+      return () => clearInterval(interval);
+    } else {
+      setElapsedTime(0);
+    }
+  }, [isRunning, currentTask?.startTime]);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
   if (!isActive) return null;
 
+  const getStatusIcon = (status: AgentTask['status']) => {
+    switch (status) {
+      case 'planning': return <Sparkles className="w-4 h-4 animate-pulse text-purple-400" />;
+      case 'running': return <Loader2 className="w-4 h-4 animate-spin text-purple-400" />;
+      case 'completed': return <CheckCircle className="w-4 h-4 text-green-400" />;
+      case 'failed': return <XCircle className="w-4 h-4 text-red-400" />;
+      default: return <Bot className="w-4 h-4 text-purple-400" />;
+    }
+  };
+
+  const getActionIcon = (type: AgentAction['type']) => {
+    switch (type) {
+      case 'click': return '👆';
+      case 'type': return '⌨️';
+      case 'scroll': return '📜';
+      case 'scrollTo': return '🎯';
+      case 'wait': return '⏳';
+      case 'hover': return '👁️';
+      case 'openPanel': return '📂';
+      case 'closePanel': return '❌';
+      case 'analyze': return '🔍';
+      case 'screenshot': return '📸';
+      default: return '▶️';
+    }
+  };
+
+  const progress = currentTask 
+    ? Math.round((currentTask.currentActionIndex / currentTask.actions.length) * 100)
+    : 0;
+
   return (
-    <div className="border-t border-purple-500/30 bg-gradient-to-r from-purple-900/20 to-black/50">
-      {/* Status Header */}
-      <div className="px-3 py-2 flex items-center justify-between border-b border-purple-500/20">
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-purple-500 animate-pulse' : 'bg-purple-500/50'}`} />
-          <span className="text-xs font-medium text-purple-300">
-            {isRunning ? '🤖 Agent กำลังทำงาน...' : '🟣 Agent Mode พร้อมใช้งาน'}
-          </span>
+    <div className="border-t border-purple-500/30 bg-gradient-to-b from-purple-950/40 to-black/80">
+      {/* Main Status Bar */}
+      <div className="px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {/* Agent Icon with Status */}
+          <div className="relative">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              isRunning 
+                ? 'bg-gradient-to-br from-purple-600 to-purple-800 shadow-lg shadow-purple-500/30' 
+                : 'bg-purple-900/50 border border-purple-500/30'
+            }`}>
+              <Bot className="w-5 h-5 text-white" />
+            </div>
+            {isRunning && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-400 rounded-full animate-pulse" />
+            )}
+          </div>
+
+          {/* Status Text */}
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-white">ABLE Agent</span>
+              <Badge 
+                variant="outline" 
+                className={`text-[10px] px-2 py-0 h-5 ${
+                  isRunning 
+                    ? 'border-purple-400/50 text-purple-300 bg-purple-500/10' 
+                    : 'border-purple-500/30 text-purple-400'
+                }`}
+              >
+                {currentTask?.status === 'planning' ? '🧠 Planning' :
+                 isRunning ? '▶️ Running' : '⏸️ Ready'}
+              </Badge>
+            </div>
+            
+            {currentTask && (
+              <div className="text-xs text-purple-300/80 max-w-[200px] truncate">
+                {currentTask.goal}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-1">
+
+        {/* Controls */}
+        <div className="flex items-center gap-2">
+          {/* Timer */}
+          {isRunning && (
+            <div className="text-xs font-mono text-purple-300 bg-purple-500/10 px-2 py-1 rounded">
+              {Math.floor(elapsedTime / 60)}:{String(elapsedTime % 60).padStart(2, '0')}
+            </div>
+          )}
+
+          {/* Toggle Logs */}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setShowLogs(!showLogs)}
+            className="h-8 px-2 text-xs text-purple-300 hover:text-purple-200 hover:bg-purple-500/20"
+          >
+            <Eye className="w-4 h-4 mr-1" />
+            Logs
+          </Button>
+
+          {/* Stop Button */}
           {isRunning && (
             <Button
               size="sm"
-              variant="ghost"
               onClick={onStop}
-              className="h-6 px-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/20"
+              className="h-8 px-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
             >
               <Square className="w-3 h-3 mr-1" />
               Stop
             </Button>
           )}
+
+          {/* Clear Logs */}
           <Button
             size="sm"
             variant="ghost"
             onClick={onClearLogs}
-            className="h-6 px-2 text-xs text-zinc-400 hover:text-zinc-300 hover:bg-zinc-500/20"
+            className="h-8 w-8 p-0 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-500/20"
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
-      {/* Current Task Progress */}
-      {currentTask && (
-        <div className="px-3 py-2 border-b border-purple-500/20 bg-purple-900/10">
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="outline" className="border-purple-500/50 text-purple-400 text-[10px]">
-              {currentTask.status === 'running' ? '⏳ Running' : currentTask.status === 'completed' ? '✅ Done' : currentTask.status === 'failed' ? '❌ Failed' : '⏸️ Pending'}
-            </Badge>
-            <span className="text-xs text-purple-200 truncate flex-1">{currentTask.goal}</span>
+      {/* Progress Bar (when running) */}
+      {currentTask && currentTask.actions.length > 0 && (
+        <div className="px-4 pb-2">
+          <div className="flex items-center gap-3">
+            <Progress value={progress} className="flex-1 h-1.5 bg-purple-950" />
+            <span className="text-[10px] text-purple-400 w-10 text-right">
+              {currentTask.currentActionIndex}/{currentTask.actions.length}
+            </span>
           </div>
-          
-          {/* Action Progress */}
-          <div className="flex gap-1 mt-2 flex-wrap">
-            {currentTask.actions.map((action, i) => (
-              <div
-                key={i}
-                className={`w-6 h-1.5 rounded-full transition-all ${
-                  i < currentTask.currentActionIndex
-                    ? 'bg-green-500'
-                    : i === currentTask.currentActionIndex
-                    ? 'bg-purple-500 animate-pulse'
-                    : 'bg-zinc-700'
-                }`}
-                title={action.description}
-              />
-            ))}
-          </div>
-          
-          {/* Current Action */}
-          {isRunning && currentTask.actions[currentTask.currentActionIndex] && (
-            <div className="mt-2 text-[10px] text-purple-300 flex items-center gap-1">
-              <span className="text-purple-500">▶</span>
-              {currentTask.actions[currentTask.currentActionIndex].description}
-            </div>
-          )}
         </div>
       )}
 
-      {/* Agent Log */}
-      <ScrollArea className="h-24">
-        <div className="px-3 py-2 space-y-0.5 font-mono text-[10px]">
-          {logs.length === 0 ? (
-            <div className="text-zinc-500 italic">
-              พิมพ์คำสั่งเช่น "เปิด trading chart แล้ววิเคราะห์ตลาด" เพื่อให้ Agent ทำงาน
-            </div>
-          ) : (
-            logs.map((log, i) => (
-              <div 
-                key={i} 
-                className={`${
-                  log.includes('✅') ? 'text-green-400' :
-                  log.includes('❌') ? 'text-red-400' :
-                  log.includes('⏳') ? 'text-yellow-400' :
-                  log.includes('🚀') ? 'text-purple-400' :
-                  'text-zinc-400'
-                }`}
-              >
-                {log}
-              </div>
-            ))
-          )}
+      {/* Current Action Steps */}
+      {currentTask && currentTask.actions.length > 0 && (
+        <div className="px-4 pb-3">
+          <div className="flex gap-1.5 flex-wrap">
+            {currentTask.actions.map((action, i) => {
+              const isCompleted = i < currentTask.currentActionIndex;
+              const isActive = i === currentTask.currentActionIndex && isRunning;
+              const isPending = i > currentTask.currentActionIndex;
+              
+              return (
+                <div
+                  key={i}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] transition-all ${
+                    isCompleted 
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                      : isActive 
+                        ? 'bg-purple-500/30 text-purple-200 border border-purple-400/50 animate-pulse shadow-lg shadow-purple-500/20' 
+                        : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50'
+                  }`}
+                  title={action.description}
+                >
+                  <span>{getActionIcon(action.type)}</span>
+                  <span className="max-w-[100px] truncate">{action.description}</span>
+                  {isCompleted && <CheckCircle className="w-3 h-3 ml-1" />}
+                  {isActive && <Loader2 className="w-3 h-3 ml-1 animate-spin" />}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </ScrollArea>
+      )}
+
+      {/* Expanded Logs Panel */}
+      {showLogs && (
+        <div className="border-t border-purple-500/20 bg-black/50">
+          <ScrollArea className="h-32">
+            <div className="p-3 space-y-1 font-mono text-[10px]">
+              {logs.length === 0 ? (
+                <div className="text-zinc-500 italic text-center py-4">
+                  💡 พิมพ์คำสั่งเช่น "เปิด trading chart" หรือ "วิเคราะห์หน้าจอ"
+                </div>
+              ) : (
+                logs.map((log, i) => (
+                  <div 
+                    key={i} 
+                    className={`py-0.5 ${
+                      log.includes('✅') ? 'text-green-400' :
+                      log.includes('❌') ? 'text-red-400' :
+                      log.includes('⏳') ? 'text-yellow-400' :
+                      log.includes('🚀') ? 'text-purple-400' :
+                      log.includes('🔍') ? 'text-cyan-400' :
+                      log.includes('🧠') ? 'text-pink-400' :
+                      'text-zinc-400'
+                    }`}
+                  >
+                    {log}
+                  </div>
+                ))
+              )}
+              <div ref={logsEndRef} />
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
+      {/* Placeholder when no task */}
+      {!currentTask && !isRunning && logs.length === 0 && (
+        <div className="px-4 pb-4">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-500/5 border border-purple-500/20">
+            <Sparkles className="w-5 h-5 text-purple-400" />
+            <div className="flex-1">
+              <div className="text-xs text-purple-200 font-medium">Agent Mode Active</div>
+              <div className="text-[10px] text-purple-400/70">
+                พิมพ์คำสั่งเพื่อให้ AI ควบคุม UI เช่น "เปิด trading chart แล้วดู XAUUSD"
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// Quick Commands for Agent Mode
+// =================== QUICK COMMANDS ===================
+
 export const AGENT_QUICK_COMMANDS = [
-  { label: '📊 Open Charts', cmd: 'เปิด trading chart แล้ว scroll ไปดู XAUUSD' },
-  { label: '📰 Check News', cmd: 'เปิด top news panel แล้วอ่านข่าวล่าสุด' },
-  { label: '📋 Open All Trading', cmd: 'เปิด panel ทั้งหมดที่ใช้สำหรับ trading' },
-  { label: '🔍 Analyze Page', cmd: 'วิเคราะห์หน้าจอปัจจุบันและบอกว่ามี panel อะไรเปิดอยู่บ้าง' }
+  { label: '📊 Open Chart', cmd: 'เปิด trading chart' },
+  { label: '📰 Check News', cmd: 'เปิด top news แล้วอ่านข่าวล่าสุด' },
+  { label: '🔍 Analyze Screen', cmd: 'วิเคราะห์หน้าจอปัจจุบัน บอกว่ามีอะไรเปิดอยู่' },
+  { label: '📋 Open Trading Tools', cmd: 'เปิด panel สำหรับ trading ทั้งหมด ได้แก่ chart, journal, และ cot data' },
+  { label: '🎯 Click Button', cmd: 'คลิกปุ่ม refresh ในหน้านี้' },
+  { label: '✨ Full Setup', cmd: 'จัดหน้าจอสำหรับเทรดทองคำ เปิด chart, news, และ cot data' }
 ];
 
-// Agent System Prompt
-export const AGENT_SYSTEM_PROMPT = `คุณคือ ABLE AI Agent ที่สามารถควบคุม ABLE Terminal ได้โดยตรง
+// =================== ENHANCED AGENT SYSTEM PROMPT ===================
 
-เมื่อผู้ใช้ขอให้ทำอะไร คุณต้อง:
-1. วิเคราะห์ว่าต้องทำอะไรบ้าง
-2. วางแผน actions ที่ต้องทำ
-3. Return เป็น JSON format:
+export const AGENT_SYSTEM_PROMPT = `คุณคือ ABLE AI Agent ที่สามารถควบคุม ABLE Terminal ได้โดยตรงแบบ Vercept.com
+
+## ความสามารถ
+คุณสามารถ:
+1. เปิด/ปิด panels ต่างๆ
+2. คลิกปุ่มและ elements
+3. พิมพ์ข้อความในช่อง input
+4. Scroll หน้าจอ
+5. วิเคราะห์หน้าจอ
+6. รอให้ elements โหลด
+
+## วิธีตอบ
+เมื่อผู้ใช้สั่งให้ทำอะไร คุณต้อง Return เป็น JSON เท่านั้น:
 
 {
-  "goal": "เป้าหมายที่ต้องทำ",
+  "goal": "เป้าหมายที่จะทำ (ภาษาไทย)",
+  "thinking": ["คิดว่า...", "จะทำ...", "เพราะ..."],
   "actions": [
     { "type": "openPanel", "target": "trading-chart", "description": "เปิด Trading Chart" },
-    { "type": "wait", "value": 1000, "description": "รอให้ panel โหลด" },
-    { "type": "click", "target": ".symbol-selector", "description": "คลิกเลือก symbol" },
-    { "type": "type", "target": ".symbol-input", "value": "XAUUSD", "description": "พิมพ์ชื่อ symbol" }
+    { "type": "wait", "value": 800, "description": "รอให้ panel โหลด" },
+    { "type": "click", "target": "[data-symbol-search]", "description": "คลิกช่อง search" },
+    { "type": "type", "target": "input", "value": "XAUUSD", "description": "พิมพ์ XAUUSD" }
   ]
 }
 
-**Available Panel IDs:**
+## Panel IDs ที่ใช้ได้
 trading-chart, options-3d, stockdio, forex, fedwatch, crypto, crypto-map, scatter, scatter-point, 
 correlation-matrix, cvd, topnews, pie, heatmap, depth, volume, currency, indicators, cot, gold, 
 realmarket, bitcoin, able-focus, intelligence, able3ai, able-hf-40, code, notes, journal, 
-monte-carlo, calendar, investing, messenger, news, tv, wol, uamap, debtclock, bloomberg-map, pacman, chess
+monte-carlo, calendar, investing, messenger, news, tv, wol, uamap, debtclock, bloomberg-map, pacman, chess, face-search, spreadsheet
 
-**Available Action Types:**
-- openPanel: เปิด panel (target = panel ID)
-- closePanel: ปิด panel (target = panel ID)
-- click: คลิก element (target = CSS selector)
-- type: พิมพ์ข้อความ (target = selector, value = text)
-- scroll: เลื่อนหน้า (value = "up" หรือ "down")
-- scrollTo: เลื่อนไปยัง element (target = selector)
-- wait: รอ (value = milliseconds)
-- hover: วางเมาส์บน element (target = selector)
-- analyze: วิเคราะห์หน้าปัจจุบัน
-- screenshot: จับภาพหน้าจอ
+## Action Types
+| Type | ใช้ทำอะไร | ตัวอย่าง target/value |
+|------|---------|---------------------|
+| openPanel | เปิด panel | target: "trading-chart" |
+| closePanel | ปิด panel | target: "messenger" |
+| click | คลิก element | target: "[data-agent-id='btn']" หรือ "button.refresh" |
+| type | พิมพ์ข้อความ | target: "input", value: "XAUUSD" |
+| scroll | เลื่อนหน้า | value: "down" หรือ "up" |
+| scrollTo | เลื่อนไปหา element | target: ".news-section" |
+| wait | รอ (ms) | value: 1000 |
+| hover | วางเมาส์ | target: ".chart-area" |
+| analyze | วิเคราะห์หน้าจอ | - |
+| doubleClick | ดับเบิลคลิก | target: ".item" |
+| pressKey | กดปุ่มคีย์บอร์ด | value: "Enter" |
 
-**ตัวอย่างคำสั่ง:**
-- "เปิด trading chart" → openPanel trading-chart
-- "เปิด news และ cot data" → openPanel topnews, openPanel cot
-- "ปิด messenger" → closePanel messenger
-- "วิเคราะห์หน้าจอ" → analyze
+## กฎสำคัญ
+1. ทุก action ต้องมี "description" เป็นภาษาไทย
+2. ใส่ wait 500-1000ms หลัง openPanel เสมอ
+3. ถ้าไม่แน่ใจว่ามี element อะไร ให้ใช้ "analyze" ก่อน
+4. Max 15 actions ต่อ task
+5. ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น
 
-**กฏสำคัญ:**
-1. ทุก action ต้องมี description ที่อธิบายว่าทำอะไร (ภาษาไทย)
-2. ใส่ wait 500-1000ms หลังจาก openPanel เพื่อรอให้ panel โหลด
-3. ถ้าไม่แน่ใจว่า selector ถูกต้อง ให้ใช้ analyze ก่อน
-4. Max 10 actions ต่อ task`;
+## ตัวอย่างคำสั่ง
+- "เปิด chart" → openPanel trading-chart
+- "ดู news" → openPanel topnews
+- "เปิด trading tools" → openPanel trading-chart, wait, openPanel journal, wait, openPanel cot
+- "วิเคราะห์หน้า" → analyze
+- "คลิกปุ่ม refresh" → click [data-agent-id="refresh"] หรือ click button:contains("Refresh")`;
+
+// =================== FULLSCREEN OVERLAY COMPONENT ===================
+
+interface FullscreenAgentOverlayProps {
+  isActive: boolean;
+  currentAction?: string;
+  thinkingSteps?: string[];
+}
+
+export const FullscreenAgentOverlay: React.FC<FullscreenAgentOverlayProps> = ({
+  isActive,
+  currentAction,
+  thinkingSteps
+}) => {
+  if (!isActive) return null;
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[99990]">
+      {/* Semi-transparent overlay */}
+      <div className="absolute inset-0 bg-purple-950/10" />
+      
+      {/* Scan line effect */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div 
+          className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-purple-500 to-transparent"
+          style={{
+            animation: 'scan-line 3s ease-in-out infinite',
+            boxShadow: '0 0 20px 5px rgba(168, 85, 247, 0.4)'
+          }}
+        />
+      </div>
+
+      {/* Corner indicators */}
+      <div className="absolute top-4 left-4 w-8 h-8 border-l-2 border-t-2 border-purple-500/50" />
+      <div className="absolute top-4 right-4 w-8 h-8 border-r-2 border-t-2 border-purple-500/50" />
+      <div className="absolute bottom-4 left-4 w-8 h-8 border-l-2 border-b-2 border-purple-500/50" />
+      <div className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-purple-500/50" />
+
+      {/* Agent active indicator */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-purple-950/90 border border-purple-500/30 rounded-full px-4 py-2 backdrop-blur-sm">
+        <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
+        <span className="text-xs font-medium text-purple-200">ABLE Agent Active</span>
+      </div>
+
+      <style>{`
+        @keyframes scan-line {
+          0% { top: 0%; }
+          100% { top: 100%; }
+        }
+      `}</style>
+    </div>
+  );
+};
