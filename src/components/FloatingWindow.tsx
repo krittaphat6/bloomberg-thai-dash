@@ -126,6 +126,8 @@ const FloatingWindow = ({
   return (
     <div
       ref={windowRef}
+      data-window-id={id}
+      data-window-title={title}
       className="fixed bg-background border border-border shadow-2xl z-40 rounded-lg overflow-hidden"
       style={{
         left: `${position.x}px`,
