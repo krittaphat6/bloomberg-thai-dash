@@ -4,6 +4,7 @@ import { GeminiService } from '@/services/GeminiService';
 import { UniversalDataService } from '@/services/UniversalDataService';
 import { useMCP } from '@/contexts/MCPContext';
 import { usePanelCommander, AVAILABLE_PANELS } from '@/contexts/PanelCommanderContext';
+import { useAgent } from '@/contexts/AgentContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,10 +20,11 @@ import {
 import {
   Send, Bot, User, Settings, Sparkles, Zap, X,
   RefreshCw, Wifi, WifiOff, Plug, Check, Loader2, Database, Layout,
-  Paperclip, FileText, Image as ImageIcon
+  Paperclip, FileText, Image as ImageIcon, BotIcon
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { AgentOverlay, AGENT_QUICK_COMMANDS, AGENT_SYSTEM_PROMPT } from '@/components/agent/AgentOverlay';
 
 interface Message {
   id: string;
@@ -40,6 +42,7 @@ interface Message {
 const ABLE3AI = () => {
   const { isReady: mcpReady, tools, executeTool } = useMCP();
   const { executeAICommand, getAvailablePanels } = usePanelCommander();
+  const agent = useAgent();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -355,8 +358,48 @@ const ABLE3AI = () => {
       let aiResponse = '';
       let model = '';
 
-      // ✅ NEW: Handle file analysis first
-      if (currentFile && currentPreview) {
+      // ✅ AGENT MODE: Use Agent to execute actions
+      if (agent.isAgentMode && aiProvider === 'gemini' && geminiReady && !currentFile) {
+        // Get page context for Agent
+        const pageContext = agent.getPageContext();
+        const contextStr = `
+หน้าจอปัจจุบัน:
+- Panels เปิดอยู่: ${pageContext.panels.join(', ') || 'ไม่มี'}
+- Buttons: ${pageContext.buttons.slice(0, 10).map(b => b.text).join(', ')}
+`;
+        
+        agent.addLog(`🧠 Processing: ${currentInput}`);
+        
+        // Ask Gemini to generate agent actions
+        const agentPrompt = `${AGENT_SYSTEM_PROMPT}
+
+${contextStr}
+
+คำสั่งจากผู้ใช้: ${currentInput}
+
+สร้าง JSON สำหรับ Agent ทำตาม:`;
+
+        const response = await GeminiService.chat(
+          agentPrompt,
+          [],
+          undefined
+        );
+
+        // Check if response contains agent actions
+        if (response.text.includes('"actions"')) {
+          model = '🤖 Agent (Gemini)';
+          
+          // Execute the agent task
+          const result = await agent.runFromAIResponse(response.text);
+          aiResponse = result;
+        } else {
+          // Regular response, not agent actions
+          aiResponse = response.text;
+          model = 'Gemini (Agent Mode)';
+        }
+      }
+      // ✅ Handle file analysis
+      else if (currentFile && currentPreview) {
         if (aiProvider !== 'gemini' || !geminiReady) {
           aiResponse = '❌ การวิเคราะห์ไฟล์ต้องใช้ Gemini\n\nกรุณากดปุ่ม "Gemini (Cloud)" ในการตั้งค่าก่อน';
           model = 'Error';
@@ -382,7 +425,7 @@ const ABLE3AI = () => {
           }
         }
       }
-      // First, try panel commands (these work without AI connection)
+      // Panel commands (these work without AI connection)
       else if (tryPanelCommand(currentInput).handled) {
         const panelResult = tryPanelCommand(currentInput);
         aiResponse = panelResult.response || '';
@@ -571,14 +614,37 @@ const ABLE3AI = () => {
               </span>
             </div>
           </CardTitle>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowSettings(!showSettings)}
-            className="h-8 w-8 p-0 text-white hover:bg-white/10"
-          >
-            {showSettings ? <X className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
-          </Button>
+          <div className="flex items-center gap-1">
+            {/* Agent Mode Toggle */}
+            <Button
+              size="sm"
+              variant={agent.isAgentMode ? 'default' : 'ghost'}
+              onClick={() => {
+                agent.setAgentMode(!agent.isAgentMode);
+                toast({
+                  title: agent.isAgentMode ? '⏹️ Agent Mode OFF' : '🤖 Agent Mode ON',
+                  description: agent.isAgentMode ? 'กลับสู่โหมดปกติ' : 'AI จะควบคุม UI ได้อัตโนมัติ'
+                });
+              }}
+              className={`h-8 px-2 gap-1 ${
+                agent.isAgentMode 
+                  ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                  : 'text-purple-400 hover:bg-purple-500/20'
+              }`}
+            >
+              <BotIcon className="w-4 h-4" />
+              <span className="text-xs">Agent</span>
+              {agent.isAgentMode && <span className="w-2 h-2 rounded-full bg-purple-300 animate-pulse" />}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowSettings(!showSettings)}
+              className="h-8 w-8 p-0 text-white hover:bg-white/10"
+            >
+              {showSettings ? <X className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
+            </Button>
+          </div>
         </div>
 
         {/* Settings Panel */}
@@ -720,20 +786,34 @@ const ABLE3AI = () => {
           </div>
         </ScrollArea>
 
-        {/* Quick Commands */}
+        {/* Quick Commands - Show Agent commands when Agent Mode is on */}
         <div className="px-3 py-2 flex gap-2 overflow-x-auto border-t border-green-500/20">
-          {quickCommands.map((cmd, i) => (
+          {(agent.isAgentMode ? AGENT_QUICK_COMMANDS : quickCommands).map((cmd, i) => (
             <Button
               key={i}
               size="sm"
               variant="outline"
               onClick={() => setInputMessage(cmd.cmd)}
-              className="h-8 text-xs px-3 whitespace-nowrap flex-shrink-0 border-green-500/50 text-green-400 hover:bg-green-500/20"
+              className={`h-8 text-xs px-3 whitespace-nowrap flex-shrink-0 ${
+                agent.isAgentMode 
+                  ? 'border-purple-500/50 text-purple-400 hover:bg-purple-500/20'
+                  : 'border-green-500/50 text-green-400 hover:bg-green-500/20'
+              }`}
             >
               {cmd.label}
             </Button>
           ))}
         </div>
+
+        {/* Agent Overlay - Show when Agent Mode is active */}
+        <AgentOverlay
+          isActive={agent.isAgentMode}
+          isRunning={agent.isRunning}
+          currentTask={agent.currentTask}
+          logs={agent.logs}
+          onStop={agent.stopAgent}
+          onClearLogs={agent.clearLogs}
+        />
 
         {/* ✅ NEW: File Preview */}
         {filePreview && uploadedFile && (
