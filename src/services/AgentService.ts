@@ -78,7 +78,11 @@ class AgentServiceClass {
   // Subscribe to action logs
   onAction(callback: (log: string) => void): () => void {
     this.actionListeners.add(callback);
-    return () => { this.actionListeners.delete(callback); };
+    // IMPORTANT: ensure cleanup returns void (not boolean)
+    return () => {
+      this.actionListeners.delete(callback);
+      return;
+    };
   }
 
   private log(message: string) {
