@@ -1,4 +1,4 @@
-// AgentContext.tsx - Global context for Agent Mode
+// AgentContext.tsx - Global context for Vercept-style Agent Mode
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { AgentService, AgentAction, AgentTask, PageContext } from '@/services/AgentService';
@@ -17,7 +17,10 @@ interface AgentContextType {
   clearLogs: () => void;
   addLog: (log: string) => void;
   getPageContext: () => PageContext;
-  highlightElement: (selector: string) => Promise<void>;
+  highlightElement: (selector: string, label?: string) => Promise<void>;
+  showThinking: (goal: string, steps: string[]) => void;
+  hideThinking: () => void;
+  analyzeScreen: () => Promise<void>;
 }
 
 const AgentContext = createContext<AgentContextType | null>(null);
@@ -38,19 +41,41 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
   const [isAgentMode, setIsAgentMode] = useState(false);
   const executor = useAgentExecutor();
 
-  const highlightElement = useCallback(async (selector: string) => {
+  const highlightElement = useCallback(async (selector: string, label?: string) => {
     const element = document.querySelector(selector) as HTMLElement;
     if (element) {
-      await AgentService.highlightElement(element);
+      await AgentService.highlightElement(element, label);
     }
   }, []);
 
+  const showThinking = useCallback((goal: string, steps: string[]) => {
+    AgentService.showThinkingPanel(
+      goal,
+      steps.map(s => ({ description: s, status: 'pending' as const }))
+    );
+  }, []);
+
+  const hideThinking = useCallback(() => {
+    AgentService.hideThinkingPanel();
+  }, []);
+
+  const analyzeScreen = useCallback(async () => {
+    executor.addLog('🔍 Analyzing screen...');
+    await AgentService.analyzeScreen();
+  }, [executor]);
+
   const handleSetAgentMode = useCallback((mode: boolean) => {
     setIsAgentMode(mode);
-    if (!mode) {
+    if (mode) {
+      // Create cursor when entering agent mode
+      AgentService.createVirtualCursor();
+      executor.addLog('🤖 Agent Mode activated - AI can now control the UI');
+    } else {
+      // Cleanup when exiting agent mode
       AgentService.cleanup();
+      executor.addLog('⏹️ Agent Mode deactivated');
     }
-  }, []);
+  }, [executor]);
 
   return (
     <AgentContext.Provider
@@ -67,7 +92,10 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
         clearLogs: executor.clearLogs,
         addLog: executor.addLog,
         getPageContext: executor.getPageContext,
-        highlightElement
+        highlightElement,
+        showThinking,
+        hideThinking,
+        analyzeScreen
       }}
     >
       {children}
