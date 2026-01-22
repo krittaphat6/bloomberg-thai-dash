@@ -4,28 +4,34 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { AgentService, AgentAction, AgentTask, PageContext } from '@/services/AgentService';
+
+// Extended actions for Vercept-like automation
+type ExtendedActionType = AgentAction['type'] | 'clickAddMenu' | 'searchInModal' | 'dragWindow' | 'resizeWindow' | 'focusWindow' | 'wheelScroll';
 import { usePanelCommander } from '@/contexts/PanelCommanderContext';
 import { toast } from '@/hooks/use-toast';
 
 const MAX_ACTIONS_PER_TASK = 20;
 const ACTION_TIMEOUT_MS = 30000;
 
-// Panel name mapping for natural language
+// Panel name mapping for natural language (must match MarketData availableComponents IDs)
 const PANEL_ALIASES: Record<string, string[]> = {
-  'tradingchart': ['trading chart', 'chart', 'กราฟ', 'tradingview', 'trading'],
-  'news': ['news', 'ข่าว', 'topnews', 'top news'],
-  'cotdata': ['cot', 'cot data', 'commitment of traders'],
-  'tradingjournal': ['journal', 'trading journal', 'บันทึก', 'diary'],
+  'trading-chart': ['trading chart', 'chart', 'กราฟ', 'tradingview', 'trading', 'tradingchart'],
+  'topnews': ['top news', 'topnews', 'news feed'],
+  'news': ['news', 'ข่าว', 'bloomberg news'],
+  'cot': ['cot', 'cot data', 'commitment of traders', 'cotdata'],
+  'journal': ['journal', 'trading journal', 'บันทึก', 'diary', 'tradingjournal'],
   'calendar': ['calendar', 'ปฏิทิน', 'economic calendar'],
   'messenger': ['messenger', 'chat', 'แชท', 'message'],
-  'canvas': ['canvas', 'whiteboard', 'กระดาน'],
-  'notes': ['notes', 'note', 'โน้ต'],
-  'marketdata': ['market data', 'market', 'ตลาด'],
-  'heatmap': ['heatmap', 'heat map', 'crypto map', 'market map'],
-  'options': ['options', 'calculator', 'เครื่องคิดเลข'],
-  'montecarlo': ['monte carlo', 'simulation', 'จำลอง'],
-  'pythoneditor': ['python', 'code', 'โค้ด', 'editor'],
-  'bloomberg': ['bloomberg', 'tv', 'live'],
+  'notes': ['notes', 'note', 'โน้ต', 'canvas'],
+  'realmarket': ['market data', 'market', 'ตลาด', 'real market'],
+  'heatmap': ['heatmap', 'heat map'],
+  'crypto-map': ['crypto map', 'market map', 'crypto heatmap'],
+  'options-3d': ['options', '3d options', 'ออปชัน'],
+  'monte-carlo': ['monte carlo', 'simulation', 'จำลอง', 'montecarlo'],
+  'code': ['python', 'code', 'โค้ด', 'editor', 'pythoneditor'],
+  'tv': ['bloomberg tv', 'tv', 'live tv', 'bloomberg live'],
+  'able3ai': ['able ai', 'ai', 'chat ai', 'gemini'],
+  'able-hf-40': ['40 modules', 'hf 40', 'able hf', 'modules'],
 };
 
 function findPanelId(text: string): string | null {
@@ -53,7 +59,7 @@ export function useAgentExecutor() {
     const unsubscribe = AgentService.onAction((log) => {
       setLogs(prev => [...prev.slice(-99), log]);
     });
-    return () => { unsubscribe(); };
+    return unsubscribe;
   }, []);
 
   const addLog = useCallback((message: string) => {
@@ -239,6 +245,47 @@ export function useAgentExecutor() {
               return true;
             }
             return false;
+
+          // ===== VERCEPT-STYLE EXTENDED ACTIONS =====
+          
+          case 'clickAddMenu' as ExtendedActionType:
+            // Click the ADD button to open panel selector
+            return await AgentService.click('button:has(.lucide-plus), button:has-text("ADD"), [data-agent-id="add-panel"]');
+
+          case 'searchInModal' as ExtendedActionType:
+            // Type in the search field of the open modal
+            if (!action.value) return false;
+            await AgentService.wait(300);
+            const searchResult = await AgentService.type('input[placeholder*="Search"], .modal input, [role="dialog"] input', String(action.value));
+            if (searchResult) {
+              await AgentService.wait(400);
+              // Click the first matching result
+              const clickResult = await AgentService.click(`button:has-text("${action.value}"), [title*="${action.value}" i]`);
+              return clickResult;
+            }
+            return false;
+
+          case 'dragWindow' as ExtendedActionType:
+            // Drag a floating window to a new position
+            if (!action.target) return false;
+            const coords = action.coordinates || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+            return await AgentService.dragWindowTo(action.target, coords.x, coords.y);
+
+          case 'resizeWindow' as ExtendedActionType:
+            // Resize a floating window
+            if (!action.target) return false;
+            const size = typeof action.value === 'object' ? action.value : { width: 800, height: 600 };
+            return await AgentService.resizeWindow(action.target, (size as any).width || 800, (size as any).height || 600);
+
+          case 'focusWindow' as ExtendedActionType:
+            // Bring a window to front and center it
+            if (!action.target) return false;
+            return await AgentService.focusWindow(action.target);
+
+          case 'wheelScroll' as ExtendedActionType:
+            // Scroll using wheel events (more natural)
+            const scrollDir = action.value === 'up' ? -1 : 1;
+            return await AgentService.wheelScroll(action.target || 'body', scrollDir * 300);
 
           default:
             addLog(`❓ Unknown action type: ${action.type}`);

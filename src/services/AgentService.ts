@@ -76,9 +76,9 @@ class AgentServiceClass {
   }
 
   // Subscribe to action logs
-  onAction(callback: (log: string) => void) {
+  onAction(callback: (log: string) => void): () => void {
     this.actionListeners.add(callback);
-    return () => this.actionListeners.delete(callback);
+    return () => { this.actionListeners.delete(callback); };
   }
 
   private log(message: string) {
@@ -783,7 +783,7 @@ class AgentServiceClass {
     document.body.appendChild(this.cursorOverlay);
   }
 
-  async moveCursorTo(x: number, y: number, duration: number = 300): Promise<void> {
+  async moveCursorTo(x: number, y: number, duration: number = 400): Promise<void> {
     if (!this.cursorOverlay) this.createVirtualCursor();
     
     return new Promise((resolve) => {
@@ -792,14 +792,31 @@ class AgentServiceClass {
       const deltaX = x - startX;
       const deltaY = y - startY;
       const startTime = performance.now();
+      
+      // Generate bezier control points for natural curve
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const curveFactor = Math.min(distance * 0.3, 80); // More curve for longer distances
+      const cpX = (startX + x) / 2 + (Math.random() - 0.5) * curveFactor;
+      const cpY = (startY + y) / 2 + (Math.random() - 0.5) * curveFactor;
 
       const animate = (currentTime: number) => {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
+        
+        // Ease out cubic for natural deceleration
         const easeProgress = 1 - Math.pow(1 - progress, 3);
         
-        this.cursorPosition.x = startX + (deltaX * easeProgress);
-        this.cursorPosition.y = startY + (deltaY * easeProgress);
+        // Quadratic bezier curve
+        const t = easeProgress;
+        const curveX = (1 - t) * (1 - t) * startX + 2 * (1 - t) * t * cpX + t * t * x;
+        const curveY = (1 - t) * (1 - t) * startY + 2 * (1 - t) * t * cpY + t * t * y;
+        
+        // Add micro-jitter for human-like movement
+        const jitterX = progress < 0.95 ? (Math.random() - 0.5) * 2 : 0;
+        const jitterY = progress < 0.95 ? (Math.random() - 0.5) * 2 : 0;
+        
+        this.cursorPosition.x = curveX + jitterX;
+        this.cursorPosition.y = curveY + jitterY;
         
         if (this.cursorOverlay) {
           this.cursorOverlay.style.left = `${this.cursorPosition.x}px`;
@@ -809,6 +826,13 @@ class AgentServiceClass {
         if (progress < 1) {
           requestAnimationFrame(animate);
         } else {
+          // Snap to exact position at end
+          this.cursorPosition.x = x;
+          this.cursorPosition.y = y;
+          if (this.cursorOverlay) {
+            this.cursorOverlay.style.left = `${x}px`;
+            this.cursorOverlay.style.top = `${y}px`;
+          }
           resolve();
         }
       };
@@ -819,8 +843,11 @@ class AgentServiceClass {
 
   async moveCursorToElement(element: HTMLElement): Promise<void> {
     const rect = element.getBoundingClientRect();
-    const targetX = rect.left + rect.width / 2;
-    const targetY = rect.top + rect.height / 2;
+    // Add slight randomness to target point within element
+    const offsetX = (Math.random() - 0.5) * Math.min(rect.width * 0.3, 10);
+    const offsetY = (Math.random() - 0.5) * Math.min(rect.height * 0.3, 10);
+    const targetX = rect.left + rect.width / 2 + offsetX;
+    const targetY = rect.top + rect.height / 2 + offsetY;
     await this.moveCursorTo(targetX, targetY);
   }
 
@@ -1299,6 +1326,222 @@ class AgentServiceClass {
     } catch (error) {
       return false;
     }
+  }
+
+  // =================== VERCEPT WINDOW CONTROL ===================
+
+  /**
+   * Drag a floating window to a new position with natural mouse movement
+   */
+  async dragWindowTo(windowIdOrTitle: string, targetX: number, targetY: number): Promise<boolean> {
+    try {
+      // Find the window by ID or title
+      const windowEl = document.querySelector(
+        `[data-window-id*="${windowIdOrTitle}" i], [data-window-title*="${windowIdOrTitle}" i]`
+      ) as HTMLElement;
+      
+      if (!windowEl) {
+        this.log(`❌ Window not found: ${windowIdOrTitle}`);
+        return false;
+      }
+
+      // Find the drag handle
+      const dragHandle = windowEl.querySelector('.drag-handle') as HTMLElement || windowEl;
+      const handleRect = dragHandle.getBoundingClientRect();
+      
+      // Move cursor to drag handle
+      await this.moveCursorToElement(dragHandle);
+      await this.wait(100);
+      
+      // Simulate drag start
+      const startX = handleRect.left + handleRect.width / 2;
+      const startY = handleRect.top + handleRect.height / 2;
+      
+      this.dispatchMouseEvent(dragHandle, 'mousedown', startX, startY);
+      await this.wait(50);
+      
+      // Animate drag movement with bezier curve
+      const steps = 20;
+      for (let i = 1; i <= steps; i++) {
+        const progress = i / steps;
+        const easeProgress = 1 - Math.pow(1 - progress, 2);
+        
+        const currentX = startX + (targetX - startX + handleRect.width / 2) * easeProgress;
+        const currentY = startY + (targetY - startY + handleRect.height / 2) * easeProgress;
+        
+        // Add small jitter
+        const jitterX = (Math.random() - 0.5) * 2;
+        const jitterY = (Math.random() - 0.5) * 2;
+        
+        await this.moveCursorTo(currentX + jitterX, currentY + jitterY, 15);
+        this.dispatchMouseEvent(document, 'mousemove', currentX + jitterX, currentY + jitterY);
+        await this.wait(20);
+      }
+      
+      // Final position
+      this.dispatchMouseEvent(document, 'mouseup', targetX + handleRect.width / 2, targetY + handleRect.height / 2);
+      
+      this.log(`✅ Dragged window "${windowIdOrTitle}" to (${targetX}, ${targetY})`);
+      return true;
+    } catch (error) {
+      this.log(`❌ Drag failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Resize a floating window with natural mouse movement
+   */
+  async resizeWindow(windowIdOrTitle: string, width: number, height: number): Promise<boolean> {
+    try {
+      const windowEl = document.querySelector(
+        `[data-window-id*="${windowIdOrTitle}" i], [data-window-title*="${windowIdOrTitle}" i]`
+      ) as HTMLElement;
+      
+      if (!windowEl) {
+        this.log(`❌ Window not found: ${windowIdOrTitle}`);
+        return false;
+      }
+
+      // Find resize handle (bottom-right corner)
+      const resizeHandle = windowEl.querySelector('[class*="cursor-se-resize"]') as HTMLElement;
+      if (!resizeHandle) {
+        this.log(`❌ Resize handle not found`);
+        return false;
+      }
+
+      const handleRect = resizeHandle.getBoundingClientRect();
+      const windowRect = windowEl.getBoundingClientRect();
+      
+      // Move to resize handle
+      await this.moveCursorToElement(resizeHandle);
+      await this.wait(100);
+      
+      const startX = handleRect.left + handleRect.width / 2;
+      const startY = handleRect.top + handleRect.height / 2;
+      
+      // Calculate target position based on desired size
+      const deltaX = width - windowRect.width;
+      const deltaY = height - windowRect.height;
+      const targetX = startX + deltaX;
+      const targetY = startY + deltaY;
+      
+      // Start resize
+      this.dispatchMouseEvent(resizeHandle, 'mousedown', startX, startY);
+      await this.wait(50);
+      
+      // Animate resize
+      const steps = 15;
+      for (let i = 1; i <= steps; i++) {
+        const progress = i / steps;
+        const easeProgress = 1 - Math.pow(1 - progress, 2);
+        
+        const currentX = startX + deltaX * easeProgress;
+        const currentY = startY + deltaY * easeProgress;
+        
+        await this.moveCursorTo(currentX, currentY, 15);
+        this.dispatchMouseEvent(document, 'mousemove', currentX, currentY);
+        await this.wait(20);
+      }
+      
+      this.dispatchMouseEvent(document, 'mouseup', targetX, targetY);
+      
+      this.log(`✅ Resized window "${windowIdOrTitle}" to ${width}x${height}`);
+      return true;
+    } catch (error) {
+      this.log(`❌ Resize failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Focus and center a window
+   */
+  async focusWindow(windowIdOrTitle: string): Promise<boolean> {
+    try {
+      const windowEl = document.querySelector(
+        `[data-window-id*="${windowIdOrTitle}" i], [data-window-title*="${windowIdOrTitle}" i]`
+      ) as HTMLElement;
+      
+      if (!windowEl) {
+        this.log(`❌ Window not found: ${windowIdOrTitle}`);
+        return false;
+      }
+
+      // Bring to front
+      windowEl.style.zIndex = '100';
+      
+      // Click to focus
+      const dragHandle = windowEl.querySelector('.drag-handle') as HTMLElement || windowEl;
+      await this.moveCursorToElement(dragHandle);
+      await this.wait(100);
+      dragHandle.click();
+      
+      // Highlight the window
+      await this.highlightElement(windowEl, 'Focused!', 1500);
+      
+      this.log(`✅ Focused window: ${windowIdOrTitle}`);
+      return true;
+    } catch (error) {
+      this.log(`❌ Focus failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Scroll using wheel events (more natural than scrollTo)
+   */
+  async wheelScroll(target: string, deltaY: number): Promise<boolean> {
+    try {
+      const element = await this.findElement(target);
+      const scrollTarget = element || document.body;
+      
+      // Move cursor to the target area
+      if (element) {
+        await this.moveCursorToElement(element);
+      }
+      await this.wait(100);
+      
+      // Dispatch wheel event in steps for smooth scrolling
+      const steps = Math.abs(Math.floor(deltaY / 50)) || 1;
+      const stepDelta = deltaY / steps;
+      
+      for (let i = 0; i < steps; i++) {
+        const wheelEvent = new WheelEvent('wheel', {
+          deltaY: stepDelta,
+          deltaMode: 0, // Pixels
+          bubbles: true,
+          cancelable: true,
+          view: window
+        });
+        
+        scrollTarget.dispatchEvent(wheelEvent);
+        await this.wait(30 + Math.random() * 20); // Variable timing for realism
+      }
+      
+      this.log(`✅ Wheel scrolled ${deltaY > 0 ? 'down' : 'up'} by ${Math.abs(deltaY)}px`);
+      return true;
+    } catch (error) {
+      this.log(`❌ Wheel scroll failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Helper: dispatch mouse event at specific coordinates
+   */
+  private dispatchMouseEvent(target: Element | Document, type: string, clientX: number, clientY: number): void {
+    const event = new MouseEvent(type, {
+      view: window,
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+      screenX: clientX,
+      screenY: clientY + (window.screenY || 0),
+      button: 0
+    });
+    target.dispatchEvent(event);
   }
 
   // =================== PAGE ANALYSIS ===================
