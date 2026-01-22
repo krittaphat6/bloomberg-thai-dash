@@ -1,9 +1,10 @@
 // AgentService.ts - Vercept-style DOM Interaction & Visual Automation
 // Full browser automation with visual feedback like Vercept.com
+// Implements: Smart element finding, fuzzy matching, deep DOM traversal, fallback strategies
 
 export interface AgentAction {
   type: 'click' | 'type' | 'scroll' | 'scrollTo' | 'wait' | 'hover' | 'openPanel' | 'closePanel' | 'screenshot' | 'analyze' | 'sendMessage' | 'navigate' | 'select' | 'doubleClick' | 'rightClick' | 'dragTo' | 'pressKey';
-  target?: string; // CSS selector, coordinates, or panel ID
+  target?: string; // CSS selector, text content, or panel ID
   value?: string | number;
   description: string;
   coordinates?: { x: number; y: number };
@@ -30,7 +31,7 @@ export interface PageContext {
   links: Array<{ text: string; href: string; selector: string }>;
   inputs: Array<{ type: string; placeholder?: string; selector: string; value?: string; label?: string }>;
   panels: string[];
-  interactiveElements: Array<{ type: string; text: string; selector: string; rect: DOMRect }>;
+  interactiveElements: Array<{ type: string; text: string; selector: string; rect: DOMRect; index: number }>;
   viewportSize: { width: number; height: number };
   scrollPosition: { x: number; y: number };
 }
@@ -43,9 +44,20 @@ export interface ScreenAnalysis {
     boundingBox: { x: number; y: number; width: number; height: number };
     isVisible: boolean;
     isInteractive: boolean;
+    index: number;
   }>;
   dominantColors: string[];
   layoutType: 'dashboard' | 'form' | 'list' | 'chat' | 'unknown';
+}
+
+// Element index for AI referencing
+interface IndexedElement {
+  element: HTMLElement;
+  index: number;
+  text: string;
+  type: string;
+  rect: DOMRect;
+  selector: string;
 }
 
 class AgentServiceClass {
@@ -56,6 +68,8 @@ class AgentServiceClass {
   private cursorPosition: { x: number; y: number } = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
   private isAnimating: boolean = false;
   private activeHighlights: HTMLDivElement[] = [];
+  private indexedElements: Map<number, IndexedElement> = new Map();
+  private lastIndexTime: number = 0;
 
   constructor() {
     this.injectAgentStyles();
@@ -74,13 +88,386 @@ class AgentServiceClass {
     this.actionListeners.forEach(cb => cb(logMessage));
   }
 
-  // Inject Vercept-style animation styles
+  // =================== SMART ELEMENT FINDING (browser-use style) ===================
+
+  /**
+   * Index all interactive elements on the page for AI reference
+   */
+  indexPageElements(): Map<number, IndexedElement> {
+    this.indexedElements.clear();
+    let index = 0;
+
+    const selectors = [
+      'button', 'a', 'input', 'textarea', 'select',
+      '[role="button"]', '[role="tab"]', '[role="menuitem"]',
+      '[onclick]', '[data-agent-id]', '[data-testid]',
+      '.btn', '.clickable', '[tabindex]'
+    ].join(', ');
+
+    document.querySelectorAll(selectors).forEach((el) => {
+      const element = el as HTMLElement;
+      const rect = element.getBoundingClientRect();
+
+      // Only visible and reasonably sized elements
+      if (rect.width > 5 && rect.height > 5 && 
+          rect.top < window.innerHeight + 500 && rect.bottom > -500 &&
+          rect.left < window.innerWidth + 500 && rect.right > -500) {
+        
+        const text = this.getElementVisibleText(element);
+        const type = this.getElementType(element);
+        
+        this.indexedElements.set(index, {
+          element,
+          index,
+          text: text.substring(0, 100),
+          type,
+          rect,
+          selector: this.generateUniqueSelector(element)
+        });
+        
+        index++;
+      }
+    });
+
+    this.lastIndexTime = Date.now();
+    this.log(`📊 Indexed ${this.indexedElements.size} interactive elements`);
+    return this.indexedElements;
+  }
+
+  private getElementVisibleText(element: HTMLElement): string {
+    // Get text content, placeholder, aria-label, title, or value
+    const text = element.textContent?.trim() ||
+                 element.getAttribute('placeholder') ||
+                 element.getAttribute('aria-label') ||
+                 element.getAttribute('title') ||
+                 (element as HTMLInputElement).value ||
+                 '';
+    return text.replace(/\s+/g, ' ').trim();
+  }
+
+  private getElementType(element: HTMLElement): string {
+    const tag = element.tagName.toLowerCase();
+    const role = element.getAttribute('role');
+    const type = element.getAttribute('type');
+    
+    if (tag === 'button' || role === 'button') return 'button';
+    if (tag === 'a') return 'link';
+    if (tag === 'input') return type || 'input';
+    if (tag === 'textarea') return 'textarea';
+    if (tag === 'select') return 'select';
+    if (role === 'tab') return 'tab';
+    if (role === 'menuitem') return 'menuitem';
+    return 'element';
+  }
+
+  private generateUniqueSelector(element: HTMLElement): string {
+    // Try data attributes first (most reliable)
+    const agentId = element.getAttribute('data-agent-id');
+    if (agentId) return `[data-agent-id="${agentId}"]`;
+
+    const testId = element.getAttribute('data-testid');
+    if (testId) return `[data-testid="${testId}"]`;
+
+    // Try ID
+    if (element.id) return `#${element.id}`;
+
+    // Build a path-based selector
+    const path: string[] = [];
+    let current: HTMLElement | null = element;
+    
+    while (current && current !== document.body) {
+      let selector = current.tagName.toLowerCase();
+      
+      if (current.id) {
+        path.unshift(`#${current.id}`);
+        break;
+      }
+      
+      // Add class if meaningful
+      const classes = Array.from(current.classList)
+        .filter(c => !c.match(/^(hover|active|focus|selected|open)/))
+        .slice(0, 2);
+      if (classes.length) {
+        selector += '.' + classes.join('.');
+      }
+      
+      // Add nth-child if needed for uniqueness
+      const parent = current.parentElement;
+      if (parent) {
+        const siblings = Array.from(parent.children).filter(
+          s => s.tagName === current!.tagName
+        );
+        if (siblings.length > 1) {
+          const idx = siblings.indexOf(current) + 1;
+          selector += `:nth-child(${idx})`;
+        }
+      }
+      
+      path.unshift(selector);
+      current = current.parentElement;
+    }
+    
+    return path.join(' > ');
+  }
+
+  /**
+   * Find element by text content (fuzzy matching)
+   */
+  findElementByText(searchText: string, elementType?: string): HTMLElement | null {
+    const normalizedSearch = searchText.toLowerCase().trim();
+    
+    // Refresh index if stale (>2 seconds old)
+    if (Date.now() - this.lastIndexTime > 2000) {
+      this.indexPageElements();
+    }
+
+    // First: exact match
+    for (const [_, indexed] of this.indexedElements) {
+      if (elementType && indexed.type !== elementType) continue;
+      if (indexed.text.toLowerCase() === normalizedSearch) {
+        this.log(`🎯 Found exact match: "${indexed.text}"`);
+        return indexed.element;
+      }
+    }
+
+    // Second: contains match
+    for (const [_, indexed] of this.indexedElements) {
+      if (elementType && indexed.type !== elementType) continue;
+      if (indexed.text.toLowerCase().includes(normalizedSearch)) {
+        this.log(`🎯 Found contains match: "${indexed.text}"`);
+        return indexed.element;
+      }
+    }
+
+    // Third: fuzzy match (search contains in text)
+    for (const [_, indexed] of this.indexedElements) {
+      if (elementType && indexed.type !== elementType) continue;
+      if (normalizedSearch.includes(indexed.text.toLowerCase()) && indexed.text.length > 2) {
+        this.log(`🎯 Found fuzzy match: "${indexed.text}"`);
+        return indexed.element;
+      }
+    }
+
+    // Fourth: word matching
+    const searchWords = normalizedSearch.split(/\s+/);
+    for (const [_, indexed] of this.indexedElements) {
+      if (elementType && indexed.type !== elementType) continue;
+      const textWords = indexed.text.toLowerCase().split(/\s+/);
+      const matchCount = searchWords.filter(w => textWords.some(tw => tw.includes(w))).length;
+      if (matchCount >= Math.ceil(searchWords.length / 2)) {
+        this.log(`🎯 Found word match: "${indexed.text}"`);
+        return indexed.element;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find element by index number
+   */
+  findElementByIndex(index: number): HTMLElement | null {
+    const indexed = this.indexedElements.get(index);
+    if (indexed) {
+      return indexed.element;
+    }
+    return null;
+  }
+
+  /**
+   * Smart element finder - tries multiple strategies
+   */
+  async findElement(target: string): Promise<HTMLElement | null> {
+    this.log(`🔍 Finding: "${target}"`);
+
+    // Strategy 1: CSS Selector
+    try {
+      const bySelector = document.querySelector(target) as HTMLElement;
+      if (bySelector && this.isElementVisible(bySelector)) {
+        this.log(`✅ Found by selector`);
+        return bySelector;
+      }
+    } catch (e) {
+      // Not a valid selector, continue
+    }
+
+    // Strategy 2: Index number (e.g., "[5]" or "5")
+    const indexMatch = target.match(/^\[?(\d+)\]?$/);
+    if (indexMatch) {
+      const index = parseInt(indexMatch[1]);
+      const byIndex = this.findElementByIndex(index);
+      if (byIndex) {
+        this.log(`✅ Found by index ${index}`);
+        return byIndex;
+      }
+    }
+
+    // Strategy 3: Text content search
+    const byText = this.findElementByText(target);
+    if (byText) {
+      return byText;
+    }
+
+    // Strategy 4: Partial attribute match
+    const attrSelectors = [
+      `[aria-label*="${target}" i]`,
+      `[title*="${target}" i]`,
+      `[placeholder*="${target}" i]`,
+      `[data-testid*="${target}" i]`,
+      `button:contains("${target}")`, // jQuery-style (custom)
+    ];
+
+    for (const selector of attrSelectors) {
+      try {
+        const el = document.querySelector(selector) as HTMLElement;
+        if (el && this.isElementVisible(el)) {
+          this.log(`✅ Found by attribute: ${selector}`);
+          return el;
+        }
+      } catch (e) {
+        // Invalid selector, continue
+      }
+    }
+
+    // Strategy 5: Deep text search with TreeWalker
+    const deepSearch = this.deepFindByText(target);
+    if (deepSearch) {
+      this.log(`✅ Found by deep text search`);
+      return deepSearch;
+    }
+
+    // Strategy 6: Try in iframes
+    const iframeSearch = this.findInIframes(target);
+    if (iframeSearch) {
+      this.log(`✅ Found in iframe`);
+      return iframeSearch;
+    }
+
+    this.log(`❌ Element not found: "${target}"`);
+    return null;
+  }
+
+  private isElementVisible(element: HTMLElement): boolean {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return rect.width > 0 && 
+           rect.height > 0 && 
+           style.visibility !== 'hidden' && 
+           style.display !== 'none' &&
+           parseFloat(style.opacity) > 0;
+  }
+
+  private deepFindByText(searchText: string): HTMLElement | null {
+    const normalizedSearch = searchText.toLowerCase().trim();
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_ELEMENT,
+      null
+    );
+
+    let node: Node | null;
+    const candidates: Array<{ element: HTMLElement; score: number }> = [];
+
+    while ((node = walker.nextNode())) {
+      const element = node as HTMLElement;
+      const text = this.getElementVisibleText(element).toLowerCase();
+      
+      if (!text || !this.isInteractiveElement(element)) continue;
+
+      // Calculate match score
+      let score = 0;
+      if (text === normalizedSearch) score = 100;
+      else if (text.includes(normalizedSearch)) score = 80;
+      else if (normalizedSearch.includes(text) && text.length > 3) score = 60;
+      else {
+        // Word overlap
+        const searchWords = normalizedSearch.split(/\s+/);
+        const textWords = text.split(/\s+/);
+        const overlap = searchWords.filter(w => textWords.some(tw => tw.includes(w))).length;
+        score = (overlap / searchWords.length) * 50;
+      }
+
+      if (score > 30 && this.isElementVisible(element)) {
+        candidates.push({ element, score });
+      }
+    }
+
+    // Return best match
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.score - a.score);
+      return candidates[0].element;
+    }
+
+    return null;
+  }
+
+  private isInteractiveElement(element: HTMLElement): boolean {
+    const interactiveTags = ['button', 'a', 'input', 'textarea', 'select'];
+    const tag = element.tagName.toLowerCase();
+    
+    if (interactiveTags.includes(tag)) return true;
+    if (element.getAttribute('role') === 'button') return true;
+    if (element.getAttribute('onclick')) return true;
+    if (element.getAttribute('tabindex')) return true;
+    if (element.classList.contains('btn') || element.classList.contains('clickable')) return true;
+    
+    // Check if cursor is pointer
+    const style = window.getComputedStyle(element);
+    if (style.cursor === 'pointer') return true;
+
+    return false;
+  }
+
+  private findInIframes(target: string): HTMLElement | null {
+    const iframes = document.querySelectorAll('iframe');
+    
+    for (const iframe of iframes) {
+      try {
+        // Only same-origin iframes
+        const doc = iframe.contentDocument;
+        if (!doc) continue;
+
+        // Try selector
+        try {
+          const el = doc.querySelector(target) as HTMLElement;
+          if (el) return el;
+        } catch (e) {}
+
+        // Try text search in iframe
+        const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_ELEMENT);
+        let node: Node | null;
+        const normalizedSearch = target.toLowerCase();
+
+        while ((node = walker.nextNode())) {
+          const element = node as HTMLElement;
+          const text = element.textContent?.toLowerCase().trim() || '';
+          if (text.includes(normalizedSearch) && this.isInteractiveElement(element)) {
+            return element;
+          }
+        }
+      } catch (e) {
+        // Cross-origin iframe, skip
+      }
+    }
+
+    return null;
+  }
+
+  // =================== VERCEPT-STYLE ANIMATIONS & CSS ===================
+
   private injectAgentStyles() {
     if (document.getElementById('vercept-agent-styles')) return;
 
     const style = document.createElement('style');
     style.id = 'vercept-agent-styles';
     style.textContent = `
+      :root {
+        --agent-accent: 280 85% 65%;
+        --agent-accent-2: 320 85% 55%;
+        --agent-success: 142 76% 36%;
+        --agent-error: 0 84% 60%;
+      }
+
       @keyframes vercept-pulse {
         0% { 
           border-color: hsl(var(--agent-accent)); 
@@ -122,11 +509,6 @@ class AgentServiceClass {
         100% { top: 100%; opacity: 0.5; }
       }
 
-      @keyframes vercept-typing-cursor {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0; }
-      }
-
       @keyframes vercept-fade-in {
         from { opacity: 0; transform: scale(0.95); }
         to { opacity: 1; transform: scale(1); }
@@ -135,6 +517,11 @@ class AgentServiceClass {
       @keyframes vercept-slide-up {
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
+      }
+
+      @keyframes vercept-index-pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
       }
 
       .vercept-cursor {
@@ -169,13 +556,14 @@ class AgentServiceClass {
       }
 
       .vercept-click-effect {
-        position: absolute;
+        position: fixed;
         width: 20px;
         height: 20px;
         background: hsl(var(--agent-accent) / 0.5);
         border-radius: 50%;
         animation: vercept-click-ripple 0.6s ease-out forwards;
         pointer-events: none;
+        z-index: 999999;
       }
 
       .vercept-highlight-box {
@@ -202,6 +590,25 @@ class AgentServiceClass {
         white-space: nowrap;
         box-shadow: 0 2px 10px hsl(var(--agent-accent) / 0.4);
         animation: vercept-fade-in 0.2s ease-out;
+      }
+
+      .vercept-index-badge {
+        position: fixed;
+        min-width: 20px;
+        height: 20px;
+        background: linear-gradient(135deg, hsl(var(--agent-accent)) 0%, hsl(var(--agent-accent-2)) 100%);
+        color: white;
+        font-size: 10px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        padding: 0 4px;
+        z-index: 99997;
+        pointer-events: none;
+        animation: vercept-fade-in 0.3s ease-out;
+        box-shadow: 0 2px 8px hsl(var(--agent-accent) / 0.5);
       }
 
       .vercept-thinking-panel {
@@ -321,12 +728,12 @@ class AgentServiceClass {
       }
 
       .vercept-step-icon.completed {
-        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        background: linear-gradient(135deg, hsl(var(--agent-success)) 0%, hsl(142 76% 26%) 100%);
         color: white;
       }
 
       .vercept-step-icon.failed {
-        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        background: linear-gradient(135deg, hsl(var(--agent-error)) 0%, hsl(0 84% 50%) 100%);
         color: white;
       }
 
@@ -356,32 +763,11 @@ class AgentServiceClass {
         animation: vercept-scan-line 2s ease-in-out infinite;
         box-shadow: 0 0 20px 5px hsl(var(--agent-accent) / 0.4);
       }
-
-      .vercept-typing-cursor-indicator {
-        display: inline-block;
-        width: 2px;
-        height: 14px;
-        background: hsl(var(--agent-accent));
-        margin-left: 2px;
-        animation: vercept-typing-cursor 0.8s step-end infinite;
-      }
-
-      .vercept-fullscreen-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.3);
-        pointer-events: none;
-        z-index: 99995;
-        backdrop-filter: blur(1px);
-      }
     `;
     document.head.appendChild(style);
   }
 
-  // =================== VERCEPT-STYLE VISUAL CURSOR ===================
+  // =================== VIRTUAL CURSOR ===================
 
   createVirtualCursor(): void {
     if (this.cursorOverlay) return;
@@ -401,7 +787,6 @@ class AgentServiceClass {
     if (!this.cursorOverlay) this.createVirtualCursor();
     
     return new Promise((resolve) => {
-      // Calculate smooth path with easing
       const startX = this.cursorPosition.x;
       const startY = this.cursorPosition.y;
       const deltaX = x - startX;
@@ -411,8 +796,6 @@ class AgentServiceClass {
       const animate = (currentTime: number) => {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
-        
-        // Ease out cubic for natural movement
         const easeProgress = 1 - Math.pow(1 - progress, 3);
         
         this.cursorPosition.x = startX + (deltaX * easeProgress);
@@ -446,14 +829,11 @@ class AgentServiceClass {
     effect.className = 'vercept-click-effect';
     effect.style.left = `${x - 10}px`;
     effect.style.top = `${y - 10}px`;
-    effect.style.position = 'fixed';
-    effect.style.zIndex = '999999';
     document.body.appendChild(effect);
-    
     setTimeout(() => effect.remove(), 600);
   }
 
-  // =================== VERCEPT-STYLE ELEMENT HIGHLIGHTING ===================
+  // =================== ELEMENT HIGHLIGHTING ===================
 
   async highlightElement(element: HTMLElement, label?: string, duration: number = 2000): Promise<void> {
     const rect = element.getBoundingClientRect();
@@ -480,12 +860,34 @@ class AgentServiceClass {
     }
   }
 
+  showIndexBadges(): void {
+    this.clearIndexBadges();
+    this.indexPageElements();
+
+    for (const [index, indexed] of this.indexedElements) {
+      if (index > 50) break; // Limit visible badges
+
+      const badge = document.createElement('div');
+      badge.className = 'vercept-index-badge';
+      badge.textContent = String(index);
+      badge.style.left = `${indexed.rect.left - 10}px`;
+      badge.style.top = `${indexed.rect.top - 10}px`;
+      badge.setAttribute('data-vercept-badge', 'true');
+      document.body.appendChild(badge);
+    }
+  }
+
+  clearIndexBadges(): void {
+    document.querySelectorAll('[data-vercept-badge]').forEach(el => el.remove());
+  }
+
   clearAllHighlights(): void {
     this.activeHighlights.forEach(h => h.remove());
     this.activeHighlights = [];
+    this.clearIndexBadges();
   }
 
-  // =================== THINKING/PLANNING UI ===================
+  // =================== THINKING PANEL ===================
 
   showThinkingPanel(goal: string, steps: Array<{ description: string; status: 'pending' | 'active' | 'completed' | 'failed' }>): void {
     this.hideThinkingPanel();
@@ -540,7 +942,7 @@ class AgentServiceClass {
     }
   }
 
-  // =================== SCREEN SCAN ANIMATION ===================
+  // =================== SCAN ANIMATION ===================
 
   showScanAnimation(duration: number = 2000): Promise<void> {
     return new Promise((resolve) => {
@@ -556,30 +958,35 @@ class AgentServiceClass {
     });
   }
 
-  // =================== DOM INTERACTION (VERCEPT-STYLE) ===================
+  // =================== SMART CLICK (with auto-find) ===================
 
-  async click(selector: string): Promise<boolean> {
+  async click(target: string): Promise<boolean> {
     try {
-      const element = document.querySelector(selector) as HTMLElement;
+      const element = await this.findElement(target);
       if (!element) {
-        this.log(`❌ Element not found: ${selector}`);
+        this.log(`❌ Element not found: ${target}`);
         return false;
       }
 
-      // Visual feedback sequence (like Vercept)
+      // Scroll into view if needed
+      if (!this.isInViewport(element)) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await this.wait(300);
+      }
+
+      // Visual feedback
       await this.highlightElement(element, 'Clicking...', 0);
       await this.moveCursorToElement(element);
       await this.wait(200);
       
-      // Click effect
       const rect = element.getBoundingClientRect();
       this.showClickEffect(rect.left + rect.width / 2, rect.top + rect.height / 2);
       
-      // Actually click
-      element.click();
+      // Dispatch realistic events
+      this.dispatchRealClick(element, rect);
       
       this.clearAllHighlights();
-      this.log(`✅ Clicked: ${selector}`);
+      this.log(`✅ Clicked: ${target}`);
       return true;
     } catch (error) {
       this.log(`❌ Click failed: ${error}`);
@@ -587,33 +994,112 @@ class AgentServiceClass {
     }
   }
 
-  async type(selector: string, text: string): Promise<boolean> {
+  private dispatchRealClick(element: HTMLElement, rect: DOMRect): void {
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+
+    const common = {
+      view: window,
+      bubbles: true,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+      screenX: x,
+      screenY: y + window.screenY,
+    };
+
+    // Full event sequence like real browser
+    element.dispatchEvent(new PointerEvent('pointerover', { ...common, pointerType: 'mouse' }));
+    element.dispatchEvent(new MouseEvent('mouseover', common));
+    element.dispatchEvent(new PointerEvent('pointerenter', { ...common, pointerType: 'mouse' }));
+    element.dispatchEvent(new MouseEvent('mouseenter', common));
+    element.dispatchEvent(new PointerEvent('pointerdown', { ...common, pointerType: 'mouse', button: 0 }));
+    element.dispatchEvent(new MouseEvent('mousedown', { ...common, button: 0 }));
+    element.focus();
+    element.dispatchEvent(new PointerEvent('pointerup', { ...common, pointerType: 'mouse', button: 0 }));
+    element.dispatchEvent(new MouseEvent('mouseup', { ...common, button: 0 }));
+    element.dispatchEvent(new MouseEvent('click', { ...common, button: 0 }));
+    
+    // Also try native click as fallback
+    element.click();
+  }
+
+  private isInViewport(element: HTMLElement): boolean {
+    const rect = element.getBoundingClientRect();
+    return (
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= window.innerHeight &&
+      rect.right <= window.innerWidth
+    );
+  }
+
+  // =================== SMART TYPE ===================
+
+  async type(target: string, text: string): Promise<boolean> {
     try {
-      const element = document.querySelector(selector) as HTMLInputElement;
+      const element = await this.findElement(target) as HTMLInputElement | HTMLTextAreaElement;
       if (!element) {
-        this.log(`❌ Input not found: ${selector}`);
+        this.log(`❌ Input not found: ${target}`);
         return false;
+      }
+
+      // Scroll into view if needed
+      if (!this.isInViewport(element)) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await this.wait(300);
       }
 
       await this.highlightElement(element, 'Typing...', 0);
       await this.moveCursorToElement(element);
       await this.wait(200);
 
+      // Focus and clear
       element.focus();
-      element.value = '';
+      element.click();
       
-      // Type character by character with visual feedback
+      // Use native value setter for React compatibility
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value'
+      )?.set;
+      const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype, 'value'
+      )?.set;
+
+      const setter = element.tagName === 'TEXTAREA' ? nativeTextAreaValueSetter : nativeInputValueSetter;
+      
+      // Clear first
+      if (setter) {
+        setter.call(element, '');
+      } else {
+        element.value = '';
+      }
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+
+      // Type character by character
       for (let i = 0; i < text.length; i++) {
-        element.value += text[i];
+        const char = text[i];
+        
+        // Dispatch keyboard events
+        element.dispatchEvent(new KeyboardEvent('keydown', { key: char, bubbles: true }));
+        element.dispatchEvent(new KeyboardEvent('keypress', { key: char, bubbles: true }));
+        
+        // Update value
+        if (setter) {
+          setter.call(element, text.substring(0, i + 1));
+        } else {
+          element.value = text.substring(0, i + 1);
+        }
         element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new KeyboardEvent('keyup', { key: char, bubbles: true }));
         
         // Random delay for realistic typing
-        await this.wait(30 + Math.random() * 50);
+        await this.wait(30 + Math.random() * 40);
       }
 
       element.dispatchEvent(new Event('change', { bubbles: true }));
       this.clearAllHighlights();
-      this.log(`✅ Typed "${text}" into ${selector}`);
+      this.log(`✅ Typed "${text}" into ${target}`);
       return true;
     } catch (error) {
       this.log(`❌ Type failed: ${error}`);
@@ -621,51 +1107,87 @@ class AgentServiceClass {
     }
   }
 
-  async scroll(direction: 'up' | 'down', amount: number = 400): Promise<boolean> {
+  // =================== SMART SCROLL ===================
+
+  async scroll(direction: 'up' | 'down', amount: number = 400, targetSelector?: string): Promise<boolean> {
     try {
+      let scrollContainer: Element | Window = window;
+
+      if (targetSelector) {
+        const target = await this.findElement(targetSelector);
+        if (target) {
+          scrollContainer = this.getScrollableAncestor(target) || window;
+        }
+      }
+
       const scrollAmount = direction === 'down' ? amount : -amount;
       
-      // Smooth scroll with animation
-      const start = window.scrollY;
-      const target = start + scrollAmount;
-      const duration = 500;
-      const startTime = performance.now();
+      if (scrollContainer === window) {
+        const start = window.scrollY;
+        const target = start + scrollAmount;
+        const duration = 500;
+        const startTime = performance.now();
 
-      return new Promise((resolve) => {
-        const animate = (currentTime: number) => {
-          const elapsed = currentTime - startTime;
-          const progress = Math.min(elapsed / duration, 1);
-          const easeProgress = 1 - Math.pow(1 - progress, 3);
-          
-          window.scrollTo(0, start + (scrollAmount * easeProgress));
-          
-          if (progress < 1) {
-            requestAnimationFrame(animate);
-          } else {
-            this.log(`✅ Scrolled ${direction} by ${amount}px`);
-            resolve(true);
-          }
-        };
-        requestAnimationFrame(animate);
-      });
+        return new Promise((resolve) => {
+          const animate = (currentTime: number) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+            
+            window.scrollTo(0, start + (scrollAmount * easeProgress));
+            
+            if (progress < 1) {
+              requestAnimationFrame(animate);
+            } else {
+              this.log(`✅ Scrolled ${direction} by ${amount}px`);
+              resolve(true);
+            }
+          };
+          requestAnimationFrame(animate);
+        });
+      } else {
+        const el = scrollContainer as Element;
+        el.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+        await this.wait(500);
+        this.log(`✅ Scrolled ${direction} in container`);
+        return true;
+      }
     } catch (error) {
       this.log(`❌ Scroll failed: ${error}`);
       return false;
     }
   }
 
-  async scrollTo(selector: string): Promise<boolean> {
+  private getScrollableAncestor(element: HTMLElement): Element | null {
+    let current: HTMLElement | null = element.parentElement;
+    
+    while (current) {
+      const style = window.getComputedStyle(current);
+      const overflow = style.overflow + style.overflowY + style.overflowX;
+      
+      if (/(auto|scroll)/.test(overflow)) {
+        if (current.scrollHeight > current.clientHeight) {
+          return current;
+        }
+      }
+      current = current.parentElement;
+    }
+    
+    return null;
+  }
+
+  async scrollTo(target: string): Promise<boolean> {
     try {
-      const element = document.querySelector(selector) as HTMLElement;
+      const element = await this.findElement(target);
       if (!element) {
-        this.log(`❌ Element not found for scroll: ${selector}`);
+        this.log(`❌ Element not found for scroll: ${target}`);
         return false;
       }
 
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       await this.wait(500);
       await this.highlightElement(element, 'Found!');
-      this.log(`✅ Scrolled to: ${selector}`);
+      this.log(`✅ Scrolled to: ${target}`);
       return true;
     } catch (error) {
       this.log(`❌ ScrollTo failed: ${error}`);
@@ -673,11 +1195,13 @@ class AgentServiceClass {
     }
   }
 
-  async hover(selector: string): Promise<boolean> {
+  // =================== OTHER ACTIONS ===================
+
+  async hover(target: string): Promise<boolean> {
     try {
-      const element = document.querySelector(selector) as HTMLElement;
+      const element = await this.findElement(target);
       if (!element) {
-        this.log(`❌ Element not found for hover: ${selector}`);
+        this.log(`❌ Element not found for hover: ${target}`);
         return false;
       }
 
@@ -687,7 +1211,7 @@ class AgentServiceClass {
       element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
       element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
       
-      this.log(`✅ Hovering: ${selector}`);
+      this.log(`✅ Hovering: ${target}`);
       return true;
     } catch (error) {
       this.log(`❌ Hover failed: ${error}`);
@@ -699,9 +1223,9 @@ class AgentServiceClass {
     const startTime = Date.now();
     
     while (Date.now() - startTime < timeout) {
-      const element = document.querySelector(selector);
+      const element = await this.findElement(selector);
       if (element) {
-        await this.highlightElement(element as HTMLElement, 'Found!');
+        await this.highlightElement(element, 'Found!');
         this.log(`✅ Found element: ${selector}`);
         return true;
       }
@@ -716,9 +1240,9 @@ class AgentServiceClass {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  async doubleClick(selector: string): Promise<boolean> {
+  async doubleClick(target: string): Promise<boolean> {
     try {
-      const element = document.querySelector(selector) as HTMLElement;
+      const element = await this.findElement(target);
       if (!element) return false;
 
       await this.highlightElement(element, 'Double-clicking...', 0);
@@ -730,25 +1254,46 @@ class AgentServiceClass {
       this.showClickEffect(rect.left + rect.width / 2, rect.top + rect.height / 2);
       
       element.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      element.click();
+      element.click();
+      
       this.clearAllHighlights();
-      this.log(`✅ Double-clicked: ${selector}`);
+      this.log(`✅ Double-clicked: ${target}`);
       return true;
     } catch (error) {
       return false;
     }
   }
 
-  async pressKey(key: string, modifiers: { ctrl?: boolean; shift?: boolean; alt?: boolean } = {}): Promise<boolean> {
+  async pressKey(key: string, modifiers: { ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean } = {}): Promise<boolean> {
     try {
-      const event = new KeyboardEvent('keydown', {
+      const activeElement = document.activeElement || document.body;
+      
+      const keyEvent = new KeyboardEvent('keydown', {
         key,
-        code: key,
+        code: key.length === 1 ? `Key${key.toUpperCase()}` : key,
         ctrlKey: modifiers.ctrl,
         shiftKey: modifiers.shift,
         altKey: modifiers.alt,
+        metaKey: modifiers.meta,
+        bubbles: true,
+        cancelable: true
+      });
+      
+      activeElement.dispatchEvent(keyEvent);
+      
+      const keyupEvent = new KeyboardEvent('keyup', {
+        key,
+        code: key.length === 1 ? `Key${key.toUpperCase()}` : key,
+        ctrlKey: modifiers.ctrl,
+        shiftKey: modifiers.shift,
+        altKey: modifiers.alt,
+        metaKey: modifiers.meta,
         bubbles: true
       });
-      document.dispatchEvent(event);
+      
+      activeElement.dispatchEvent(keyupEvent);
+      
       this.log(`✅ Pressed key: ${modifiers.ctrl ? 'Ctrl+' : ''}${modifiers.shift ? 'Shift+' : ''}${modifiers.alt ? 'Alt+' : ''}${key}`);
       return true;
     } catch (error) {
@@ -756,7 +1301,7 @@ class AgentServiceClass {
     }
   }
 
-  // =================== ADVANCED PAGE ANALYSIS ===================
+  // =================== PAGE ANALYSIS ===================
 
   getPageContent(): string {
     const body = document.body;
@@ -782,16 +1327,15 @@ class AgentServiceClass {
   getButtons(): Array<{ text: string; selector: string; agentId?: string; rect?: DOMRect }> {
     const buttons: Array<{ text: string; selector: string; agentId?: string; rect?: DOMRect }> = [];
     
-    document.querySelectorAll('button, [role="button"], .btn, [data-agent-id]').forEach((el, index) => {
-      const text = el.textContent?.trim() || '';
+    document.querySelectorAll('button, [role="button"], .btn, [data-agent-id]').forEach((el) => {
+      const text = (el as HTMLElement).textContent?.trim() || '';
       const agentId = el.getAttribute('data-agent-id');
       const rect = el.getBoundingClientRect();
       
-      // Only include visible elements
       if ((text || agentId) && rect.width > 0 && rect.height > 0) {
         buttons.push({
           text: text.substring(0, 50),
-          selector: agentId ? `[data-agent-id="${agentId}"]` : `button:nth-of-type(${index + 1})`,
+          selector: agentId ? `[data-agent-id="${agentId}"]` : this.generateUniqueSelector(el as HTMLElement),
           agentId: agentId || undefined,
           rect
         });
@@ -804,15 +1348,15 @@ class AgentServiceClass {
   getLinks(): Array<{ text: string; href: string; selector: string }> {
     const links: Array<{ text: string; href: string; selector: string }> = [];
     
-    document.querySelectorAll('a[href]').forEach((el, index) => {
-      const text = el.textContent?.trim() || '';
+    document.querySelectorAll('a[href]').forEach((el) => {
+      const text = (el as HTMLElement).textContent?.trim() || '';
       const href = el.getAttribute('href') || '';
       
       if (text) {
         links.push({
           text: text.substring(0, 50),
           href,
-          selector: `a:nth-of-type(${index + 1})`
+          selector: this.generateUniqueSelector(el as HTMLElement)
         });
       }
     });
@@ -823,20 +1367,18 @@ class AgentServiceClass {
   getFormFields(): Array<{ type: string; placeholder?: string; selector: string; value?: string; label?: string }> {
     const inputs: Array<{ type: string; placeholder?: string; selector: string; value?: string; label?: string }> = [];
     
-    document.querySelectorAll('input, textarea, select').forEach((el, index) => {
+    document.querySelectorAll('input, textarea, select').forEach((el) => {
       const type = el.getAttribute('type') || el.tagName.toLowerCase();
       const placeholder = el.getAttribute('placeholder') || undefined;
       const value = (el as HTMLInputElement).value || undefined;
-      const agentId = el.getAttribute('data-agent-id');
       
-      // Try to find associated label
       const id = el.id;
       const label = id ? document.querySelector(`label[for="${id}"]`)?.textContent?.trim() : undefined;
       
       inputs.push({
         type,
         placeholder,
-        selector: agentId ? `[data-agent-id="${agentId}"]` : `input:nth-of-type(${index + 1})`,
+        selector: this.generateUniqueSelector(el as HTMLElement),
         value,
         label
       });
@@ -845,28 +1387,23 @@ class AgentServiceClass {
     return inputs.slice(0, 30);
   }
 
-  getInteractiveElements(): Array<{ type: string; text: string; selector: string; rect: DOMRect }> {
-    const elements: Array<{ type: string; text: string; selector: string; rect: DOMRect }> = [];
+  getInteractiveElements(): Array<{ type: string; text: string; selector: string; rect: DOMRect; index: number }> {
+    this.indexPageElements();
     
-    // Get all clickable elements
-    const selectors = 'button, a, input, textarea, select, [role="button"], [onclick], [data-agent-id]';
-    document.querySelectorAll(selectors).forEach((el, index) => {
-      const rect = el.getBoundingClientRect();
-      
-      // Only visible elements
-      if (rect.width > 0 && rect.height > 0 && rect.top < window.innerHeight && rect.bottom > 0) {
-        elements.push({
-          type: el.tagName.toLowerCase(),
-          text: el.textContent?.trim().substring(0, 30) || '',
-          selector: el.getAttribute('data-agent-id') 
-            ? `[data-agent-id="${el.getAttribute('data-agent-id')}"]` 
-            : `${el.tagName.toLowerCase()}:nth-of-type(${index + 1})`,
-          rect
-        });
-      }
-    });
+    const elements: Array<{ type: string; text: string; selector: string; rect: DOMRect; index: number }> = [];
     
-    return elements.slice(0, 100);
+    for (const [index, indexed] of this.indexedElements) {
+      if (index > 100) break;
+      elements.push({
+        type: indexed.type,
+        text: indexed.text,
+        selector: indexed.selector,
+        rect: indexed.rect,
+        index
+      });
+    }
+    
+    return elements;
   }
 
   getPageContext(): PageContext {
@@ -887,7 +1424,6 @@ class AgentServiceClass {
   getCurrentPanels(): string[] {
     const panels: string[] = [];
     
-    // Look for open panels in ABLE Terminal
     document.querySelectorAll('[data-panel-id], .floating-window, .panel-container, [data-testid]').forEach(el => {
       const panelId = el.getAttribute('data-panel-id') || el.getAttribute('data-testid') || '';
       if (panelId && !panels.includes(panelId)) {
@@ -895,7 +1431,6 @@ class AgentServiceClass {
       }
     });
     
-    // Also check for tab titles
     document.querySelectorAll('.tab-title, [role="tab"], .react-grid-item').forEach(el => {
       const title = el.textContent?.trim();
       if (title && title.length < 30 && !panels.includes(title)) {
@@ -910,23 +1445,29 @@ class AgentServiceClass {
     this.log('🔍 Analyzing screen...');
     await this.showScanAnimation(1500);
     
+    // Index all elements
+    this.indexPageElements();
+    this.showIndexBadges();
+    
     const elements: ScreenAnalysis['elements'] = [];
     
-    // Analyze all interactive elements
-    const interactive = this.getInteractiveElements();
-    interactive.forEach(el => {
+    for (const [index, indexed] of this.indexedElements) {
       elements.push({
-        type: el.type === 'button' || el.type === 'a' ? 'button' : 
-              el.type === 'input' || el.type === 'textarea' ? 'input' : 'text',
-        text: el.text,
-        selector: el.selector,
-        boundingBox: { x: el.rect.x, y: el.rect.y, width: el.rect.width, height: el.rect.height },
+        type: indexed.type === 'button' || indexed.type === 'link' ? 'button' : 
+              indexed.type.includes('input') || indexed.type === 'textarea' ? 'input' : 'text',
+        text: indexed.text,
+        selector: indexed.selector,
+        boundingBox: { x: indexed.rect.x, y: indexed.rect.y, width: indexed.rect.width, height: indexed.rect.height },
         isVisible: true,
-        isInteractive: true
+        isInteractive: true,
+        index
       });
-    });
+    }
 
     this.log(`✅ Found ${elements.length} interactive elements`);
+    
+    // Hide badges after a delay
+    setTimeout(() => this.clearIndexBadges(), 5000);
     
     return {
       elements,
@@ -934,8 +1475,6 @@ class AgentServiceClass {
       layoutType: 'dashboard'
     };
   }
-
-  // =================== SCREENSHOT / STATE CAPTURE ===================
 
   async screenshot(): Promise<string | null> {
     this.log('📸 Capturing page state...');
@@ -961,6 +1500,7 @@ class AgentServiceClass {
     this.clearAllHighlights();
     this.removeCursor();
     this.hideThinkingPanel();
+    this.clearIndexBadges();
   }
 }
 

@@ -1,5 +1,6 @@
 // useAgentExecutor.ts - Vercept-style Agent Executor with Visual Feedback
 // Full task execution with thinking panel, cursor animation, and step tracking
+// Implements: Smart action parsing, fallback strategies, improved error handling
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { AgentService, AgentAction, AgentTask, PageContext } from '@/services/AgentService';
@@ -8,6 +9,36 @@ import { toast } from '@/hooks/use-toast';
 
 const MAX_ACTIONS_PER_TASK = 20;
 const ACTION_TIMEOUT_MS = 30000;
+
+// Panel name mapping for natural language
+const PANEL_ALIASES: Record<string, string[]> = {
+  'tradingchart': ['trading chart', 'chart', 'กราฟ', 'tradingview', 'trading'],
+  'news': ['news', 'ข่าว', 'topnews', 'top news'],
+  'cotdata': ['cot', 'cot data', 'commitment of traders'],
+  'tradingjournal': ['journal', 'trading journal', 'บันทึก', 'diary'],
+  'calendar': ['calendar', 'ปฏิทิน', 'economic calendar'],
+  'messenger': ['messenger', 'chat', 'แชท', 'message'],
+  'canvas': ['canvas', 'whiteboard', 'กระดาน'],
+  'notes': ['notes', 'note', 'โน้ต'],
+  'marketdata': ['market data', 'market', 'ตลาด'],
+  'heatmap': ['heatmap', 'heat map', 'crypto map', 'market map'],
+  'options': ['options', 'calculator', 'เครื่องคิดเลข'],
+  'montecarlo': ['monte carlo', 'simulation', 'จำลอง'],
+  'pythoneditor': ['python', 'code', 'โค้ด', 'editor'],
+  'bloomberg': ['bloomberg', 'tv', 'live'],
+};
+
+function findPanelId(text: string): string | null {
+  const normalized = text.toLowerCase().trim();
+  
+  for (const [panelId, aliases] of Object.entries(PANEL_ALIASES)) {
+    if (aliases.some(alias => normalized.includes(alias))) {
+      return panelId;
+    }
+  }
+  
+  return null;
+}
 
 export function useAgentExecutor() {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
@@ -32,16 +63,14 @@ export function useAgentExecutor() {
 
   const parseAIResponse = useCallback((response: string): AgentTask | null => {
     try {
-      // Try to extract JSON from the response - be flexible with format
       let jsonStr = response;
       
-      // Remove markdown code blocks if present
+      // Remove markdown code blocks
       jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
       
       // Try to find JSON object
       const jsonMatch = jsonStr.match(/\{[\s\S]*"goal"[\s\S]*"actions"[\s\S]*\}/);
       if (!jsonMatch) {
-        // Try alternative: find any JSON object with actions
         const altMatch = jsonStr.match(/\{[\s\S]*"actions"\s*:\s*\[[\s\S]*\]\s*\}/);
         if (!altMatch) {
           addLog('❌ No valid JSON found in AI response');
@@ -60,13 +89,25 @@ export function useAgentExecutor() {
         return null;
       }
 
-      // Validate and limit actions
-      const actions = parsed.actions.slice(0, MAX_ACTIONS_PER_TASK).map((a: any) => ({
-        type: a.type || 'wait',
-        target: a.target,
-        value: a.value,
-        description: a.description || `${a.type} ${a.target || ''}`
-      }));
+      // Validate and enhance actions
+      const actions = parsed.actions.slice(0, MAX_ACTIONS_PER_TASK).map((a: any) => {
+        const action: AgentAction = {
+          type: a.type || 'wait',
+          target: a.target,
+          value: a.value,
+          description: a.description || `${a.type} ${a.target || ''}`
+        };
+
+        // Smart panel ID resolution for openPanel actions
+        if (action.type === 'openPanel' && action.target) {
+          const resolvedPanel = findPanelId(action.target);
+          if (resolvedPanel) {
+            action.target = resolvedPanel;
+          }
+        }
+
+        return action;
+      });
 
       const task: AgentTask = {
         id: Date.now().toString(),
@@ -101,16 +142,23 @@ export function useAgentExecutor() {
       const actionPromise = (async () => {
         switch (action.type) {
           case 'click':
-            if (!action.target) return false;
+            if (!action.target) {
+              addLog('❌ No target specified for click');
+              return false;
+            }
             return await AgentService.click(action.target);
 
           case 'type':
-            if (!action.target || !action.value) return false;
+            if (!action.target || !action.value) {
+              addLog('❌ Missing target or value for type');
+              return false;
+            }
             return await AgentService.type(action.target, String(action.value));
 
           case 'scroll':
             const direction = action.value === 'up' ? 'up' : 'down';
-            return await AgentService.scroll(direction, 400);
+            const targetForScroll = action.target;
+            return await AgentService.scroll(direction, 400, targetForScroll);
 
           case 'scrollTo':
             if (!action.target) return false;
@@ -127,19 +175,22 @@ export function useAgentExecutor() {
 
           case 'openPanel':
             if (!action.target) return false;
-            const opened = openPanel(action.target);
+            // Try to resolve panel name
+            const panelToOpen = findPanelId(action.target) || action.target;
+            const opened = openPanel(panelToOpen);
             if (opened) {
-              addLog(`✅ Opened panel: ${action.target}`);
+              addLog(`✅ Opened panel: ${panelToOpen}`);
             } else {
-              addLog(`⚠️ Panel may already be open: ${action.target}`);
+              addLog(`⚠️ Panel may already be open or not found: ${panelToOpen}`);
             }
-            return true; // Don't fail if panel already open
+            return true; // Don't fail task if panel already open
 
           case 'closePanel':
             if (!action.target) return false;
-            const closed = closePanel(action.target);
+            const panelToClose = findPanelId(action.target) || action.target;
+            const closed = closePanel(panelToClose);
             if (closed) {
-              addLog(`✅ Closed panel: ${action.target}`);
+              addLog(`✅ Closed panel: ${panelToClose}`);
             }
             return true;
 
@@ -159,7 +210,35 @@ export function useAgentExecutor() {
 
           case 'pressKey':
             if (!action.value) return false;
-            return await AgentService.pressKey(String(action.value));
+            const key = String(action.value);
+            // Parse modifiers from key string like "Ctrl+C"
+            const parts = key.split('+');
+            const mainKey = parts.pop() || key;
+            const modifiers = {
+              ctrl: parts.some(p => p.toLowerCase() === 'ctrl'),
+              shift: parts.some(p => p.toLowerCase() === 'shift'),
+              alt: parts.some(p => p.toLowerCase() === 'alt'),
+              meta: parts.some(p => p.toLowerCase() === 'meta' || p.toLowerCase() === 'cmd')
+            };
+            return await AgentService.pressKey(mainKey, modifiers);
+
+          case 'navigate':
+            if (!action.target) return false;
+            window.location.href = action.target;
+            addLog(`✅ Navigating to: ${action.target}`);
+            return true;
+
+          case 'select':
+            if (!action.target || !action.value) return false;
+            // For select dropdowns
+            const selectEl = await AgentService.findElement(action.target) as HTMLSelectElement;
+            if (selectEl && selectEl.tagName === 'SELECT') {
+              selectEl.value = String(action.value);
+              selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+              addLog(`✅ Selected: ${action.value}`);
+              return true;
+            }
+            return false;
 
           default:
             addLog(`❓ Unknown action type: ${action.type}`);
@@ -187,6 +266,9 @@ export function useAgentExecutor() {
     setCurrentTask({ ...task, status: 'running', startTime: Date.now() });
     abortRef.current = false;
 
+    // Index page elements at start
+    AgentService.indexPageElements();
+
     // Show visual thinking panel
     AgentService.showThinkingPanel(
       task.goal,
@@ -203,6 +285,7 @@ export function useAgentExecutor() {
     });
 
     let success = true;
+    let lastSuccessIndex = -1;
     
     for (let i = 0; i < task.actions.length; i++) {
       if (abortRef.current) {
@@ -211,19 +294,34 @@ export function useAgentExecutor() {
         break;
       }
 
-      // Update visual thinking panel
+      // Re-index elements periodically (every 3 actions)
+      if (i > 0 && i % 3 === 0) {
+        AgentService.indexPageElements();
+      }
+
       AgentService.updateThinkingStep(i, 'active');
-      
       setCurrentTask(prev => prev ? { ...prev, currentActionIndex: i } : null);
       
       const action = task.actions[i];
-      const result = await executeAction(action);
+      let result = await executeAction(action);
       
-      // Update step status
+      // Retry logic for clicks and types (with fallback strategies)
+      if (!result && (action.type === 'click' || action.type === 'type')) {
+        addLog(`🔄 Retrying with updated element index...`);
+        AgentService.indexPageElements();
+        await AgentService.wait(500);
+        result = await executeAction(action);
+      }
+      
       AgentService.updateThinkingStep(i, result ? 'completed' : 'failed');
       
-      if (!result && action.type !== 'wait' && action.type !== 'openPanel') {
-        // Only fail for critical actions, not waits or panel opens
+      if (result) {
+        lastSuccessIndex = i;
+      }
+      
+      // Only fail for critical actions that failed
+      const criticalActions = ['click', 'type', 'select'];
+      if (!result && criticalActions.includes(action.type)) {
         success = false;
         addLog(`❌ Task failed at step ${i + 1}`);
         setCurrentTask(prev => prev ? { ...prev, status: 'failed', error: `Failed at: ${action.description}` } : null);
