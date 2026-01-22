@@ -41,7 +41,7 @@ interface Message {
 
 const ABLE3AI = () => {
   const { isReady: mcpReady, tools, executeTool } = useMCP();
-  const { executeAICommand, getAvailablePanels } = usePanelCommander();
+  const panelCommander = usePanelCommander();
   const agent = useAgent();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -282,7 +282,7 @@ const ABLE3AI = () => {
       lowerMessage.includes('panels') ||
       lowerMessage.includes('รายการ')
     ) {
-      const result = executeAICommand(message);
+      const result = panelCommander.executeAICommand(message);
       if (result.success || result.message) {
         return { handled: true, response: result.message };
       }
