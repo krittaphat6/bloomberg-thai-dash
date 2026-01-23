@@ -14,6 +14,11 @@ interface AgentOverlayProps {
   isRunning: boolean;
   currentTask: AgentTask | null;
   logs: string[];
+  loopState?: {
+    iteration: number;
+    status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped';
+    currentStep: string;
+  };
   onStop: () => void;
   onClearLogs: () => void;
 }
@@ -23,6 +28,7 @@ export const AgentOverlay: React.FC<AgentOverlayProps> = ({
   isRunning,
   currentTask,
   logs,
+  loopState,
   onStop,
   onClearLogs
 }) => {
@@ -107,24 +113,45 @@ export const AgentOverlay: React.FC<AgentOverlayProps> = ({
                 className={`text-[10px] px-2 py-0 h-5 ${
                   isRunning 
                     ? 'border-purple-400/50 text-purple-300 bg-purple-500/10' 
-                    : 'border-purple-500/30 text-purple-400'
+                    : loopState?.status === 'completed' 
+                      ? 'border-green-400/50 text-green-300 bg-green-500/10'
+                      : loopState?.status === 'failed'
+                        ? 'border-red-400/50 text-red-300 bg-red-500/10'
+                        : 'border-purple-500/30 text-purple-400'
                 }`}
               >
-                {currentTask?.status === 'planning' ? '🧠 Planning' :
+                {loopState?.status === 'running' ? `🔄 Loop ${loopState.iteration}` :
+                 loopState?.status === 'completed' ? '✅ Done' :
+                 loopState?.status === 'failed' ? '❌ Failed' :
+                 loopState?.status === 'stopped' ? '⏹️ Stopped' :
+                 currentTask?.status === 'planning' ? '🧠 Planning' :
                  isRunning ? '▶️ Running' : '⏸️ Ready'}
               </Badge>
             </div>
             
-            {currentTask && (
+            {/* Show loop step or task goal */}
+            {loopState?.status === 'running' && loopState.currentStep ? (
+              <div className="text-xs text-cyan-300/90 max-w-[250px] truncate font-medium">
+                {loopState.currentStep}
+              </div>
+            ) : currentTask ? (
               <div className="text-xs text-purple-300/80 max-w-[200px] truncate">
                 {currentTask.goal}
               </div>
-            )}
+            ) : null}
           </div>
         </div>
 
         {/* Controls */}
         <div className="flex items-center gap-2">
+          {/* Loop iteration indicator */}
+          {loopState?.status === 'running' && (
+            <div className="flex items-center gap-1 text-xs font-mono text-cyan-300 bg-cyan-500/10 px-2 py-1 rounded border border-cyan-500/30">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>Loop {loopState.iteration}/10</span>
+            </div>
+          )}
+          
           {/* Timer */}
           {isRunning && (
             <div className="text-xs font-mono text-purple-300 bg-purple-500/10 px-2 py-1 rounded">

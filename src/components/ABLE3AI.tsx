@@ -359,45 +359,14 @@ const ABLE3AI = () => {
       let aiResponse = '';
       let model = '';
 
-      // ✅ AGENT MODE: Use Agent to execute actions
+      // ✅ AGENT MODE: Use Gemini-controlled Loop (continues until done or user stops)
       if (agent.isAgentMode && aiProvider === 'gemini' && geminiReady && !currentFile) {
-        // Get page context for Agent
-        const pageContext = agent.getPageContext();
-        const contextStr = `
-หน้าจอปัจจุบัน:
-- Panels เปิดอยู่: ${pageContext.panels.join(', ') || 'ไม่มี'}
-- Buttons: ${pageContext.buttons.slice(0, 10).map(b => b.text).join(', ')}
-`;
+        agent.addLog(`🚀 Agent Loop Started: ${currentInput}`);
+        model = '🤖 Agent Loop (Gemini)';
         
-        agent.addLog(`🧠 Processing: ${currentInput}`);
-        
-        // Ask Gemini to generate agent actions
-        const agentPrompt = `${AGENT_SYSTEM_PROMPT}
-
-${contextStr}
-
-คำสั่งจากผู้ใช้: ${currentInput}
-
-สร้าง JSON สำหรับ Agent ทำตาม:`;
-
-        const response = await GeminiService.chat(
-          agentPrompt,
-          [],
-          undefined
-        );
-
-        // Check if response contains agent actions
-        if (response.text.includes('"actions"')) {
-          model = '🤖 Agent (Gemini)';
-          
-          // Execute the agent task
-          const result = await agent.runFromAIResponse(response.text);
-          aiResponse = result;
-        } else {
-          // Regular response, not agent actions
-          aiResponse = response.text;
-          model = 'Gemini (Agent Mode)';
-        }
+        // Use the new loop-based execution that continues until completion
+        const result = await agent.runAgentLoop(currentInput);
+        aiResponse = result;
       }
       // ✅ Handle file analysis
       else if (currentFile && currentPreview) {
@@ -812,6 +781,7 @@ ${contextStr}
           isRunning={agent.isRunning}
           currentTask={agent.currentTask}
           logs={agent.logs}
+          loopState={agent.loopState}
           onStop={agent.stopAgent}
           onClearLogs={agent.clearLogs}
         />
