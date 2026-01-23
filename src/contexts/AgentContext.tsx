@@ -1,8 +1,9 @@
-// AgentContext.tsx - Global context for Vercept-style Agent Mode
+// AgentContext.tsx - Global context for Vercept-style Agent Mode with Gemini Loop Control
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { AgentService, AgentAction, AgentTask, PageContext } from '@/services/AgentService';
 import { useAgentExecutor } from '@/hooks/useAgentExecutor';
+import { useAgentLoop } from '@/hooks/useAgentLoop';
 
 interface AgentContextType {
   isAgentMode: boolean;
@@ -13,6 +14,13 @@ interface AgentContextType {
   executeAction: (action: AgentAction) => Promise<boolean>;
   executeTask: (task: AgentTask) => Promise<void>;
   runFromAIResponse: (response: string) => Promise<string>;
+  // ✅ NEW: Gemini-controlled loop that continues until done
+  runAgentLoop: (goal: string) => Promise<string>;
+  loopState: {
+    iteration: number;
+    status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped';
+    currentStep: string;
+  };
   stopAgent: () => void;
   clearLogs: () => void;
   addLog: (log: string) => void;
@@ -40,6 +48,7 @@ interface AgentProviderProps {
 export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
   const [isAgentMode, setIsAgentMode] = useState(false);
   const executor = useAgentExecutor();
+  const agentLoop = useAgentLoop();
 
   const highlightElement = useCallback(async (selector: string, label?: string) => {
     const element = document.querySelector(selector) as HTMLElement;
@@ -77,19 +86,40 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
     }
   }, [executor]);
 
+  // Combined stop function
+  const stopAgent = useCallback(() => {
+    executor.stopAgent();
+    agentLoop.stopAgent();
+  }, [executor, agentLoop]);
+
+  // Combined logs
+  const combinedLogs = [...executor.logs, ...agentLoop.state.logs];
+
+  // Combined isRunning
+  const isRunning = executor.isRunning || agentLoop.isRunning;
+
   return (
     <AgentContext.Provider
       value={{
         isAgentMode,
         setAgentMode: handleSetAgentMode,
-        isRunning: executor.isRunning,
+        isRunning,
         currentTask: executor.currentTask,
-        logs: executor.logs,
+        logs: combinedLogs,
         executeAction: executor.executeAction,
         executeTask: executor.executeTask,
         runFromAIResponse: executor.runFromAIResponse,
-        stopAgent: executor.stopAgent,
-        clearLogs: executor.clearLogs,
+        runAgentLoop: agentLoop.runAgentLoop,
+        loopState: {
+          iteration: agentLoop.state.iteration,
+          status: agentLoop.state.status,
+          currentStep: agentLoop.state.currentStep
+        },
+        stopAgent,
+        clearLogs: () => {
+          executor.clearLogs();
+          agentLoop.clearLogs();
+        },
         addLog: executor.addLog,
         getPageContext: executor.getPageContext,
         highlightElement,
