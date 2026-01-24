@@ -92,7 +92,296 @@ class AgentServiceClass {
     this.actionListeners.forEach(cb => cb(logMessage));
   }
 
-  // =================== SMART ELEMENT FINDING (browser-use style) ===================
+  // =================== VERCEPT SMART ELEMENT FINDING ===================
+
+  /**
+   * Multi-strategy element finder with confidence scoring
+   * Based on browser-use and Stagehand patterns for Vercept-style automation
+   */
+  async findElementSmart(target: string, options?: {
+    timeout?: number;
+    retries?: number;
+    fuzzyMatch?: boolean;
+  }): Promise<{ element: HTMLElement | null; confidence: number; method: string }> {
+    const { timeout = 5000, retries = 3, fuzzyMatch = true } = options || {};
+    
+    const strategies: Array<() => { element: HTMLElement | null; confidence: number; method: string } | null> = [
+      // Strategy 1: Direct CSS selector
+      () => this.trySelector(target),
+      // Strategy 2: data-agent-id
+      () => this.tryDataAttribute('data-agent-id', target),
+      // Strategy 3: data-testid
+      () => this.tryDataAttribute('data-testid', target),
+      // Strategy 4: aria-label
+      () => this.tryAriaLabel(target),
+      // Strategy 5: Visible text (exact)
+      () => this.tryVisibleText(target, false),
+      // Strategy 6: Visible text (fuzzy)
+      () => fuzzyMatch ? this.tryVisibleText(target, true) : null,
+      // Strategy 7: Indexed elements
+      () => this.tryIndexedElement(target),
+      // Strategy 8: Shadow DOM traversal
+      () => this.tryShadowDOM(target),
+      // Strategy 9: React Portal detection
+      () => this.tryReactPortals(target),
+      // Strategy 10: XPath fallback
+      () => this.tryXPath(target),
+    ];
+
+    for (let attempt = 0; attempt < retries; attempt++) {
+      for (const strategy of strategies) {
+        try {
+          const result = strategy();
+          if (result?.element && this.isElementInteractable(result.element)) {
+            this.log(`🎯 Found via ${result.method} (${result.confidence}% confidence)`);
+            return result;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      await this.wait(300);
+      this.indexPageElements(); // Re-index after wait
+    }
+    
+    return { element: null, confidence: 0, method: 'none' };
+  }
+
+  /**
+   * Check if element is truly interactable (Vercept validation)
+   */
+  isElementInteractable(element: HTMLElement): boolean {
+    if (!element) return false;
+    
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    
+    return (
+      rect.width > 0 &&
+      rect.height > 0 &&
+      style.visibility !== 'hidden' &&
+      style.display !== 'none' &&
+      style.pointerEvents !== 'none' &&
+      !element.hasAttribute('disabled') &&
+      element.getAttribute('aria-hidden') !== 'true' &&
+      parseFloat(style.opacity) > 0
+    );
+  }
+
+  /**
+   * Strategy: Try CSS selector
+   */
+  private trySelector(selector: string): { element: HTMLElement | null; confidence: number; method: string } {
+    try {
+      const el = document.querySelector(selector) as HTMLElement;
+      if (el && this.isElementVisible(el)) {
+        return { element: el, confidence: 100, method: 'css-selector' };
+      }
+    } catch (e) {
+      // Invalid selector
+    }
+    return { element: null, confidence: 0, method: 'css-selector' };
+  }
+
+  /**
+   * Strategy: Try data attribute
+   */
+  private tryDataAttribute(attr: string, value: string): { element: HTMLElement | null; confidence: number; method: string } {
+    const el = document.querySelector(`[${attr}="${value}"]`) as HTMLElement ||
+               document.querySelector(`[${attr}*="${value}" i]`) as HTMLElement;
+    if (el && this.isElementVisible(el)) {
+      return { element: el, confidence: 95, method: `data-attr-${attr}` };
+    }
+    return { element: null, confidence: 0, method: `data-attr-${attr}` };
+  }
+
+  /**
+   * Strategy: Try aria-label
+   */
+  private tryAriaLabel(target: string): { element: HTMLElement | null; confidence: number; method: string } {
+    const el = document.querySelector(`[aria-label="${target}" i]`) as HTMLElement ||
+               document.querySelector(`[aria-label*="${target}" i]`) as HTMLElement;
+    if (el && this.isElementVisible(el)) {
+      return { element: el, confidence: 90, method: 'aria-label' };
+    }
+    return { element: null, confidence: 0, method: 'aria-label' };
+  }
+
+  /**
+   * Strategy: Try visible text with optional fuzzy matching
+   */
+  private tryVisibleText(target: string, fuzzy: boolean): { element: HTMLElement | null; confidence: number; method: string } {
+    const el = this.findElementByText(target);
+    if (el) {
+      return { element: el, confidence: fuzzy ? 75 : 85, method: fuzzy ? 'fuzzy-text' : 'exact-text' };
+    }
+    return { element: null, confidence: 0, method: fuzzy ? 'fuzzy-text' : 'exact-text' };
+  }
+
+  /**
+   * Strategy: Try indexed element
+   */
+  private tryIndexedElement(target: string): { element: HTMLElement | null; confidence: number; method: string } {
+    const indexMatch = target.match(/^\[?(\d+)\]?$/);
+    if (indexMatch) {
+      const index = parseInt(indexMatch[1]);
+      const el = this.findElementByIndex(index);
+      if (el) {
+        return { element: el, confidence: 90, method: 'index' };
+      }
+    }
+    return { element: null, confidence: 0, method: 'index' };
+  }
+
+  /**
+   * Strategy: Shadow DOM traversal
+   */
+  private tryShadowDOM(target: string): { element: HTMLElement | null; confidence: number; method: string } {
+    const shadowHosts = document.querySelectorAll('*');
+    for (const host of shadowHosts) {
+      if (host.shadowRoot) {
+        try {
+          const found = host.shadowRoot.querySelector(target) as HTMLElement;
+          if (found && this.isElementVisible(found)) {
+            return { element: found, confidence: 85, method: 'shadow-dom' };
+          }
+        } catch (e) {
+          // Invalid selector for shadow DOM
+        }
+      }
+    }
+    return { element: null, confidence: 0, method: 'shadow-dom' };
+  }
+
+  /**
+   * Strategy: React Portal detection (modals, tooltips, etc.)
+   */
+  private tryReactPortals(target: string): { element: HTMLElement | null; confidence: number; method: string } {
+    const portalSelectors = [
+      '[data-radix-portal]',
+      '[data-state="open"]',
+      '[role="dialog"]',
+      '[role="menu"]',
+      '[role="listbox"]',
+      '.portal-container',
+      '#portal-root',
+      '#modal-root'
+    ];
+    
+    for (const portalSelector of portalSelectors) {
+      const portals = document.querySelectorAll(portalSelector);
+      for (const portal of portals) {
+        try {
+          const found = portal.querySelector(target) as HTMLElement;
+          if (found && this.isElementVisible(found)) {
+            return { element: found, confidence: 90, method: 'react-portal' };
+          }
+        } catch (e) {
+          // Continue to text search
+        }
+        
+        // Also try text match within portal
+        const textMatch = this.findElementByTextInContainer(portal as HTMLElement, target);
+        if (textMatch) {
+          return { element: textMatch, confidence: 85, method: 'react-portal-text' };
+        }
+      }
+    }
+    return { element: null, confidence: 0, method: 'react-portal' };
+  }
+
+  /**
+   * Strategy: XPath fallback
+   */
+  private tryXPath(target: string): { element: HTMLElement | null; confidence: number; method: string } {
+    try {
+      // Try common XPath patterns
+      const xpaths = [
+        `//*[contains(text(), "${target}")]`,
+        `//*[contains(@class, "${target}")]`,
+        `//button[contains(., "${target}")]`,
+        `//a[contains(., "${target}")]`,
+      ];
+      
+      for (const xpath of xpaths) {
+        const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+        const el = result.singleNodeValue as HTMLElement;
+        if (el && this.isElementVisible(el)) {
+          return { element: el, confidence: 70, method: 'xpath' };
+        }
+      }
+    } catch (e) {
+      // XPath error
+    }
+    return { element: null, confidence: 0, method: 'xpath' };
+  }
+
+  /**
+   * Find element by text within a container
+   */
+  findElementByTextInContainer(container: HTMLElement, searchText: string): HTMLElement | null {
+    const normalizedSearch = searchText.toLowerCase().trim();
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT);
+    
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const element = node as HTMLElement;
+      const text = this.getElementVisibleText(element).toLowerCase();
+      
+      if (text.includes(normalizedSearch) && this.isInteractiveElement(element)) {
+        return element;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Fuzzy text matching with Levenshtein distance
+   */
+  fuzzyTextMatch(text: string, target: string, threshold = 0.7): boolean {
+    const normalize = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ');
+    const a = normalize(text);
+    const b = normalize(target);
+    
+    if (a.includes(b) || b.includes(a)) return true;
+    
+    // Simple Levenshtein-based similarity
+    const maxLen = Math.max(a.length, b.length);
+    if (maxLen === 0) return true;
+    
+    const distance = this.levenshteinDistance(a, b);
+    const similarity = 1 - distance / maxLen;
+    return similarity >= threshold;
+  }
+
+  /**
+   * Calculate Levenshtein distance between two strings
+   */
+  levenshteinDistance(a: string, b: string): number {
+    const matrix: number[][] = [];
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+    return matrix[b.length][a.length];
+  }
+
+  // =================== ELEMENT INDEXING ===================
 
   /**
    * Index all interactive elements on the page for AI reference

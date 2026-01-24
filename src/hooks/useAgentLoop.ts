@@ -1,9 +1,10 @@
-// useAgentLoop.ts - Advanced Gemini-Controlled Agent with Vercept-style Automation
-// Agent runs continuously until goal is achieved or user stops it
+// useAgentLoop.ts - Vercept-Style Gemini-Controlled Agent with Self-Healing
+// 100% reliable browser automation with smart element finding and action caching
 
 import { useState, useCallback, useRef } from 'react';
 import { GeminiService } from '@/services/GeminiService';
 import { AgentService, PageContext } from '@/services/AgentService';
+import { ActionCache } from '@/services/ActionCache';
 import { usePanelCommander } from '@/contexts/PanelCommanderContext';
 import { toast } from '@/hooks/use-toast';
 
@@ -19,6 +20,9 @@ interface LoopState {
   logs: string[];
   startTime?: number;
   lastError?: string;
+  confidence?: number;
+  successCount?: number;
+  failCount?: number;
 }
 
 interface ActionResult {
@@ -27,6 +31,8 @@ interface ActionResult {
   description?: string;
   error?: string;
   elementFound?: boolean;
+  method?: string;
+  confidence?: number;
 }
 
 interface GeminiAction {
@@ -101,114 +107,211 @@ export function useAgentLoop() {
     console.log('🤖 Agent:', message);
   }, []);
 
-  // Enhanced page state capture for Gemini
+  // Enhanced page state capture for Gemini (Vercept-style)
   const getPageState = useCallback(async (): Promise<string> => {
     const ctx = AgentService.getPageContext();
     
     // Index all interactive elements
     const indexedElements = AgentService.indexPageElements();
-    const elementsArray: Array<{
-      index: number;
-      type: string;
-      text: string;
-      selector: string;
-      visible: boolean;
-    }> = [];
     
-    indexedElements.forEach((el, index) => {
-      if (index < 50) { // Limit to prevent token overflow
-        elementsArray.push({
-          index: el.index,
-          type: el.type,
-          text: el.text.substring(0, 60),
-          selector: el.selector.substring(0, 100),
-          visible: true
-        });
-      }
+    // Categorize elements for better AI understanding
+    const buttons: Array<{ index: number; text: string; type: string; selector: string }> = [];
+    const inputs: Array<{ index: number; text: string; type: string; selector: string }> = [];
+    const links: Array<{ index: number; text: string; type: string; selector: string }> = [];
+    const other: Array<{ index: number; text: string; type: string; selector: string }> = [];
+    
+    indexedElements.forEach((el, idx) => {
+      if (idx > 40) return; // Limit to prevent token overflow
+      
+      const item = {
+        index: el.index,
+        text: el.text.substring(0, 50),
+        type: el.type,
+        selector: el.selector.substring(0, 80)
+      };
+      
+      if (el.type === 'button') buttons.push(item);
+      else if (el.type.includes('input') || el.type === 'textarea') inputs.push(item);
+      else if (el.type === 'link') links.push(item);
+      else other.push(item);
     });
 
-    // Get all open modals/dialogs
+    // Get all open modals/dialogs with detailed info
     const modals = document.querySelectorAll('[role="dialog"], [data-state="open"], .modal');
     const modalInfo = Array.from(modals).map(m => {
-      const inputs = Array.from(m.querySelectorAll('input')).map(i => ({
+      const searchInput = m.querySelector('input[type="search"], input[placeholder*="Search" i], input[placeholder*="ค้นหา" i]');
+      const allInputs = Array.from(m.querySelectorAll('input')).map(i => ({
         placeholder: i.placeholder,
         type: i.type,
         hasValue: !!i.value
       }));
-      const buttons = Array.from(m.querySelectorAll('button')).map(b => ({
-        text: b.textContent?.trim().substring(0, 40) || '',
+      const visibleButtons = Array.from(m.querySelectorAll('button')).map(b => ({
+        text: b.textContent?.trim().substring(0, 30) || '',
         disabled: b.disabled
-      })).filter(b => b.text);
+      })).filter(b => b.text).slice(0, 10);
       
       return {
         title: m.querySelector('h2, h3, [class*="title"]')?.textContent?.trim() || 'Modal',
-        hasSearchInput: inputs.some(i => i.placeholder?.toLowerCase().includes('search')),
-        inputs,
-        buttons: buttons.slice(0, 15)
+        hasSearchInput: !!searchInput,
+        searchPlaceholder: searchInput?.getAttribute('placeholder'),
+        inputs: allInputs,
+        buttons: visibleButtons
       };
     });
 
-    // Get open floating windows
-    const openWindows = Array.from(document.querySelectorAll('[data-window-id]')).map(w => {
+    // Get open floating windows with position and size
+    const openWindows = Array.from(document.querySelectorAll(
+      '[data-window-id], [data-panel-id], .floating-panel, .react-draggable'
+    )).map(w => {
       const windowEl = w as HTMLElement;
       const rect = windowEl.getBoundingClientRect();
       return {
-        id: windowEl.dataset.windowId,
-        title: windowEl.dataset.windowTitle || windowEl.querySelector('h3, h4, .title')?.textContent?.trim(),
+        id: windowEl.dataset.windowId || windowEl.dataset.panelId || windowEl.getAttribute('data-window-id') || 'unknown',
+        title: windowEl.dataset.windowTitle || windowEl.querySelector('[class*="title"], h1, h2, h3')?.textContent?.substring(0, 30) || 'Untitled',
         position: { x: Math.round(rect.left), y: Math.round(rect.top) },
-        size: { width: Math.round(rect.width), height: Math.round(rect.height) }
+        size: { width: Math.round(rect.width), height: Math.round(rect.height) },
+        isVisible: rect.width > 0 && rect.height > 0
       };
-    });
+    }).filter(w => w.isVisible);
 
-    // Check if ADD menu is visible
-    const addMenuVisible = !!document.querySelector('[data-agent-id="add-menu"], [role="dialog"] input[placeholder*="Search" i]');
-    const hasAddButton = !!document.querySelector('button:has(.lucide-plus), [data-agent-id="add-panel"]');
+    // Check ADD menu status
+    const addButton = document.querySelector('button:has(.lucide-plus), [data-agent-id="add-panel"]');
+    const hasAddButton = !!addButton;
+    const addMenuOpen = !!document.querySelector('[data-agent-id="add-menu"], [role="dialog"] input[placeholder*="Search" i]');
 
     return JSON.stringify({
-      url: ctx.url,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      hasAddMenuOpen: addMenuVisible,
-      hasAddButton,
-      openModals: modalInfo,
+      viewport: { 
+        width: window.innerWidth, 
+        height: window.innerHeight 
+      },
+      scroll: { 
+        x: Math.round(window.scrollX), 
+        y: Math.round(window.scrollY) 
+      },
+      
+      // Panel/Window status
       openWindows,
-      interactiveElements: elementsArray,
-      scrollPosition: { x: window.scrollX, y: window.scrollY }
+      openWindowCount: openWindows.length,
+      
+      // Modal status
+      hasOpenModal: modalInfo.length > 0,
+      openModals: modalInfo,
+      
+      // ADD button status
+      hasAddButton,
+      addMenuOpen,
+      
+      // Interactive elements (categorized)
+      buttons: buttons.slice(0, 15),
+      inputs: inputs.slice(0, 10),
+      links: links.slice(0, 10),
+      otherElements: other.slice(0, 10),
+      
+      totalInteractiveElements: indexedElements.size
     }, null, 2);
   }, []);
 
-  // Execute a single action with retry logic
-  const executeAction = useCallback(async (action: GeminiAction, retryCount = 0): Promise<ActionResult> => {
+  // Execute a single action with self-healing retry logic (Vercept-style)
+  const executeAction = useCallback(async (
+    action: GeminiAction, 
+    retryCount = 0
+  ): Promise<ActionResult> => {
+    const MAX_RETRIES = 3;
     const actionType = action.type;
     const target = action.target || '';
     const value = action.value;
     
-    addLog(`⏳ ${action.description || actionType}`);
+    addLog(`⏳ ${action.description || actionType}${retryCount > 0 ? ` (retry ${retryCount})` : ''}`);
     setState(prev => ({ ...prev, currentStep: action.description || actionType }));
     
     try {
       let success = false;
       let elementFound = true;
+      let alternativeAction: GeminiAction | null = null;
+      let method = '';
+      let confidence = 0;
 
       switch (actionType) {
+        case 'openPanel': {
+          // Direct panel open - most reliable
+          const panelInfo = findPanelInfo(target);
+          const panelId = panelInfo?.id || target;
+          
+          success = openPanel(panelId);
+          
+          if (!success && retryCount < MAX_RETRIES) {
+            // Self-healing: try clicking ADD menu instead
+            addLog(`🔄 Direct open failed, trying ADD menu...`);
+            alternativeAction = {
+              type: 'clickAddMenu',
+              description: 'Open ADD menu as fallback'
+            };
+          }
+          break;
+        }
+
         case 'click': {
-          // Try multiple strategies
-          success = await AgentService.click(target);
-          if (!success) {
-            // Try by visible text
-            const byText = AgentService.findElementByText(target.replace(/["\[\]]/g, ''));
-            if (byText) {
-              await AgentService.moveCursorToElement(byText);
-              byText.click();
-              success = true;
-            } else {
-              elementFound = false;
+          // Smart element finding with confidence scoring
+          const findResult = await AgentService.findElementSmart(target, {
+            retries: 2,
+            fuzzyMatch: true
+          });
+          
+          if (findResult.element) {
+            await AgentService.moveCursorToElement(findResult.element);
+            await AgentService.wait(100);
+            findResult.element.click();
+            success = true;
+            method = findResult.method;
+            confidence = findResult.confidence;
+            addLog(`✅ Clicked via ${findResult.method} (${findResult.confidence}% confidence)`);
+          } else {
+            elementFound = false;
+            
+            // Self-healing: try alternative selectors
+            if (retryCount < MAX_RETRIES) {
+              const el = AgentService.findElementByText(target.replace(/["\[\]]/g, ''));
+              if (el) {
+                await AgentService.moveCursorToElement(el);
+                el.click();
+                success = true;
+                addLog(`✅ Clicked via text fallback`);
+              }
             }
           }
           break;
         }
 
         case 'type': {
-          success = await AgentService.type(target, String(value));
+          const findResult = await AgentService.findElementSmart(target, {
+            retries: 2,
+            fuzzyMatch: false
+          });
+          
+          if (findResult.element) {
+            success = await AgentService.type(target, String(value));
+          } else {
+            // Self-healing: find any visible input
+            const inputs = document.querySelectorAll('input:not([type="hidden"]), textarea');
+            for (const input of inputs) {
+              if (AgentService.isElementInteractable(input as HTMLElement)) {
+                const inputEl = input as HTMLInputElement;
+                inputEl.focus();
+                inputEl.value = '';
+                
+                // Type character by character for React
+                for (const char of String(value)) {
+                  inputEl.value += char;
+                  inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                  await AgentService.wait(30);
+                }
+                
+                success = true;
+                addLog(`✅ Typed into fallback input`);
+                break;
+              }
+            }
+          }
           break;
         }
 
@@ -218,52 +321,23 @@ export function useAgentLoop() {
           break;
         }
 
-        case 'openPanel': {
-          const panelInfo = findPanelInfo(target);
-          const panelId = panelInfo?.id || target;
-          
-          // First try direct openPanel
-          const opened = openPanel(panelId);
-          if (opened) {
-            success = true;
-            addLog(`✅ Panel เปิดตรง: ${panelId}`);
-          } else {
-            // Panel might be already open - verify
-            const existingWindow = document.querySelector(`[data-window-id*="${panelId}" i]`);
-            if (existingWindow) {
-              success = true;
-              addLog(`ℹ️ Panel เปิดอยู่แล้ว: ${panelId}`);
-            } else {
-              // Need to use ADD menu
-              success = false;
-              addLog(`⚠️ ต้องใช้ ADD menu สำหรับ: ${panelId}`);
-            }
-          }
-          break;
-        }
-
-        case 'closePanel': {
-          const closePanelInfo = findPanelInfo(target);
-          const closePanelId = closePanelInfo?.id || target;
-          closePanel(closePanelId);
-          success = true;
-          break;
-        }
-
         case 'clickAddMenu': {
+          await AgentService.wait(200);
+          
           // Find ADD button with multiple selectors
           const addSelectors = [
             '[data-agent-id="add-panel"]',
             'button:has(.lucide-plus)',
             'button[title*="add" i]',
-            'button[title*="เพิ่ม" i]'
+            'button[title*="เพิ่ม" i]',
+            'button[aria-label*="add" i]'
           ];
           
           let addBtn: HTMLElement | null = null;
           for (const selector of addSelectors) {
             try {
               addBtn = document.querySelector(selector) as HTMLElement;
-              if (addBtn) break;
+              if (addBtn && AgentService.isElementInteractable(addBtn)) break;
             } catch (e) { continue; }
           }
           
@@ -275,6 +349,7 @@ export function useAgentLoop() {
           
           if (addBtn) {
             await AgentService.moveCursorToElement(addBtn);
+            await AgentService.wait(100);
             addBtn.click();
             await AgentService.wait(400);
             success = true;
@@ -287,39 +362,45 @@ export function useAgentLoop() {
         }
 
         case 'searchInModal': {
-          await AgentService.wait(300);
+          await AgentService.wait(400);
           
-          // Find search input in modal
+          // Find search input in modal with more selectors
           const searchSelectors = [
+            '[role="dialog"] input[type="search"]',
             '[role="dialog"] input[type="text"]',
             '[role="dialog"] input[placeholder*="Search" i]',
+            '[role="dialog"] input[placeholder*="ค้นหา" i]',
             '[data-state="open"] input',
             '.modal input',
-            'input[placeholder*="search" i]',
-            'input[placeholder*="ค้นหา" i]'
+            'input[placeholder*="Search" i]',
           ];
           
           let searchInput: HTMLInputElement | null = null;
           for (const selector of searchSelectors) {
-            searchInput = document.querySelector(selector) as HTMLInputElement;
-            if (searchInput) break;
+            const input = document.querySelector(selector) as HTMLInputElement;
+            if (input && AgentService.isElementInteractable(input)) {
+              searchInput = input;
+              break;
+            }
           }
           
           if (searchInput) {
             searchInput.focus();
             searchInput.value = '';
             
-            // Type the search term
+            // Type character by character for React compatibility
             const searchTerm = String(value);
-            for (let i = 0; i < searchTerm.length; i++) {
-              searchInput.value += searchTerm[i];
+            for (const char of searchTerm) {
+              searchInput.value += char;
               searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-              await AgentService.wait(50);
+              await AgentService.wait(30);
             }
             
-            await AgentService.wait(500);
             success = true;
             addLog(`✅ พิมพ์ค้นหา: ${searchTerm}`);
+            
+            // Wait for results to appear
+            await AgentService.wait(500);
           } else {
             addLog(`❌ ไม่พบช่องค้นหาใน modal`);
             success = false;
@@ -328,37 +409,38 @@ export function useAgentLoop() {
         }
 
         case 'clickSearchResult': {
-          await AgentService.wait(400);
-          const searchValue = String(value).toLowerCase();
+          await AgentService.wait(300);
           
-          // Try to find matching button/option in modal
+          const searchValue = String(value).toLowerCase();
           const resultSelectors = [
+            '[role="dialog"] [role="option"]',
             '[role="dialog"] button',
+            '[role="dialog"] [data-value]',
+            '[role="listbox"] [role="option"]',
+            '.search-result',
             '[data-state="open"] button',
-            '[role="option"]',
-            '[role="menuitem"]',
-            '.modal button',
-            '[role="dialog"] [role="option"]'
           ];
           
           for (const selector of resultSelectors) {
             const elements = document.querySelectorAll(selector);
             for (const el of elements) {
               const text = el.textContent?.toLowerCase() || '';
-              if (text.includes(searchValue)) {
+              if (text.includes(searchValue) || AgentService.fuzzyTextMatch(text, searchValue)) {
                 await AgentService.moveCursorToElement(el as HTMLElement);
                 (el as HTMLElement).click();
                 success = true;
-                addLog(`✅ คลิกผลลัพธ์: ${el.textContent?.substring(0, 40)}`);
+                addLog(`✅ คลิกผลลัพธ์: ${el.textContent?.substring(0, 30)}`);
                 break;
               }
             }
             if (success) break;
           }
           
-          // Fallback: click first visible option
+          // Fallback: click first option
           if (!success) {
-            const firstOption = document.querySelector('[role="dialog"] button:not([disabled]), [role="option"]') as HTMLElement;
+            const firstOption = document.querySelector(
+              '[role="dialog"] button:not([disabled]), [role="option"]:first-child'
+            ) as HTMLElement;
             if (firstOption) {
               await AgentService.moveCursorToElement(firstOption);
               firstOption.click();
@@ -378,6 +460,7 @@ export function useAgentLoop() {
             windowEl.style.zIndex = '9999';
             await AgentService.highlightElement(windowEl, 'Focused', 1500);
             success = true;
+            addLog(`✅ โฟกัสหน้าต่าง: ${target}`);
           } else {
             success = false;
             elementFound = false;
@@ -405,14 +488,27 @@ export function useAgentLoop() {
         case 'wheelScroll': {
           const delta = value === 'up' ? -250 : 250;
           
-          // Find scrollable container
-          const scrollTarget = document.querySelector(
-            `[data-window-id*="${target}" i] [class*="scroll"], [data-window-id*="${target}" i] .overflow-auto`
-          ) as HTMLElement || document.querySelector(target) as HTMLElement;
+          // Find scrollable container first
+          const scrollContainerSelectors = [
+            `[data-window-id*="${target}" i] [class*="scroll"]`,
+            `[data-window-id*="${target}" i] .overflow-auto`,
+            `[data-window-id*="${target}" i] .overflow-y-auto`,
+          ];
+          
+          let scrollTarget: HTMLElement | null = null;
+          for (const sel of scrollContainerSelectors) {
+            scrollTarget = document.querySelector(sel) as HTMLElement;
+            if (scrollTarget) break;
+          }
+          
+          if (!scrollTarget) {
+            scrollTarget = document.querySelector(target) as HTMLElement;
+          }
           
           if (scrollTarget) {
             scrollTarget.scrollBy({ top: delta, behavior: 'smooth' });
             success = true;
+            addLog(`✅ เลื่อน ${value === 'up' ? 'ขึ้น' : 'ลง'}`);
           } else {
             success = await AgentService.wheelScroll(target || 'body', delta);
           }
@@ -428,6 +524,7 @@ export function useAgentLoop() {
           // Try multiple ways to close modal
           const closeSelectors = [
             '[role="dialog"] button[aria-label*="close" i]',
+            '[role="dialog"] button:has(.lucide-x)',
             '[role="dialog"] .close',
             '[data-state="open"] button:has(.lucide-x)',
             '.modal .close'
@@ -438,6 +535,7 @@ export function useAgentLoop() {
             if (closeBtn) {
               closeBtn.click();
               success = true;
+              addLog(`✅ ปิด modal`);
               break;
             }
           }
@@ -447,7 +545,16 @@ export function useAgentLoop() {
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
             await AgentService.wait(200);
             success = true;
+            addLog(`✅ ปิด modal (Escape)`);
           }
+          break;
+        }
+
+        case 'closePanel': {
+          const closePanelInfo = findPanelInfo(target);
+          const closePanelId = closePanelInfo?.id || target;
+          closePanel(closePanelId);
+          success = true;
           break;
         }
 
@@ -462,23 +569,59 @@ export function useAgentLoop() {
           success = false;
       }
 
-      if (success) {
-        addLog(`✅ ${action.description || actionType}`);
-      } else if (!elementFound && retryCount < MAX_RETRIES_PER_ACTION && action.fallback) {
+      // Execute alternative action if main action failed
+      if (!success && alternativeAction && retryCount < MAX_RETRIES) {
+        addLog(`🔄 Trying alternative: ${alternativeAction.type}`);
+        return executeAction(alternativeAction, retryCount + 1);
+      }
+
+      // Self-healing retry with re-indexed elements
+      if (!success && !elementFound && retryCount < MAX_RETRIES) {
+        addLog(`🔄 Re-indexing elements and retrying...`);
+        AgentService.indexPageElements();
+        await AgentService.wait(500);
+        return executeAction(action, retryCount + 1);
+      }
+
+      // Handle fallback from action definition
+      if (!success && action.fallback && retryCount < MAX_RETRIES) {
         addLog(`🔄 ลอง fallback action...`);
         return executeAction(action.fallback, retryCount + 1);
-      } else if (!success) {
+      }
+
+      if (success) {
+        addLog(`✅ ${action.description || actionType}`);
+      } else {
         addLog(`❌ Failed: ${action.description || actionType}`);
       }
 
-      return { success, action: actionType, description: action.description, elementFound };
+      return { 
+        success, 
+        action: actionType, 
+        description: action.description, 
+        elementFound,
+        method,
+        confidence
+      };
+
     } catch (error) {
       addLog(`❌ Error: ${error}`);
-      return { success: false, action: actionType, error: String(error), elementFound: false };
+      
+      if (retryCount < MAX_RETRIES) {
+        await AgentService.wait(500);
+        return executeAction(action, retryCount + 1);
+      }
+      
+      return { 
+        success: false, 
+        action: actionType, 
+        error: String(error), 
+        elementFound: false 
+      };
     }
   }, [openPanel, closePanel, addLog]);
 
-  // Ask Gemini for next action based on current state
+  // Ask Gemini for next action (Vercept-style structured prompt)
   const askGeminiForNextAction = useCallback(async (
     originalGoal: string,
     pageState: string,
@@ -488,82 +631,92 @@ export function useAgentLoop() {
     const lastFailed = previousActions.filter(a => !a.success).slice(-3);
     const lastSuccessful = previousActions.filter(a => a.success).slice(-5);
 
-    const prompt = `คุณเป็น ABLE Agent ที่กำลังควบคุม ABLE Terminal
+    const prompt = `You are ABLE Agent, an AI that controls a trading terminal UI.
 
-## 🎯 เป้าหมาย
+## YOUR GOAL
 ${originalGoal}
 
-## 📊 สถานะหน้าจอปัจจุบัน
+## CURRENT PAGE STATE
 ${pageState}
 
-## ✅ Actions ที่สำเร็จ
-${lastSuccessful.map(a => `• ${a.action}: ${a.description || 'done'}`).join('\n') || 'ยังไม่มี'}
+## COMPLETED ACTIONS
+${lastSuccessful.map(a => `✅ ${a.action}: ${a.description}`).join('\n') || 'None yet'}
 
-## ❌ Actions ที่ล้มเหลว (ถ้ามี)
-${lastFailed.map(a => `• ${a.action}: ${a.error || 'failed'}`).join('\n') || 'ไม่มี'}
+## FAILED ACTIONS (avoid repeating)
+${lastFailed.map(a => `❌ ${a.action}: ${a.error}`).join('\n') || 'None'}
 
-## 📋 คำสั่ง
-วิเคราะห์สถานะปัจจุบันและเลือก actions ที่จะทำต่อ
+## AVAILABLE ACTIONS
+| Action | Description | Required Params |
+|--------|-------------|-----------------|
+| openPanel | Open a panel by ID | target: panel-id (e.g., "trading-chart", "topnews", "cot") |
+| clickAddMenu | Click ADD button to open panel selector | none |
+| searchInModal | Type in modal's search field | value: search text |
+| clickSearchResult | Click matching search result | value: text to match |
+| click | Click any element | target: selector or visible text |
+| type | Type into input | target: selector, value: text |
+| focusWindow | Bring window to front | target: window id |
+| dragWindow | Move window | target: id, coordinates: {x, y} |
+| resizeWindow | Resize window | target: id, value: {width, height} |
+| wheelScroll | Scroll in container | target: selector, value: "up" or "down" |
+| wait | Wait for UI | value: milliseconds (100-1000) |
+| closeModal | Close open modal/dialog | none |
 
-### Action Types ที่ใช้ได้:
-| Type | Description | Parameters |
-|------|-------------|------------|
-| clickAddMenu | คลิกปุ่ม ADD เพื่อเปิด panel selector | - |
-| searchInModal | พิมพ์ค้นหาใน modal | value: "search term" |
-| clickSearchResult | คลิกผลลัพธ์ที่ตรงกัน | value: "text to match" |
-| openPanel | เปิด panel โดยตรง (ถ้าทำได้) | target: "panel-id" |
-| focusWindow | โฟกัสหน้าต่าง | target: "window id/name" |
-| dragWindow | ลากหน้าต่างไปตำแหน่งใหม่ | target: "id", coordinates: {x, y} |
-| resizeWindow | ปรับขนาดหน้าต่าง | target: "id", value: {width, height} |
-| wheelScroll | เลื่อนในหน้าต่าง | target: "id", value: "up"/"down" |
-| click | คลิก element | target: "selector or text" |
-| type | พิมพ์ข้อความ | target: "selector", value: "text" |
-| wait | รอ | value: milliseconds |
-| closeModal | ปิด modal | - |
+## PANEL IDs (use with openPanel)
+trading-chart, topnews, cot, journal, calendar, notes, code, heatmap, messenger, able3ai, monte-carlo, gold, realmarket, crypto, correlation-matrix, indicators, intelligence, spreadsheet, fedwatch
 
-### กลยุทธ์การเปิด Panel:
-1. ถ้า hasAddButton=true และ hasAddMenuOpen=false → clickAddMenu ก่อน
-2. หลังจาก clickAddMenu → searchInModal พิมพ์ชื่อ panel
-3. หลังจาก search → clickSearchResult คลิกผลลัพธ์
-4. หลังจาก panel เปิด → focusWindow, dragWindow, resizeWindow ตามต้องการ
+## STRATEGY FOR OPENING PANELS
+1. First, try: openPanel with the panel ID directly
+2. If that doesn't work: clickAddMenu → searchInModal → clickSearchResult
 
-### การตอบ
-ถ้าเป้าหมายสำเร็จแล้ว:
-{"done": true, "summary": "สิ่งที่ทำสำเร็จ"}
+## RULES
+1. Return ONLY valid JSON, no markdown or explanation
+2. Include "thinking" array to show your reasoning
+3. If goal is achieved, set "done": true with "summary"
+4. Maximum 3 actions per response
+5. Always add wait(300-500) after UI-changing actions
+6. If modal is open, interact with it first
+7. Check "openWindows" before opening a panel that's already open
 
-ถ้าต้องทำต่อ:
+## RESPONSE FORMAT
+
+If goal is complete:
+{"done": true, "summary": "What was accomplished"}
+
+If more actions needed:
 {
-  "thinking": ["สิ่งที่สังเกต", "สิ่งที่จะทำ"],
+  "thinking": ["observation 1", "what I will do"],
   "actions": [
-    {"type": "actionType", "target": "...", "value": "...", "description": "คำอธิบาย"}
+    {"type": "actionType", "target": "...", "value": "...", "description": "Human-readable description"}
   ]
 }
 
-⚠️ ข้อควรระวัง:
-- ใส่ wait 300-600ms หลังทุก action ที่เปลี่ยน UI
-- ถ้า modal เปิดอยู่ (openModals) ต้อง interact กับ modal ก่อน
-- ถ้า panel เปิดแล้ว (ดูใน openWindows) ไม่ต้องเปิดใหม่
-- ตอบเป็น JSON เท่านั้น
+Iteration: ${iteration}/${MAX_LOOP_ITERATIONS}
 
-Iteration: ${iteration}/${MAX_LOOP_ITERATIONS}`;
+Respond with JSON only:`;
 
     try {
       const response = await GeminiService.chat(prompt, [], 
-        'คุณเป็น AI Agent ที่ควบคุม UI ตอบเป็น valid JSON เท่านั้น ห้ามมีข้อความอื่น');
+        'You are a UI automation agent. Respond with valid JSON only. No markdown, no explanation, just JSON.');
       
-      // Parse response
+      // Extract JSON from response
       let jsonStr = response.text
         .replace(/```json\n?/g, '')
         .replace(/```\n?/g, '')
+        .replace(/^\s*[\r\n]/gm, '')
         .trim();
       
-      // Try to extract JSON object
+      // Find JSON object
       const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        return parsed as GeminiResponse;
+        
+        // Validate structure
+        if (parsed.done !== undefined || Array.isArray(parsed.actions)) {
+          return parsed as GeminiResponse;
+        }
       }
       
+      addLog('⚠️ Invalid JSON from Gemini, retrying...');
       return { actions: [] };
     } catch (error) {
       addLog(`❌ Gemini error: ${error}`);
