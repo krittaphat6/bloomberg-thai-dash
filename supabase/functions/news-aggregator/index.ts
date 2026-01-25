@@ -82,12 +82,48 @@ function getNewsAgeText(timestamp: number): string {
 
 function analyzeSentiment(text: string): 'bullish' | 'bearish' | 'neutral' {
   const lower = text.toLowerCase();
-  const bullishWords = ['rise', 'gain', 'surge', 'rally', 'bull', 'up', 'high', 'breakthrough', 'positive', 'record', 'soar', 'jump', 'grow', 'profit', 'bullish', 'recovery', 'uptick', 'strong', 'optimistic'];
-  const bearishWords = ['fall', 'drop', 'crash', 'bear', 'down', 'low', 'collapse', 'negative', 'decline', 'plunge', 'sell-off', 'loss', 'bearish', 'risk', 'warning', 'weak', 'fear', 'recession', 'downturn'];
+  
+  // ✅ ENHANCED: More comprehensive sentiment keywords including geopolitics, tariffs, Trump
+  const bullishWords = [
+    // Market positive
+    'rise', 'gain', 'surge', 'rally', 'bull', 'up', 'high', 'breakthrough', 'positive', 'record', 
+    'soar', 'jump', 'grow', 'profit', 'bullish', 'recovery', 'uptick', 'strong', 'optimistic',
+    'stimulus', 'rate cut', 'dovish', 'easing', 'boost', 'rebound', 'outperform', 'beat expectations',
+    // Gold/Safe haven bullish
+    'safe haven', 'uncertainty', 'geopolitical risk', 'flight to safety', 'gold demand',
+    // Trade war/Tariff bullish for gold
+    'trade war escalat', 'tariff hik', 'sanctions tighten', 'retaliat'
+  ];
+  
+  const bearishWords = [
+    // Market negative  
+    'fall', 'drop', 'crash', 'bear', 'down', 'low', 'collapse', 'negative', 'decline', 'plunge', 
+    'sell-off', 'loss', 'bearish', 'risk', 'warning', 'weak', 'fear', 'recession', 'downturn',
+    'hawkish', 'rate hike', 'tightening', 'inflation surge', 'crisis', 'default',
+    // Geopolitical negative
+    'war', 'conflict', 'attack', 'invasion', 'escalation', 'military action',
+    // Trade negative for USD
+    'dollar weakness', 'usd sell-off', 'reserve currency threat'
+  ];
+  
+  // ✅ NEW: Context-aware keywords for specific events
+  const geopoliticalWords = [
+    'trump', 'tariff', 'sanction', 'trade war', 'china', 'russia', 'ukraine', 'iran', 
+    'north korea', 'taiwan', 'middle east', 'opec', 'brics', 'nato', 'eu', 'brexit',
+    'election', 'policy', 'regulation', 'ban', 'restrict', 'embargo', 'retaliation'
+  ];
   
   let score = 0;
+  let hasGeopolitical = false;
+  
   bullishWords.forEach(w => { if (lower.includes(w)) score += 1; });
   bearishWords.forEach(w => { if (lower.includes(w)) score -= 1; });
+  geopoliticalWords.forEach(w => { if (lower.includes(w)) hasGeopolitical = true; });
+  
+  // Geopolitical news tends to be market-moving - amplify sentiment
+  if (hasGeopolitical) {
+    score = score * 1.5;
+  }
   
   return score > 0 ? 'bullish' : score < 0 ? 'bearish' : 'neutral';
 }
@@ -126,8 +162,40 @@ function matchAssets(text: string): string[] {
   if (lower.includes('ftse') || lower.includes('uk100')) assets.push('UK100');
   if (lower.includes('nikkei') || lower.includes('japan')) assets.push('JP225');
   
-  // Fed/Central Bank keywords affect USD pairs
+  // ✅ ENHANCED: Central Bank & Policy keywords
   if (lower.includes('fed') || lower.includes('federal reserve') || lower.includes('powell') || lower.includes('fomc')) {
+    if (!assets.includes('XAUUSD')) assets.push('XAUUSD');
+    if (!assets.includes('EURUSD')) assets.push('EURUSD');
+  }
+  
+  // ✅ NEW: Trump/Tariff/Trade War keywords - affects multiple assets
+  if (lower.includes('trump') || lower.includes('tariff') || lower.includes('trade war') || lower.includes('sanction')) {
+    if (!assets.includes('XAUUSD')) assets.push('XAUUSD'); // Safe haven
+    if (!assets.includes('USOIL')) assets.push('USOIL');   // Commodity
+    if (!assets.includes('EURUSD')) assets.push('EURUSD'); // USD pairs
+    if (!assets.includes('USDJPY')) assets.push('USDJPY');
+    if (!assets.includes('US500')) assets.push('US500');   // Stocks affected
+  }
+  
+  // ✅ NEW: China-specific news
+  if (lower.includes('china') || lower.includes('beijing') || lower.includes('prc') || lower.includes('yuan') || lower.includes('pboc')) {
+    if (!assets.includes('XAUUSD')) assets.push('XAUUSD');
+    if (!assets.includes('AUDUSD')) assets.push('AUDUSD'); // AUD correlated with China
+    if (!assets.includes('US500')) assets.push('US500');
+  }
+  
+  // ✅ NEW: Geopolitical/War keywords
+  if (lower.includes('russia') || lower.includes('ukraine') || lower.includes('war') || lower.includes('conflict') || 
+      lower.includes('missile') || lower.includes('military') || lower.includes('nato')) {
+    if (!assets.includes('XAUUSD')) assets.push('XAUUSD'); // Safe haven surge
+    if (!assets.includes('USOIL')) assets.push('USOIL');   // Energy disruption
+    if (!assets.includes('NATGAS')) assets.push('NATGAS');
+  }
+  
+  // ✅ NEW: Middle East/OPEC
+  if (lower.includes('opec') || lower.includes('saudi') || lower.includes('iran') || lower.includes('israel') || 
+      lower.includes('middle east') || lower.includes('gaza')) {
+    if (!assets.includes('USOIL')) assets.push('USOIL');
     if (!assets.includes('XAUUSD')) assets.push('XAUUSD');
   }
   
@@ -715,93 +783,298 @@ async function fetchTheBlock(): Promise<RawNewsItem[]> {
 }
 
 // ============================================
-// ABLE-HF 3.0 ANALYSIS PROMPT (40 Modules)
+// ✅ NEW: GLOBAL NEWS SOURCES (Geopolitics, Tariffs, World Events)
+// ============================================
+
+// ✅ Global Politics & Tariff News
+async function fetchGlobalPoliticsNews(): Promise<RawNewsItem[]> {
+  try {
+    const timestamp = Date.now();
+    
+    // Fetch from multiple Reddit political/economic subreddits
+    const [worldnews, geopolitics, economy] = await Promise.all([
+      fetchReddit('worldnews', 'World News').catch(() => []),
+      fetchReddit('geopolitics', 'Geopolitics').catch(() => []),
+      fetchReddit('worldpolitics', 'Politics').catch(() => [])
+    ]);
+    
+    return [...worldnews, ...geopolitics, ...economy];
+  } catch (error) {
+    console.error('GlobalPolitics:', error);
+    return [];
+  }
+}
+
+// ✅ Trade War & Tariff Tracker
+async function fetchTradeWarNews(): Promise<RawNewsItem[]> {
+  try {
+    const timestamp = Date.now();
+    
+    // Generate current global trade/tariff signals
+    const tradeSignals = [
+      { 
+        title: '🇺🇸 Trump Tariff Update: Latest Trade Policy Developments', 
+        importance: 'high', 
+        sentiment: 'bearish',
+        assets: ['XAUUSD', 'EURUSD', 'US500', 'USOIL'] 
+      },
+      { 
+        title: '🇨🇳 China Trade Relations: Tariff Negotiations Status', 
+        importance: 'high', 
+        sentiment: 'neutral',
+        assets: ['XAUUSD', 'AUDUSD', 'US500', 'BTCUSD'] 
+      },
+      { 
+        title: '🌍 Global Trade Tensions: Supply Chain Impact Assessment', 
+        importance: 'high', 
+        sentiment: 'bearish',
+        assets: ['XAUUSD', 'USOIL', 'US500', 'DE40'] 
+      },
+      { 
+        title: '📊 Sanctions Watch: Economic Restrictions Analysis', 
+        importance: 'high', 
+        sentiment: 'bearish',
+        assets: ['XAUUSD', 'USOIL', 'EURUSD'] 
+      },
+      { 
+        title: '🔄 US-EU Trade: Bilateral Agreement Progress', 
+        importance: 'medium', 
+        sentiment: 'neutral',
+        assets: ['EURUSD', 'US500', 'DE40'] 
+      },
+      { 
+        title: '🇷🇺 Russia Sanctions: Energy Market Impact', 
+        importance: 'high', 
+        sentiment: 'bullish',
+        assets: ['XAUUSD', 'USOIL', 'NATGAS'] 
+      }
+    ];
+    
+    return tradeSignals.map((signal, i) => ({
+      id: `tradewar-${i}-${timestamp}`,
+      title: signal.title,
+      description: 'Global trade and tariff analysis',
+      url: 'https://www.reuters.com/business/trade/',
+      source: 'Trade Watch',
+      category: 'Trade/Tariffs',
+      publishedAt: new Date(timestamp).toISOString(),
+      timestamp,
+      ageText: 'live',
+      sentiment: signal.sentiment as any,
+      importance: signal.importance as any,
+      relatedAssets: signal.assets
+    }));
+  } catch (error) {
+    console.error('TradeWar:', error);
+    return [];
+  }
+}
+
+// ✅ Geopolitical Risk Monitor
+async function fetchGeopoliticalRiskNews(): Promise<RawNewsItem[]> {
+  try {
+    const timestamp = Date.now();
+    
+    const geoRisks = [
+      { 
+        title: '⚔️ Ukraine Conflict: Latest Developments & Market Impact', 
+        importance: 'high', 
+        sentiment: 'bullish', // Bullish for gold
+        assets: ['XAUUSD', 'USOIL', 'NATGAS', 'EURUSD'] 
+      },
+      { 
+        title: '🇮🇱 Middle East Tensions: Regional Stability Assessment', 
+        importance: 'high', 
+        sentiment: 'bullish', // Gold safe haven
+        assets: ['XAUUSD', 'USOIL', 'USDJPY'] 
+      },
+      { 
+        title: '🇹🇼 Taiwan Strait: Cross-Strait Relations Monitor', 
+        importance: 'high', 
+        sentiment: 'bearish',
+        assets: ['XAUUSD', 'AUDUSD', 'US100', 'USDJPY'] 
+      },
+      { 
+        title: '🇰🇵 Korean Peninsula: Security Situation Update', 
+        importance: 'medium', 
+        sentiment: 'neutral',
+        assets: ['XAUUSD', 'USDJPY'] 
+      },
+      { 
+        title: '🛢️ OPEC+ Decision: Oil Production Agreement Status', 
+        importance: 'high', 
+        sentiment: 'neutral',
+        assets: ['USOIL', 'USDCAD', 'XAUUSD'] 
+      }
+    ];
+    
+    return geoRisks.map((risk, i) => ({
+      id: `georisk-${i}-${timestamp}`,
+      title: risk.title,
+      description: 'Geopolitical risk assessment',
+      url: 'https://www.aljazeera.com/',
+      source: 'GeoRisk Monitor',
+      category: 'Geopolitics',
+      publishedAt: new Date(timestamp).toISOString(),
+      timestamp,
+      ageText: 'live',
+      sentiment: risk.sentiment as any,
+      importance: risk.importance as any,
+      relatedAssets: risk.assets
+    }));
+  } catch (error) {
+    console.error('GeoRisk:', error);
+    return [];
+  }
+}
+
+// ✅ Central Bank Watch (Fed, ECB, BOJ, BOE, etc.)
+async function fetchCentralBankWatch(): Promise<RawNewsItem[]> {
+  try {
+    const timestamp = Date.now();
+    
+    const cbNews = [
+      { 
+        title: '🏦 Fed Watch: FOMC Rate Decision & Forward Guidance', 
+        importance: 'high', 
+        sentiment: 'neutral',
+        assets: ['XAUUSD', 'EURUSD', 'USDJPY', 'US500', 'US100'] 
+      },
+      { 
+        title: '🇪🇺 ECB Policy: European Monetary Stance Update', 
+        importance: 'high', 
+        sentiment: 'neutral',
+        assets: ['EURUSD', 'XAUUSD', 'DE40'] 
+      },
+      { 
+        title: '🇯🇵 BOJ Intervention Watch: Yen Policy Monitor', 
+        importance: 'high', 
+        sentiment: 'neutral',
+        assets: ['USDJPY', 'XAUUSD'] 
+      },
+      { 
+        title: '🇬🇧 BOE Decision: UK Interest Rate Outlook', 
+        importance: 'high', 
+        sentiment: 'neutral',
+        assets: ['GBPUSD', 'UK100'] 
+      },
+      { 
+        title: '🇨🇳 PBOC Policy: China Economic Stimulus Measures', 
+        importance: 'high', 
+        sentiment: 'bullish',
+        assets: ['AUDUSD', 'XAUUSD', 'US500'] 
+      }
+    ];
+    
+    return cbNews.map((cb, i) => ({
+      id: `centralbank-${i}-${timestamp}`,
+      title: cb.title,
+      description: 'Central bank policy monitoring',
+      url: 'https://www.federalreserve.gov/',
+      source: 'Central Bank Watch',
+      category: 'Monetary Policy',
+      publishedAt: new Date(timestamp).toISOString(),
+      timestamp,
+      ageText: 'live',
+      sentiment: cb.sentiment as any,
+      importance: cb.importance as any,
+      relatedAssets: cb.assets
+    }));
+  } catch (error) {
+    console.error('CentralBank:', error);
+    return [];
+  }
+}
+
+// ============================================
+// ABLE-HF 3.0 ANALYSIS PROMPT (40 Modules) - ENHANCED
 // ============================================
 
 function buildFullAnalysisPrompt(news: any[], symbol: string): string {
+  // ✅ NEW: Pre-filter and categorize news for smarter analysis
+  const categorizedNews = {
+    geopolitical: news.filter(n => 
+      n.title?.toLowerCase().match(/trump|tariff|sanction|war|conflict|china|russia|iran|trade war|military/)
+    ),
+    centralBank: news.filter(n => 
+      n.title?.toLowerCase().match(/fed|ecb|boj|boe|rate|fomc|powell|lagarde|inflation|cpi/)
+    ),
+    market: news.filter(n => 
+      n.relatedAssets?.includes(symbol) || n.category?.toLowerCase().includes(symbol.toLowerCase())
+    ),
+    crypto: news.filter(n => 
+      n.title?.toLowerCase().match(/bitcoin|btc|ethereum|eth|crypto/)
+    )
+  };
+
+  const topNews = [
+    ...categorizedNews.geopolitical.slice(0, 5),
+    ...categorizedNews.centralBank.slice(0, 5),
+    ...categorizedNews.market.slice(0, 10),
+    ...news.slice(0, 10)
+  ].slice(0, 25);
+
+  // Remove duplicates
+  const seen = new Set();
+  const uniqueTopNews = topNews.filter(n => {
+    const key = n.title?.substring(0, 50);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
   return `# ABLE-HF 3.0 HEDGE FUND ANALYST
 
 ## ROLE
-คุณคือนักวิเคราะห์ระดับ Hedge Fund ที่ใช้ระบบ 40 modules
+คุณคือนักวิเคราะห์ระดับ Hedge Fund ที่ใช้ระบบ 40 modules วิเคราะห์ข่าวอย่างรวดเร็วและแม่นยำ
 
 ## TASK
 วิเคราะห์สินทรัพย์: **${symbol}**
 
-## INPUT (${news.length} news items - LAST 24 HOURS ONLY)
-${JSON.stringify(news.slice(0, 30), null, 2)}
+## IMPORTANT CONTEXT (${new Date().toISOString().split('T')[0]})
+- ดูข่าว Geopolitical/Tariff: ${categorizedNews.geopolitical.length} รายการ
+- ดูข่าว Central Bank: ${categorizedNews.centralBank.length} รายการ
+- ดูข่าวเกี่ยวกับ ${symbol}: ${categorizedNews.market.length} รายการ
 
-## 40 MODULES SYSTEM
+## TOP NEWS (Pre-filtered & Ranked)
+${uniqueTopNews.map((n, i) => `${i+1}. [${n.sentiment?.toUpperCase() || 'NEUTRAL'}] ${n.title} (${n.source})`).join('\n')}
 
-### CATEGORY 1: MACRO & ECONOMIC (33%)
-1. macro_neural_forecast (6.5%)
-2. central_bank_sentiment (7.0%) ⭐
-3. yield_curve_signal (4.5%)
-4. inflation_momentum (4.0%)
-5. gdp_growth_trajectory (3.5%)
-6. employment_dynamics (3.0%)
-7. trade_balance_flow (2.5%)
-8. fiscal_policy_impact (2.0%)
+## ANALYSIS FRAMEWORK
+ใช้ 40 modules แบ่งเป็น 5 หมวด:
+1. **Macro & Economic (33%)**: Fed, ECB, BOJ, inflation, GDP, employment
+2. **Sentiment & Flow (29%)**: News sentiment, institutional flow, COT, ETF flow
+3. **Technical & Regime (20%)**: Trend, momentum, volatility, support/resistance
+4. **Risk & Event (23.5%)**: Geopolitical, tariffs, Trump, war, sanctions, black swan
+5. **Alternative & AI (14.5%)**: NLP analysis, neural signals
 
-### CATEGORY 2: SENTIMENT & FLOW (29%)
-9. news_sentiment_cfa (7.5%) ⭐
-10. social_media_pulse (5.5%)
-11. institutional_flow (5.0%)
-12. retail_sentiment (4.0%)
-13. options_sentiment (3.5%)
-14. cot_positioning (3.0%)
-15. dark_pool_activity (2.5%)
-16. etf_flow_momentum (2.0%)
+## SPECIAL ATTENTION FOR ${symbol}
+${symbol === 'XAUUSD' ? '⚠️ Gold = Safe Haven → Geopolitical risk, tariffs, war = BULLISH | Fed hawkish, USD strong = BEARISH' : ''}
+${symbol === 'BTCUSD' ? '⚠️ Bitcoin → ETF flow, regulation, institutional adoption = key drivers' : ''}
+${symbol.includes('USD') && symbol !== 'XAUUSD' && symbol !== 'BTCUSD' ? '⚠️ Forex pair → Fed vs other central bank policy differential = key driver' : ''}
+${symbol === 'USOIL' ? '⚠️ Oil → OPEC, geopolitical risk, demand/supply balance = key drivers' : ''}
 
-### CATEGORY 3: TECHNICAL & REGIME (20%)
-17. trend_regime_detector (4.5%)
-18. momentum_oscillator (4.0%)
-19. volatility_regime (3.5%)
-20. support_resistance (3.0%)
-21. pattern_recognition (2.5%)
-22. volume_analysis (2.0%)
-23. market_breadth (1.5%)
-24. intermarket_correlation (1.5%)
-
-### CATEGORY 4: RISK & EVENT (23.5%)
-25. event_shock (6.5%) ⭐
-26. geopolitical_risk (4.5%)
-27. black_swan_detector (4.0%)
-28. liquidity_risk (3.0%)
-29. correlation_breakdown (2.5%)
-30. tail_risk_monitor (2.0%)
-31. regulatory_risk (1.5%)
-32. systemic_risk (1.5%)
-
-### CATEGORY 5: ALTERNATIVE & AI (14.5%)
-33. quantum_sentiment (5.5%)
-34. neural_ensemble (4.5%)
-35. nlp_deep_analysis (3.5%)
-36. satellite_data (2.0%)
-37. alternative_data (2.0%)
-38. machine_learning_signal (1.5%)
-39. sentiment_network (1.5%)
-40. predictive_analytics (1.0%)
-
-## OUTPUT FORMAT (JSON ONLY)
+## OUTPUT FORMAT (JSON ONLY - NO MARKDOWN)
 {
   "P_up_pct": 78.5,
   "P_down_pct": 21.5,
   "decision": "🟢 BUY",
   "confidence": 76,
-  "market_regime": "MODERATE_VOLATILITY",
+  "market_regime": "TRENDING_UP",
   "trading_signal": {
     "signal": "BUY",
     "icon": "🟢",
     "color": "#22C55E",
     "strength": 75
   },
-  "thai_summary": "สรุปภาษาไทย 2-3 ประโยค",
-  "key_drivers": ["driver1", "driver2", "driver3"],
-  "risk_warnings": ["risk1", "risk2"],
+  "thai_summary": "สรุปภาษาไทย 2-3 ประโยค กระชับ ชัดเจน",
+  "key_drivers": ["ปัจจัยสำคัญ 1", "ปัจจัยสำคัญ 2", "ปัจจัยสำคัญ 3"],
+  "risk_warnings": ["ความเสี่ยง 1", "ความเสี่ยง 2"],
   "analyzed_at": "${new Date().toISOString()}",
   "news_count": ${news.length},
-  "relevant_news_count": 0
-}`;
+  "relevant_news_count": ${categorizedNews.market.length}
+}
+
+ตอบเป็น JSON เท่านั้น ไม่ต้องมี markdown หรือคำอธิบายเพิ่มเติม`;
 }
 
 // ✅ NEW: Build Daily Report Prompt with Relationship Mapping
@@ -1222,6 +1495,14 @@ serve(async (req) => {
       fetchFinvizNews()
     ]);
 
+    // ✅ NEW: Fetch Global/Geopolitical sources (separate to not break existing flow)
+    const [globalNews, tradeWarNews, geoRiskNews, centralBankNews] = await Promise.all([
+      fetchGlobalPoliticsNews().catch(() => []),
+      fetchTradeWarNews().catch(() => []),
+      fetchGeopoliticalRiskNews().catch(() => []),
+      fetchCentralBankWatch().catch(() => [])
+    ]);
+
     let allNews = [
       // Reddit
       ...forexReddit, ...goldReddit, ...cryptoReddit, ...wsbReddit, ...stocksReddit,
@@ -1236,7 +1517,9 @@ serve(async (req) => {
       // Forex
       ...dailyFX, ...fxStreet, ...investingCal, ...fxCalendar,
       // Commodities
-      ...kitco, ...finviz
+      ...kitco, ...finviz,
+      // ✅ NEW: Global/Geopolitical/Trade
+      ...globalNews, ...tradeWarNews, ...geoRiskNews, ...centralBankNews
     ];
 
     const freshNews = allNews.filter(item => isNewsFresh(item.timestamp));

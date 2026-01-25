@@ -113,26 +113,34 @@ const SENTIMENT_DICTIONARY = {
   ultra_bullish: [
     'soar', 'surge', 'skyrocket', 'moon', 'breakout', 'explosive',
     'fed pivot', 'rate cut', 'dovish pivot', 'massive rally', 'all-time high',
-    'golden cross confirmed', 'institutional buying', 'whale accumulation'
+    'golden cross confirmed', 'institutional buying', 'whale accumulation',
+    // ✅ NEW: Geopolitical bullish for gold
+    'safe haven surge', 'flight to safety', 'geopolitical crisis'
   ],
   
   // Strong Bullish (+12 to +17)
   strong_bullish: [
     'rally', 'bullish', 'outperform', 'upgrade', 'beat expectations',
     'strong buy', 'accumulate', 'breakout potential', 'dovish',
-    'stimulus', 'easing', 'recovery', 'growth accelerating'
+    'stimulus', 'easing', 'recovery', 'growth accelerating',
+    // ✅ NEW: Trade war bullish for safe havens
+    'trade war escalation', 'tariff hike', 'sanctions imposed', 'risk-off'
   ],
   
   // Bullish (+8 to +11)
   bullish: [
     'rise', 'gain', 'positive', 'growth', 'optimistic', 'buy',
-    'uptrend', 'support holds', 'demand strong', 'inflows'
+    'uptrend', 'support holds', 'demand strong', 'inflows',
+    // ✅ NEW: Central bank dovish
+    'fed pause', 'inflation cooling', 'rate cut expected'
   ],
   
   // Mild Bullish (+3 to +7)
   mild_bullish: [
     'steady', 'stable', 'resilient', 'hold', 'neutral to positive',
-    'sideways', 'consolidating', 'base building'
+    'sideways', 'consolidating', 'base building',
+    // ✅ NEW
+    'trade deal progress', 'tariff exemption'
   ],
   
   // Neutral (-2 to +2)
@@ -143,47 +151,102 @@ const SENTIMENT_DICTIONARY = {
   // Mild Bearish (-3 to -7)
   mild_bearish: [
     'cautious', 'concerned', 'risk', 'pressure', 'weakness',
-    'pullback', 'correction', 'profit-taking'
+    'pullback', 'correction', 'profit-taking',
+    // ✅ NEW
+    'tariff threat', 'trade tension'
   ],
   
   // Bearish (-8 to -11)
   bearish: [
     'fall', 'drop', 'decline', 'sell', 'bearish', 'downtrend',
-    'breakdown', 'resistance', 'outflows', 'negative'
+    'breakdown', 'resistance', 'outflows', 'negative',
+    // ✅ NEW: Hawkish Fed, strong USD (bearish for gold)
+    'fed hawkish', 'rate hike', 'dollar rally', 'yields surge'
   ],
   
   // Strong Bearish (-12 to -17)
   strong_bearish: [
     'plunge', 'crash', 'collapse', 'crisis', 'recession',
     'death cross', 'capitulation', 'panic selling', 'hawkish',
-    'rate hike', 'tightening', 'inflation surge'
+    'rate hike', 'tightening', 'inflation surge',
+    // ✅ NEW: Risk-on (bearish for gold)
+    'risk-on', 'stock rally', 'equities surge'
   ],
   
   // Ultra Bearish (-18 to -25)
   ultra_bearish: [
     'black swan', 'meltdown', 'catastrophic', 'systemic crisis',
     'bank run', 'contagion', 'default', 'bankruptcy', 'war escalation',
-    'nuclear', 'pandemic', 'hyperinflation'
+    'nuclear', 'pandemic', 'hyperinflation',
+    // ✅ NEW
+    'market crash', 'flash crash', 'circuit breaker'
   ]
 };
 
 // Asset-specific keywords
 const ASSET_KEYWORDS: Record<string, { bullish: string[], bearish: string[] }> = {
   XAUUSD: {
-    bullish: ['safe haven', 'gold demand', 'central bank buying', 'inflation hedge', 'dollar weakness', 'geopolitical tension'],
-    bearish: ['risk-on', 'dollar strength', 'rate hike', 'gold selling', 'crypto alternative']
+    bullish: [
+      'safe haven', 'gold demand', 'central bank buying', 'inflation hedge', 'dollar weakness', 
+      'geopolitical tension', 'war', 'conflict', 'sanctions', 'tariff', 'trade war',
+      // ✅ NEW: Trump/Tariff specific
+      'trump tariff', 'china retaliation', 'trade escalation', 'uncertainty', 'risk-off',
+      'middle east', 'russia', 'ukraine', 'iran', 'fed dovish', 'rate cut', 'inflation hot'
+    ],
+    bearish: [
+      'risk-on', 'dollar strength', 'rate hike', 'gold selling', 'crypto alternative',
+      'fed hawkish', 'yields surge', 'strong jobs', 'inflation cooling', 'equities rally'
+    ]
   },
   BTCUSD: {
-    bullish: ['bitcoin adoption', 'etf approval', 'institutional buying', 'halving', 'crypto rally', 'defi growth'],
-    bearish: ['crypto crash', 'regulation', 'exchange hack', 'bitcoin ban', 'crypto winter']
+    bullish: [
+      'bitcoin adoption', 'etf approval', 'institutional buying', 'halving', 'crypto rally', 
+      'defi growth', 'bitcoin spot etf', 'blackrock', 'fidelity', 'microstrategy'
+    ],
+    bearish: [
+      'crypto crash', 'regulation', 'exchange hack', 'bitcoin ban', 'crypto winter',
+      'sec lawsuit', 'binance', 'tether', 'china crypto ban'
+    ]
   },
   EURUSD: {
-    bullish: ['ecb hawkish', 'euro strength', 'german growth', 'eurozone recovery'],
-    bearish: ['ecb dovish', 'euro weakness', 'germany recession', 'european crisis']
+    bullish: [
+      'ecb hawkish', 'euro strength', 'german growth', 'eurozone recovery',
+      'dollar weakness', 'fed dovish', 'us recession'
+    ],
+    bearish: [
+      'ecb dovish', 'euro weakness', 'germany recession', 'european crisis',
+      'dollar strength', 'fed hawkish', 'energy crisis'
+    ]
   },
   USDJPY: {
-    bullish: ['boj intervention', 'yen strength', 'japanese inflation'],
-    bearish: ['carry trade', 'yen weakness', 'boj dovish', 'yield differential']
+    bullish: [
+      'boj intervention', 'yen strength', 'japanese inflation', 'boj hawkish',
+      'yield curve control adjustment'
+    ],
+    bearish: [
+      'carry trade', 'yen weakness', 'boj dovish', 'yield differential',
+      'us rates higher', 'safe haven selling'
+    ]
+  },
+  USOIL: {
+    bullish: [
+      'opec cut', 'oil demand', 'supply disruption', 'middle east tension', 'iran sanctions',
+      'russia sanctions', 'refinery outage', 'hurricane', 'geopolitical risk'
+    ],
+    bearish: [
+      'opec increase', 'demand destruction', 'recession fear', 'oversupply',
+      'us shale', 'strategic reserve release'
+    ]
+  },
+  US500: {
+    bullish: [
+      'earnings beat', 'tech rally', 'fed pause', 'soft landing', 'buybacks',
+      'ai boom', 'employment strong', 'consumer spending'
+    ],
+    bearish: [
+      'recession', 'earnings miss', 'fed tightening', 'yield inversion',
+      'tariff impact', 'trade war', 'tech selloff', 'valuation concern'
+    ]
   }
 };
 
@@ -487,16 +550,34 @@ export class AbleNewsAnalyzer {
   }
   
   private scoreGeopolitical(text: string): number {
-    const geoRiskWords = ['war', 'conflict', 'tension', 'military', 'sanctions', 'nuclear', 'attack', 'invasion'];
+    // ✅ ENHANCED: Comprehensive geopolitical risk detection
+    const geoRiskWords = [
+      // War & Conflict
+      'war', 'conflict', 'tension', 'military', 'sanctions', 'nuclear', 'attack', 'invasion',
+      'missile', 'strike', 'escalation', 'retaliation', 'blockade',
+      // Countries & Regions
+      'russia', 'ukraine', 'china', 'taiwan', 'iran', 'israel', 'north korea', 'gaza',
+      'middle east', 'south china sea', 'nato', 'kremlin',
+      // Trade & Policy
+      'trump', 'tariff', 'trade war', 'sanction', 'embargo', 'ban', 'restriction',
+      'retaliation', 'countermeasure', 'trade tension', 'trade deal collapse'
+    ];
+    
     let riskLevel = 0;
     
     geoRiskWords.forEach(word => {
       if (text.includes(word)) riskLevel++;
     });
     
+    // ✅ NEW: Specific high-impact events
+    if (text.includes('trump tariff') || text.includes('china tariff')) riskLevel += 3;
+    if (text.includes('war') || text.includes('invasion')) riskLevel += 2;
+    if (text.includes('nuclear') || text.includes('missile')) riskLevel += 3;
+    
     // Geopolitical risk is bullish for gold, bearish for risk assets
     if (riskLevel > 0) {
-      return this.input.symbol === 'XAUUSD' ? 0.7 + (riskLevel * 0.05) : 0.3 - (riskLevel * 0.05);
+      const impactScore = Math.min(0.95, 0.6 + (riskLevel * 0.05));
+      return this.input.symbol === 'XAUUSD' ? impactScore : 1 - impactScore;
     }
     
     return 0.5;
