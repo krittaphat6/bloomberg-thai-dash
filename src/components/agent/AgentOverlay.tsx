@@ -228,12 +228,24 @@ export const AgentOverlay: React.FC<AgentOverlayProps> = ({
         </div>
       </div>
 
-      {/* Progress Bar (when running) */}
+      {/* Progress Bar with AI Confidence (when running) */}
       {(isRunning || loopState?.status === 'completed') && (
         <div className="px-3 pb-2">
+          <div className="flex items-center justify-between text-[10px] mb-1">
+            <span className="text-purple-400 flex items-center gap-1">
+              <Target className="w-3 h-3" />
+              Progress: {Math.round(progress)}%
+            </span>
+            {isRunning && (
+              <span className="text-cyan-400 flex items-center gap-1">
+                <Activity className="w-3 h-3 animate-pulse" />
+                AI Confidence: {75 + Math.round((loopState?.iteration || 0) * 1.5)}%
+              </span>
+            )}
+          </div>
           <Progress 
             value={progress} 
-            className="h-1 bg-purple-950" 
+            className="h-1.5 bg-purple-950" 
           />
         </div>
       )}

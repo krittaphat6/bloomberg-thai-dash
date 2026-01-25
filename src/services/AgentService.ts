@@ -254,40 +254,77 @@ class AgentServiceClass {
   }
 
   /**
-   * Strategy: React Portal detection (modals, tooltips, etc.)
+   * Strategy: React Portal detection (Radix UI, shadcn modals, tooltips, etc.)
+   * Enhanced for better Radix/shadcn support
    */
   private tryReactPortals(target: string): { element: HTMLElement | null; confidence: number; method: string } {
+    // Comprehensive portal selectors for Radix UI and shadcn
     const portalSelectors = [
       '[data-radix-portal]',
+      '[data-radix-popper-content-wrapper]',
       '[data-state="open"]',
       '[role="dialog"]',
+      '[role="alertdialog"]',
       '[role="menu"]',
       '[role="listbox"]',
+      '[role="combobox"]',
+      '[data-radix-collection-item]',
+      '[cmdk-root]',
+      '[cmdk-list]',
       '.portal-container',
       '#portal-root',
-      '#modal-root'
+      '#modal-root',
+      '.fixed[style*="z-index"]'
     ];
     
     for (const portalSelector of portalSelectors) {
-      const portals = document.querySelectorAll(portalSelector);
-      for (const portal of portals) {
-        try {
-          const found = portal.querySelector(target) as HTMLElement;
-          if (found && this.isElementVisible(found)) {
-            return { element: found, confidence: 90, method: 'react-portal' };
+      try {
+        const portals = document.querySelectorAll(portalSelector);
+        for (const portal of portals) {
+          // Skip if not visible
+          const portalRect = portal.getBoundingClientRect();
+          if (portalRect.width === 0 || portalRect.height === 0) continue;
+
+          // Try CSS selector in portal
+          try {
+            const found = portal.querySelector(target) as HTMLElement;
+            if (found && this.isElementVisible(found)) {
+              this.log(`✅ Found in React Portal via selector: ${portalSelector}`);
+              return { element: found, confidence: 95, method: 'react-portal' };
+            }
+          } catch (e) {
+            // Invalid selector, continue
           }
-        } catch (e) {
-          // Continue to text search
+
+          // Try cmdk-specific selectors
+          const cmdkItems = portal.querySelectorAll('[cmdk-item], [data-cmdk-item]');
+          for (const item of cmdkItems) {
+            const text = item.textContent?.toLowerCase() || '';
+            if (text.includes(target.toLowerCase())) {
+              this.log(`✅ Found in cmdk item: ${text.substring(0, 30)}`);
+              return { element: item as HTMLElement, confidence: 92, method: 'cmdk-item' };
+            }
+          }
+          
+          // Try text match within portal
+          const textMatch = this.findElementByTextInContainer(portal as HTMLElement, target);
+          if (textMatch) {
+            return { element: textMatch, confidence: 88, method: 'react-portal-text' };
+          }
         }
-        
-        // Also try text match within portal
-        const textMatch = this.findElementByTextInContainer(portal as HTMLElement, target);
-        if (textMatch) {
-          return { element: textMatch, confidence: 85, method: 'react-portal-text' };
-        }
+      } catch (e) {
+        continue;
       }
     }
     return { element: null, confidence: 0, method: 'react-portal' };
+  }
+
+  /**
+   * Find element in any visible modal/dialog - public for self-healing
+   */
+  findInReactPortals(target: string): HTMLElement | null {
+    const result = this.tryReactPortals(target);
+    return result.element;
   }
 
   /**
