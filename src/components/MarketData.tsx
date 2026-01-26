@@ -50,6 +50,7 @@ import { BloombergMap } from './BloombergMap';
 import MonteCarloSimulator from './MonteCarloSimulator';
 import AbleHF40Modules from './AbleHF40Modules';
 import { FaceSearch } from './FaceSearch';
+import { FaceApprovalPanel } from './FaceApprovalPanel';
 
 interface PanelData {
   id: string;
@@ -500,6 +501,16 @@ const MarketData = () => {
       category: 'entertainment',
       description: 'Chess puzzles and challenges',
       tags: ['chess', 'puzzle', 'game', 'strategy']
+    },
+    
+    // Admin Tools
+    { 
+      id: 'face-approval', 
+      title: '👤 FACE APPROVAL', 
+      component: <FaceApprovalPanel />,
+      category: 'admin',
+      description: 'อนุมัติผู้ใช้งานใหม่ที่ลงทะเบียนใบหน้า',
+      tags: ['admin', 'approval', 'face', 'users', 'อนุมัติ']
     },
   ];
 

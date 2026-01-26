@@ -379,6 +379,48 @@ export type Database = {
           },
         ]
       }
+      face_registrations: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string | null
+          face_encoding: string | null
+          face_image_url: string | null
+          id: string
+          registered_at: string | null
+          rejection_reason: string | null
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          face_encoding?: string | null
+          face_image_url?: string | null
+          id?: string
+          registered_at?: string | null
+          rejection_reason?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          face_encoding?: string | null
+          face_image_url?: string | null
+          id?: string
+          registered_at?: string | null
+          rejection_reason?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       friend_nicknames: {
         Row: {
           created_at: string | null
@@ -925,6 +967,7 @@ export type Database = {
     }
     Functions: {
       cleanup_webhook_logs: { Args: never; Returns: undefined }
+      is_face_admin: { Args: { check_user_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

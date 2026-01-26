@@ -4,12 +4,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { ResponsiveProvider } from "@/contexts/ResponsiveContext";
 import { MCPProvider } from "@/contexts/MCPContext";
 import { PanelCommanderProvider } from "@/contexts/PanelCommanderContext";
 import { AgentProvider } from "@/contexts/AgentContext";
-import { AuthScreen } from "@/components/AuthScreen";
+import { AuthWrapper } from "@/components/AuthWrapper";
 
 // Lazy load page components to reduce initial bundle size
 const Index = lazy(() => import("./pages/Index"));
@@ -39,40 +39,26 @@ const PageLoader = () => (
   </div>
 );
 
-// Protected App Content
+// Protected App Content with Face Scan Auth
 const AppContent = () => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-terminal-amber animate-pulse font-mono text-lg">
-          Loading ABLE Terminal...
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <AuthScreen />;
-  }
-
   return (
-    <BrowserRouter>
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/notes" element={<NotesAndVisualization />} />
-          <Route path="/relationship-dashboard" element={<RelationshipDashboard />} />
-          <Route path="/intelligence" element={<IntelligencePlatform />} />
-          <Route path="/options" element={<OptionsSurfacePlot />} />
-          <Route path="/pacman" element={<PacManGame />} />
-          <Route path="/map" element={<GlobalMap />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
+    <AuthWrapper>
+      <BrowserRouter>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/notes" element={<NotesAndVisualization />} />
+            <Route path="/relationship-dashboard" element={<RelationshipDashboard />} />
+            <Route path="/intelligence" element={<IntelligencePlatform />} />
+            <Route path="/options" element={<OptionsSurfacePlot />} />
+            <Route path="/pacman" element={<PacManGame />} />
+            <Route path="/map" element={<GlobalMap />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </AuthWrapper>
   );
 };
 

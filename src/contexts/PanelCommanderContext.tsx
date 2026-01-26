@@ -64,6 +64,9 @@ export const AVAILABLE_PANELS: PanelConfig[] = [
   // Entertainment
   { id: 'pacman', title: '🎮 PAC-MAN', keywords: ['pacman', 'game', 'เกม', 'pac-man'], category: 'entertainment' },
   { id: 'chess', title: '♟️ CHESS PUZZLE', keywords: ['chess', 'หมากรุก', 'puzzle'], category: 'entertainment' },
+  
+  // Admin
+  { id: 'face-approval', title: '👤 FACE APPROVAL', keywords: ['face', 'approval', 'อนุมัติ', 'admin', 'ผู้ใช้'], category: 'admin' },
 ];
 
 export interface OpenPanelCommand {
