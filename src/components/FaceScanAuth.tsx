@@ -15,6 +15,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import ableTerminalLogo from '@/assets/able-terminal-logo.png';
+import { FaceImagePicker } from '@/components/face-scan/FaceImagePicker';
 
 interface FaceScanAuthProps {
   userId: string;
@@ -32,6 +33,7 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
   const [isLoading, setIsLoading] = useState(true);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [cameraErrorDetails, setCameraErrorDetails] = useState<string | null>(null);
 
   const isEmbedded = useMemo(() => {
     try {
@@ -116,6 +118,7 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
   const startCamera = async () => {
     setStatus('camera-init');
     setErrorMessage(null);
+    setCameraErrorDetails(null);
 
     // stop any prior stream
     stopCamera();
@@ -157,6 +160,7 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
 
       const name = error?.name as string | undefined;
       const message = String(error?.message || '');
+      setCameraErrorDetails([name, message].filter(Boolean).join(': '));
       const isTimeout = message.includes('CAMERA_TIMEOUT');
       const isUnsupported = message.includes('CAMERA_UNSUPPORTED');
       const isPermission = name === 'NotAllowedError' || name === 'SecurityError';
@@ -266,6 +270,14 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
     setCapturedImage(null);
     setStatus('idle');
     setErrorMessage(null);
+    setCameraErrorDetails(null);
+  };
+
+  const handleImageData = async (imageData: string) => {
+    setCapturedImage(imageData);
+    stopCamera();
+    setStatus('processing');
+    await processFace(imageData);
   };
 
   // Cleanup on unmount
@@ -438,12 +450,20 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
           {errorMessage && status === 'failed' && (
             <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
               <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
-              <p className="text-xs text-destructive">{errorMessage}</p>
+              <div className="min-w-0">
+                <p className="text-xs text-destructive">{errorMessage}</p>
+                {cameraErrorDetails && (
+                  <p className="mt-1 text-[10px] text-muted-foreground font-mono break-words">
+                    {cameraErrorDetails}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
           {/* Action buttons */}
-          <div className="flex gap-3">
+          <div className="space-y-3">
+            <div className="flex gap-3">
             {status === 'idle' && (
               <>
                 <Button
@@ -515,6 +535,16 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
                 {registrationStatus === 'approved' ? 'เข้าสู่ระบบ' : 'เข้าใจแล้ว'}
               </Button>
             )}
+            </div>
+
+            {(status === 'idle' || status === 'failed') &&
+              (registrationStatus === 'none' || registrationStatus === 'rejected') && (
+                <FaceImagePicker
+                  onImageData={handleImageData}
+                  disabled={false}
+                  label="อัปโหลดรูปแทน (ถ้ากล้องเปิดไม่ได้)"
+                />
+              )}
           </div>
         </CardContent>
       </Card>
