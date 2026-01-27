@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { 
@@ -32,6 +32,14 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
   const [isLoading, setIsLoading] = useState(true);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const isEmbedded = useMemo(() => {
+    try {
+      return window.self !== window.top;
+    } catch {
+      return true;
+    }
+  }, []);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -108,27 +116,67 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
   const startCamera = async () => {
     setStatus('camera-init');
     setErrorMessage(null);
+
+    // stop any prior stream
+    stopCamera();
     
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'user',
-          width: { ideal: 640 },
-          height: { ideal: 480 }
-        }
-      });
-      
-      streamRef.current = stream;
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setStatus('scanning');
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('CAMERA_UNSUPPORTED');
       }
+
+      // Some browsers/embedded iframes can stall on permission prompts; fail fast.
+      const stream = (await Promise.race([
+        navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('CAMERA_TIMEOUT')), 10000)
+        )
+      ])) as MediaStream;
+
+      streamRef.current = stream;
+      const videoEl = videoRef.current;
+      if (!videoEl) {
+        throw new Error('CAMERA_ELEMENT_MISSING');
+      }
+
+      videoEl.srcObject = stream;
+      // Don't await play() — it can hang in some environments. Transition UI immediately.
+      videoEl.play().catch(() => {
+        // ignore; user can still grant permission / browser may block autoplay
+      });
+      setStatus('scanning');
     } catch (error: any) {
       console.error('Camera error:', error);
       setStatus('failed');
-      setErrorMessage('ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตการใช้กล้อง');
+
+      const name = error?.name as string | undefined;
+      const message = String(error?.message || '');
+      const isTimeout = message.includes('CAMERA_TIMEOUT');
+      const isUnsupported = message.includes('CAMERA_UNSUPPORTED');
+      const isPermission = name === 'NotAllowedError' || name === 'SecurityError';
+      const isNoDevice = name === 'NotFoundError' || name === 'OverconstrainedError';
+
+      if (isUnsupported) {
+        setErrorMessage('อุปกรณ์/เบราว์เซอร์นี้ไม่รองรับการเปิดกล้อง');
+      } else if (isNoDevice) {
+        setErrorMessage('ไม่พบกล้องในอุปกรณ์นี้');
+      } else if (isTimeout) {
+        setErrorMessage(
+          isEmbedded
+            ? 'การเปิดกล้องค้างในหน้าพรีวิว — กรุณาเปิดในแท็บใหม่แล้วลองอีกครั้ง'
+            : 'การเปิดกล้องใช้เวลานานเกินไป กรุณาลองใหม่'
+        );
+      } else if (isPermission) {
+        setErrorMessage('ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตการใช้กล้อง');
+      } else {
+        setErrorMessage('ไม่สามารถเข้าถึงกล้องได้ กรุณาลองใหม่');
+      }
     }
   };
 
@@ -147,6 +195,17 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
     const context = canvas.getContext('2d');
     
     if (!context) return;
+
+    if (!video.videoWidth || !video.videoHeight) {
+      stopCamera();
+      setStatus('failed');
+      setErrorMessage(
+        isEmbedded
+          ? 'ยังไม่สามารถเริ่มภาพจากกล้องในหน้าพรีวิวได้ — กรุณาเปิดในแท็บใหม่แล้วลองอีกครั้ง'
+          : 'กล้องยังไม่พร้อม กรุณาลองใหม่'
+      );
+      return;
+    }
     
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -163,7 +222,7 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
     
     // Process the face
     await processFace(imageData);
-  }, [stopCamera]);
+  }, [stopCamera, isEmbedded]);
 
   const processFace = async (imageData: string) => {
     try {
@@ -427,13 +486,24 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
             )}
 
             {status === 'failed' && (
-              <Button
-                onClick={retryCapture}
-                className="w-full bg-terminal-amber hover:bg-terminal-amber/90 text-black font-mono font-semibold"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                ลองใหม่
-              </Button>
+              <>
+                {isEmbedded && (
+                  <Button
+                    onClick={() => window.open(window.location.href, '_blank', 'noopener,noreferrer')}
+                    variant="outline"
+                    className="flex-1 font-mono border-terminal-amber/30 text-terminal-amber hover:bg-terminal-amber/10"
+                  >
+                    เปิดในแท็บใหม่
+                  </Button>
+                )}
+                <Button
+                  onClick={retryCapture}
+                  className={`${isEmbedded ? 'flex-1' : 'w-full'} bg-terminal-amber hover:bg-terminal-amber/90 text-black font-mono font-semibold`}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  ลองใหม่
+                </Button>
+              </>
             )}
 
             {status === 'success' && (
