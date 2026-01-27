@@ -44,8 +44,10 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
 
   // Subscribe to realtime updates for approval status
   useEffect(() => {
+    if (!userId) return;
+    
     const channel = supabase
-      .channel('face-registration-updates')
+      .channel(`face-registration-updates-${userId}`)
       .on(
         'postgres_changes',
         {
@@ -73,6 +75,11 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
   }, [userId]);
 
   const checkRegistration = async () => {
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
+    
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -81,15 +88,18 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (error) throw error;
-
-      if (data) {
+      if (error) {
+        console.error('Error checking registration:', error);
+        // On error, assume no registration
+        setRegistrationStatus('none');
+      } else if (data) {
         setRegistrationStatus(data.status as RegistrationStatus);
       } else {
         setRegistrationStatus('none');
       }
     } catch (error) {
       console.error('Error checking registration:', error);
+      setRegistrationStatus('none');
     } finally {
       setIsLoading(false);
     }
