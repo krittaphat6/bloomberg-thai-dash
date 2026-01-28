@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TabManager from './TabManager';
 import TabSelector from './TabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
-import { Expand, Minimize, LogOut, TrendingUp, BarChart3, Brain, Wrench, MessageSquare, Gamepad2, Globe } from 'lucide-react';
+import { Expand, Minimize, LogOut, TrendingUp, BarChart3, Brain, Wrench, MessageSquare, Gamepad2, Globe, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useResponsiveContext } from '@/contexts/ResponsiveContext';
 import { usePanelCommander } from '@/contexts/PanelCommanderContext';
@@ -68,6 +68,8 @@ interface TabOption {
   tags?: string[];
 }
 
+const ADMIN_EMAILS = ['krittaphat6@hotmail.com', 'admin@ableterminal.com'];
+
 const MarketData = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -79,6 +81,11 @@ const MarketData = () => {
   const [nextPanelId, setNextPanelId] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [panelIdCounter, setPanelIdCounter] = useState(1);
+
+  // Check if current user is admin
+  const isAdmin = useMemo(() => {
+    return ADMIN_EMAILS.includes(user?.email || '');
+  }, [user?.email]);
 
   useEffect(() => {
     const timeInterval = setInterval(() => {
@@ -611,6 +618,17 @@ const MarketData = () => {
               {isFullscreen ? <Minimize className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
             </Button>
             <ThemeSwitcher />
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/admin')}
+                className="text-terminal-amber hover:bg-terminal-amber/10 font-mono text-xs"
+              >
+                <Shield className="h-4 w-4 mr-1" />
+                Admin
+              </Button>
+            )}
             <div className="text-sm sm:text-base text-terminal-green font-mono">
               {currentTime.toLocaleTimeString()} EST | LIVE
             </div>
