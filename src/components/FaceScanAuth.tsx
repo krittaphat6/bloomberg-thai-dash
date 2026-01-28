@@ -537,14 +537,6 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
             )}
             </div>
 
-            {(status === 'idle' || status === 'failed') &&
-              (registrationStatus === 'none' || registrationStatus === 'rejected') && (
-                <FaceImagePicker
-                  onImageData={handleImageData}
-                  disabled={false}
-                  label="อัปโหลดรูปแทน (ถ้ากล้องเปิดไม่ได้)"
-                />
-              )}
           </div>
         </CardContent>
       </Card>
