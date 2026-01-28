@@ -20,6 +20,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const OptionsSurfacePlot = lazy(() => import("./components/OptionsSurfacePlot"));
 const PacManGame = lazy(() => import("./components/PacManGame").then(m => ({ default: m.PacManGame })));
 const GlobalMap = lazy(() => import("./pages/GlobalMap"));
+const Admin = lazy(() => import("./pages/Admin"));
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,7 @@ const AppContent = () => {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/admin" element={<Admin />} />
             <Route path="/notes" element={<NotesAndVisualization />} />
             <Route path="/relationship-dashboard" element={<RelationshipDashboard />} />
             <Route path="/intelligence" element={<IntelligencePlatform />} />
