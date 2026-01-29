@@ -88,12 +88,12 @@ export const FaceSearch: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'main' | 'lookalikes' | 'analysis'>('main');
   const [scanPhases, setScanPhases] = useState<ScanPhase[]>([
     { name: 'Face Detection', description: 'ตรวจจับใบหน้าในรูปภาพ', icon: <ScanFace className="w-4 h-4" />, color: 'text-cyan-400', status: 'pending' },
-    { name: 'Feature Analysis', description: 'วิเคราะห์ลักษณะใบหน้า 68 จุด', icon: <Eye className="w-4 h-4" />, color: 'text-blue-400', status: 'pending' },
-    { name: 'Facial Signature', description: 'สร้างลายเซ็นใบหน้าเฉพาะตัว', icon: <Fingerprint className="w-4 h-4" />, color: 'text-purple-400', status: 'pending' },
+    { name: 'Deep Analysis', description: 'วิเคราะห์ลักษณะใบหน้า 68 จุด', icon: <Eye className="w-4 h-4" />, color: 'text-blue-400', status: 'pending' },
+    { name: 'Face Embedding', description: 'สร้าง Face Vector สำหรับเปรียบเทียบ', icon: <Fingerprint className="w-4 h-4" />, color: 'text-purple-400', status: 'pending' },
     { name: 'AI Reasoning', description: 'Chain-of-Thought Analysis', icon: <Brain className="w-4 h-4" />, color: 'text-pink-400', status: 'pending' },
-    { name: 'Database Search', description: 'ค้นหาในฐานข้อมูล Celebrity', icon: <Database className="w-4 h-4" />, color: 'text-orange-400', status: 'pending' },
-    { name: 'Lookalike Match', description: 'จับคู่คนหน้าคล้าย', icon: <Users className="w-4 h-4" />, color: 'text-yellow-400', status: 'pending' },
-    { name: 'Social Search', description: 'ค้นหา Social Media Profiles', icon: <Network className="w-4 h-4" />, color: 'text-green-400', status: 'pending' },
+    { name: 'Database Search', description: 'ค้นหาในฐานข้อมูล Face Registration', icon: <Database className="w-4 h-4" />, color: 'text-orange-400', status: 'pending' },
+    { name: 'Platform Search', description: 'ค้นหา IG, TikTok, FB, X', icon: <Network className="w-4 h-4" />, color: 'text-green-400', status: 'pending' },
+    { name: 'Lookalike Match', description: 'จับคู่คนหน้าคล้ายจากคนดัง', icon: <Users className="w-4 h-4" />, color: 'text-yellow-400', status: 'pending' },
     { name: 'Verification', description: 'ตรวจสอบและยืนยันผลลัพธ์', icon: <CheckCircle className="w-4 h-4" />, color: 'text-emerald-400', status: 'pending' },
   ]);
   const [analysisLog, setAnalysisLog] = useState<string[]>([]);
@@ -132,14 +132,14 @@ export const FaceSearch: React.FC = () => {
           
           // Add analysis log
           const logs = [
-            '🔍 Detecting facial boundaries...',
-            '📐 Mapping 68 facial landmarks...',
-            '🔐 Generating unique facial embedding...',
-            '🧠 Running Chain-of-Thought reasoning...',
-            '📊 Searching celebrity database...',
-            '👥 Finding similar faces...',
-            '🌐 Fetching social media profiles...',
-            '✅ Verifying and ranking results...'
+            '🔍 Detecting facial boundaries & landmarks...',
+            '📐 Deep analyzing 68 facial points + features...',
+            '🔐 Generating face embedding vector...',
+            '🧠 Running Chain-of-Thought AI reasoning...',
+            '💾 Searching registered faces database...',
+            '🌐 Simulating IG, TikTok, FB, X reverse search...',
+            '👥 Finding lookalike celebrities...',
+            '✅ Verifying & ranking all results...'
           ];
           setAnalysisLog(prev => [...prev, logs[idx]]);
         }, cumulativeTime);
@@ -231,6 +231,30 @@ export const FaceSearch: React.FC = () => {
     setShowCamera(false);
   };
 
+  // Fetch registered faces from database to enhance search
+  const fetchRegisteredFaces = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('face_registrations')
+        .select('user_id, face_encoding, face_image_url')
+        .eq('status', 'approved');
+      
+      if (error) {
+        console.error('Error fetching registered faces:', error);
+        return [];
+      }
+      
+      return (data || []).map(item => ({
+        userId: item.user_id,
+        faceEncoding: item.face_encoding || '',
+        faceImageUrl: item.face_image_url || ''
+      }));
+    } catch (error) {
+      console.error('Error fetching registered faces:', error);
+      return [];
+    }
+  };
+
   const searchFace = async () => {
     if (!selectedImage) {
       toast.error('กรุณาเลือกรูปภาพก่อน');
@@ -242,6 +266,10 @@ export const FaceSearch: React.FC = () => {
     setActiveTab('main');
 
     try {
+      // Fetch registered faces to include in search
+      const registeredFaces = await fetchRegisteredFaces();
+      console.log(`Loaded ${registeredFaces.length} registered faces for matching`);
+
       const { data, error } = await supabase.functions.invoke('face-search', {
         body: { 
           image: selectedImage,
@@ -249,8 +277,11 @@ export const FaceSearch: React.FC = () => {
             searchSocialMedia: true,
             includeRelatedImages: true,
             searchLookalikes: true,
-            deepAnalysis: true
-          }
+            deepAnalysis: true,
+            searchRegisteredFaces: true,
+            webSearch: true
+          },
+          registeredFaces: registeredFaces
         }
       });
 
@@ -260,9 +291,11 @@ export const FaceSearch: React.FC = () => {
       
       if (data.success && (data.persons.length > 0 || (data.lookalikes && data.lookalikes.length > 0))) {
         const totalResults = data.persons.length + (data.lookalikes?.length || 0);
-        toast.success(`พบ ${totalResults} ผลลัพธ์`);
+        const dbMatches = data.databaseMatches || 0;
+        const strategies = data.searchStrategies?.length || 0;
+        toast.success(`พบ ${totalResults} ผลลัพธ์ (${strategies} strategies, ${dbMatches} DB matches)`);
       } else if (data.success) {
-        toast.info('ไม่พบข้อมูลที่ตรงกับใบหน้านี้');
+        toast.info('ไม่พบข้อมูลที่ตรงกับใบหน้านี้ ลองใช้รูปที่ชัดกว่านี้');
       }
     } catch (error) {
       console.error('Face search error:', error);
