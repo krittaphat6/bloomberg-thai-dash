@@ -1194,7 +1194,7 @@ async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): P
     return generateFallbackAnalysis(news, symbols);
   }
 
-  console.log(`🔑 Gemini API Direct (gemini-2.0-flash-exp)`);
+  console.log(`🔑 Gemini API Direct (gemini-2.5-flash)`);
   const results: MacroAnalysis[] = [];
 
   for (const symbol of symbols) {
@@ -1211,7 +1211,7 @@ async function analyzeWithGemini(news: RawNewsItem[], pinnedAssets: string[]): P
       const prompt = buildFullAnalysisPrompt(allNewsDetailed, symbol);
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1284,7 +1284,7 @@ async function generateDailyReportAI(news: RawNewsItem[], assets: string[]): Pro
     const prompt = buildDailyReportPrompt(news, assets);
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

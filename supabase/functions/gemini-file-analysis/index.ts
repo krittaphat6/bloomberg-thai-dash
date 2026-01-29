@@ -90,7 +90,7 @@ serve(async (req) => {
       console.log('🔮 Using Gemini API directly');
       
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -126,7 +126,7 @@ serve(async (req) => {
           fileName,
           fileType,
           analysis: text,
-          model: 'gemini-2.0-flash-exp'
+          model: 'gemini-2.5-flash'
         }), 
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

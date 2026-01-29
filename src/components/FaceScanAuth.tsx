@@ -84,9 +84,20 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
     };
   }, [userId]);
 
+  // Admin emails that bypass face scan requirement
+  const ADMIN_EMAILS = ['krittaphat6@hotmail.com', 'admin@ableterminal.com'];
+
   const checkRegistration = async () => {
     if (!userId) {
       setIsLoading(false);
+      return;
+    }
+    
+    // ✅ Check if user is admin - auto-approve bypass
+    if (ADMIN_EMAILS.includes(userEmail.toLowerCase())) {
+      console.log('🔓 Admin detected, bypassing face scan:', userEmail);
+      setIsLoading(false);
+      onSuccess(); // Directly grant access
       return;
     }
     

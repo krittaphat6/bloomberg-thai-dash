@@ -68,7 +68,7 @@ ${headlines.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n')}
 
     // Make streaming request to Google Gemini directly
     const aiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: {

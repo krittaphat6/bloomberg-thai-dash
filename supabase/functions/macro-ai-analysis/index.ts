@@ -48,7 +48,7 @@ serve(async (req) => {
       const contextInfo = context ? `\n\n--- App Data Context ---\n${JSON.stringify(context, null, 2)}` : ''
       
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -120,7 +120,7 @@ ${headlinesList.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n') || 'ไ�
 วิเคราะห์และตอบเป็น JSON`
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -190,7 +190,7 @@ ${headlinesList.slice(0, 15).map((h, i) => `${i + 1}. ${h}`).join('\n') || 'ไ�
       risk_warnings: Array.isArray(analysis.risk_warnings) ? analysis.risk_warnings.slice(0, 2) : [],
       market_regime: analysis.market_regime || 'ranging',
       analyzed_at: new Date().toISOString(),
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.5-flash',
       news_count: headlinesList.length
     }
 

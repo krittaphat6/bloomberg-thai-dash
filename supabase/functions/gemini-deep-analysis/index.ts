@@ -102,7 +102,7 @@ ${batch.map((n, idx) => `${idx + 1}. "${n.title}" (${n.source})`).join('\n')}
 
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -296,7 +296,7 @@ ${newsHeadlines || 'ไม่มีข่าวที่ผ่านเกณฑ
 }`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -359,7 +359,7 @@ ${newsHeadlines || 'ไม่มีข่าวที่ผ่านเกณฑ
         filter_pass_rate: filterStats.filter_pass_rate || '0%',
         market_moving_news: filterStats.market_moving_news || 0,
         top_news: filterStats.top_news || [],
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-2.5-flash',
         framework: 'ABLE-HF 3.0'
       }
     };
