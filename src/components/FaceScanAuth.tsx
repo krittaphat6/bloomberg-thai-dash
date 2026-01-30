@@ -401,7 +401,7 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
               </div>
             )}
 
-            {(status === 'scanning' || status === 'processing') && !capturedImage && (
+            {(status === 'camera-init' || status === 'scanning' || status === 'processing') && !capturedImage && (
               <>
                 <video
                   ref={videoRef}
