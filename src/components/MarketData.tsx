@@ -50,7 +50,7 @@ import { BloombergMap } from './BloombergMap';
 import MonteCarloSimulator from './MonteCarloSimulator';
 import AbleHF40Modules from './AbleHF40Modules';
 import { FaceSearch } from './FaceSearch';
-import { FaceApprovalPanel } from './FaceApprovalPanel';
+import { TacticalCommandMap } from './TacticalMap';
 
 interface PanelData {
   id: string;
@@ -510,14 +510,14 @@ const MarketData = () => {
       tags: ['chess', 'puzzle', 'game', 'strategy']
     },
     
-    // Admin Tools
+    // Tactical Command
     { 
-      id: 'face-approval', 
-      title: '👤 FACE APPROVAL', 
-      component: <FaceApprovalPanel />,
-      category: 'admin',
-      description: 'อนุมัติผู้ใช้งานใหม่ที่ลงทะเบียนใบหน้า',
-      tags: ['admin', 'approval', 'face', 'users', 'อนุมัติ']
+      id: 'tactical-command', 
+      title: '🎯 TACTICAL COMMAND', 
+      component: <TacticalCommandMap />,
+      category: 'tools',
+      description: 'ระบบบัญชาการทางยุทธวิธี แบบ Palantir AIP',
+      tags: ['tactical', 'military', 'command', 'simulation', 'map', 'ยุทธวิธี']
     },
   ];
 

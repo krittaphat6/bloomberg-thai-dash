@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Shield, Users } from 'lucide-react';
-import { FaceApprovalPanel } from '@/components/FaceApprovalPanel';
+import { ArrowLeft, Shield, Users, Target } from 'lucide-react';
+import { TacticalCommandMap } from '@/components/TacticalMap';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -74,8 +74,8 @@ const Admin = () => {
               Dashboard
             </Button>
             <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-terminal-amber" />
-              <h1 className="text-xl font-mono font-bold text-terminal-amber">ADMIN PANEL</h1>
+              <Target className="h-5 w-5 text-terminal-amber" />
+              <h1 className="text-xl font-mono font-bold text-terminal-amber">TACTICAL COMMAND CENTER</h1>
             </div>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono">
@@ -86,19 +86,8 @@ const Admin = () => {
       </header>
 
       {/* Content */}
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="space-y-6">
-          <div>
-            <h2 className="text-lg font-mono font-semibold text-foreground mb-2">
-              การจัดการผู้ใช้งาน
-            </h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              ตรวจสอบและอนุมัติผู้ใช้งานที่ลงทะเบียนใบหน้าใหม่
-            </p>
-          </div>
-
-          <FaceApprovalPanel />
-        </div>
+      <main className="h-[calc(100vh-73px)]">
+        <TacticalCommandMap />
       </main>
     </div>
   );
