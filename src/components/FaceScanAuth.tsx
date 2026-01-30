@@ -154,16 +154,32 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
       ])) as MediaStream;
 
       streamRef.current = stream;
+      
+      // Wait a tick for video element to be in DOM after status change
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const videoEl = videoRef.current;
       if (!videoEl) {
         throw new Error('CAMERA_ELEMENT_MISSING');
       }
 
       videoEl.srcObject = stream;
-      // Don't await play() — it can hang in some environments. Transition UI immediately.
-      videoEl.play().catch(() => {
-        // ignore; user can still grant permission / browser may block autoplay
+      
+      // Wait for video metadata to be loaded before transitioning
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('VIDEO_LOAD_TIMEOUT')), 5000);
+        videoEl.onloadedmetadata = () => {
+          clearTimeout(timeout);
+          videoEl.play()
+            .then(() => resolve())
+            .catch(() => resolve()); // Still resolve even if autoplay blocked
+        };
+        videoEl.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error('VIDEO_ELEMENT_ERROR'));
+        };
       });
+      
       setStatus('scanning');
     } catch (error: any) {
       console.error('Camera error:', error);
@@ -172,7 +188,7 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
       const name = error?.name as string | undefined;
       const message = String(error?.message || '');
       setCameraErrorDetails([name, message].filter(Boolean).join(': '));
-      const isTimeout = message.includes('CAMERA_TIMEOUT');
+      const isTimeout = message.includes('CAMERA_TIMEOUT') || message.includes('VIDEO_LOAD_TIMEOUT');
       const isUnsupported = message.includes('CAMERA_UNSUPPORTED');
       const isPermission = name === 'NotAllowedError' || name === 'SecurityError';
       const isNoDevice = name === 'NotFoundError' || name === 'OverconstrainedError';
@@ -188,9 +204,13 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
             : 'การเปิดกล้องใช้เวลานานเกินไป กรุณาลองใหม่'
         );
       } else if (isPermission) {
-        setErrorMessage('ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตการใช้กล้อง');
+        setErrorMessage(
+          isEmbedded
+            ? 'ไม่สามารถเข้าถึงกล้องใน Preview ได้ — กรุณาเปิดในแท็บใหม่หรืออัปโหลดรูปแทน'
+            : 'ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตการใช้กล้องในเบราว์เซอร์'
+        );
       } else {
-        setErrorMessage('ไม่สามารถเข้าถึงกล้องได้ กรุณาลองใหม่');
+        setErrorMessage('ไม่สามารถเข้าถึงกล้องได้ กรุณาลองใหม่หรืออัปโหลดรูปแทน');
       }
     }
   };
@@ -494,6 +514,19 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
               </>
             )}
 
+            {status === 'camera-init' && (
+              <Button
+                onClick={() => {
+                  stopCamera();
+                  setStatus('idle');
+                }}
+                variant="outline"
+                className="w-full font-mono border-muted-foreground/30"
+              >
+                ยกเลิก
+              </Button>
+            )}
+
             {status === 'scanning' && (
               <>
                 <Button
@@ -548,6 +581,15 @@ export const FaceScanAuth = ({ userId, userEmail, onSuccess, onCancel }: FaceSca
             )}
             </div>
 
+            {/* Upload fallback - always show when not processing */}
+            {(status === 'idle' || status === 'failed') && (
+              <div className="pt-2 border-t border-muted-foreground/20">
+                <p className="text-xs text-muted-foreground text-center mb-2">
+                  หรือใช้รูปภาพแทน
+                </p>
+                <FaceImagePicker onImageData={handleImageData} />
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
