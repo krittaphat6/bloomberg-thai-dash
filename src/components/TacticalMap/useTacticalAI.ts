@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
 import { TacticalUnit, TacticalMessage, TacticalProposal } from './types';
-import { supabase } from '@/integrations/supabase/client';
 
 interface UseTacticalAIReturn {
   messages: TacticalMessage[];
@@ -11,6 +10,46 @@ interface UseTacticalAIReturn {
   rejectProposal: () => void;
   clearMessages: () => void;
 }
+
+const TACTICAL_SYSTEM_PROMPT = `You are ABLE Tactical AI, a sophisticated military command assistant modeled after Palantir AIP for Defense.
+
+You operate as the AI backbone of a battlefield command system, providing:
+1. Real-time tactical analysis and threat assessment
+2. Combat simulation predictions based on unit positions and capabilities
+3. Strategic recommendations for attack, defense, jamming, and movement operations
+4. Risk assessment and casualty predictions
+
+CAPABILITIES:
+- Analyze unit positions, types, and combat strength
+- Calculate engagement ranges and combat effectiveness
+- Predict outcomes of various tactical scenarios
+- Recommend optimal force deployment
+- Advise on electronic warfare (jamming) operations
+- Provide movement and waypoint suggestions
+
+UNIT TYPES & CAPABILITIES:
+- infantry: Ground troops, 10 combat power, 5km range
+- armor: Tank units, 25 combat power, 10km range
+- artillery: Fire support, 30 combat power, 30km range
+- air_defense: Anti-air, 15 combat power, 50km range
+- comms_jammer: EW unit, can disable enemy comms within 20km
+- comms_relay: Communication hub, critical for command chain
+- recon: Scout units, 8 combat power, 15km visibility
+- command: HQ unit, force multiplier effect
+
+RESPONSE FORMAT:
+- Always respond in Thai language unless specifically asked otherwise
+- Provide structured analysis with clear sections
+- Include risk levels: ต่ำ (low), กลาง (medium), สูง (high)
+- Include success probability estimates (0-100%)
+- Be concise but thorough
+
+When user requests actions like "โจมตี" (attack), "jam" (jamming), "เคลื่อนที่" (move), provide:
+1. Tactical assessment of the request
+2. Recommended units to execute
+3. Risk assessment
+4. Expected outcome
+5. Alternative approaches if applicable`;
 
 export const useTacticalAI = (initialMessages: TacticalMessage[]): UseTacticalAIReturn => {
   const [messages, setMessages] = useState<TacticalMessage[]>(initialMessages);
@@ -30,36 +69,58 @@ export const useTacticalAI = (initialMessages: TacticalMessage[]): UseTacticalAI
     setIsLoading(true);
 
     try {
-      // Build context for AI
+      // Build detailed context for AI
       const friendlyUnits = units.filter(u => u.affiliation === 'friendly');
       const hostileUnits = units.filter(u => u.affiliation === 'hostile');
+      const activeUnits = units.filter(u => u.status !== 'destroyed');
       
-      const contextPrompt = `You are ABLE Tactical AI, a military command assistant similar to Palantir AIP for Defense.
+      // Calculate total combat power
+      const friendlyPower = friendlyUnits.reduce((sum, u) => {
+        const base = { infantry: 10, armor: 25, artillery: 30, air_defense: 15, comms_jammer: 12, comms_relay: 3, recon: 8, command: 5, logistics: 2, satcom: 2 };
+        return sum + (base[u.type] || 10) * (u.strength / 100);
+      }, 0);
+      
+      const hostilePower = hostileUnits.reduce((sum, u) => {
+        const base = { infantry: 10, armor: 25, artillery: 30, air_defense: 15, comms_jammer: 12, comms_relay: 3, recon: 8, command: 5, logistics: 2, satcom: 2 };
+        return sum + (base[u.type] || 10) * (u.strength / 100);
+      }, 0);
 
-Current Battlefield Status:
-- Friendly Units: ${friendlyUnits.length} (${friendlyUnits.map(u => u.callsign).join(', ')})
-- Hostile Units: ${hostileUnits.length} detected
-- Time: ${new Date().toISOString()}
+      const contextPrompt = `${TACTICAL_SYSTEM_PROMPT}
 
-Available Friendly Assets:
-${friendlyUnits.map(u => `- ${u.callsign} (${u.type}): Status=${u.status}, Strength=${Math.round(u.strength)}%, Position=[${u.position.join(',')}]`).join('\n')}
+CURRENT BATTLEFIELD STATUS (${new Date().toISOString()}):
+=====================================
 
-Detected Hostile Forces:
-${hostileUnits.map(u => `- ${u.callsign} (${u.type}): Status=${u.status}, Position=[${u.position.join(',')}]`).join('\n')}
+📊 FORCE SUMMARY:
+- Friendly Units: ${friendlyUnits.length} (Total Combat Power: ${Math.round(friendlyPower)})
+- Hostile Units: ${hostileUnits.length} (Total Combat Power: ${Math.round(hostilePower)})
+- Force Ratio: ${(friendlyPower / Math.max(1, hostilePower)).toFixed(2)}:1 ${friendlyPower > hostilePower ? '(ADVANTAGE)' : '(DISADVANTAGE)'}
 
-User Command: ${content}
+🔵 FRIENDLY FORCES:
+${friendlyUnits.map(u => 
+  `• ${u.callsign} [${u.type.toUpperCase()}]
+    - Status: ${u.status} | Strength: ${Math.round(u.strength)}%
+    - Position: [${u.position[0].toFixed(4)}, ${u.position[1].toFixed(4)}]
+    - Effective Range: ${u.effectiveRange || 10}km`
+).join('\n')}
 
-Respond in Thai language. If the user requests an action (attack, defend, jam, move units, etc.), provide:
-1. A tactical analysis
-2. Recommended actions with specific units
-3. Risk assessment (ต่ำ/กลาง/สูง)
-4. Expected outcome
+🔴 HOSTILE FORCES:
+${hostileUnits.map(u => 
+  `• ${u.callsign} [${u.type.toUpperCase()}]
+    - Status: ${u.status} | Strength: ${Math.round(u.strength)}%
+    - Position: [${u.position[0].toFixed(4)}, ${u.position[1].toFixed(4)}]`
+).join('\n')}
 
-For jamming operations, specify which jammer units to use and target communications.
-For movement orders, specify waypoints and formation.
-For attack orders, specify assault and support elements.
+⚠️ THREAT ASSESSMENT:
+${hostileUnits.filter(u => u.status === 'moving').length > 0 
+  ? `- ${hostileUnits.filter(u => u.status === 'moving').length} hostile units are on the move`
+  : '- No immediate hostile movement detected'}
+${hostileUnits.some(u => u.type.includes('comms')) 
+  ? '- Enemy communications network active - jamming recommended'
+  : ''}
 
-Keep responses concise and military-style.`;
+USER COMMAND: ${content}
+
+Provide tactical analysis and recommendations in Thai.`;
 
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-deep-analysis`, {
         method: 'POST',
@@ -69,7 +130,7 @@ Keep responses concise and military-style.`;
         },
         body: JSON.stringify({
           prompt: contextPrompt,
-          analysisType: 'tactical',
+          analysisType: 'tactical-command',
         }),
       });
 
@@ -80,12 +141,25 @@ Keep responses concise and military-style.`;
       const data = await response.json();
       const aiContent = data.analysis || data.result || 'ไม่สามารถวิเคราะห์คำสั่งได้';
 
-      // Check if this is an action request that needs a proposal
-      const actionKeywords = ['โจมตี', 'attack', 'jam', 'jamming', 'move', 'เคลื่อนที่', 'defend', 'ป้องกัน', 'fire', 'ยิง'];
+      // Detect action keywords for proposal generation
+      const actionKeywords = [
+        'โจมตี', 'attack', 'fire', 'ยิง', 'strike',
+        'jam', 'jamming', 'รบกวน', 'ทำลายสื่อสาร',
+        'move', 'เคลื่อนที่', 'ย้าย', 'deploy',
+        'defend', 'ป้องกัน', 'hold', 'ตั้งรับ',
+        'recon', 'ลาดตระเวน', 'scout',
+        'withdraw', 'ถอย', 'retreat'
+      ];
+      
       const isActionRequest = actionKeywords.some(kw => content.toLowerCase().includes(kw));
 
       let proposal: TacticalProposal | undefined;
       if (isActionRequest) {
+        // Determine risk based on force ratio
+        const ratio = friendlyPower / Math.max(1, hostilePower);
+        const riskLevel = ratio > 1.5 ? 'low' : ratio > 1 ? 'medium' : 'high';
+        const successProb = Math.min(95, Math.max(20, 50 + (ratio - 1) * 30 + Math.random() * 15));
+        
         proposal = {
           id: `proposal-${Date.now()}`,
           title: content.slice(0, 50) + (content.length > 50 ? '...' : ''),
@@ -94,9 +168,9 @@ Keep responses concise and military-style.`;
           status: 'pending',
           createdAt: new Date(),
           createdBy: 'ABLE Tactical AI',
-          aiConfidence: 75 + Math.random() * 20,
-          riskAssessment: Math.random() > 0.7 ? 'high' : Math.random() > 0.4 ? 'medium' : 'low',
-          successProbability: 60 + Math.random() * 35,
+          aiConfidence: 70 + Math.random() * 25,
+          riskAssessment: riskLevel,
+          successProbability: successProb,
         };
         setActiveProposal(proposal);
       }

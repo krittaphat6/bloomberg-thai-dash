@@ -3,15 +3,14 @@ import {
   Maximize2, 
   Minimize2, 
   RefreshCw, 
-  Layers, 
   Radio, 
   Eye, 
   EyeOff,
-  Save,
-  Share2,
-  Settings,
   Target,
-  MapPin
+  Play,
+  Pause,
+  Crosshair,
+  Zap
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { TacticalMapCanvas } from './TacticalMapCanvas';
 import { TacticalAIChat } from './TacticalAIChat';
 import { UnitListPanel } from './UnitListPanel';
+import { TacticalOverlay } from './TacticalOverlay';
 import { useTacticalAI } from './useTacticalAI';
 import { generateMockUnits, generateMockZones, getInitialMessages } from './mockData';
 import { TacticalUnit, TacticalZone } from './types';
@@ -63,38 +63,12 @@ export const TacticalCommandMap = ({
     sendMessage(content, units);
   }, [sendMessage, units]);
 
-  const handleRefresh = useCallback(() => {
+
+  const handleResetBattlefield = useCallback(() => {
     setUnits(generateMockUnits());
     setZones(generateMockZones());
-    toast.success('Battlefield data refreshed');
-  }, []);
-
-  const handleStartSimulation = useCallback(() => {
-    setIsSimulating(true);
-    toast.info('Starting tactical simulation...');
-    
-    // Simulate unit movements
-    const interval = setInterval(() => {
-      setUnits(prev => prev.map(unit => {
-        if (unit.status === 'moving' && Math.random() > 0.7) {
-          const newLat = unit.position[0] + (Math.random() - 0.5) * 0.02;
-          const newLng = unit.position[1] + (Math.random() - 0.5) * 0.02;
-          return {
-            ...unit,
-            position: [newLat, newLng] as [number, number],
-            heading: (unit.heading + Math.random() * 20 - 10 + 360) % 360,
-          };
-        }
-        return unit;
-      }));
-    }, 2000);
-
-    // Stop after 30 seconds
-    setTimeout(() => {
-      clearInterval(interval);
-      setIsSimulating(false);
-      toast.success('Simulation complete');
-    }, 30000);
+    setIsSimulating(false);
+    toast.success('Battlefield reset to initial state');
   }, []);
 
   const friendlyCount = units.filter(u => u.affiliation === 'friendly').length;
@@ -146,17 +120,19 @@ export const TacticalCommandMap = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleStartSimulation}
-            disabled={isSimulating}
-            className="h-7 px-2 text-muted-foreground hover:text-foreground"
+            onClick={() => setIsSimulating(!isSimulating)}
+            className={cn(
+              "h-7 px-2",
+              isSimulating ? "text-[#22c55e]" : "text-muted-foreground hover:text-foreground"
+            )}
           >
-            <Radio className={cn("w-3 h-3", isSimulating && "animate-pulse text-[#22c55e]")} />
+            {isSimulating ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
           </Button>
 
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleRefresh}
+            onClick={handleResetBattlefield}
             className="h-7 px-2 text-muted-foreground hover:text-foreground"
           >
             <RefreshCw className="w-3 h-3" />
@@ -197,13 +173,16 @@ export const TacticalCommandMap = ({
             className="w-full h-full"
           />
 
-          {/* Simulation Indicator */}
-          {isSimulating && (
-            <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#22c55e]/20 border border-[#22c55e]/50">
-              <Radio className="w-3 h-3 text-[#22c55e] animate-pulse" />
-              <span className="text-[10px] font-mono text-[#22c55e]">SIMULATION RUNNING</span>
-            </div>
-          )}
+          {/* Combat Control Overlay */}
+          <TacticalOverlay
+            units={units}
+            zones={zones}
+            selectedUnit={selectedUnit}
+            onUnitsUpdate={setUnits}
+            onSelectUnit={handleSelectUnit}
+            isSimulating={isSimulating}
+            onSimulationToggle={setIsSimulating}
+          />
 
           {/* Map Legend */}
           <div className="absolute bottom-4 left-4 bg-[#0d1421]/90 backdrop-blur-sm rounded-lg p-3 border border-[#1e3a5f]">
