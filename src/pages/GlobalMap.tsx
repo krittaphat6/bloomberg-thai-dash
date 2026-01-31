@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { BloombergMap } from '@/components/BloombergMap';
 import { TacticalCommandMap } from '@/components/TacticalMap';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Map, Target } from 'lucide-react';
+import { ArrowLeft, Map, Target, Crosshair, Globe } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 type MapMode = 'global' | 'tactical';
@@ -41,8 +41,8 @@ const GlobalMap = () => {
                 : 'text-white/70 hover:text-white hover:bg-white/10'
               }
             >
-              <Target className="w-4 h-4 mr-1" />
-              Tactical
+              <Crosshair className="w-4 h-4 mr-1" />
+              Combat Sim
             </Button>
             <Button
               variant={mapMode === 'global' ? 'default' : 'ghost'}
@@ -53,14 +53,21 @@ const GlobalMap = () => {
                 : 'text-white/70 hover:text-white hover:bg-white/10'
               }
             >
-              <Map className="w-4 h-4 mr-1" />
-              Global
+              <Globe className="w-4 h-4 mr-1" />
+              Intel Map
             </Button>
           </div>
           
-          <span className="text-[#ff6600] text-sm font-bold ml-auto">
-            {mapMode === 'tactical' ? 'ABLE TACTICAL COMMAND' : 'ABLE GLOBAL MAP'}
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            {mapMode === 'tactical' && (
+              <span className="text-[#f59e0b] text-xs font-mono px-2 py-1 bg-[#f59e0b]/10 rounded">
+                COMBAT SIMULATION MODE
+              </span>
+            )}
+            <span className="text-[#00a0ff] text-sm font-bold font-mono">
+              {mapMode === 'tactical' ? 'ABLE TACTICAL COMMAND' : 'ABLE GLOBAL INTELLIGENCE'}
+            </span>
+          </div>
         </div>
       )}
       
