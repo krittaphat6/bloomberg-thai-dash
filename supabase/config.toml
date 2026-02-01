@@ -50,3 +50,21 @@ verify_jwt = false
 
 [functions.comprehensive-news-analyzer]
 verify_jwt = false
+
+[functions.finbert-sentiment]
+verify_jwt = false
+
+[functions.gemini-deep-analysis]
+verify_jwt = false
+
+[functions.gemini-daily-report]
+verify_jwt = false
+
+[functions.gemini-file-analysis]
+verify_jwt = false
+
+[functions.global-weather]
+verify_jwt = false
+
+[functions.face-search]
+verify_jwt = false

@@ -1,5 +1,7 @@
 // src/components/TopNews.tsx
-// ✅ FIXED VERSION - Refresh ทุก 10 นาที + เฉพาะตอนเปิด component + แสดง metadata
+// ✅ UPGRADED VERSION - FinBERT Sentiment + Feature Engineering + macro-news-sentiment-trading
+// Based on: https://github.com/yukepenn/macro-news-sentiment-trading
+// Research: https://arxiv.org/html/2505.16136v1
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -7,15 +9,25 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, Sparkles, ExternalLink, Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3, Settings, Eye, FileText, Users, Zap, Loader2, Target, Plus, X, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Search, Pin, Newspaper } from 'lucide-react';
+import { RefreshCw, Sparkles, ExternalLink, Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3, Settings, Eye, FileText, Users, Zap, Loader2, Target, Plus, X, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Search, Pin, Newspaper, Activity, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
 import { GeminiThinkingModal } from './TopNews/GeminiThinkingModal';
 import { RelationshipDiagram } from './TopNews/RelationshipDiagram';
 import { FlowchartDiagram } from './TopNews/FlowchartDiagram';
+import { AdvancedSentimentPanel } from './TopNews/AdvancedSentimentPanel';
+import { FinBERTBadge } from './TopNews/FinBERTBadge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
+import { 
+  computeSentimentFeatures, 
+  calculateBacktestStats,
+  generateSignal,
+  SentimentFeatures,
+  BacktestStats,
+  TradingSignal
+} from '@/services/sentimentFeatureService';
 
 // ABLE-HF 3.0 Analysis Result from Backend
 interface AbleAnalysisResult {
@@ -38,6 +50,19 @@ interface AbleAnalysisResult {
   analyzed_at?: string;
   news_count?: number;
   relevant_news_count?: number;
+}
+
+// FinBERT Result
+interface FinBERTResult {
+  id: string;
+  title: string;
+  sentiment: 'positive' | 'negative' | 'neutral';
+  confidence: number;
+  scores: {
+    positive: number;
+    negative: number;
+    neutral: number;
+  };
 }
 
 // ============ TYPES ============
@@ -176,6 +201,14 @@ export const TopNews = () => {
     marketMovingCount: number;
     topNews: any[];
   } | null>(null);
+
+  // ✅ NEW: FinBERT & Feature Engineering States
+  const [finbertLoading, setFinbertLoading] = useState(false);
+  const [finbertResults, setFinbertResults] = useState<Record<string, FinBERTResult>>({});
+  const [sentimentFeatures, setSentimentFeatures] = useState<SentimentFeatures | null>(null);
+  const [backtestStats, setBacktestStats] = useState<BacktestStats | null>(null);
+  const [tradingSignal, setTradingSignal] = useState<{ signal: TradingSignal; strength: number; reasoning: string[] } | null>(null);
+  const [showAdvancedStats, setShowAdvancedStats] = useState(true);
 
   // Fetch prices
   const fetchPrices = useCallback(async () => {
@@ -340,6 +373,86 @@ export const TopNews = () => {
       delete newPrices[symbol];
       return newPrices;
     });
+  };
+
+  // ✅ NEW: FinBERT Analysis Function
+  const runFinBERTAnalysis = async () => {
+    if (rawNews.length === 0) {
+      toast({ title: '⚠️ ไม่มีข่าว', description: 'กดปุ่ม Refresh เพื่อดึงข่าวก่อน', variant: 'destructive' });
+      return;
+    }
+
+    setFinbertLoading(true);
+    console.log('🧠 Starting FinBERT analysis for', rawNews.length, 'news items...');
+    
+    try {
+      const newsToAnalyze = rawNews.slice(0, 50).map(n => ({
+        id: n.id,
+        title: n.title
+      }));
+
+      const { data, error } = await supabase.functions.invoke('finbert-sentiment', {
+        body: { news: newsToAnalyze }
+      });
+
+      if (error) throw error;
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'FinBERT analysis failed');
+      }
+
+      // Store results by ID
+      const resultsMap: Record<string, FinBERTResult> = {};
+      (data.results || []).forEach((r: FinBERTResult) => {
+        resultsMap[r.id] = r;
+      });
+      setFinbertResults(resultsMap);
+
+      // Compute advanced features
+      const newsWithSentiment = rawNews.slice(0, 50).map(n => ({
+        id: n.id,
+        title: n.title,
+        sentiment: (resultsMap[n.id]?.sentiment || 'neutral') as 'positive' | 'negative' | 'neutral',
+        confidence: resultsMap[n.id]?.confidence || 50,
+        timestamp: n.timestamp
+      }));
+
+      const features = computeSentimentFeatures(newsWithSentiment);
+      setSentimentFeatures(features);
+
+      // Generate trading signal
+      const signal = generateSignal(features);
+      setTradingSignal(signal);
+
+      // Calculate backtest stats (simulated)
+      const signals = newsWithSentiment.map(n => ({
+        sentiment: n.sentiment === 'positive' ? 1 : n.sentiment === 'negative' ? -1 : 0,
+        timestamp: n.timestamp
+      }));
+      const backtest = calculateBacktestStats(signals);
+      setBacktestStats(backtest);
+
+      console.log('✅ FinBERT analysis complete:', {
+        total: data.results?.length,
+        features: features,
+        signal: signal.signal
+      });
+
+      toast({
+        title: '✅ FinBERT Analysis Complete',
+        description: `${data.results?.length} ข่าววิเคราะห์ | Signal: ${signal.signal} | Mean: ${(features.sentiment_mean * 100).toFixed(1)}%`
+      });
+
+    } catch (error) {
+      console.error('FinBERT error:', error);
+      toast({ 
+        title: '❌ FinBERT Analysis Failed', 
+        description: error instanceof Error ? error.message : 'Unknown error', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setFinbertLoading(false);
+    }
   };
 
   // ✅ NEW: Fetch เมื่อเปิด component + Auto-refresh ทุก 10 นาที + Cleanup
@@ -512,20 +625,58 @@ export const TopNews = () => {
         {/* Content Area */}
         <ScrollArea className="flex-1">
           {activeTab === 'macro' && <div className="p-4 md:p-6">
-              {/* Top Controls - Add Asset + Run Gemini */}
+              {/* Top Controls - Add Asset + Run Gemini + FinBERT */}
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-xs">
                     <Brain className="w-3 h-3 mr-1" />
                     ABLE-HF 3.0
                   </Badge>
+                  {sentimentFeatures && (
+                    <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 text-xs">
+                      🧠 FinBERT
+                    </Badge>
+                  )}
                   {geminiResult && (
                     <Badge variant="outline" className="border-purple-500/30 text-purple-400 text-xs">
-                      ✨ AI Analyzed
+                      ✨ Gemini
+                    </Badge>
+                  )}
+                  {tradingSignal && (
+                    <Badge 
+                      variant="outline" 
+                      className={`text-xs ${
+                        tradingSignal.signal.includes('BUY') ? 'border-emerald-500/50 text-emerald-400' :
+                        tradingSignal.signal.includes('SELL') ? 'border-red-500/50 text-red-400' :
+                        'border-zinc-500/50 text-zinc-400'
+                      }`}
+                    >
+                      📊 {tradingSignal.signal}
                     </Badge>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* ✅ NEW: FinBERT Analysis Button */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={runFinBERTAnalysis}
+                    disabled={finbertLoading || rawNews.length === 0}
+                    className="h-8 text-xs border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500/50"
+                  >
+                    {finbertLoading ? (
+                      <>
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Brain className="w-3 h-3 mr-1" />
+                        FinBERT
+                      </>
+                    )}
+                  </Button>
+                  
                   {/* ✅ Run Gemini Deep Analysis Button */}
                   <Button 
                     size="sm" 
@@ -717,6 +868,16 @@ export const TopNews = () => {
                     </div>
                   )}
                 </Card>
+              )}
+
+              {/* ✅ NEW: Advanced Sentiment Panel (FinBERT + Feature Engineering) */}
+              {showAdvancedStats && sentimentFeatures && (
+                <AdvancedSentimentPanel 
+                  features={sentimentFeatures}
+                  backtestStats={backtestStats}
+                  signal={tradingSignal}
+                  isLoading={finbertLoading}
+                />
               )}
 
               {showAddAsset && <Card className="p-3 mb-4 bg-zinc-900 border-zinc-800">
