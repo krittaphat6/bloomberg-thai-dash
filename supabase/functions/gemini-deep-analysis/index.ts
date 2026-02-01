@@ -41,6 +41,20 @@ interface DeepAnalysisRequest {
     change: number;
     changePercent: number;
   };
+  // ✅ NEW: FinBERT features from frontend
+  sentimentFeatures?: {
+    sentiment_mean: number;
+    sentiment_std: number;
+    sentiment_momentum: number;
+    goldstein_mean: number;
+    goldstein_max: number;
+    article_spike: boolean;
+    spike_magnitude: number;
+    bullish_ratio: number;
+    bearish_ratio: number;
+    neutral_ratio: number;
+    avg_confidence: number;
+  };
 }
 
 // ✅ NEW: FilteredNews interface
