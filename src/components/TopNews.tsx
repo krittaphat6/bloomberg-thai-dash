@@ -38,6 +38,11 @@ interface AbleAnalysisResult {
   analyzed_at?: string;
   news_count?: number;
   relevant_news_count?: number;
+  filtered_news_count?: number;
+  filter_pass_rate?: string;
+  market_moving_news?: number;
+  top_news?: any[];
+  thinking_process?: string;
 }
 
 // ============ TYPES ============
@@ -744,26 +749,33 @@ export const TopNews = () => {
 
               {/* Macro Analysis Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {macroData.length === 0 ? <div className="col-span-2 text-center py-12 text-zinc-500">
+                {pinnedAssets.length === 0 ? <div className="col-span-2 text-center py-12 text-zinc-500">
                     <Brain className="w-12 h-12 mx-auto mb-3 opacity-50" />
                     <p className="text-lg">No assets pinned</p>
                     <p className="text-sm mt-1">Add assets to see AI analysis</p>
-                  </div> : macroData.map(macro => {
-              const analysis = macro.ableAnalysis;
-              const isFallback = !analysis || analysis.decision?.includes('Fallback');
-              const P_up = analysis?.P_up_pct || 50;
-              const decision = analysis?.decision || 'HOLD';
-              const analysisText = analysis?.thai_summary || macro.analysis;
-              return <Card key={macro.symbol} className="p-4 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer bg-black relative group" onClick={() => setSelectedAssetForModal(macro.symbol)}>
-                        {/* ✅ DELETE BUTTON - เหมือน Gold card */}
+                  </div> : pinnedAssets.map(asset => {
+              const analysis = ableAnalysis[asset.symbol];
+              const hasAnalysis = analysis && analysis.P_up_pct !== undefined;
+              const isFallback = !hasAnalysis || analysis?.decision?.includes('Fallback');
+              const P_up = hasAnalysis ? analysis.P_up_pct : 50;
+              const decision = hasAnalysis ? (analysis.decision || 'HOLD') : '—';
+              const analysisText = hasAnalysis ? (analysis.thai_summary || 'กำลังรอการวิเคราะห์...') : 'กดปุ่ม "Run Gemini AI" เพื่อเริ่มการวิเคราะห์';
+              const priceData = assetPrices[asset.symbol];
+              
+              return <Card 
+                key={asset.symbol} 
+                className={`p-4 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer bg-black relative group ${!hasAnalysis ? 'opacity-75' : ''}`} 
+                onClick={() => hasAnalysis ? setSelectedAssetForModal(asset.symbol) : null}
+              >
+                        {/* DELETE BUTTON */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleRemoveAsset(macro.symbol);
-                            toast({ title: `❌ ${ASSET_DISPLAY_NAMES[macro.symbol] || macro.symbol} removed` });
+                            handleRemoveAsset(asset.symbol);
+                            toast({ title: `❌ ${ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol} removed` });
                           }}
                           className="absolute top-2 right-2 p-1.5 rounded-full bg-zinc-800/80 hover:bg-red-500/30 text-zinc-500 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 z-10"
-                          title={`Remove ${ASSET_DISPLAY_NAMES[macro.symbol] || macro.symbol}`}
+                          title={`Remove ${ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol}`}
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -772,14 +784,14 @@ export const TopNews = () => {
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <h3 className="text-lg font-bold text-white">
-                              {ASSET_DISPLAY_NAMES[macro.symbol] || macro.symbol}
+                              {ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol}
                             </h3>
-                            {assetPrices[macro.symbol] && <div className="text-sm text-zinc-500">
-                                ${assetPrices[macro.symbol].price.toFixed(2)}
+                            {priceData && <div className="text-sm text-zinc-500">
+                                ${priceData.price.toFixed(2)}
                               </div>}
                           </div>
-                          <Badge className={`${P_up > 55 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : P_up < 45 ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-zinc-700/10 text-zinc-400 border-zinc-700/30'}`}>
-                            {P_up}%
+                          <Badge className={`${!hasAnalysis ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700' : P_up > 55 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : P_up < 45 ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-zinc-700/10 text-zinc-400 border-zinc-700/30'}`}>
+                            {hasAnalysis ? `${P_up.toFixed(1)}%` : '—'}
                           </Badge>
                         </div>
 
@@ -790,50 +802,70 @@ export const TopNews = () => {
                             <span>Bullish</span>
                           </div>
                           <div className="relative h-2 bg-zinc-800 rounded-full overflow-hidden">
-                            <div className={`absolute left-0 top-0 h-full transition-all duration-500 ${P_up > 55 ? 'bg-emerald-500' : P_up < 45 ? 'bg-red-500' : 'bg-zinc-500'}`} style={{
-                      width: `${P_up}%`
-                    }} />
+                            {hasAnalysis ? (
+                              <div 
+                                className={`absolute left-0 top-0 h-full transition-all duration-500 ${P_up > 55 ? 'bg-emerald-500' : P_up < 45 ? 'bg-red-500' : 'bg-zinc-500'}`} 
+                                style={{ width: `${P_up}%` }} 
+                              />
+                            ) : (
+                              <div className="absolute left-0 top-0 h-full w-1/2 bg-zinc-700/50" />
+                            )}
                           </div>
                         </div>
 
                         {/* AI Analysis */}
                         <div className="mb-3">
                           <div className="flex items-center gap-1 mb-1">
-                            <Brain className={`w-3 h-3 ${isFallback ? 'text-yellow-400' : 'text-emerald-400'}`} />
-                            <span className={`text-xs ${isFallback ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                              {isFallback ? '⚠️ Fallback Mode' : 'ABLE-HF 3.0 Analysis'}
+                            <Brain className={`w-3 h-3 ${!hasAnalysis ? 'text-zinc-600' : isFallback ? 'text-yellow-400' : 'text-emerald-400'}`} />
+                            <span className={`text-xs ${!hasAnalysis ? 'text-zinc-600' : isFallback ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                              {!hasAnalysis ? '⏳ Pending Analysis' : isFallback ? '⚠️ Fallback Mode' : 'ABLE-HF 3.0 Analysis'}
                             </span>
                             {analyzing && <Loader2 className="w-3 h-3 animate-spin text-emerald-400 ml-1" />}
                           </div>
-                          <p className={`text-xs md:text-sm leading-relaxed line-clamp-3 ${isFallback ? 'text-yellow-300/70' : 'text-zinc-300'}`}>
+                          <p className={`text-xs md:text-sm leading-relaxed line-clamp-3 ${!hasAnalysis ? 'text-zinc-600 italic' : isFallback ? 'text-yellow-300/70' : 'text-zinc-300'}`}>
                             {analysisText}
                           </p>
                         </div>
 
-                        {/* Key Drivers */}
-                        {analysis?.key_drivers && analysis.key_drivers.length > 0 && <div className="mb-3">
+                        {/* Key Drivers - only show if has analysis */}
+                        {hasAnalysis && analysis?.key_drivers && analysis.key_drivers.length > 0 && <div className="mb-3">
                             <div className="flex flex-wrap gap-1">
                               {analysis.key_drivers.slice(0, 3).map((driver, i) => <Badge key={i} variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">
                                   {driver}
                                 </Badge>)}
                             </div>
                           </div>}
+                          
+                        {/* Placeholder for no analysis */}
+                        {!hasAnalysis && (
+                          <div className="mb-3 flex items-center gap-2 text-zinc-600">
+                            <Sparkles className="w-3 h-3" />
+                            <span className="text-[10px]">กดปุ่ม Run Gemini AI เพื่อวิเคราะห์</span>
+                          </div>
+                        )}
 
                         {/* Footer */}
                         <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                           <div className="flex items-center gap-2">
-                            <span className={`text-sm md:text-base font-bold ${P_up > 55 ? 'text-emerald-400' : P_up < 45 ? 'text-red-400' : 'text-zinc-400'}`}>
-                              {P_up > 50 ? '↗' : '↘'} {P_up > 50 ? '+' : ''}{((P_up - 50) * 0.05).toFixed(2)}%
-                            </span>
-                            {analysis?.news_count && <span className="text-[10px] text-zinc-600">
-                                ({analysis.relevant_news_count || 0}/{analysis.news_count} news)
-                              </span>}
-                            {/* ✅ NEW: แสดงอายุข่าว */}
-                            {newsMetadata && <span className="text-[10px] text-emerald-600">
-                                • {newsMetadata.newestNewsAge}
-                              </span>}
+                            {hasAnalysis ? (
+                              <>
+                                <span className={`text-sm md:text-base font-bold ${P_up > 55 ? 'text-emerald-400' : P_up < 45 ? 'text-red-400' : 'text-zinc-400'}`}>
+                                  {P_up > 50 ? '↗' : '↘'} {P_up > 50 ? '+' : ''}{((P_up - 50) * 0.05).toFixed(2)}%
+                                </span>
+                                {analysis?.news_count && <span className="text-[10px] text-zinc-600">
+                                    ({analysis.filtered_news_count || 0}/{analysis.news_count} news)
+                                  </span>}
+                              </>
+                            ) : (
+                              <span className="text-sm text-zinc-600">รอวิเคราะห์...</span>
+                            )}
+                            {priceData && priceData.changePercent !== 0 && (
+                              <span className={`text-[10px] ${priceData.changePercent > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {priceData.changePercent > 0 ? '+' : ''}{priceData.changePercent.toFixed(2)}% today
+                              </span>
+                            )}
                           </div>
-                          <Badge className={`text-xs ${decision.includes('BUY') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : decision.includes('SELL') ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-zinc-700/10 text-zinc-400 border-zinc-700/30'}`}>
+                          <Badge className={`text-xs ${!hasAnalysis ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700' : decision.includes('BUY') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : decision.includes('SELL') ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-zinc-700/10 text-zinc-400 border-zinc-700/30'}`}>
                             {decision}
                           </Badge>
                         </div>

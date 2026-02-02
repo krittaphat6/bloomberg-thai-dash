@@ -56,49 +56,90 @@ interface FilteredNews {
   isMarketMoving: boolean;
 }
 
-// ✅ NEW: Filter and rank news using Gemini
+// ✅ ENHANCED: Multi-step intelligent news filtering with Chain-of-Thought
 async function filterAndRankNews(
   news: any[], 
   symbol: string, 
   apiKey: string
 ): Promise<{ filteredNews: FilteredNews[]; stats: any }> {
-  console.log(`🔍 Filtering ${news.length} news for ${symbol}...`);
+  console.log(`🔍 Smart filtering ${news.length} news for ${symbol}...`);
   
   const filteredNews: FilteredNews[] = [];
-  const batchSize = 10; // Process 10 news at a time for efficiency
   
-  // Process news in batches
-  for (let i = 0; i < Math.min(news.length, 50); i += batchSize) {
-    const batch = news.slice(i, i + batchSize);
+  // ✅ NEW: Asset-specific keyword mappings for better relevance detection
+  const assetKeywords: Record<string, string[]> = {
+    'XAUUSD': ['gold', 'xau', 'precious metal', 'safe haven', 'fed', 'interest rate', 'inflation', 'dollar', 'treasury', 'yields', 'real rates', 'etf', 'central bank', 'geopolitical', 'war', 'crisis', 'uncertainty'],
+    'EURUSD': ['euro', 'eur', 'ecb', 'eurozone', 'germany', 'lagarde', 'eu', 'dollar', 'fed', 'rate differential', 'european'],
+    'GBPUSD': ['pound', 'gbp', 'sterling', 'boe', 'uk', 'britain', 'bailey', 'england', 'brexit'],
+    'USDJPY': ['yen', 'jpy', 'boj', 'japan', 'ueda', 'kuroda', 'intervention', 'carry trade'],
+    'USOIL': ['oil', 'crude', 'wti', 'brent', 'opec', 'saudi', 'energy', 'petroleum', 'gasoline', 'drilling'],
+    'BTCUSD': ['bitcoin', 'btc', 'crypto', 'blockchain', 'halving', 'etf', 'sec', 'coinbase', 'binance', 'whale'],
+    'ETHUSD': ['ethereum', 'eth', 'crypto', 'defi', 'smart contract', 'layer 2', 'staking'],
+    'US500': ['s&p', 'sp500', 'spy', 'stocks', 'equities', 'nasdaq', 'dow', 'earnings', 'tech stocks', 'wall street'],
+    'US100': ['nasdaq', 'tech', 'apple', 'microsoft', 'google', 'nvda', 'nvidia', 'ai stocks', 'semiconductor'],
+    'XAGUSD': ['silver', 'xag', 'precious metal', 'industrial metal', 'solar'],
+  };
+  
+  const relevantKeywords = assetKeywords[symbol] || [];
+  
+  // ✅ Step 1: Pre-filter using keywords (fast, no API call)
+  const preFilteredNews = news.filter(n => {
+    const titleLower = n.title.toLowerCase();
+    const hasRelevantKeyword = relevantKeywords.some(kw => titleLower.includes(kw));
+    const hasGeneralMarketKeyword = ['market', 'price', 'surge', 'crash', 'rally', 'drop', 'rise', 'fall', 'fed', 'central bank', 'inflation', 'recession', 'gdp', 'employment', 'cpi', 'fomc', 'rate', 'tariff', 'trade war', 'sanction', 'geopolitical', 'war', 'conflict'].some(kw => titleLower.includes(kw));
+    return hasRelevantKeyword || hasGeneralMarketKeyword;
+  });
+  
+  console.log(`📊 Pre-filter: ${preFilteredNews.length}/${news.length} news passed keyword check`);
+  
+  // ✅ Step 2: Use Gemini for deep analysis on pre-filtered news (more efficient)
+  const batchSize = 15;
+  
+  for (let i = 0; i < Math.min(preFilteredNews.length, 45); i += batchSize) {
+    const batch = preFilteredNews.slice(i, i + batchSize);
     
-    const batchPrompt = `คุณเป็น AI ผู้เชี่ยวชาญวิเคราะห์ข่าวการเงิน วิเคราะห์ว่าข่าวแต่ละข่าวมีความเกี่ยวข้องและผลกระทบต่อ ${symbol} มากน้อยเพียงใด
+    // ✅ ENHANCED: Chain-of-Thought prompt for better reasoning
+    const batchPrompt = `คุณเป็น AI วิเคราะห์ข่าวการเงินระดับ Hedge Fund สำหรับ ${symbol}
 
-ข่าวที่ต้องวิเคราะห์:
-${batch.map((n, idx) => `${idx + 1}. "${n.title}" (${n.source})`).join('\n')}
+## ข้อมูลสินทรัพย์ที่กำลังวิเคราะห์:
+- Symbol: ${symbol}
+- ประเภท: ${getAssetType(symbol)}
+- Keywords ที่เกี่ยวข้อง: ${relevantKeywords.slice(0, 5).join(', ')}
 
-ตอบเป็น JSON array (ตอบแค่ JSON เท่านั้น ไม่ต้องมี markdown):
+## ข่าวที่ต้องวิเคราะห์ (${batch.length} รายการ):
+${batch.map((n, idx) => `${idx + 1}. "${n.title}" [${n.source}]`).join('\n')}
+
+## คำสั่งการวิเคราะห์ (Chain-of-Thought):
+สำหรับแต่ละข่าว ให้คิดตามขั้นตอนนี้:
+
+1. **ความเกี่ยวข้อง (relevanceScore)**:
+   - 90-100: เกี่ยวข้องโดยตรงกับ ${symbol} (เช่น ข่าวราคา${symbol}, นโยบายที่กระทบโดยตรง)
+   - 70-89: เกี่ยวข้องทางอ้อมผ่าน correlation (เช่น USD strength กระทบ Gold)
+   - 50-69: เกี่ยวข้องบางส่วนกับตลาดโดยรวม
+   - 0-49: ไม่เกี่ยวข้องหรือเกี่ยวข้องน้อยมาก
+
+2. **ผลกระทบต่อราคา (impactScore)**:
+   - 90-100: Game-changer (Fed rate decision, สงคราม, central bank intervention)
+   - 70-89: สำคัญมาก (CPI surprise, major earnings, policy shift)
+   - 50-69: สำคัญปานกลาง (economic data, corporate news)
+   - 0-49: ผลกระทบต่ำ (routine news, opinion pieces)
+
+3. **ปัจจัยหลัก (keyFactors)**: ระบุ 2-3 ปัจจัยที่ข่าวนี้อาจกระทบ ${symbol}
+
+4. **Market Moving**: true เฉพาะข่าวที่จะทำให้ตลาดขยับแรงทันที
+
+ตอบเป็น JSON array เท่านั้น:
 [
   {
     "index": 1,
-    "relevanceScore": <0-100 ความเกี่ยวข้องกับ ${symbol}>,
-    "impactScore": <0-100 ผลกระทบต่อราคา>,
+    "reasoning": "<คิดวิเคราะห์สั้นๆ 1 ประโยคว่าข่าวนี้เกี่ยวกับอะไรและกระทบ ${symbol} อย่างไร>",
+    "relevanceScore": <0-100>,
+    "impactScore": <0-100>,
     "keyFactors": ["factor1", "factor2"],
-    "isMarketMoving": <true/false เฉพาะข่าวระดับ major event>
+    "isMarketMoving": <true/false>,
+    "direction": "<bullish/bearish/neutral สำหรับ ${symbol}>"
   }
-]
-
-เกณฑ์การให้คะแนน:
-- relevanceScore 90-100: เกี่ยวข้องโดยตรงกับ ${symbol} (เช่น ข่าวราคาทอง, Fed, oil supply)
-- relevanceScore 70-89: เกี่ยวข้องทางอ้อม (เช่น USD strength, inflation data)
-- relevanceScore 50-69: เกี่ยวข้องบางส่วน
-- relevanceScore 0-49: ไม่เกี่ยวข้อง
-
-- impactScore 90-100: game-changer (Fed rate decision, war, major central bank action)
-- impactScore 70-89: สำคัญมาก (CPI surprise, employment data)
-- impactScore 50-69: สำคัญปานกลาง
-- impactScore 0-49: ผลกระทบต่ำ
-
-- isMarketMoving: true เฉพาะข่าวที่จะทำให้ตลาดขยับแรง (Fed, war, major crash)`;
+]`;
 
     try {
       const response = await fetch(
@@ -109,8 +150,8 @@ ${batch.map((n, idx) => `${idx + 1}. "${n.title}" (${n.source})`).join('\n')}
           body: JSON.stringify({
             contents: [{ parts: [{ text: batchPrompt }] }],
             generationConfig: {
-              temperature: 0.1,
-              maxOutputTokens: 2000,
+              temperature: 0.15, // Lower temperature for more consistent analysis
+              maxOutputTokens: 3000,
               responseMimeType: "application/json"
             }
           })
@@ -129,20 +170,20 @@ ${batch.map((n, idx) => `${idx + 1}. "${n.title}" (${n.source})`).join('\n')}
           if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
           results = JSON.parse(jsonStr.trim());
         } catch {
-          console.warn('Failed to parse batch results');
+          console.warn('Failed to parse batch results, skipping batch');
           continue;
         }
 
-        // Map results back to news items
+        // Map results back to news items with enhanced filtering
         for (const result of results) {
           const newsItem = batch[result.index - 1];
-          if (newsItem && result.relevanceScore >= 40 && result.impactScore >= 30) {
+          if (newsItem && result.relevanceScore >= 35 && result.impactScore >= 25) {
             filteredNews.push({
               id: newsItem.id,
               title: newsItem.title,
               source: newsItem.source,
               timestamp: newsItem.timestamp,
-              sentiment: newsItem.sentiment,
+              sentiment: result.direction || newsItem.sentiment,
               relevanceScore: result.relevanceScore || 50,
               impactScore: result.impactScore || 50,
               keyFactors: result.keyFactors || [],
@@ -156,35 +197,49 @@ ${batch.map((n, idx) => `${idx + 1}. "${n.title}" (${n.source})`).join('\n')}
     }
   }
 
-  // Sort: Market-moving first, then by impact score
+  // Sort: Market-moving first, then by combined score
   filteredNews.sort((a, b) => {
     if (a.isMarketMoving && !b.isMarketMoving) return -1;
     if (!a.isMarketMoving && b.isMarketMoving) return 1;
-    return b.impactScore - a.impactScore;
+    const scoreA = (a.relevanceScore * 0.4) + (a.impactScore * 0.6);
+    const scoreB = (b.relevanceScore * 0.4) + (b.impactScore * 0.6);
+    return scoreB - scoreA;
   });
 
-  // Filter to keep only high-quality news
+  // ✅ ENHANCED: More lenient filtering for quality news
   const highQualityNews = filteredNews.filter(n => 
-    n.relevanceScore >= 60 && n.impactScore >= 50
+    n.relevanceScore >= 55 && n.impactScore >= 45
   );
 
   const stats = {
     total_news: news.length,
+    pre_filtered_count: preFilteredNews.length,
     filtered_news_count: highQualityNews.length,
     filter_pass_rate: ((highQualityNews.length / news.length) * 100).toFixed(1) + '%',
     market_moving_news: highQualityNews.filter(n => n.isMarketMoving).length,
     top_news: highQualityNews.slice(0, 5).map(n => ({
-      title: n.title.substring(0, 80),
+      title: n.title.substring(0, 100),
       relevance: n.relevanceScore,
       impact: n.impactScore,
-      factors: n.keyFactors.slice(0, 3)
+      factors: n.keyFactors.slice(0, 3),
+      direction: n.sentiment
     }))
   };
 
-  console.log(`✅ Filtered: ${highQualityNews.length}/${news.length} news (${stats.filter_pass_rate})`);
+  console.log(`✅ Smart Filter: ${highQualityNews.length}/${news.length} news (${stats.filter_pass_rate})`);
   console.log(`🚨 Market Moving: ${stats.market_moving_news}`);
 
   return { filteredNews: highQualityNews, stats };
+}
+
+// Helper to get asset type
+function getAssetType(symbol: string): string {
+  if (['XAUUSD', 'XAGUSD'].includes(symbol)) return 'Precious Metal / Safe Haven';
+  if (['USOIL', 'UKOIL', 'NATGAS'].includes(symbol)) return 'Energy Commodity';
+  if (['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD'].includes(symbol)) return 'Forex';
+  if (['BTCUSD', 'ETHUSD', 'BNBUSD', 'SOLUSD', 'ADAUSD'].includes(symbol)) return 'Cryptocurrency';
+  if (['US500', 'US100', 'US30', 'DE40', 'UK100', 'JP225'].includes(symbol)) return 'Stock Index';
+  return 'Financial Asset';
 }
 
 serve(async (req) => {
@@ -252,24 +307,75 @@ serve(async (req) => {
 ${marketMovingTag}`;
     }).join('\n\n');
 
-    const prompt = `คุณเป็น ABLE-HF 3.0 AI ผู้เชี่ยวชาญระดับ Hedge Fund วิเคราะห์สินทรัพย์ ${symbol}
+    // ✅ ENHANCED: Advanced multi-step reasoning prompt
+    const assetType = getAssetType(symbol);
+    
+    const prompt = `คุณเป็น ABLE-HF 3.0 AI - ระบบวิเคราะห์การเงินระดับ Hedge Fund ที่ผ่านการฝึกจาก CFA, CMT และ FRM frameworks
 
-## ข้อมูลราคา
-${priceData ? `ราคาปัจจุบัน: ${priceData.price}, เปลี่ยนแปลง: ${priceData.changePercent >= 0 ? '+' : ''}${priceData.changePercent.toFixed(2)}%` : 'ไม่มีข้อมูลราคา'}
+## 🎯 สินทรัพย์ที่วิเคราะห์: ${symbol}
+ประเภท: ${assetType}
 
-## ข่าวสำคัญที่ผ่านการกรองแล้ว (${filteredNews.length}/${news?.length || 0} รายการ)
-${newsHeadlines || 'ไม่มีข่าวที่ผ่านเกณฑ์'}
+## 📊 ข้อมูลราคาปัจจุบัน
+${priceData ? `- ราคา: ${priceData.price}
+- เปลี่ยนแปลง 24h: ${priceData.changePercent >= 0 ? '+' : ''}${priceData.changePercent.toFixed(2)}%
+- ทิศทางระยะสั้น: ${priceData.changePercent > 1 ? 'bullish momentum' : priceData.changePercent < -1 ? 'bearish momentum' : 'sideways'}` : 'ไม่มีข้อมูลราคา'}
 
-## คำสั่ง
-วิเคราะห์ตามหลัก ABLE-HF 3.0 Framework ครบ 40 modules ใน 5 หมวดหมู่:
+## 📰 ข่าวสำคัญที่ผ่านการกรองแล้ว (${filteredNews.length}/${news?.length || 0} รายการ)
+${newsHeadlines || '⚠️ ไม่มีข่าวที่เกี่ยวข้องโดยตรง'}
 
-1. **Macro & Economic (33%)**: ผลกระทบจากนโยบายการเงิน, Fed, ECB, อัตราดอกเบี้ย, inflation
-2. **Sentiment & Flow (29%)**: sentiment ข่าว, social media, institutional flow, COT positioning
-3. **Technical & Regime (20%)**: แนวโน้ม, momentum, volatility, support/resistance
-4. **Risk & Event (23.5%)**: ความเสี่ยงจากเหตุการณ์, geopolitical risk, black swan
-5. **Alternative & AI (14.5%)**: NLP analysis, neural signals, alternative data
+## 🧠 คำสั่งการวิเคราะห์ (Chain-of-Thought)
 
-⚠️ ข่าวที่มี "MARKET MOVING" ควรให้น้ำหนักสูงสุดในการวิเคราะห์
+### ขั้นตอนที่ 1: วิเคราะห์ข่าวแต่ละข่าว
+- อ่านข่าวแต่ละข่าวและคิดว่าข่าวนั้นกระทบ ${symbol} อย่างไร
+- ให้ความสำคัญกับข่าวที่มี "MARKET MOVING" มากที่สุด
+- พิจารณา correlation และ causation relationships
+
+### ขั้นตอนที่ 2: สังเคราะห์ภาพรวม
+วิเคราะห์ครบ 5 หมวด (ABLE-HF 3.0 Framework):
+
+1. **Macro & Economic (33% weight)**
+   - นโยบายการเงิน (Fed, ECB, BOJ, BOE)
+   - อัตราดอกเบี้ย, Real yields
+   - Inflation expectations
+   - GDP, Employment data
+
+2. **Sentiment & Flow (29% weight)**
+   - News sentiment score (รวมจากข่าวที่ให้)
+   - Institutional positioning
+   - COT data implications
+   - Retail sentiment indicators
+
+3. **Technical & Regime (20% weight)**
+   - Trend direction
+   - Momentum indicators
+   - Volatility regime
+   - Key support/resistance
+
+4. **Risk & Event (23.5% weight)**
+   - Geopolitical risk factors
+   - Upcoming events
+   - Black swan indicators
+   - Correlation breakdown risk
+
+5. **Alternative & AI (14.5% weight)**
+   - NLP sentiment score
+   - Cross-asset signals
+   - Alternative data signals
+
+### ขั้นตอนที่ 3: สรุปและให้คำแนะนำ
+
+**เกณฑ์การตัดสินใจ:**
+- P_up_pct > 65 AND confidence > 70 → STRONG_BUY
+- P_up_pct > 55 AND confidence > 60 → BUY
+- P_up_pct < 35 AND confidence > 70 → STRONG_SELL
+- P_up_pct < 45 AND confidence > 60 → SELL
+- อื่นๆ → HOLD
+
+**⚠️ กฎสำคัญ:**
+1. ถ้าไม่มีข่าวที่เกี่ยวข้องโดยตรง ให้ลด confidence ลง
+2. ข่าว MARKET MOVING ควรมีผลต่อการตัดสินใจมากที่สุด
+3. พิจารณา correlation กับ USD, yields, และ risk sentiment
+4. อย่าให้ P_up_pct + P_down_pct > 100
 
 ตอบเป็น JSON format นี้เท่านั้น:
 {
@@ -278,10 +384,10 @@ ${newsHeadlines || 'ไม่มีข่าวที่ผ่านเกณฑ
   "P_down_pct": <ความน่าจะเป็นลง 0-100>,
   "confidence": <ความมั่นใจ 0-100>,
   "decision": "<STRONG_BUY|BUY|HOLD|SELL|STRONG_SELL>",
-  "thai_summary": "<สรุป 2-3 ประโยค ภาษาไทย>",
+  "thai_summary": "<สรุป 3-4 ประโยค ภาษาไทย อธิบายว่าทำไมถึงให้คำแนะนำนี้ อ้างอิงข่าวที่สำคัญที่สุด>",
   "market_regime": "<trending_up|trending_down|ranging|volatile>",
-  "key_drivers": ["<ปัจจัยสำคัญ 1>", "<ปัจจัยสำคัญ 2>", "<ปัจจัยสำคัญ 3>"],
-  "risk_warnings": ["<ความเสี่ยง 1>", "<ความเสี่ยง 2>", "<ความเสี่ยง 3>"],
+  "key_drivers": ["<ปัจจัยสำคัญ 1 - อ้างอิงข่าวจริง>", "<ปัจจัยสำคัญ 2>", "<ปัจจัยสำคัญ 3>"],
+  "risk_warnings": ["<ความเสี่ยง 1 - เจาะจง>", "<ความเสี่ยง 2>"],
   "category_performance": {
     "macro_economic": <score 0-100>,
     "sentiment_flow": <score 0-100>,
@@ -292,7 +398,7 @@ ${newsHeadlines || 'ไม่มีข่าวที่ผ่านเกณฑ
   "scores": {
     ${MODULE_IDS.map(id => `"${id}": <score -100 to 100>`).join(',\n    ')}
   },
-  "thinking_process": "<อธิบายกระบวนการคิดโดยละเอียด 5-10 ประโยค>"
+  "thinking_process": "<อธิบายกระบวนการคิดโดยละเอียด 8-15 ประโยค ระบุว่าข่าวไหนสำคัญที่สุด ทำไมถึงให้ decision นี้>"
 }`;
 
     const response = await fetch(
