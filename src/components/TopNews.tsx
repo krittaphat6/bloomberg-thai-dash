@@ -1,5 +1,5 @@
 // src/components/TopNews.tsx
-// ✅ FIXED VERSION - Refresh ทุก 10 นาที + เฉพาะตอนเปิด component + แสดง metadata
+// ✅ FIXED VERSION - Refresh ทุก 10 นาที + เฉพาะตอนเปิด component + แสดง metadata + Historical Sentiment Chart + Alert System
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -7,13 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, Sparkles, ExternalLink, Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3, Settings, Eye, FileText, Users, Zap, Loader2, Target, Plus, X, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Search, Pin, Newspaper } from 'lucide-react';
+import { RefreshCw, Sparkles, ExternalLink, Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3, Settings, Eye, EyeOff, FileText, Users, Zap, Loader2, Target, Plus, X, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Search, Pin, Newspaper } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
 import { GeminiThinkingModal } from './TopNews/GeminiThinkingModal';
 import { RelationshipDiagram } from './TopNews/RelationshipDiagram';
 import { FlowchartDiagram } from './TopNews/FlowchartDiagram';
+import { SentimentHistoryChart, SpikeAlert } from './TopNews/SentimentHistoryChart';
+import { AlertSystem, Alert } from './TopNews/AlertSystem';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
 
@@ -181,6 +183,10 @@ export const TopNews = () => {
     marketMovingCount: number;
     topNews: any[];
   } | null>(null);
+
+  // ✅ NEW: Sentiment Chart & Alert System States
+  const [showSentimentChart, setShowSentimentChart] = useState(true);
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
   // Fetch prices
   const fetchPrices = useCallback(async () => {
@@ -632,12 +638,44 @@ export const TopNews = () => {
                     )}
                   </Button>
                   
+                  {/* Toggle Chart Button */}
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => setShowSentimentChart(!showSentimentChart)}
+                    className="h-8 text-xs border-zinc-700 text-zinc-400 hover:text-purple-400 hover:border-purple-500"
+                  >
+                    {showSentimentChart ? <EyeOff className="w-3 h-3 mr-1" /> : <Eye className="w-3 h-3 mr-1" />}
+                    Chart
+                  </Button>
+                  
                   <Button size="sm" variant="outline" onClick={() => setShowAddAsset(!showAddAsset)} className="h-8 text-xs border-zinc-700 text-zinc-400 hover:text-white hover:border-emerald-500">
                     <Plus className="w-3 h-3 mr-1" />
                     Add Asset ({pinnedAssets.length}/8)
                   </Button>
                 </div>
               </div>
+              
+              {/* ✅ NEW: Alert System */}
+              <AlertSystem 
+                rawNews={rawNews}
+                pinnedAssets={pinnedAssets}
+                onAlertClick={(alert) => {
+                  setSelectedAlert(alert);
+                  console.log('Alert clicked:', alert);
+                }}
+              />
+              
+              {/* ✅ NEW: Sentiment History Chart */}
+              {showSentimentChart && rawNews.length > 0 && (
+                <SentimentHistoryChart 
+                  pinnedAssets={pinnedAssets}
+                  rawNews={rawNews}
+                  onSpikeDetected={(spike: SpikeAlert) => {
+                    console.log('Spike detected from chart:', spike);
+                  }}
+                />
+              )}
               
               {/* ✅ Gemini Thinking Panel */}
               {showGeminiPanel && (
