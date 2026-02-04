@@ -1,7 +1,10 @@
 // ============================================
-// ABLE-HF 3.0 News Intelligence Engine
+// ABLE-HF 4.0 News Intelligence Engine
 // Hedge Fund Grade Analysis - 40 Modules
+// ✅ UPGRADED: Real-time data integration
 // ============================================
+
+import { fetchModuleData, calculateModuleScores, ModuleRealTimeData, MODULE_DATA_SOURCES } from './ModuleDataService';
 
 // ============ TYPES & INTERFACES ============
 export interface NewsAnalysisInput {
@@ -254,13 +257,96 @@ const ASSET_KEYWORDS: Record<string, { bullish: string[], bearish: string[] }> =
 export class AbleNewsAnalyzer {
   private input: NewsAnalysisInput;
   private moduleScores: Record<string, number> = {};
+  private realTimeData: ModuleRealTimeData | null = null;
   
   constructor(input: NewsAnalysisInput) {
     this.input = input;
   }
   
-  // Main analysis function
-  analyze(): AbleNewsResult {
+  // Main analysis function - ✅ UPGRADED with async real-time data
+  async analyze(): Promise<AbleNewsResult> {
+    const headlines = this.input.headlines.join(' ').toLowerCase();
+    
+    // ✅ NEW: Fetch real-time market data first
+    try {
+      this.realTimeData = await fetchModuleData(this.input.symbol);
+      console.log(`📊 Real-time data fetched for ${this.input.symbol}:`, {
+        vix: this.realTimeData.vixLevel,
+        yieldSpread: this.realTimeData.yieldCurveSpread,
+        gdp: this.realTimeData.gdpGrowth,
+        hasPriceData: !!this.realTimeData.priceData
+      });
+    } catch (error) {
+      console.warn('Failed to fetch real-time data, using keyword-only analysis:', error);
+    }
+    
+    // Run all 40 modules (keyword-based)
+    this.runMacroEconomicModules(headlines);
+    this.runSentimentFlowModules(headlines);
+    this.runTechnicalRegimeModules(headlines);
+    this.runRiskEventModules(headlines);
+    this.runAlternativeAIModules(headlines);
+    
+    // ✅ NEW: Override with real-time data scores
+    if (this.realTimeData) {
+      const realScores = calculateModuleScores(
+        this.realTimeData, 
+        headlines, 
+        this.input.symbol
+      );
+      
+      // Merge real scores (prioritize real data over keyword-based)
+      Object.entries(realScores).forEach(([key, value]) => {
+        if (value !== undefined && value !== 0.5) {
+          // Blend real data with keyword data (70% real, 30% keyword)
+          const keywordScore = this.moduleScores[key] || 0.5;
+          this.moduleScores[key] = value * 0.7 + keywordScore * 0.3;
+        }
+      });
+      
+      console.log(`✅ Merged ${Object.keys(realScores).length} real-time scores for ${this.input.symbol}`);
+    }
+    
+    // Calculate master equation
+    const { P_up, quantum_boost, neural_boost } = this.calculateMasterEquation();
+    const P_down = 1 - P_up;
+    
+    // Determine decision and confidence
+    const { decision, confidence, trading_signal } = this.determineDecision(P_up);
+    
+    // Calculate category performance
+    const category_performance = this.calculateCategoryPerformance();
+    
+    // Generate insights
+    const market_regime = this.detectMarketRegime(headlines);
+    const meta_insights = this.generateMetaInsights(P_up, category_performance);
+    const key_drivers = this.extractKeyDrivers(headlines);
+    const risk_warnings = this.extractRiskWarnings(headlines);
+    const thai_summary = this.generateThaiSummary(P_up, decision, key_drivers);
+    
+    return {
+      P_up_pct: Math.round(P_up * 100),
+      P_down_pct: Math.round(P_down * 100),
+      decision,
+      confidence,
+      regime_adjusted_confidence: Math.min(100, Math.round(P_up * 100 * (1 + quantum_boost + neural_boost))),
+      market_regime,
+      quantum_enhancement: Math.round(quantum_boost * 100),
+      neural_enhancement: Math.round(neural_boost * 100),
+      scores: this.moduleScores,
+      category_performance,
+      meta_insights,
+      trading_signal,
+      thai_summary,
+      key_drivers,
+      risk_warnings,
+      analyzed_at: new Date().toISOString(),
+      news_count: this.input.headlines.length
+    };
+  }
+  
+  // ✅ Synchronous version for compatibility
+  analyzeSync(): AbleNewsResult {
     const headlines = this.input.headlines.join(' ').toLowerCase();
     
     // Run all 40 modules

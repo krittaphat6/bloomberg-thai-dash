@@ -528,7 +528,11 @@ export const TopNews = () => {
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-xs">
                     <Brain className="w-3 h-3 mr-1" />
-                    ABLE-HF 3.0
+                    ABLE-HF 4.0
+                  </Badge>
+                  {/* ✅ NEW: Data source status */}
+                  <Badge variant="outline" className="border-purple-500/30 text-purple-400 text-xs hidden md:flex">
+                    📡 16 Real-time • 📰 17 News • ≈ 7 Proxy
                   </Badge>
                   {geminiResult && (
                     <Badge variant="outline" className="border-purple-500/30 text-purple-400 text-xs">
