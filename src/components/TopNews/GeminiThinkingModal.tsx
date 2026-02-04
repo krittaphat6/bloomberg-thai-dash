@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
-import { Brain, Zap, TrendingUp, TrendingDown, AlertTriangle, Sparkles, BarChart3, Target, Shield, Globe } from 'lucide-react';
+import { Brain, Zap, TrendingUp, TrendingDown, AlertTriangle, Sparkles, BarChart3, Target, Shield, Globe, Radio, FileText, CircleDot } from 'lucide-react';
 
 interface ModuleScore {
   name: string;
@@ -48,6 +48,55 @@ interface GeminiThinkingModalProps {
   } | null;
 }
 
+// ✅ NEW: Data source mapping for each module
+const MODULE_DATA_SOURCES: Record<string, 'real-time' | 'keyword' | 'proxy'> = {
+  // Real-time data (16 modules)
+  yield_curve_signal: 'real-time',
+  volatility_regime: 'real-time',
+  momentum_oscillator: 'real-time',
+  trend_regime_detector: 'real-time',
+  volume_analysis: 'real-time',
+  options_sentiment: 'real-time',
+  etf_flow_momentum: 'real-time',
+  institutional_flow: 'real-time',
+  liquidity_risk: 'real-time',
+  tail_risk_monitor: 'real-time',
+  crypto_correlation: 'real-time',
+  macro_neural_forecast: 'real-time',
+  inflation_momentum: 'real-time',
+  gdp_growth_trajectory: 'real-time',
+  employment_dynamics: 'real-time',
+  satellite_data: 'real-time',
+  
+  // Keyword-based (17 modules)
+  central_bank_sentiment: 'keyword',
+  news_sentiment_cfa: 'keyword',
+  social_media_pulse: 'keyword',
+  retail_sentiment: 'keyword',
+  event_shock: 'keyword',
+  geopolitical_risk: 'keyword',
+  black_swan_detector: 'keyword',
+  regulatory_risk: 'keyword',
+  systemic_risk: 'keyword',
+  fiscal_policy_impact: 'keyword',
+  trade_balance_flow: 'keyword',
+  pattern_recognition: 'keyword',
+  quantum_sentiment: 'keyword',
+  neural_ensemble: 'keyword',
+  nlp_deep_analysis: 'keyword',
+  patent_innovation: 'keyword',
+  esg_momentum: 'keyword',
+  
+  // Proxy (7 modules)
+  cot_positioning: 'proxy',
+  dark_pool_activity: 'proxy',
+  support_resistance: 'proxy',
+  market_breadth: 'proxy',
+  intermarket_correlation: 'proxy',
+  correlation_breakdown: 'proxy',
+  web_traffic_signal: 'proxy',
+};
+
 // Module configurations with weights and categories
 const MODULE_CONFIG: Record<string, { label: string; weight: number; category: string; icon: any }> = {
   // MACRO & ECONOMIC (33%)
@@ -91,10 +140,10 @@ const MODULE_CONFIG: Record<string, { label: string; weight: number; category: s
   neural_ensemble: { label: 'Neural Ensemble', weight: 4.5, category: 'ai', icon: Brain },
   nlp_deep_analysis: { label: 'NLP Deep Analysis', weight: 3.5, category: 'ai', icon: Sparkles },
   satellite_data: { label: 'Satellite Data', weight: 2.0, category: 'ai', icon: Globe },
-  alternative_data: { label: 'Alternative Data', weight: 2.0, category: 'ai', icon: Target },
-  machine_learning_signal: { label: 'ML Signal', weight: 1.5, category: 'ai', icon: Brain },
-  sentiment_network: { label: 'Sentiment Network', weight: 1.5, category: 'ai', icon: Zap },
-  predictive_analytics: { label: 'Predictive Analytics', weight: 1.0, category: 'ai', icon: Sparkles },
+  web_traffic_signal: { label: 'Web Traffic Signal', weight: 2.0, category: 'ai', icon: Target },
+  patent_innovation: { label: 'Patent Innovation', weight: 1.5, category: 'ai', icon: Brain },
+  esg_momentum: { label: 'ESG Momentum', weight: 1.5, category: 'ai', icon: Zap },
+  crypto_correlation: { label: 'Crypto Correlation', weight: 1.5, category: 'ai', icon: Sparkles },
 };
 
 const CATEGORY_CONFIG = {
@@ -253,6 +302,34 @@ export const GeminiThinkingModal: React.FC<GeminiThinkingModalProps> = ({
               })}
             </div>
 
+            {/* ✅ NEW: Data Source Summary */}
+            <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+              <div className="flex items-center gap-2 mb-3">
+                <Radio className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm font-medium text-white">40 Modules Data Status</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2 text-center">
+                  <div className="text-lg font-bold text-emerald-400">16</div>
+                  <div className="text-[10px] text-zinc-400 flex items-center justify-center gap-1">
+                    <Radio className="w-3 h-3" /> Real-time
+                  </div>
+                </div>
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-2 text-center">
+                  <div className="text-lg font-bold text-blue-400">17</div>
+                  <div className="text-[10px] text-zinc-400 flex items-center justify-center gap-1">
+                    <FileText className="w-3 h-3" /> News-based
+                  </div>
+                </div>
+                <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-2 text-center">
+                  <div className="text-lg font-bold text-orange-400">7</div>
+                  <div className="text-[10px] text-zinc-400 flex items-center justify-center gap-1">
+                    <CircleDot className="w-3 h-3" /> Proxy
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* 40 Modules Grid */}
             <div className="space-y-4">
               <div className="flex items-center gap-2">
@@ -272,6 +349,7 @@ export const GeminiThinkingModal: React.FC<GeminiThinkingModalProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {modules.map((module) => {
                         const Icon = module.icon;
+                        const dataSource = MODULE_DATA_SOURCES[module.key] || 'keyword';
                         return (
                           <div 
                             key={module.key}
@@ -279,8 +357,24 @@ export const GeminiThinkingModal: React.FC<GeminiThinkingModalProps> = ({
                           >
                             <Icon className={`w-3 h-3 flex-shrink-0 ${catConfig.color}`} />
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between gap-1">
                                 <span className="text-xs text-zinc-400 truncate">{module.label}</span>
+                                {/* ✅ Data source badge */}
+                                {dataSource === 'real-time' && (
+                                  <Badge className="bg-emerald-500/20 text-emerald-400 text-[7px] px-1 py-0 h-4 border-0">
+                                    📡
+                                  </Badge>
+                                )}
+                                {dataSource === 'keyword' && (
+                                  <Badge className="bg-blue-500/20 text-blue-400 text-[7px] px-1 py-0 h-4 border-0">
+                                    📰
+                                  </Badge>
+                                )}
+                                {dataSource === 'proxy' && (
+                                  <Badge className="bg-orange-500/20 text-orange-400 text-[7px] px-1 py-0 h-4 border-0">
+                                    ≈
+                                  </Badge>
+                                )}
                                 <span className={`text-xs font-bold ${getScoreColor(module.score)}`}>
                                   {module.score}
                                 </span>
