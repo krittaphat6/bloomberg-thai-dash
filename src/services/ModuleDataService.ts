@@ -52,12 +52,24 @@ export interface ModuleRealTimeData {
 // Cache for API calls
 const dataCache: Map<string, { data: any; timestamp: number }> = new Map();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const ECON_CACHE_DURATION = 60 * 60 * 1000; // 1 hour for economic data
 
-// ============ YAHOO FINANCE HELPERS ============
+import { supabase } from '@/integrations/supabase/client';
 
-async function fetchYahooQuote(symbol: string): Promise<any> {
-  const cacheKey = `yahoo_${symbol}`;
+// ============ EDGE FUNCTION PROXY ============
+// Use Edge Function to bypass CORS restrictions
+
+interface MarketDataProxyResponse {
+  success: boolean;
+  data: Record<string, any>;
+  error?: string;
+}
+
+async function fetchMarketDataViaProxy(
+  symbols: string[] = [],
+  includeEconomic = true,
+  includeCrypto = true
+): Promise<MarketDataProxyResponse | null> {
+  const cacheKey = `proxy_${symbols.join('_')}_${includeEconomic}_${includeCrypto}`;
   const cached = dataCache.get(cacheKey);
   
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
@@ -65,75 +77,27 @@ async function fetchYahooQuote(symbol: string): Promise<any> {
   }
 
   try {
-    const response = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=3mo`,
-      { 
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        signal: AbortSignal.timeout(10000)
-      }
-    );
+    const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+      body: { symbols, includeEconomic, includeCrypto }
+    });
     
-    if (!response.ok) throw new Error(`Yahoo API error: ${response.status}`);
-    
-    const data = await response.json();
-    const result = data.chart?.result?.[0];
-    
-    if (result) {
-      dataCache.set(cacheKey, { data: result, timestamp: Date.now() });
+    if (error) {
+      console.warn('Market data proxy error:', error);
+      return null;
     }
     
-    return result;
+    if (data) {
+      dataCache.set(cacheKey, { data, timestamp: Date.now() });
+    }
+    
+    return data;
   } catch (error) {
-    console.warn(`Yahoo fetch error for ${symbol}:`, error);
+    console.warn('Market data proxy fetch error:', error);
     return null;
   }
 }
 
-// Calculate RSI
-function calculateRSI(prices: number[], period: number = 14): number {
-  if (prices.length < period + 1) return 50;
-  
-  let gains = 0;
-  let losses = 0;
-  
-  for (let i = prices.length - period; i < prices.length; i++) {
-    const change = prices[i] - prices[i - 1];
-    if (change > 0) gains += change;
-    else losses -= change;
-  }
-  
-  const avgGain = gains / period;
-  const avgLoss = losses / period;
-  
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return 100 - (100 / (1 + rs));
-}
-
-// Calculate Simple Moving Average
-function calculateSMA(prices: number[], period: number): number {
-  if (prices.length < period) return prices[prices.length - 1] || 0;
-  const slice = prices.slice(-period);
-  return slice.reduce((a, b) => a + b, 0) / period;
-}
-
-// Calculate ATR
-function calculateATR(highs: number[], lows: number[], closes: number[], period: number = 14): number {
-  if (highs.length < period + 1) return 0;
-  
-  let atr = 0;
-  for (let i = highs.length - period; i < highs.length; i++) {
-    const tr = Math.max(
-      highs[i] - lows[i],
-      Math.abs(highs[i] - closes[i - 1]),
-      Math.abs(lows[i] - closes[i - 1])
-    );
-    atr += tr;
-  }
-  return atr / period;
-}
-
-// Get Yahoo symbol mapping
+// Get Yahoo symbol mapping (for display/reference)
 function getYahooSymbol(symbol: string): string {
   const mapping: Record<string, string> = {
     'XAUUSD': 'GC=F',
@@ -164,72 +128,50 @@ function getYahooSymbol(symbol: string): string {
   return mapping[symbol] || symbol;
 }
 
-// Fetch Binance ticker
-async function fetchBinanceTicker(symbol: string): Promise<any> {
-  const cacheKey = `binance_${symbol}`;
-  const cached = dataCache.get(cacheKey);
-  
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return cached.data;
-  }
+// ============ TECHNICAL INDICATOR HELPERS ============
 
-  try {
-    const response = await fetch(
-      `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`,
-      { signal: AbortSignal.timeout(5000) }
-    );
-    if (!response.ok) return null;
-    const data = await response.json();
-    
-    const result = {
-      price: parseFloat(data.lastPrice),
-      priceChangePercent: parseFloat(data.priceChangePercent),
-      volume: parseFloat(data.volume),
-    };
-    
-    dataCache.set(cacheKey, { data: result, timestamp: Date.now() });
-    return result;
-  } catch {
-    return null;
-  }
+// Calculate Simple Moving Average
+function calculateSMA(prices: number[], period: number): number {
+  if (prices.length < period) return prices[prices.length - 1] || 0;
+  const slice = prices.slice(-period);
+  return slice.reduce((a, b) => a + b, 0) / period;
 }
 
-// Fetch economic indicators from World Bank API
-async function fetchEconomicIndicators(): Promise<{
-  gdpGrowth: number | null;
-  inflationRate: number | null;
-  unemploymentRate: number | null;
-} | null> {
-  const cacheKey = 'economic_indicators';
-  const cached = dataCache.get(cacheKey);
+// Calculate RSI
+function calculateRSI(prices: number[], period: number = 14): number {
+  if (prices.length < period + 1) return 50;
   
-  if (cached && Date.now() - cached.timestamp < ECON_CACHE_DURATION) {
-    return cached.data;
+  let gains = 0;
+  let losses = 0;
+  
+  for (let i = prices.length - period; i < prices.length; i++) {
+    const change = prices[i] - prices[i - 1];
+    if (change > 0) gains += change;
+    else losses -= change;
   }
+  
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+}
 
-  try {
-    const [gdpRes, inflationRes, unemploymentRes] = await Promise.all([
-      fetch('https://api.worldbank.org/v2/country/USA/indicator/NY.GDP.MKTP.KD.ZG?format=json&per_page=1', { signal: AbortSignal.timeout(10000) }),
-      fetch('https://api.worldbank.org/v2/country/USA/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1', { signal: AbortSignal.timeout(10000) }),
-      fetch('https://api.worldbank.org/v2/country/USA/indicator/SL.UEM.TOTL.ZS?format=json&per_page=1', { signal: AbortSignal.timeout(10000) }),
-    ]);
-
-    const gdpData = await gdpRes.json();
-    const inflationData = await inflationRes.json();
-    const unemploymentData = await unemploymentRes.json();
-
-    const result = {
-      gdpGrowth: gdpData[1]?.[0]?.value || null,
-      inflationRate: inflationData[1]?.[0]?.value || null,
-      unemploymentRate: unemploymentData[1]?.[0]?.value || null,
-    };
-
-    dataCache.set(cacheKey, { data: result, timestamp: Date.now() });
-    return result;
-  } catch (error) {
-    console.warn('Economic indicators fetch error:', error);
-    return null;
+// Calculate ATR (Average True Range)
+function calculateATR(highs: number[], lows: number[], closes: number[], period: number = 14): number {
+  if (highs.length < period + 1) return 0;
+  
+  let atr = 0;
+  for (let i = highs.length - period; i < highs.length; i++) {
+    const tr = Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1])
+    );
+    atr += tr;
   }
+  return atr / period;
 }
 
 // ============ MAIN DATA FETCHER ============
@@ -252,99 +194,80 @@ export async function fetchModuleData(symbol: string): Promise<ModuleRealTimeDat
   };
 
   try {
-    // Parallel fetch for speed
-    const [
-      tnxData,      // 10-Year Treasury
-      irxData,      // 13-Week Treasury (3-month proxy)
-      vixData,      // VIX
-      assetData,    // Target asset
-      gldData,      // GLD ETF
-      spyData,      // SPY ETF
-      btcData,      // Bitcoin
-      dxyData,      // Dollar Index
-    ] = await Promise.all([
-      fetchYahooQuote('^TNX'),
-      fetchYahooQuote('^IRX'),
-      fetchYahooQuote('^VIX'),
-      fetchYahooQuote(getYahooSymbol(symbol)),
-      fetchYahooQuote('GLD'),
-      fetchYahooQuote('SPY'),
-      fetchBinanceTicker('BTCUSDT'),
-      fetchYahooQuote('DX-Y.NYB'),
-    ]);
+    // Fetch all market data via Edge Function proxy (bypasses CORS)
+    const yahooSymbol = getYahooSymbol(symbol);
+    const symbolsToFetch = [yahooSymbol, 'VIX', '10Y', '3M', 'DXY', 'GLD', 'SPY'];
+    
+    const proxyData = await fetchMarketDataViaProxy(symbolsToFetch, true, true);
+    
+    if (!proxyData?.success || !proxyData.data) {
+      console.warn('No data returned from market-data-proxy');
+      return results;
+    }
+
+    const data = proxyData.data;
 
     // 1. Yield Curve Spread (10Y - 3M)
+    const tnxData = data['10Y'] || data['^TNX'];
+    const irxData = data['3M'] || data['^IRX'];
     if (tnxData && irxData) {
-      const tnx = tnxData.meta?.regularMarketPrice || 0;
-      const irx = irxData.meta?.regularMarketPrice || 0;
+      const tnx = tnxData.price || 0;
+      const irx = irxData.price || 0;
       results.yieldCurveSpread = tnx - irx;
     }
 
     // 2. VIX Level
+    const vixData = data['VIX'] || data['^VIX'];
     if (vixData) {
-      results.vixLevel = vixData.meta?.regularMarketPrice || null;
+      results.vixLevel = vixData.price || null;
     }
 
     // 3. DXY Level
+    const dxyData = data['DXY'] || data['DX-Y.NYB'];
     if (dxyData) {
-      results.dxyLevel = dxyData.meta?.regularMarketPrice || null;
-      const dxyCloses = dxyData.indicators?.quote?.[0]?.close?.filter((c: number) => c != null) || [];
-      if (dxyCloses.length >= 2) {
-        results.dxyChange = ((dxyCloses[dxyCloses.length - 1] - dxyCloses[dxyCloses.length - 2]) / dxyCloses[dxyCloses.length - 2]) * 100;
-      }
+      results.dxyLevel = dxyData.price || null;
+      results.dxyChange = dxyData.change24h || null;
     }
 
     // 4. Price Data for target asset
+    const assetData = data[yahooSymbol] || data[symbol];
     if (assetData) {
-      const quotes = assetData.indicators?.quote?.[0];
-      const closes = quotes?.close?.filter((c: number) => c != null) || [];
-      const highs = quotes?.high?.filter((h: number) => h != null) || [];
-      const lows = quotes?.low?.filter((l: number) => l != null) || [];
-      const volumes = quotes?.volume?.filter((v: number) => v != null) || [];
-
-      if (closes.length > 0) {
-        const current = assetData.meta?.regularMarketPrice || closes[closes.length - 1];
-        const previous = closes.length >= 2 ? closes[closes.length - 2] : current;
-        const change24h = previous > 0 ? ((current - previous) / previous) * 100 : 0;
-        
-        results.priceData = {
-          current,
-          ma20: calculateSMA(closes, 20),
-          ma50: calculateSMA(closes, 50),
-          ma200: closes.length >= 200 ? calculateSMA(closes, 200) : calculateSMA(closes, Math.min(closes.length, 60)),
-          rsi14: calculateRSI(closes, 14),
-          atr14: calculateATR(highs, lows, closes, 14),
-          volume: volumes[volumes.length - 1] || 0,
-          avgVolume: volumes.length > 0 ? volumes.reduce((a: number, b: number) => a + b, 0) / volumes.length : 0,
-          change24h,
-        };
-      }
-    }
-
-    // 5. ETF Flow Data
-    if (gldData && spyData) {
-      const gldQuotes = gldData.indicators?.quote?.[0];
-      const spyQuotes = spyData.indicators?.quote?.[0];
+      const closes = assetData.closes || [];
       
-      const gldVolumes = gldQuotes?.volume?.filter((v: number) => v != null) || [];
-      const spyVolumes = spyQuotes?.volume?.filter((v: number) => v != null) || [];
-
-      results.etfFlows = {
-        gldVolume: gldVolumes[gldVolumes.length - 1] || 0,
-        gldAvgVolume: gldVolumes.length > 0 ? gldVolumes.reduce((a: number, b: number) => a + b, 0) / gldVolumes.length : 0,
-        spyVolume: spyVolumes[spyVolumes.length - 1] || 0,
-        spyAvgVolume: spyVolumes.length > 0 ? spyVolumes.reduce((a: number, b: number) => a + b, 0) / spyVolumes.length : 0,
+      results.priceData = {
+        current: assetData.price || 0,
+        ma20: assetData.ma20 || (closes.length > 0 ? calculateSMA(closes, 20) : 0),
+        ma50: assetData.ma50 || (closes.length > 0 ? calculateSMA(closes, 50) : 0),
+        ma200: assetData.ma200 || (closes.length > 0 ? calculateSMA(closes, Math.min(200, closes.length)) : 0),
+        rsi14: assetData.rsi14 || 50,
+        atr14: assetData.atr14 || 0,
+        volume: assetData.volume || 0,
+        avgVolume: assetData.avgVolume || 0,
+        change24h: assetData.change24h || 0,
       };
     }
 
-    // 6. Bitcoin Data
-    if (btcData) {
-      results.btcChange24h = btcData.priceChangePercent;
-      results.btcVolume = btcData.volume;
+    // 5. ETF Flow Data
+    const gldData = data['GLD'];
+    const spyData = data['SPY'];
+    if (gldData && spyData) {
+      results.etfFlows = {
+        gldVolume: gldData.volume || 0,
+        gldAvgVolume: gldData.avgVolume || 0,
+        spyVolume: spyData.volume || 0,
+        spyAvgVolume: spyData.avgVolume || 0,
+      };
     }
 
-    // 7. Economic Data from World Bank (cached heavily)
-    const economicData = await fetchEconomicIndicators();
+    // 6. Bitcoin Data from Binance
+    const btcData = data['BTCUSD'];
+    if (btcData) {
+      results.btcChange24h = btcData.change24h || btcData.priceChangePercent || null;
+      results.btcVolume = btcData.volume || null;
+    }
+
+    // 7. Economic Data from World Bank
+    const economicData = data['economic'];
     if (economicData) {
       results.gdpGrowth = economicData.gdpGrowth;
       results.inflationRate = economicData.inflationRate;
