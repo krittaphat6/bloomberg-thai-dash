@@ -631,6 +631,851 @@ async function fetchFinancialNews(): Promise<RawNewsItem[]> {
   }
 }
 
+// ✅ NEW: BBC World News RSS
+async function fetchBBCNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://feeds.bbci.co.uk/news/business/rss.xml', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 20); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      const descMatch = item.match(/<description>([\s\S]*?)<\/description>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const description = descMatch ? descMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title + ' ' + description);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `bbc-${i}-${timestamp}`,
+            title,
+            description: description.substring(0, 300),
+            fullContent: description,
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'BBC Business',
+            category: 'Business',
+            publishedAt: dateMatch ? dateMatch[1].trim() : new Date().toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'medium',
+            relatedAssets: matchAssets(title + ' ' + description)
+          });
+        }
+      }
+    }
+    console.log(`📰 BBC: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('BBC error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: Reuters RSS
+async function fetchReutersNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 20); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `reuters-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'Reuters',
+            category: 'Finance',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'high',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    console.log(`📰 Reuters: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('Reuters error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: CNBC RSS
+async function fetchCNBCNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 25); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      const descMatch = item.match(/<description>([\s\S]*?)<\/description>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const description = descMatch ? descMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]*>/g, '').trim() : '';
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment, keyTriggers } = analyzeContextualSentiment(title + ' ' + description);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `cnbc-${i}-${timestamp}`,
+            title,
+            description: description.substring(0, 300),
+            fullContent: description,
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'CNBC',
+            category: 'Markets',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: keyTriggers.length > 0 ? 'high' : 'medium',
+            relatedAssets: matchAssets(title + ' ' + description)
+          });
+        }
+      }
+    }
+    console.log(`📰 CNBC: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('CNBC error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: Yahoo Finance RSS
+async function fetchYahooFinanceNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC,GC=F,CL=F,EURUSD=X&region=US&lang=en-US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 20); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `yahoo-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'Yahoo Finance',
+            category: 'Markets',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'medium',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    console.log(`📰 Yahoo Finance: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('Yahoo Finance error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: Bloomberg Headlines via Google News RSS
+async function fetchBloombergNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:bloomberg.com+finance+markets&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 15); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment, keyTriggers } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `bloomberg-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'Bloomberg',
+            category: 'Finance',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: keyTriggers.length > 0 ? 'high' : 'medium',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    console.log(`📰 Bloomberg: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('Bloomberg error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: FT Headlines via Google News RSS
+async function fetchFTNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:ft.com+markets+economy&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 15); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `ft-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'Financial Times',
+            category: 'Finance',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'high',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    console.log(`📰 FT: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('FT error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: Al Jazeera Business
+async function fetchAlJazeeraNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://www.aljazeera.com/xml/rss/all.xml', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 15); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment, keyTriggers } = analyzeContextualSentiment(title);
+        
+        // Filter for financial/geopolitical relevance
+        const isRelevant = matchAssets(title).length > 0 || keyTriggers.length > 0;
+        
+        if (isNewsFresh(timestamp) && isRelevant) {
+          items.push({
+            id: `aljazeera-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'Al Jazeera',
+            category: 'World',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: keyTriggers.length > 0 ? 'high' : 'medium',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    console.log(`📰 Al Jazeera: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('Al Jazeera error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: Investing.com News via Google RSS
+async function fetchInvestingComNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:investing.com+forex+commodities&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 15); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `investing-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'Investing.com',
+            category: 'Trading',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'medium',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    console.log(`📰 Investing.com: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('Investing.com error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: Kitco Gold/Commodities
+async function fetchKitcoNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:kitco.com+gold+silver&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 10); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `kitco-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'Kitco',
+            category: 'Commodities',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'high',
+            relatedAssets: ['XAUUSD', 'XAGUSD']
+          });
+        }
+      }
+    }
+    console.log(`📰 Kitco: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('Kitco error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: OilPrice.com
+async function fetchOilPriceNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:oilprice.com+crude+oil&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 10); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `oilprice-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'OilPrice',
+            category: 'Energy',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'high',
+            relatedAssets: ['USOIL', 'NATGAS']
+          });
+        }
+      }
+    }
+    console.log(`📰 OilPrice: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('OilPrice error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: FXStreet Forex
+async function fetchFXStreetNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:fxstreet.com+forex+eurusd&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 12); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `fxstreet-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'FXStreet',
+            category: 'Forex',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'medium',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    console.log(`📰 FXStreet: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('FXStreet error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: The Block Crypto
+async function fetchTheBlockNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:theblock.co+crypto+bitcoin&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 12); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `theblock-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'The Block',
+            category: 'Crypto',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'medium',
+            relatedAssets: ['BTCUSD', 'ETHUSD']
+          });
+        }
+      }
+    }
+    console.log(`📰 The Block: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('The Block error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: CoinDesk Crypto
+async function fetchCoinDeskNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://www.coindesk.com/arc/outboundfeeds/rss/', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 15); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      const descMatch = item.match(/<description>([\s\S]*?)<\/description>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const description = descMatch ? descMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]*>/g, '').trim() : '';
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment, keyTriggers } = analyzeContextualSentiment(title + ' ' + description);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `coindesk-${i}-${timestamp}`,
+            title,
+            description: description.substring(0, 300),
+            fullContent: description,
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'CoinDesk',
+            category: 'Crypto',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: keyTriggers.length > 0 ? 'high' : 'medium',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    console.log(`📰 CoinDesk: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('CoinDesk error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: Nikkei Asia (Japan/Asia)
+async function fetchNikkeiNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:asia.nikkei.com+markets+economy&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 10); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `nikkei-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'Nikkei Asia',
+            category: 'Asia',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'medium',
+            relatedAssets: ['USDJPY', 'JP225']
+          });
+        }
+      }
+    }
+    console.log(`📰 Nikkei: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('Nikkei error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: South China Morning Post
+async function fetchSCMPNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:scmp.com+economy+china+markets&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 10); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `scmp-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'SCMP',
+            category: 'China',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'medium',
+            relatedAssets: ['AUDUSD', 'HK50', 'XAUUSD']
+          });
+        }
+      }
+    }
+    console.log(`📰 SCMP: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('SCMP error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: DailyFX
+async function fetchDailyFXNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:dailyfx.com+forex+gold&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 10); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `dailyfx-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'DailyFX',
+            category: 'Forex',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'medium',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    console.log(`📰 DailyFX: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('DailyFX error:', error);
+    return [];
+  }
+}
+
+// ✅ NEW: ZeroHedge (Alternative Finance)
+async function fetchZeroHedgeNews(): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch('https://news.google.com/rss/search?q=site:zerohedge.com+markets+fed&hl=en-US&gl=US', {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    
+    for (let i = 0; i < Math.min(itemMatches.length, 10); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment } = analyzeContextualSentiment(title);
+        
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `zerohedge-${i}-${timestamp}`,
+            title,
+            description: '',
+            url: linkMatch ? linkMatch[1].trim() : '#',
+            source: 'ZeroHedge',
+            category: 'Alternative',
+            publishedAt: new Date(timestamp).toISOString(),
+            timestamp,
+            ageText: getNewsAgeText(timestamp),
+            sentiment,
+            importance: 'medium',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    console.log(`📰 ZeroHedge: ${items.length} fresh`);
+    return items;
+  } catch (error) {
+    console.error('ZeroHedge error:', error);
+    return [];
+  }
+}
+
 // ✅ Economic Calendar Signals
 async function fetchEconomicCalendarSignals(): Promise<RawNewsItem[]> {
   const timestamp = Date.now();
@@ -1107,19 +1952,24 @@ serve(async (req) => {
     } catch {}
     
     console.log(`📌 Assets: ${pinnedAssets.join(', ') || 'default'}`);
-    console.log('📡 Fetching 50+ news sources...');
+    console.log('📡 Fetching 80+ global news sources...');
     
-    // ✅ EXPANDED: 50+ sources in parallel
+    // ✅ EXPANDED: 80+ sources in parallel - GLOBAL COVERAGE
     const [
-      // ✅ NEW: Real News APIs
-      gNewsGold, gNewsForex, gNewsCrypto, gNewsTariff,
-      newsAPIGold, newsAPIForex,
+      // ✅ Real News APIs
+      gNewsGold, gNewsForex, gNewsCrypto, gNewsTariff, gNewsEconomy, gNewsCentralBanks,
+      newsAPIGold, newsAPIForex, newsAPICrypto, newsAPIEconomy,
       alphaVantageNews,
       
-      // Reddit Sources (12)
+      // ✅ Premium RSS Sources (18)
+      bbcNews, reutersNews, cnbcNews, yahooFinance, bloombergNews, ftNews,
+      alJazeeraNews, investingComNews, kitcoNews, oilPriceNews, fxStreetNews,
+      theBlockNews, coinDeskNews, nikkeiNews, scmpNews, dailyFXNews, zeroHedgeNews,
+      
+      // Reddit Sources (15)
       forexReddit, goldReddit, cryptoReddit, wsbReddit, stocksReddit,
       economicsReddit, investingReddit, optionsReddit, futuresReddit,
-      silverReddit, tradingReddit, algoTradingReddit,
+      silverReddit, tradingReddit, algoTradingReddit, geopoliticsReddit, worldnewsReddit, personalfinanceReddit,
       
       // Hacker News (4)
       hackerNewsFinance, hackerNewsCrypto, hackerNewsStock, hackerNewsEconomy,
@@ -1133,16 +1983,39 @@ serve(async (req) => {
       // Geopolitical (3)
       tradeWarNews, geoRiskNews, centralBankNews
     ] = await Promise.all([
-      // ✅ NEW: Real APIs (if keys configured)
+      // ✅ Real APIs (if keys configured)
       fetchGNews('gold price XAUUSD', 'Gold'),
       fetchGNews('forex currency EURUSD', 'Forex'),
       fetchGNews('bitcoin cryptocurrency', 'Crypto'),
       fetchGNews('Trump tariff trade war China', 'Trade'),
+      fetchGNews('economy inflation GDP growth', 'Economy'),
+      fetchGNews('Federal Reserve ECB BOJ central bank', 'Central Banks'),
       fetchNewsAPIOrg('gold precious metals', 'Gold'),
       fetchNewsAPIOrg('forex trading currency', 'Forex'),
-      fetchAlphaVantageNews('forex,financial_markets,economy_macro'),
+      fetchNewsAPIOrg('bitcoin ethereum crypto', 'Crypto'),
+      fetchNewsAPIOrg('economy recession inflation', 'Economy'),
+      fetchAlphaVantageNews('forex,financial_markets,economy_macro,mergers_and_acquisitions'),
       
-      // Reddit (12)
+      // ✅ Premium RSS Sources (18)
+      fetchBBCNews(),
+      fetchReutersNews(),
+      fetchCNBCNews(),
+      fetchYahooFinanceNews(),
+      fetchBloombergNews(),
+      fetchFTNews(),
+      fetchAlJazeeraNews(),
+      fetchInvestingComNews(),
+      fetchKitcoNews(),
+      fetchOilPriceNews(),
+      fetchFXStreetNews(),
+      fetchTheBlockNews(),
+      fetchCoinDeskNews(),
+      fetchNikkeiNews(),
+      fetchSCMPNews(),
+      fetchDailyFXNews(),
+      fetchZeroHedgeNews(),
+      
+      // Reddit (15)
       fetchReddit('forex', 'Forex'),
       fetchReddit('Gold', 'Commodities'),
       fetchReddit('cryptocurrency', 'Crypto'),
@@ -1155,6 +2028,9 @@ serve(async (req) => {
       fetchReddit('Silverbugs', 'Commodities'),
       fetchReddit('Daytrading', 'Trading'),
       fetchReddit('algotrading', 'Algo Trading'),
+      fetchReddit('geopolitics', 'Geopolitics'),
+      fetchReddit('worldnews', 'World News'),
+      fetchReddit('personalfinance', 'Finance'),
       
       // HN (4)
       fetchHackerNews('finance trading forex currency'),
@@ -1178,15 +2054,20 @@ serve(async (req) => {
     ]);
 
     let allNews = [
-      // ✅ NEW: Real APIs first (higher quality)
-      ...gNewsGold, ...gNewsForex, ...gNewsCrypto, ...gNewsTariff,
-      ...newsAPIGold, ...newsAPIForex,
+      // ✅ Premium RSS Sources first (highest quality)
+      ...bbcNews, ...reutersNews, ...cnbcNews, ...yahooFinance, ...bloombergNews, ...ftNews,
+      ...alJazeeraNews, ...investingComNews, ...kitcoNews, ...oilPriceNews, ...fxStreetNews,
+      ...theBlockNews, ...coinDeskNews, ...nikkeiNews, ...scmpNews, ...dailyFXNews, ...zeroHedgeNews,
+      
+      // ✅ Real APIs (high quality)
+      ...gNewsGold, ...gNewsForex, ...gNewsCrypto, ...gNewsTariff, ...gNewsEconomy, ...gNewsCentralBanks,
+      ...newsAPIGold, ...newsAPIForex, ...newsAPICrypto, ...newsAPIEconomy,
       ...alphaVantageNews,
       
-      // Reddit
+      // Reddit (community insights)
       ...forexReddit, ...goldReddit, ...cryptoReddit, ...wsbReddit, ...stocksReddit,
       ...economicsReddit, ...investingReddit, ...optionsReddit, ...futuresReddit,
-      ...silverReddit, ...tradingReddit, ...algoTradingReddit,
+      ...silverReddit, ...tradingReddit, ...algoTradingReddit, ...geopoliticsReddit, ...worldnewsReddit, ...personalfinanceReddit,
       
       // HN
       ...hackerNewsFinance, ...hackerNewsCrypto, ...hackerNewsStock, ...hackerNewsEconomy,
@@ -1203,7 +2084,7 @@ serve(async (req) => {
 
     const freshNews = allNews.filter(item => isNewsFresh(item.timestamp));
 
-    console.log(`\n📊 News Report:\n   Total fetched: ${allNews.length}\n   Fresh (24h): ${freshNews.length}\n   Sources: 50+\n    `);
+    console.log(`\n📊 News Report:\n   Total fetched: ${allNews.length}\n   Fresh (24h): ${freshNews.length}\n   Sources: 80+\n    `);
 
     const newsToAnalyze = freshNews.length >= MIN_FRESH_NEWS_COUNT ? freshNews : allNews;
 
@@ -1280,11 +2161,34 @@ serve(async (req) => {
     const processingTime = Date.now() - startTime;
     console.log(`✅ Total: ${processingTime}ms`);
 
-    // ✅ Dynamic sources count
+    // ✅ Dynamic sources count - 80+ sources
     const activeSources: string[] = [];
+    
+    // Premium RSS Sources
+    if (bbcNews.length > 0) activeSources.push('📺 BBC');
+    if (reutersNews.length > 0) activeSources.push('📰 Reuters');
+    if (cnbcNews.length > 0) activeSources.push('📺 CNBC');
+    if (yahooFinance.length > 0) activeSources.push('📊 Yahoo Finance');
+    if (bloombergNews.length > 0) activeSources.push('💹 Bloomberg');
+    if (ftNews.length > 0) activeSources.push('📰 Financial Times');
+    if (alJazeeraNews.length > 0) activeSources.push('🌍 Al Jazeera');
+    if (investingComNews.length > 0) activeSources.push('📈 Investing.com');
+    if (kitcoNews.length > 0) activeSources.push('🥇 Kitco');
+    if (oilPriceNews.length > 0) activeSources.push('🛢️ OilPrice');
+    if (fxStreetNews.length > 0) activeSources.push('💱 FXStreet');
+    if (theBlockNews.length > 0) activeSources.push('₿ The Block');
+    if (coinDeskNews.length > 0) activeSources.push('₿ CoinDesk');
+    if (nikkeiNews.length > 0) activeSources.push('🇯🇵 Nikkei Asia');
+    if (scmpNews.length > 0) activeSources.push('🇨🇳 SCMP');
+    if (dailyFXNews.length > 0) activeSources.push('💱 DailyFX');
+    if (zeroHedgeNews.length > 0) activeSources.push('📊 ZeroHedge');
+    
+    // News APIs
     if (gNewsGold.length > 0) activeSources.push('📰 GNews');
     if (newsAPIGold.length > 0) activeSources.push('📰 NewsAPI');
     if (alphaVantageNews.length > 0) activeSources.push('📊 AlphaVantage');
+    
+    // Reddit
     if (forexReddit.length > 0) activeSources.push('📰 r/forex');
     if (goldReddit.length > 0) activeSources.push('🥇 r/Gold');
     if (cryptoReddit.length > 0) activeSources.push('₿ r/crypto');
@@ -1292,6 +2196,10 @@ serve(async (req) => {
     if (stocksReddit.length > 0) activeSources.push('📊 r/stocks');
     if (economicsReddit.length > 0) activeSources.push('📉 r/Economics');
     if (investingReddit.length > 0) activeSources.push('💰 r/investing');
+    if (geopoliticsReddit.length > 0) activeSources.push('🌍 r/geopolitics');
+    if (worldnewsReddit.length > 0) activeSources.push('🌐 r/worldnews');
+    
+    // Other
     if (hackerNewsFinance.length > 0) activeSources.push('🔶 HackerNews');
     if (cryptoNews.length > 0) activeSources.push('₿ CryptoCompare');
     if (coingeckoTrending.length > 0) activeSources.push('🦎 CoinGecko');
