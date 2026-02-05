@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RefreshCw, Plus, X, Info } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ScatterPoint {
   x: number;
@@ -80,28 +81,38 @@ const ScatterPointChart = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch SPY as benchmark
+      // Fetch SPY as benchmark using proxy
       let benchmarkPrices: number[] = [];
       try {
-        const spyResponse = await fetch(
-          `https://query1.finance.yahoo.com/v8/finance/chart/SPY?range=3mo&interval=1d`
-        );
-        const spyData = await spyResponse.json();
-        benchmarkPrices = spyData.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter((p: any) => p != null) || [];
+        const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+          body: { source: 'yahoo', symbols: ['SPY'], range: '3mo', interval: '1d' }
+        });
+        if (!error && data?.yahoo?.SPY) {
+          benchmarkPrices = data.yahoo.SPY.quotes?.close?.filter((p: any) => p != null) || [];
+        }
       } catch {
-        // Generate mock benchmark data
+        benchmarkPrices = Array.from({ length: 60 }, (_, i) => 450 + Math.sin(i * 0.1) * 20 + Math.random() * 10);
+      }
+
+      if (benchmarkPrices.length === 0) {
         benchmarkPrices = Array.from({ length: 60 }, (_, i) => 450 + Math.sin(i * 0.1) * 20 + Math.random() * 10);
       }
 
       const newScatterData: Record<string, ScatterPoint[]> = {};
 
+      // Fetch all symbols via proxy
+      const symbolNames = symbols.map(s => s.symbol);
+      const { data: proxyData, error } = await supabase.functions.invoke('market-data-proxy', {
+        body: { source: 'yahoo', symbols: symbolNames, range: '3mo', interval: '1d' }
+      });
+
       for (const { symbol } of symbols) {
         try {
-          const response = await fetch(
-            `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=3mo&interval=1d`
-          );
-          const data = await response.json();
-          const prices = data.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter((p: any) => p != null) || [];
+          let prices: number[] = [];
+          
+          if (!error && proxyData?.yahoo?.[symbol]) {
+            prices = proxyData.yahoo[symbol].quotes?.close?.filter((p: any) => p != null) || [];
+          }
 
           if (prices.length > length) {
             // Create trail of points (last 10 data points)
@@ -122,7 +133,7 @@ const ScatterPointChart = () => {
             newScatterData[symbol] = [{ x: mockX, y: mockY, symbol }];
           }
         } catch (error) {
-          console.error(`Error fetching ${symbol}:`, error);
+          console.error(`Error processing ${symbol}:`, error);
           const mockX = (Math.random() - 0.5) * 30;
           const mockY = (Math.random() - 0.5) * 30;
           newScatterData[symbol] = [{ x: mockX, y: mockY, symbol }];

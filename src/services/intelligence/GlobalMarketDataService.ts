@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface MarketQuote {
   symbol: string;
@@ -67,40 +67,44 @@ class GlobalMarketDataService {
 
   private async fetchYahooFinance(symbol: string): Promise<MarketQuote | null> {
     try {
-      const response = await axios.get(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
-        {
-          params: {
-            interval: '1d',
-            range: '1d'
-          }
+      // Use market-data-proxy edge function to avoid CORS
+      const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+        body: {
+          source: 'yahoo',
+          symbols: [symbol],
+          range: '1d',
+          interval: '1d'
         }
-      );
+      });
 
-      const data = response.data.chart.result[0];
-      const meta = data.meta;
-      const quote = data.indicators.quote[0];
+      if (error) throw error;
+
+      const result = data?.yahoo?.[symbol];
+      if (!result) throw new Error('No data returned');
+
+      const meta = result.meta;
+      const quotes = result.quotes;
       
-      const currentPrice = meta.regularMarketPrice || quote.close[quote.close.length - 1];
-      const previousClose = meta.previousClose || meta.chartPreviousClose;
+      const currentPrice = meta?.regularMarketPrice || quotes?.close?.[quotes.close.length - 1];
+      const previousClose = meta?.previousClose || meta?.chartPreviousClose;
       const change = currentPrice - previousClose;
-      const changePercent = (change / previousClose) * 100;
+      const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
 
       return {
-        symbol: meta.symbol,
-        name: meta.longName || meta.symbol,
+        symbol: meta?.symbol || symbol,
+        name: meta?.longName || meta?.symbol || symbol,
         price: currentPrice,
         change: change,
         changePercent: changePercent,
-        volume: meta.regularMarketVolume || quote.volume[quote.volume.length - 1],
-        marketCap: meta.marketCap,
-        high: meta.regularMarketDayHigh || Math.max(...quote.high.filter((h: number) => h)),
-        low: meta.regularMarketDayLow || Math.min(...quote.low.filter((l: number) => l)),
-        open: quote.open[0],
+        volume: meta?.regularMarketVolume || quotes?.volume?.[quotes.volume.length - 1] || 0,
+        marketCap: meta?.marketCap,
+        high: meta?.regularMarketDayHigh || Math.max(...(quotes?.high?.filter((h: number) => h) || [currentPrice])),
+        low: meta?.regularMarketDayLow || Math.min(...(quotes?.low?.filter((l: number) => l) || [currentPrice])),
+        open: quotes?.open?.[0] || currentPrice,
         close: currentPrice,
         previousClose: previousClose,
-        exchange: meta.exchangeName,
-        country: this.getCountryFromExchange(meta.exchangeName),
+        exchange: meta?.exchangeName || 'Unknown',
+        country: this.getCountryFromExchange(meta?.exchangeName || ''),
         timestamp: new Date()
       };
     } catch (error) {

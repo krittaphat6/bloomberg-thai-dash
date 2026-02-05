@@ -1,4 +1,5 @@
 // Gold Data Service - Real gold price and holdings data
+import { supabase } from '@/integrations/supabase/client';
 
 export interface GoldData {
   date: string;
@@ -29,7 +30,7 @@ export class GoldDataService {
   };
   private static readonly CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
 
-  // Fetch GLD ETF data from Yahoo Finance
+  // Fetch GLD ETF data via proxy
   static async fetchGLDData(): Promise<GoldData[]> {
     // Check cache
     if (this.cache.gld.length > 0 && Date.now() - this.cache.timestamp < this.CACHE_DURATION) {
@@ -37,22 +38,25 @@ export class GoldDataService {
     }
 
     try {
-      const symbol = 'GLD';
-      const range = '1mo';
-      const interval = '1d';
+      // Use market-data-proxy edge function
+      const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+        body: {
+          source: 'yahoo',
+          symbols: ['GLD'],
+          range: '1mo',
+          interval: '1d'
+        }
+      });
 
-      const response = await fetch(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`
-      );
+      if (error) throw error;
 
-      if (!response.ok) throw new Error('Yahoo Finance error');
+      const result = data?.yahoo?.['GLD'];
+      if (!result) throw new Error('No data returned');
 
-      const data = await response.json();
-      const result = data.chart.result[0];
-      const quotes = result.indicators.quote[0];
-      const timestamps = result.timestamp;
+      const quotes = result.quotes;
+      const timestamps = result.timestamps;
 
-      if (!timestamps || !quotes.close) {
+      if (!timestamps || !quotes?.close) {
         throw new Error('Invalid data format');
       }
 
@@ -69,7 +73,7 @@ export class GoldDataService {
           priceGBP: price * 0.79,
           priceEUR: price * 0.92,
           volume: quotes.volume[i] || 0,
-          marketCap: price * 393000000, // GLD shares outstanding approx
+          marketCap: price * 393000000,
           change,
           changePercent
         };
@@ -85,24 +89,27 @@ export class GoldDataService {
     }
   }
 
-  // Fetch real-time gold spot price
+  // Fetch real-time gold spot price via proxy
   static async fetchGoldPriceRealtime(): Promise<number> {
     try {
-      // Use Yahoo Finance gold futures
-      const response = await fetch(
-        'https://query1.finance.yahoo.com/v8/finance/chart/GC=F'
-      );
+      const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+        body: {
+          source: 'yahoo',
+          symbols: ['GC=F'],
+          range: '1d',
+          interval: '1d'
+        }
+      });
 
-      if (!response.ok) throw new Error('Gold price fetch error');
+      if (error) throw error;
 
-      const data = await response.json();
-      const price = data.chart.result[0].meta.regularMarketPrice;
+      const price = data?.yahoo?.['GC=F']?.meta?.regularMarketPrice;
+      if (!price) throw new Error('No price data');
       
       this.cache.price = price;
       return price;
     } catch (error) {
       console.error('Gold price error:', error);
-      // Fallback price
       return this.cache.price || 2050;
     }
   }
