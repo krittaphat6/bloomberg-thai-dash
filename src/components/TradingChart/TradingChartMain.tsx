@@ -15,6 +15,7 @@ import PineScriptEditor from './PineScriptEditor';
 import AlertsPanel from './AlertsPanel';
 import ThemePanel from './ThemePanel';
 import LayoutSelector from './LayoutSelector';
+import MultiChartLayout from './MultiChartLayout';
 import CustomIndicatorsPanel from './CustomIndicatorsPanel';
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
 import MobileTradingChart from './MobileTradingChart';
@@ -75,6 +76,9 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
   const [showWatchlist, setShowWatchlist] = useState(true);
   const [showLayoutSelector, setShowLayoutSelector] = useState(false);
   const [currentLayout, setCurrentLayout] = useState('1');
+  const [layoutSyncSymbol, setLayoutSyncSymbol] = useState(true);
+  const [layoutSyncTimeframe, setLayoutSyncTimeframe] = useState(true);
+  const [layoutSyncCrosshair, setLayoutSyncCrosshair] = useState(true);
 
   // Theme
   const [theme, setTheme] = useState<ChartTheme>(loadTheme);
@@ -462,60 +466,77 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
           onScreenshot={handleScreenshot}
         />
 
-        {/* Chart Canvas */}
+        {/* Chart Canvas - Single or Multi-panel based on layout */}
         <div ref={chartContainerRef} className="flex-1 relative min-h-0">
-          {isLoading && data.length === 0 ? (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <RefreshCw className="w-8 h-8 animate-spin text-terminal-green" />
-            </div>
-          ) : error ? (
-            <div className="absolute inset-0 flex items-center justify-center text-destructive">
-              {error}
-            </div>
-          ) : (
-            <LightweightChartCanvas
-              data={data}
-              symbol={symbol.symbol}
-              symbolType={symbol.type}
-              timeframe={timeframe}
-              width={dimensions.width}
-              height={dimensions.height}
-              theme={theme}
-              indicators={indicators}
-              onCrosshairMove={(data) => setCrosshair({ ...crosshair, ...data, x: 0, y: 0 })}
-            />
-          )}
-
-          {/* Crosshair info */}
-          {crosshair.visible && (
-            <div className="absolute top-2 left-2 px-2 py-1 bg-card/80 rounded text-xs font-mono">
-              <span className="text-muted-foreground">Price: </span>
-              <span className="text-foreground">{crosshair.price.toFixed(2)}</span>
-              {crosshair.time > 0 && (
-                <>
-                  <span className="text-muted-foreground ml-3">Time: </span>
-                  <span className="text-foreground">
-                    {new Date(crosshair.time).toLocaleString()}
-                  </span>
-                </>
+          {currentLayout === '1' ? (
+            // Single chart mode
+            <>
+              {isLoading && data.length === 0 ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <RefreshCw className="w-8 h-8 animate-spin text-terminal-green" />
+                </div>
+              ) : error ? (
+                <div className="absolute inset-0 flex items-center justify-center text-destructive">
+                  {error}
+                </div>
+              ) : (
+                <LightweightChartCanvas
+                  data={data}
+                  symbol={symbol.symbol}
+                  symbolType={symbol.type}
+                  timeframe={timeframe}
+                  width={dimensions.width}
+                  height={dimensions.height}
+                  theme={theme}
+                  indicators={indicators}
+                  onCrosshairMove={(data) => setCrosshair({ ...crosshair, ...data, x: 0, y: 0 })}
+                />
               )}
-            </div>
-          )}
 
-          {/* Custom indicators badge */}
-          {customIndicators.length > 0 && (
-            <div className="absolute top-2 right-2 flex gap-1">
-              {customIndicators.filter(i => i.visible).map(ind => (
-                <Badge 
-                  key={ind.id} 
-                  variant="outline" 
-                  className="text-[10px]"
-                  style={{ borderColor: ind.color, color: ind.color }}
-                >
-                  {ind.name}
-                </Badge>
-              ))}
-            </div>
+              {/* Crosshair info */}
+              {crosshair.visible && (
+                <div className="absolute top-2 left-2 px-2 py-1 bg-card/80 rounded text-xs font-mono">
+                  <span className="text-muted-foreground">Price: </span>
+                  <span className="text-foreground">{crosshair.price.toFixed(2)}</span>
+                  {crosshair.time > 0 && (
+                    <>
+                      <span className="text-muted-foreground ml-3">Time: </span>
+                      <span className="text-foreground">
+                        {new Date(crosshair.time).toLocaleString()}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Custom indicators badge */}
+              {customIndicators.length > 0 && (
+                <div className="absolute top-2 right-2 flex gap-1">
+                  {customIndicators.filter(i => i.visible).map(ind => (
+                    <Badge 
+                      key={ind.id} 
+                      variant="outline" 
+                      className="text-[10px]"
+                      style={{ borderColor: ind.color, color: ind.color }}
+                    >
+                      {ind.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            // Multi-chart layout mode
+            <MultiChartLayout
+              layoutId={currentLayout}
+              mainSymbol={symbol}
+              timeframe={timeframe}
+              theme={theme}
+              syncSymbol={layoutSyncSymbol}
+              syncTimeframe={layoutSyncTimeframe}
+              syncCrosshair={layoutSyncCrosshair}
+              onMainSymbolChange={handleSelectSymbol}
+            />
           )}
         </div>
 
