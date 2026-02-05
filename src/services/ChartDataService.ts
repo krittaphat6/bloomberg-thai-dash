@@ -34,9 +34,55 @@ const TIMEFRAME_MS: Record<Timeframe, number> = {
 class ChartDataService {
   private cache: Map<string, { data: OHLCVData[]; timestamp: number }> = new Map();
   private cacheDuration = 60000; // 1 minute cache
+  private allCryptoSymbols: ChartSymbol[] = [];
+  private symbolsLoaded = false;
 
-  // Popular symbols list
-  getSymbolsList(): ChartSymbol[] {
+  // Load all crypto symbols from Binance
+  async loadAllCryptoSymbols(): Promise<ChartSymbol[]> {
+    if (this.symbolsLoaded && this.allCryptoSymbols.length > 0) {
+      return this.allCryptoSymbols;
+    }
+
+    try {
+      const response = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+      if (!response.ok) throw new Error('Failed to fetch symbols');
+      
+      const data = await response.json();
+      this.allCryptoSymbols = data
+        .filter((t: any) => t.symbol.endsWith('USDT'))
+        .map((t: any) => ({
+          symbol: t.symbol,
+          name: t.symbol.replace('USDT', ''),
+          exchange: 'Binance',
+          type: 'crypto' as const,
+        }))
+        .sort((a: ChartSymbol, b: ChartSymbol) => a.symbol.localeCompare(b.symbol));
+      
+      this.symbolsLoaded = true;
+      console.log(`[ChartDataService] Loaded ${this.allCryptoSymbols.length} crypto symbols`);
+      return this.allCryptoSymbols;
+    } catch (error) {
+      console.error('[ChartDataService] Failed to load crypto symbols:', error);
+      return this.getDefaultSymbols().filter(s => s.type === 'crypto');
+    }
+  }
+
+  // Search symbols
+  async searchSymbols(query: string): Promise<ChartSymbol[]> {
+    const q = query.toUpperCase();
+    const cryptos = await this.loadAllCryptoSymbols();
+    const defaults = this.getDefaultSymbols();
+    
+    const matches = [
+      ...defaults.filter(s => s.symbol.includes(q) || s.name.toUpperCase().includes(q)),
+      ...cryptos.filter(s => s.symbol.includes(q) && !defaults.some(d => d.symbol === s.symbol)),
+    ];
+    
+    return matches.slice(0, 50);
+  }
+
+  // Default popular symbols
+  private getDefaultSymbols(): ChartSymbol[] {
     return [
       // Crypto
       { symbol: 'BTCUSDT', name: 'Bitcoin', exchange: 'Binance', type: 'crypto' },
@@ -44,6 +90,11 @@ class ChartDataService {
       { symbol: 'BNBUSDT', name: 'BNB', exchange: 'Binance', type: 'crypto' },
       { symbol: 'SOLUSDT', name: 'Solana', exchange: 'Binance', type: 'crypto' },
       { symbol: 'XRPUSDT', name: 'XRP', exchange: 'Binance', type: 'crypto' },
+      { symbol: 'ADAUSDT', name: 'Cardano', exchange: 'Binance', type: 'crypto' },
+      { symbol: 'DOGEUSDT', name: 'Dogecoin', exchange: 'Binance', type: 'crypto' },
+      { symbol: 'DOTUSDT', name: 'Polkadot', exchange: 'Binance', type: 'crypto' },
+      { symbol: 'MATICUSDT', name: 'Polygon', exchange: 'Binance', type: 'crypto' },
+      { symbol: 'AVAXUSDT', name: 'Avalanche', exchange: 'Binance', type: 'crypto' },
       // US Stocks
       { symbol: 'AAPL', name: 'Apple', exchange: 'NASDAQ', type: 'stock' },
       { symbol: 'MSFT', name: 'Microsoft', exchange: 'NASDAQ', type: 'stock' },
@@ -63,6 +114,11 @@ class ChartDataService {
       { symbol: 'KBANK.BK', name: 'Kasikornbank', exchange: 'SET', type: 'set' },
       { symbol: 'SCB.BK', name: 'SCB', exchange: 'SET', type: 'set' },
     ];
+  }
+
+  // Popular symbols list
+  getSymbolsList(): ChartSymbol[] {
+    return this.getDefaultSymbols();
   }
 
   // Fetch crypto data from Binance (free, no API key)
