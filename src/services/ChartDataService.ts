@@ -121,16 +121,18 @@ class ChartDataService {
     return this.getDefaultSymbols();
   }
 
-  // Fetch crypto data from Binance (free, no API key)
-  async fetchCryptoData(symbol: string, timeframe: Timeframe, limit: number = 500): Promise<OHLCVData[]> {
-    const cacheKey = `crypto:${symbol}:${timeframe}`;
+  // Fetch crypto data from Binance (free, no API key, max 1000 candles per request)
+  async fetchCryptoData(symbol: string, timeframe: Timeframe, limit: number = 1000): Promise<OHLCVData[]> {
+    const cacheKey = `crypto:${symbol}:${timeframe}:${limit}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) return cached;
 
     try {
       const interval = this.binanceInterval(timeframe);
+      // Binance allows max 1000 candles per request
+      const effectiveLimit = Math.min(limit, 1000);
       const response = await fetch(
-        `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
+        `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${effectiveLimit}`
       );
       
       if (!response.ok) throw new Error('Binance API error');
@@ -146,6 +148,7 @@ class ChartDataService {
       }));
       
       this.setCache(cacheKey, ohlcv);
+      console.log(`[ChartDataService] Loaded ${ohlcv.length} candles for ${symbol} (${timeframe})`);
       return ohlcv;
     } catch (error) {
       console.error('Crypto fetch error:', error);
