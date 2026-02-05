@@ -1,4 +1,6 @@
 // Chart Data Service - Fetch OHLCV data from multiple sources
+import { supabase } from '@/integrations/supabase/client';
+
 export interface OHLCVData {
   timestamp: number;
   open: number;
@@ -95,7 +97,7 @@ class ChartDataService {
     }
   }
 
-  // Fetch stock data from Yahoo Finance (free, no API key)
+  // Fetch stock data via proxy
   async fetchStockData(symbol: string, timeframe: Timeframe, limit: number = 500): Promise<OHLCVData[]> {
     const cacheKey = `stock:${symbol}:${timeframe}`;
     const cached = this.getFromCache(cacheKey);
@@ -105,19 +107,23 @@ class ChartDataService {
       const range = this.yahooRange(timeframe);
       const interval = this.yahooInterval(timeframe);
       
-      const response = await fetch(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`
-      );
+      // Use market-data-proxy edge function
+      const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+        body: {
+          source: 'yahoo',
+          symbols: [symbol],
+          range,
+          interval
+        }
+      });
       
-      if (!response.ok) throw new Error('Yahoo Finance API error');
+      if (error) throw error;
       
-      const data = await response.json();
-      const result = data.chart?.result?.[0];
+      const result = data?.yahoo?.[symbol];
+      if (!result?.timestamps) throw new Error('No data');
       
-      if (!result?.timestamp) throw new Error('No data');
-      
-      const quotes = result.indicators?.quote?.[0];
-      const ohlcv: OHLCVData[] = result.timestamp.map((t: number, i: number) => ({
+      const quotes = result.quotes;
+      const ohlcv: OHLCVData[] = result.timestamps.map((t: number, i: number) => ({
         timestamp: t * 1000,
         open: quotes?.open?.[i] || 0,
         high: quotes?.high?.[i] || 0,
@@ -134,10 +140,8 @@ class ChartDataService {
     }
   }
 
-  // Fetch Forex data (using free API or mock)
+  // Fetch Forex data (using mock as free APIs are limited)
   async fetchForexData(symbol: string, timeframe: Timeframe, limit: number = 500): Promise<OHLCVData[]> {
-    // For forex, we'll use mock data as free APIs are limited
-    // In production, you would use a paid API like Oanda or FXCM
     return this.generateMockData(symbol, timeframe, limit);
   }
 
@@ -155,6 +159,7 @@ class ChartDataService {
         return this.generateMockData(symbol.symbol, timeframe, limit);
     }
   }
+
 
   // Generate realistic mock OHLCV data
   generateMockData(symbol: string, timeframe: Timeframe, limit: number): OHLCVData[] {

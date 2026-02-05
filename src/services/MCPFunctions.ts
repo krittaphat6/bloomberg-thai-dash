@@ -244,6 +244,8 @@ mcp.register({
 
 // ===== Market Data Functions =====
 
+import { supabase } from '@/integrations/supabase/client';
+
 mcp.register({
   name: 'get_market_price',
   description: 'ดึงราคาตลาดปัจจุบัน',
@@ -268,22 +270,31 @@ mcp.register({
           source: 'Binance'
         };
       } else {
-        // ถ้าเป็นหุ้น ใช้ Yahoo Finance
-        const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`);
+        // ใช้ market-data-proxy edge function
+        const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+          body: {
+            source: 'yahoo',
+            symbols: [symbol],
+            range: '1d',
+            interval: '1d'
+          }
+        });
         
-        if (!response.ok) throw new Error('Yahoo Finance API error');
-        const data = await response.json();
-        const meta = data.chart?.result?.[0]?.meta;
+        if (error) throw error;
+        const result = data?.yahoo?.[symbol];
+        if (!result) throw new Error('No data found');
         
-        if (!meta) throw new Error('No data found');
+        const meta = result.meta;
+        const price = meta?.regularMarketPrice;
+        const prevClose = meta?.previousClose || meta?.chartPreviousClose;
         
         return {
           success: true,
           symbol,
-          price: meta.regularMarketPrice,
-          change24h: ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100).toFixed(2),
-          volume: meta.regularMarketVolume,
-          source: 'Yahoo Finance'
+          price: price,
+          change24h: prevClose > 0 ? ((price - prevClose) / prevClose * 100).toFixed(2) : '0',
+          volume: meta?.regularMarketVolume,
+          source: 'Yahoo Finance (Proxy)'
         };
       }
     } catch (error) {

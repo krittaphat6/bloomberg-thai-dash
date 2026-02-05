@@ -1,5 +1,7 @@
 // Real-time price service for financial assets
-// Uses free APIs to fetch live prices
+// Uses market-data-proxy edge function to avoid CORS
+
+import { supabase } from '@/integrations/supabase/client';
 
 interface PriceData {
   symbol: string;
@@ -53,49 +55,44 @@ export async function fetchRealTimePrice(symbol: string): Promise<PriceData | nu
   }
 
   try {
-    // Use Yahoo Finance v8 API through CORS proxy
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1m&range=1d`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'Accept': 'application/json'
+    // Use market-data-proxy edge function to avoid CORS
+    const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+      body: {
+        source: 'yahoo',
+        symbols: [yahooSymbol],
+        range: '1d',
+        interval: '1m'
       }
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    if (error) throw error;
 
-    const data = await response.json();
-    const result = data?.chart?.result?.[0];
-    
-    if (!result) {
-      throw new Error('No data returned');
-    }
+    const result = data?.yahoo?.[yahooSymbol];
+    if (!result) throw new Error('No data returned');
 
     const meta = result.meta;
-    const quote = result.indicators?.quote?.[0];
+    const quotes = result.quotes;
     
     // Get last valid price from close array
-    let price = meta.regularMarketPrice;
-    if (!price && quote?.close) {
-      const closes = quote.close.filter((c: number | null) => c !== null);
+    let price = meta?.regularMarketPrice;
+    if (!price && quotes?.close) {
+      const closes = quotes.close.filter((c: number | null) => c !== null);
       price = closes[closes.length - 1];
     }
 
-    const prevClose = meta.chartPreviousClose || meta.previousClose;
+    const prevClose = meta?.chartPreviousClose || meta?.previousClose || price;
     const change = price - prevClose;
-    const changePercent = (change / prevClose) * 100;
+    const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
 
     // Get high/low from today's data
-    let high = meta.regularMarketDayHigh;
-    let low = meta.regularMarketDayLow;
+    let high = meta?.regularMarketDayHigh;
+    let low = meta?.regularMarketDayLow;
     
-    if (!high && quote?.high) {
-      high = Math.max(...quote.high.filter((h: number | null) => h !== null));
+    if (!high && quotes?.high) {
+      high = Math.max(...quotes.high.filter((h: number | null) => h !== null));
     }
-    if (!low && quote?.low) {
-      low = Math.min(...quote.low.filter((l: number | null) => l !== null && l > 0));
+    if (!low && quotes?.low) {
+      low = Math.min(...quotes.low.filter((l: number | null) => l !== null && l > 0));
     }
 
     const priceData: PriceData = {
