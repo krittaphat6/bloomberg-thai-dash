@@ -40,7 +40,8 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
   const [searchResults, setSearchResults] = useState<ChartSymbol[]>([]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 400, height: 300 });
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 200, height: 150 });
 
   // Sync with parent
   useEffect(() => {
@@ -55,19 +56,32 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
     }
   }, [syncTimeframe]);
 
-  // Resize observer
+  // Resize observer - watch the chart container specifically
   useEffect(() => {
+    const chartContainer = chartContainerRef.current;
+    if (!chartContainer) return;
+    
     const observer = new ResizeObserver(entries => {
       for (const entry of entries) {
-        setDimensions({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height - 32, // Subtract header height
-        });
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setDimensions({
+            width: Math.floor(width),
+            height: Math.floor(height),
+          });
+        }
       }
     });
 
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
+    observer.observe(chartContainer);
+    
+    // Initial measurement
+    const rect = chartContainer.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setDimensions({
+        width: Math.floor(rect.width),
+        height: Math.floor(rect.height),
+      });
     }
 
     return () => observer.disconnect();
@@ -125,11 +139,12 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
   return (
     <div 
       ref={containerRef}
-      className="flex flex-col h-full border border-terminal-green/20 rounded overflow-hidden bg-background"
+      className="flex flex-col h-full w-full border border-terminal-green/20 rounded overflow-hidden bg-background"
+      style={{ minHeight: '100px', minWidth: '120px' }}
     >
       {/* Mini Header */}
-      <div className="h-8 flex items-center justify-between px-2 bg-card/80 border-b border-terminal-green/10 flex-shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="h-7 flex items-center justify-between px-1.5 bg-card/80 border-b border-terminal-green/10 flex-shrink-0">
+        <div className="flex items-center gap-1 min-w-0 flex-1">
           {showSymbolInput ? (
             <div className="relative">
               <input
@@ -137,20 +152,19 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
                 value={symbolQuery}
                 onChange={(e) => handleSearch(e.target.value)}
                 placeholder="Search..."
-                className="w-32 h-6 px-2 text-xs bg-muted rounded border border-terminal-green/30 focus:outline-none focus:border-terminal-green"
+                className="w-24 h-5 px-1.5 text-[10px] bg-muted rounded border border-terminal-green/30 focus:outline-none focus:border-terminal-green"
                 autoFocus
                 onBlur={() => setTimeout(() => setShowSymbolInput(false), 200)}
               />
               {searchResults.length > 0 && (
-                <div className="absolute top-7 left-0 w-48 bg-card border border-terminal-green/30 rounded shadow-lg z-50 max-h-48 overflow-y-auto">
+                <div className="absolute top-6 left-0 w-40 bg-card border border-terminal-green/30 rounded shadow-lg z-50 max-h-40 overflow-y-auto">
                   {searchResults.map(s => (
                     <button
                       key={s.symbol}
                       onClick={() => handleSelectSymbol(s)}
-                      className="w-full px-2 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center justify-between"
+                      className="w-full px-1.5 py-1 text-left text-[10px] hover:bg-muted/50 flex items-center justify-between"
                     >
-                      <span className="font-mono text-terminal-green">{s.symbol}</span>
-                      <Badge variant="outline" className="text-[8px]">{s.exchange}</Badge>
+                      <span className="font-mono text-terminal-green truncate">{s.symbol}</span>
                     </button>
                   ))}
                 </div>
@@ -159,24 +173,27 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
           ) : (
             <button
               onClick={() => setShowSymbolInput(true)}
-              className="flex items-center gap-1 text-xs font-mono text-terminal-green hover:text-terminal-green/80"
+              className="flex items-center gap-0.5 text-[10px] font-mono text-terminal-green hover:text-terminal-green/80 truncate"
             >
-              <Search className="w-3 h-3" />
-              {symbol.symbol}
+              <Search className="w-2.5 h-2.5 flex-shrink-0" />
+              <span className="truncate">{symbol.symbol}</span>
             </button>
           )}
           
-          <span className={`text-[10px] ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
-            {currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <span className={`text-[9px] flex-shrink-0 ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
+            {currentPrice > 1000 
+              ? currentPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })
+              : currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            }
           </span>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           {/* Timeframe quick switch */}
           <select
             value={timeframe}
             onChange={(e) => setTimeframe(e.target.value as Timeframe)}
-            className="h-5 px-1 text-[10px] bg-muted rounded border-none focus:outline-none text-muted-foreground"
+            className="h-5 px-0.5 text-[9px] bg-muted rounded border-none focus:outline-none text-muted-foreground"
           >
             {['1m', '5m', '15m', '1h', '4h', '1D'].map(tf => (
               <option key={tf} value={tf}>{tf}</option>
@@ -189,7 +206,7 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
             onClick={fetchData}
             className="h-5 w-5 p-0"
           >
-            <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-2.5 h-2.5 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
           
           {!isMainPanel && onClose && (
@@ -199,17 +216,21 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
               onClick={onClose}
               className="h-5 w-5 p-0 text-muted-foreground hover:text-red-500"
             >
-              <X className="w-3 h-3" />
+              <X className="w-2.5 h-2.5" />
             </Button>
           )}
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="flex-1 relative min-h-0">
+      {/* Chart Container */}
+      <div 
+        ref={chartContainerRef}
+        className="flex-1 relative overflow-hidden"
+        style={{ minHeight: '60px' }}
+      >
         {isLoading && data.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center">
-            <RefreshCw className="w-6 h-6 animate-spin text-terminal-green" />
+            <RefreshCw className="w-4 h-4 animate-spin text-terminal-green" />
           </div>
         ) : (
           <LightweightChartCanvas
