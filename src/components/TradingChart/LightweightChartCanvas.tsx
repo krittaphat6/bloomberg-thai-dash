@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, HistogramData, Time, CrosshairMode, LineStyle } from 'lightweight-charts';
 import { OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from './ChartThemes';
@@ -33,8 +33,12 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
-  
-  const [isReady, setIsReady] = useState(false);
+  const onCrosshairMoveRef = useRef(onCrosshairMove);
+
+  // Keep onCrosshairMove ref updated
+  useEffect(() => {
+    onCrosshairMoveRef.current = onCrosshairMove;
+  }, [onCrosshairMove]);
 
   // Convert OHLCV data to lightweight-charts format
   const formatCandleData = useCallback((ohlcv: OHLCVData[]): CandlestickData[] => {
@@ -47,24 +51,24 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
     }));
   }, []);
 
-  const formatVolumeData = useCallback((ohlcv: OHLCVData[]): HistogramData[] => {
+  const formatVolumeData = useCallback((ohlcv: OHLCVData[], themeColors: ChartTheme['colors']): HistogramData[] => {
     return ohlcv.map(d => ({
       time: Math.floor(d.timestamp / 1000) as Time,
       value: d.volume,
       color: d.close >= d.open 
-        ? theme.colors.volumeUp 
-        : theme.colors.volumeDown,
+        ? themeColors.volumeUp 
+        : themeColors.volumeDown,
     }));
-  }, [theme]);
+  }, []);
 
-  // Initialize chart
+  // Initialize chart - only run once on mount
   useEffect(() => {
-    if (!containerRef.current || width === 0 || height === 0) return;
+    if (!containerRef.current) return;
 
-    // Create chart
+    // Create chart with initial size
     const chart = createChart(containerRef.current, {
-      width,
-      height,
+      width: width || containerRef.current.clientWidth || 800,
+      height: height || containerRef.current.clientHeight || 500,
       layout: {
         background: { color: theme.colors.background },
         textColor: theme.colors.text,
@@ -138,13 +142,13 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
     // Subscribe to crosshair movement
     chart.subscribeCrosshairMove((param) => {
       if (!param.time || !param.point) {
-        onCrosshairMove?.({ price: 0, time: 0, visible: false });
+        onCrosshairMoveRef.current?.({ price: 0, time: 0, visible: false });
         return;
       }
       
       const price = param.seriesData.get(candleSeries);
       if (price) {
-        onCrosshairMove?.({
+        onCrosshairMoveRef.current?.({
           price: (price as CandlestickData).close,
           time: (param.time as number) * 1000,
           visible: true,
@@ -155,7 +159,6 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
-    setIsReady(true);
 
     return () => {
       chart.remove();
@@ -163,9 +166,39 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       indicatorSeriesRef.current.clear();
-      setIsReady(false);
     };
-  }, [theme, onCrosshairMove]);
+  }, []); // Only run on mount
+
+  // Update theme
+  useEffect(() => {
+    if (!chartRef.current || !candleSeriesRef.current) return;
+
+    chartRef.current.applyOptions({
+      layout: {
+        background: { color: theme.colors.background },
+        textColor: theme.colors.text,
+      },
+      grid: {
+        vertLines: { color: theme.colors.grid },
+        horzLines: { color: theme.colors.grid },
+      },
+      crosshair: {
+        vertLine: { color: theme.colors.crosshair, labelBackgroundColor: theme.colors.crosshair },
+        horzLine: { color: theme.colors.crosshair, labelBackgroundColor: theme.colors.crosshair },
+      },
+      rightPriceScale: { borderColor: theme.colors.grid },
+      timeScale: { borderColor: theme.colors.grid },
+    });
+
+    candleSeriesRef.current.applyOptions({
+      upColor: theme.colors.bullCandle.fill,
+      downColor: theme.colors.bearCandle.fill,
+      borderUpColor: theme.colors.bullCandle.border,
+      borderDownColor: theme.colors.bearCandle.border,
+      wickUpColor: theme.colors.bullCandle.border,
+      wickDownColor: theme.colors.bearCandle.border,
+    });
+  }, [theme]);
 
   // Update chart size
   useEffect(() => {
@@ -174,23 +207,23 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
     }
   }, [width, height]);
 
-  // Update data
+  // Update data when it changes
   useEffect(() => {
-    if (!isReady || !candleSeriesRef.current || !volumeSeriesRef.current || data.length === 0) return;
+    if (!candleSeriesRef.current || !volumeSeriesRef.current || data.length === 0) return;
 
     const candleData = formatCandleData(data);
-    const volumeData = formatVolumeData(data);
+    const volumeData = formatVolumeData(data, theme.colors);
 
     candleSeriesRef.current.setData(candleData);
     volumeSeriesRef.current.setData(volumeData);
 
     // Fit content with some padding on the right
     chartRef.current?.timeScale().fitContent();
-  }, [data, isReady, formatCandleData, formatVolumeData]);
+  }, [data, formatCandleData, formatVolumeData, theme.colors]);
 
   // Real-time updates for crypto
   useEffect(() => {
-    if (!isReady || symbolType !== 'crypto' || !candleSeriesRef.current) return;
+    if (symbolType !== 'crypto' || !candleSeriesRef.current) return;
 
     const interval = timeframe === '1D' ? '1d' : timeframe === '1W' ? '1w' : timeframe === '1M' ? '1M' : timeframe.toLowerCase();
     
@@ -220,15 +253,19 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
     });
 
     return unsubscribe;
-  }, [symbol, symbolType, timeframe, isReady, theme]);
+  }, [symbol, symbolType, timeframe, theme.colors]);
 
   // Draw indicators
   useEffect(() => {
-    if (!isReady || !chartRef.current || data.length === 0) return;
+    if (!chartRef.current || data.length === 0) return;
 
     // Remove old indicator series
     indicatorSeriesRef.current.forEach((series) => {
-      chartRef.current?.removeSeries(series);
+      try {
+        chartRef.current?.removeSeries(series);
+      } catch (e) {
+        // Series may already be removed
+      }
     });
     indicatorSeriesRef.current.clear();
 
@@ -258,7 +295,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
           indicatorSeriesRef.current.set(ind.id, series);
         }
       });
-  }, [indicators, data, isReady]);
+  }, [indicators, data]);
 
   // Calculate Moving Average
   const calculateMA = (ohlcv: OHLCVData[], length: number, isEMA: boolean): number[] => {
@@ -294,7 +331,10 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
     <div 
       ref={containerRef} 
       className="w-full h-full"
-      style={{ minHeight: height }}
+      style={{ 
+        minHeight: height || 400,
+        minWidth: width || 600,
+      }}
     />
   );
 };
