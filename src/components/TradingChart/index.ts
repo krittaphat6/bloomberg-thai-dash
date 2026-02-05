@@ -13,5 +13,7 @@ export { default as ZoomControls } from './ZoomControls';
 export { default as KeyboardShortcutsHelp } from './KeyboardShortcutsHelp';
 export { default as WatchlistSidebar } from './WatchlistSidebar';
 export { default as LayoutSelector } from './LayoutSelector';
+export { default as MultiChartLayout } from './MultiChartLayout';
+export { default as MultiChartPanel } from './MultiChartPanel';
 export * from './types';
 export * from './ChartThemes';
