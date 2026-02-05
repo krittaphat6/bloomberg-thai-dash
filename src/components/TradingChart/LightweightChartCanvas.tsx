@@ -117,6 +117,14 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
         axisPressedMouseMove: true,
         axisDoubleClickReset: true,
       },
+      watermark: {
+        visible: true,
+        fontSize: 16,
+        horzAlign: 'left',
+        vertAlign: 'bottom',
+        color: 'rgba(255, 176, 0, 0.15)',
+        text: 'ABLE',
+      },
     });
 
     // Add candlestick series
