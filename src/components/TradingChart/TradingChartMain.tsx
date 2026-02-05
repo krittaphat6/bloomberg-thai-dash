@@ -14,6 +14,7 @@ import IndicatorsPanel from './IndicatorsPanel';
 import PineScriptEditor from './PineScriptEditor';
 import AlertsPanel from './AlertsPanel';
 import ThemePanel from './ThemePanel';
+import LayoutSelector from './LayoutSelector';
 import CustomIndicatorsPanel from './CustomIndicatorsPanel';
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
 import MobileTradingChart from './MobileTradingChart';
@@ -72,6 +73,8 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
   const [showCustomIndicators, setShowCustomIndicators] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [showWatchlist, setShowWatchlist] = useState(true);
+  const [showLayoutSelector, setShowLayoutSelector] = useState(false);
+  const [currentLayout, setCurrentLayout] = useState('1');
 
   // Theme
   const [theme, setTheme] = useState<ChartTheme>(loadTheme);
@@ -442,7 +445,7 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
           onToggleIndicators={() => setShowIndicators(true)}
           onTogglePineScript={() => setShowPineScript(true)}
           onToggleAlerts={() => setShowAlerts(true)}
-          onToggleMultiChart={() => toast({ title: 'Coming Soon', description: 'Multi-chart layout' })}
+          onToggleMultiChart={() => setShowLayoutSelector(true)}
           onToggleTheme={() => setShowTheme(true)}
           onToggleCustomIndicators={() => setShowCustomIndicators(true)}
           onToggleKeyboardHelp={() => setShowKeyboardHelp(true)}
@@ -578,6 +581,13 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
         <KeyboardShortcutsHelp
           isOpen={showKeyboardHelp}
           onClose={() => setShowKeyboardHelp(false)}
+        />
+
+        <LayoutSelector
+          isOpen={showLayoutSelector}
+          onClose={() => setShowLayoutSelector(false)}
+          currentLayout={currentLayout}
+          onLayoutChange={setCurrentLayout}
         />
       </div>
 
