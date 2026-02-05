@@ -63,6 +63,7 @@
     "hyperformula": "^3.0.1",
     "input-otp": "^1.2.4",
     "leaflet": "^1.9.4",
+    "lightweight-charts": "^4.2.3",
     "lucide-react": "^0.462.0",
     "ml-kmeans": "^6.0.0",
     "next-themes": "^0.3.0",

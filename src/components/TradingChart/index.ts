@@ -1,6 +1,7 @@
 export { default as TradingChartMain } from './TradingChartMain';
 export { default as MobileTradingChart } from './MobileTradingChart';
 export { default as ChartCanvas } from './ChartCanvas';
+export { default as LightweightChartCanvas } from './LightweightChartCanvas';
 export { default as ChartToolbar } from './ChartToolbar';
 export { default as SymbolSearch } from './SymbolSearch';
 export { default as IndicatorsPanel } from './IndicatorsPanel';
@@ -10,5 +11,6 @@ export { default as ThemePanel } from './ThemePanel';
 export { default as CustomIndicatorsPanel } from './CustomIndicatorsPanel';
 export { default as ZoomControls } from './ZoomControls';
 export { default as KeyboardShortcutsHelp } from './KeyboardShortcutsHelp';
+export { default as WatchlistSidebar } from './WatchlistSidebar';
 export * from './types';
 export * from './ChartThemes';

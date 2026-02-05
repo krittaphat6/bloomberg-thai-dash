@@ -2,12 +2,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { Search, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import { Search, TrendingUp, TrendingDown, RefreshCw, PanelRightClose, PanelRight } from 'lucide-react';
 import { chartDataService, ChartSymbol, Timeframe, OHLCVData } from '@/services/ChartDataService';
 import { ChartIndicator, ChartAlert, DrawingTool, CrosshairData, DEFAULT_INDICATORS } from './types';
 import { PineScriptResult, OHLCData } from '@/utils/PineScriptRunner';
 import { ChartTheme, loadTheme, saveTheme, PRESET_THEMES } from './ChartThemes';
-import ChartCanvas from './ChartCanvas';
+import LightweightChartCanvas from './LightweightChartCanvas';
 import ChartToolbar from './ChartToolbar';
 import SymbolSearch from './SymbolSearch';
 import IndicatorsPanel from './IndicatorsPanel';
@@ -17,6 +17,7 @@ import ThemePanel from './ThemePanel';
 import CustomIndicatorsPanel from './CustomIndicatorsPanel';
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
 import MobileTradingChart from './MobileTradingChart';
+import WatchlistSidebar from './WatchlistSidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface TradingChartMainProps {
@@ -70,6 +71,7 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
   const [showTheme, setShowTheme] = useState(false);
   const [showCustomIndicators, setShowCustomIndicators] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [showWatchlist, setShowWatchlist] = useState(true);
 
   // Theme
   const [theme, setTheme] = useState<ChartTheme>(loadTheme);
@@ -96,21 +98,22 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
 
-  // Resize observer
+  // Resize observer for chart container
   useEffect(() => {
     const observer = new ResizeObserver(entries => {
       for (const entry of entries) {
         setDimensions({
           width: entry.contentRect.width,
-          height: entry.contentRect.height - 50,
+          height: entry.contentRect.height,
         });
       }
     });
 
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
+    if (chartContainerRef.current) {
+      observer.observe(chartContainerRef.current);
     }
 
     return () => observer.disconnect();
@@ -374,201 +377,218 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
   }));
 
   return (
-    <div ref={containerRef} className={`flex flex-col h-full ${className}`} style={{ backgroundColor: theme.colors.background }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-card/50 border-b border-terminal-green/20">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setShowSymbolSearch(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded bg-muted/30 hover:bg-muted/50 transition-colors"
-          >
-            <Search className="w-4 h-4 text-muted-foreground" />
-            <span className="font-mono font-bold text-lg text-terminal-green">
-              {symbol.symbol}
-            </span>
-            <Badge variant="outline" className="text-[10px]">
-              {symbol.exchange}
-            </Badge>
-          </button>
+    <div ref={containerRef} className={`flex h-full ${className}`} style={{ backgroundColor: theme.colors.background }}>
+      {/* Main Chart Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2 bg-card/50 border-b border-terminal-green/20">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowSymbolSearch(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded bg-muted/30 hover:bg-muted/50 transition-colors"
+            >
+              <Search className="w-4 h-4 text-muted-foreground" />
+              <span className="font-mono font-bold text-lg text-terminal-green">
+                {symbol.symbol}
+              </span>
+              <Badge variant="outline" className="text-[10px]">
+                {symbol.exchange}
+              </Badge>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-2xl font-bold text-foreground">
+                {currentPrice.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+              <div className={`flex items-center gap-1 ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
+                {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                <span className="font-mono text-sm">
+                  {isPositive ? '+' : ''}{priceChange.toFixed(2)} ({priceChangePercent.toFixed(2)}%)
+                </span>
+              </div>
+            </div>
+          </div>
 
           <div className="flex items-center gap-2">
-            <span className="font-mono text-2xl font-bold text-foreground">
-              {currentPrice.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </span>
-            <div className={`flex items-center gap-1 ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
-              {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              <span className="font-mono text-sm">
-                {isPositive ? '+' : ''}{priceChange.toFixed(2)} ({priceChangePercent.toFixed(2)}%)
-              </span>
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={fetchData}
+              disabled={isLoading}
+              className="text-terminal-green"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowWatchlist(!showWatchlist)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {showWatchlist ? <PanelRightClose className="w-4 h-4" /> : <PanelRight className="w-4 h-4" />}
+            </Button>
           </div>
         </div>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={fetchData}
-          disabled={isLoading}
-          className="text-terminal-green"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-        </Button>
+        {/* Toolbar */}
+        <ChartToolbar
+          selectedDrawingTool={selectedDrawingTool}
+          onSelectDrawingTool={setSelectedDrawingTool}
+          timeframe={timeframe}
+          onTimeframeChange={setTimeframe}
+          onToggleIndicators={() => setShowIndicators(true)}
+          onTogglePineScript={() => setShowPineScript(true)}
+          onToggleAlerts={() => setShowAlerts(true)}
+          onToggleMultiChart={() => toast({ title: 'Coming Soon', description: 'Multi-chart layout' })}
+          onToggleTheme={() => setShowTheme(true)}
+          onToggleCustomIndicators={() => setShowCustomIndicators(true)}
+          onToggleKeyboardHelp={() => setShowKeyboardHelp(true)}
+          zoomLevel={zoomLevel}
+          onZoomIn={() => handleZoom(-1, dimensions.width / 2)}
+          onZoomOut={() => handleZoom(1, dimensions.width / 2)}
+          onZoomReset={handleZoomReset}
+          onZoomChange={handleZoomChange}
+          onFullscreen={() => containerRef.current?.requestFullscreen?.()}
+          onClearDrawings={() => setDrawings([])}
+          onSaveChart={handleSaveChart}
+          onScreenshot={handleScreenshot}
+        />
+
+        {/* Chart Canvas */}
+        <div ref={chartContainerRef} className="flex-1 relative min-h-0">
+          {isLoading && data.length === 0 ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <RefreshCw className="w-8 h-8 animate-spin text-terminal-green" />
+            </div>
+          ) : error ? (
+            <div className="absolute inset-0 flex items-center justify-center text-destructive">
+              {error}
+            </div>
+          ) : (
+            <LightweightChartCanvas
+              data={data}
+              symbol={symbol.symbol}
+              symbolType={symbol.type}
+              timeframe={timeframe}
+              width={dimensions.width}
+              height={dimensions.height}
+              theme={theme}
+              indicators={indicators}
+              onCrosshairMove={(data) => setCrosshair({ ...crosshair, ...data, x: 0, y: 0 })}
+            />
+          )}
+
+          {/* Crosshair info */}
+          {crosshair.visible && (
+            <div className="absolute top-2 left-2 px-2 py-1 bg-card/80 rounded text-xs font-mono">
+              <span className="text-muted-foreground">Price: </span>
+              <span className="text-foreground">{crosshair.price.toFixed(2)}</span>
+              {crosshair.time > 0 && (
+                <>
+                  <span className="text-muted-foreground ml-3">Time: </span>
+                  <span className="text-foreground">
+                    {new Date(crosshair.time).toLocaleString()}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Custom indicators badge */}
+          {customIndicators.length > 0 && (
+            <div className="absolute top-2 right-2 flex gap-1">
+              {customIndicators.filter(i => i.visible).map(ind => (
+                <Badge 
+                  key={ind.id} 
+                  variant="outline" 
+                  className="text-[10px]"
+                  style={{ borderColor: ind.color, color: ind.color }}
+                >
+                  {ind.name}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Panels */}
+        <SymbolSearch
+          isOpen={showSymbolSearch}
+          onClose={() => setShowSymbolSearch(false)}
+          onSelectSymbol={handleSelectSymbol}
+          currentSymbol={symbol}
+          favorites={favorites}
+          onToggleFavorite={handleToggleFavorite}
+        />
+
+        <IndicatorsPanel
+          isOpen={showIndicators}
+          onClose={() => setShowIndicators(false)}
+          indicators={indicators}
+          onToggleIndicator={handleToggleIndicator}
+          onUpdateIndicator={handleUpdateIndicator}
+          onAddCustomIndicator={(ind) => setIndicators(prev => [...prev, ind])}
+          onRemoveIndicator={(id) => setIndicators(prev => prev.filter(i => i.id !== id))}
+        />
+
+        <PineScriptEditor
+          isOpen={showPineScript}
+          onClose={() => setShowPineScript(false)}
+          chartData={ohlcData}
+          onApplyIndicator={handleApplyPineScript}
+        />
+
+        <AlertsPanel
+          isOpen={showAlerts}
+          onClose={() => setShowAlerts(false)}
+          alerts={alerts}
+          onAddAlert={(alert) => setAlerts(prev => [...prev, alert])}
+          onRemoveAlert={(id) => setAlerts(prev => prev.filter(a => a.id !== id))}
+          onToggleAlert={(id) => setAlerts(prev =>
+            prev.map(a => (a.id === id ? { ...a, triggered: !a.triggered } : a))
+          )}
+          currentSymbol={symbol.symbol}
+          currentPrice={currentPrice}
+        />
+
+        <ThemePanel
+          isOpen={showTheme}
+          onClose={() => setShowTheme(false)}
+          currentTheme={theme}
+          onThemeChange={handleThemeChange}
+        />
+
+        <CustomIndicatorsPanel
+          isOpen={showCustomIndicators}
+          onClose={() => setShowCustomIndicators(false)}
+          chartData={ohlcData}
+          activeIndicators={customIndicators}
+          onAddIndicator={handleAddCustomIndicator}
+          onRemoveIndicator={handleRemoveCustomIndicator}
+          onToggleIndicator={handleToggleCustomIndicator}
+          onOpenPineEditor={() => {
+            setShowCustomIndicators(false);
+            setShowPineScript(true);
+          }}
+        />
+
+        <KeyboardShortcutsHelp
+          isOpen={showKeyboardHelp}
+          onClose={() => setShowKeyboardHelp(false)}
+        />
       </div>
 
-      {/* Toolbar */}
-      <ChartToolbar
-        selectedDrawingTool={selectedDrawingTool}
-        onSelectDrawingTool={setSelectedDrawingTool}
-        timeframe={timeframe}
-        onTimeframeChange={setTimeframe}
-        onToggleIndicators={() => setShowIndicators(true)}
-        onTogglePineScript={() => setShowPineScript(true)}
-        onToggleAlerts={() => setShowAlerts(true)}
-        onToggleMultiChart={() => toast({ title: 'Coming Soon', description: 'Multi-chart layout' })}
-        onToggleTheme={() => setShowTheme(true)}
-        onToggleCustomIndicators={() => setShowCustomIndicators(true)}
-        onToggleKeyboardHelp={() => setShowKeyboardHelp(true)}
-        zoomLevel={zoomLevel}
-        onZoomIn={() => handleZoom(-1, dimensions.width / 2)}
-        onZoomOut={() => handleZoom(1, dimensions.width / 2)}
-        onZoomReset={handleZoomReset}
-        onZoomChange={handleZoomChange}
-        onFullscreen={() => containerRef.current?.requestFullscreen?.()}
-        onClearDrawings={() => setDrawings([])}
-        onSaveChart={handleSaveChart}
-        onScreenshot={handleScreenshot}
-      />
-
-      {/* Chart Canvas */}
-      <div className="flex-1 relative">
-        {isLoading && data.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <RefreshCw className="w-8 h-8 animate-spin text-terminal-green" />
-          </div>
-        ) : error ? (
-          <div className="absolute inset-0 flex items-center justify-center text-red-500">
-            {error}
-          </div>
-        ) : (
-          <ChartCanvas
-            data={data}
-            width={dimensions.width}
-            height={dimensions.height}
-            indicators={indicators}
-            drawings={drawings}
-            selectedDrawingTool={selectedDrawingTool}
-            onAddDrawing={(drawing) => setDrawings(prev => [...prev, drawing])}
-            crosshair={crosshair}
-            onCrosshairMove={setCrosshair}
-            visibleRange={visibleRange}
-            onZoom={handleZoom}
-            onPan={handlePan}
-            theme={theme}
-            customIndicators={customIndicators}
-          />
-        )}
-
-        {/* Crosshair info */}
-        {crosshair.visible && (
-          <div className="absolute top-2 left-2 px-2 py-1 bg-card/80 rounded text-xs font-mono">
-            <span className="text-muted-foreground">Price: </span>
-            <span className="text-foreground">{crosshair.price.toFixed(2)}</span>
-            {crosshair.time > 0 && (
-              <>
-                <span className="text-muted-foreground ml-3">Time: </span>
-                <span className="text-foreground">
-                  {new Date(crosshair.time).toLocaleString()}
-                </span>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Custom indicators badge */}
-        {customIndicators.length > 0 && (
-          <div className="absolute top-2 right-2 flex gap-1">
-            {customIndicators.filter(i => i.visible).map(ind => (
-              <Badge 
-                key={ind.id} 
-                variant="outline" 
-                className="text-[10px]"
-                style={{ borderColor: ind.color, color: ind.color }}
-              >
-                {ind.name}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Panels */}
-      <SymbolSearch
-        isOpen={showSymbolSearch}
-        onClose={() => setShowSymbolSearch(false)}
-        onSelectSymbol={handleSelectSymbol}
-        currentSymbol={symbol}
-        favorites={favorites}
-        onToggleFavorite={handleToggleFavorite}
-      />
-
-      <IndicatorsPanel
-        isOpen={showIndicators}
-        onClose={() => setShowIndicators(false)}
-        indicators={indicators}
-        onToggleIndicator={handleToggleIndicator}
-        onUpdateIndicator={handleUpdateIndicator}
-        onAddCustomIndicator={(ind) => setIndicators(prev => [...prev, ind])}
-        onRemoveIndicator={(id) => setIndicators(prev => prev.filter(i => i.id !== id))}
-      />
-
-      <PineScriptEditor
-        isOpen={showPineScript}
-        onClose={() => setShowPineScript(false)}
-        chartData={ohlcData}
-        onApplyIndicator={handleApplyPineScript}
-      />
-
-      <AlertsPanel
-        isOpen={showAlerts}
-        onClose={() => setShowAlerts(false)}
-        alerts={alerts}
-        onAddAlert={(alert) => setAlerts(prev => [...prev, alert])}
-        onRemoveAlert={(id) => setAlerts(prev => prev.filter(a => a.id !== id))}
-        onToggleAlert={(id) => setAlerts(prev =>
-          prev.map(a => (a.id === id ? { ...a, triggered: !a.triggered } : a))
-        )}
-        currentSymbol={symbol.symbol}
-        currentPrice={currentPrice}
-      />
-
-      <ThemePanel
-        isOpen={showTheme}
-        onClose={() => setShowTheme(false)}
-        currentTheme={theme}
-        onThemeChange={handleThemeChange}
-      />
-
-      <CustomIndicatorsPanel
-        isOpen={showCustomIndicators}
-        onClose={() => setShowCustomIndicators(false)}
-        chartData={ohlcData}
-        activeIndicators={customIndicators}
-        onAddIndicator={handleAddCustomIndicator}
-        onRemoveIndicator={handleRemoveCustomIndicator}
-        onToggleIndicator={handleToggleCustomIndicator}
-        onOpenPineEditor={() => {
-          setShowCustomIndicators(false);
-          setShowPineScript(true);
-        }}
-      />
-
-      <KeyboardShortcutsHelp
-        isOpen={showKeyboardHelp}
-        onClose={() => setShowKeyboardHelp(false)}
-      />
+      {/* Watchlist Sidebar */}
+      {showWatchlist && (
+        <WatchlistSidebar
+          onSelectSymbol={handleSelectSymbol}
+          currentSymbol={symbol.symbol}
+          className="w-64 flex-shrink-0"
+        />
+      )}
     </div>
   );
 };
