@@ -1,24 +1,17 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Slider } from '@/components/ui/slider';
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-import { BarChart2, TrendingUp, Activity, Settings, X, Plus } from 'lucide-react';
-import { ChartIndicator, DEFAULT_INDICATORS } from './types';
+import { BarChart2, X, Layers, MousePointerClick } from 'lucide-react';
+import { ChartIndicator } from './types';
 
 interface IndicatorsPanelProps {
   isOpen: boolean;
@@ -30,42 +23,32 @@ interface IndicatorsPanelProps {
   onRemoveIndicator: (id: string) => void;
 }
 
-const INDICATOR_CATEGORIES = [
-  {
-    name: 'Moving Averages',
-    icon: TrendingUp,
-    indicators: ['SMA 20', 'SMA 50', 'SMA 200', 'EMA 9', 'EMA 21'],
-  },
-  {
-    name: 'Volatility',
-    icon: Activity,
-    indicators: ['Bollinger Bands'],
-  },
-  {
-    name: 'Oscillators',
-    icon: BarChart2,
-    indicators: ['RSI', 'MACD', 'Stochastic', 'CVD'],
-  },
-  {
-    name: 'Volume',
-    icon: BarChart2,
-    indicators: ['Volume'],
-  },
-];
-
 const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
   isOpen,
   onClose,
   indicators,
   onToggleIndicator,
   onUpdateIndicator,
-  onAddCustomIndicator,
-  onRemoveIndicator,
 }) => {
-  const [editingIndicator, setEditingIndicator] = useState<string | null>(null);
+  const [domRows, setDomRows] = useState(20);
+  
+  const domIndicator = indicators.find(i => i.name === 'DOM');
+  const isDOMActive = domIndicator?.visible ?? false;
 
-  const getIndicatorByName = (name: string) => {
-    return indicators.find(i => i.name === name);
+  const handleDOMToggle = () => {
+    if (domIndicator) {
+      onToggleIndicator(domIndicator.id);
+    }
+  };
+
+  const handleRowsChange = (value: number[]) => {
+    setDomRows(value[0]);
+    if (domIndicator) {
+      onUpdateIndicator(domIndicator.id, { 
+        ...domIndicator.settings, 
+        rows: value[0] 
+      });
+    }
   };
 
   return (
@@ -79,158 +62,88 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
         </SheetHeader>
 
         <ScrollArea className="h-[calc(100vh-100px)] mt-4 pr-4">
-          {/* Active indicators */}
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">Active Indicators</h3>
-            <div className="space-y-2">
-              {indicators.filter(i => i.visible).map(indicator => (
-                <div
-                  key={indicator.id}
-                  className="flex items-center justify-between p-2 rounded bg-muted/30 border border-terminal-green/20"
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: indicator.color }}
+          {/* DOM Indicator Card */}
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg border border-terminal-cyan/30 bg-muted/20">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-terminal-cyan" />
+                  <span className="text-lg font-mono font-bold text-terminal-cyan">DOM</span>
+                  <Badge variant="outline" className="text-[10px] border-terminal-cyan/50">
+                    Depth of Market
+                  </Badge>
+                </div>
+                <Switch
+                  checked={isDOMActive}
+                  onCheckedChange={handleDOMToggle}
+                  className="data-[state=checked]:bg-terminal-cyan"
+                />
+              </div>
+
+              {/* Description */}
+              <p className="text-sm text-muted-foreground mb-4">
+                Real-time order book depth visualization with Value Area, POC, and volume profile analysis.
+              </p>
+
+              {/* Usage Hint */}
+              <div className="flex items-start gap-2 p-3 rounded bg-terminal-cyan/10 border border-terminal-cyan/20 mb-4">
+                <MousePointerClick className="w-4 h-4 text-terminal-cyan mt-0.5 flex-shrink-0" />
+                <div className="text-xs">
+                  <span className="font-bold text-terminal-cyan">Click on chart</span>
+                  <span className="text-muted-foreground"> to open fullscreen DOM view. Press ESC or click again to close.</span>
+                </div>
+              </div>
+
+              {/* Settings */}
+              {isDOMActive && (
+                <div className="space-y-4 pt-4 border-t border-border">
+                  {/* Rows slider */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Price Levels</span>
+                      <span className="text-xs font-mono text-terminal-cyan">{domRows} rows</span>
+                    </div>
+                    <Slider
+                      value={[domRows]}
+                      onValueChange={handleRowsChange}
+                      min={10}
+                      max={30}
+                      step={5}
+                      className="w-full"
                     />
-                    <span className="text-sm font-mono">{indicator.name}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {indicator.type}
-                    </Badge>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      onClick={() => setEditingIndicator(
-                        editingIndicator === indicator.id ? null : indicator.id
-                      )}
-                    >
-                      <Settings className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 text-red-500"
-                      onClick={() => onToggleIndicator(indicator.id)}
-                    >
-                      <X className="w-3 h-3" />
-                    </Button>
+
+                  {/* Feature badges */}
+                  <div className="flex flex-wrap gap-1">
+                    <Badge variant="secondary" className="text-[9px]">Volume Profile</Badge>
+                    <Badge variant="secondary" className="text-[9px]">Value Area (70%)</Badge>
+                    <Badge variant="secondary" className="text-[9px]">POC</Badge>
+                    <Badge variant="secondary" className="text-[9px]">Bid/Ask Delta</Badge>
+                    <Badge variant="secondary" className="text-[9px]">Imbalance</Badge>
+                    <Badge variant="secondary" className="text-[9px]">Cumulative Depth</Badge>
                   </div>
                 </div>
-              ))}
-              {indicators.filter(i => i.visible).length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No active indicators
-                </p>
               )}
             </div>
-          </div>
 
-          {/* Edit indicator settings */}
-          {editingIndicator && (
-            <div className="mb-6 p-3 rounded border border-terminal-green/30 bg-muted/20">
-              <h4 className="text-sm font-medium mb-3">
-                {indicators.find(i => i.id === editingIndicator)?.name} Settings
-              </h4>
-              {Object.entries(
-                indicators.find(i => i.id === editingIndicator)?.settings || {}
-              ).map(([key, value]) => (
-                <div key={key} className="flex items-center gap-2 mb-2">
-                  <Label className="w-20 text-xs capitalize">{key}</Label>
-                  <Input
-                    type="number"
-                    value={value as number}
-                    onChange={e =>
-                      onUpdateIndicator(editingIndicator, {
-                        ...indicators.find(i => i.id === editingIndicator)?.settings,
-                        [key]: parseFloat(e.target.value),
-                      })
-                    }
-                    className="h-7 text-xs"
-                  />
-                </div>
-              ))}
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full mt-2"
-                onClick={() => setEditingIndicator(null)}
-              >
-                Done
-              </Button>
+            {/* Info Section */}
+            <div className="p-3 rounded border border-border bg-muted/10">
+              <h4 className="text-xs font-bold text-terminal-amber mb-2">📊 DOM Features</h4>
+              <ul className="text-[10px] text-muted-foreground space-y-1">
+                <li>• <strong className="text-terminal-green">Volume Profile</strong> - Visual histogram of order sizes</li>
+                <li>• <strong className="text-terminal-amber">POC (Point of Control)</strong> - Price with highest volume</li>
+                <li>• <strong className="text-terminal-amber">Value Area</strong> - 70% volume zone (VAH/VAL)</li>
+                <li>• <strong className="text-terminal-green">Bid Size</strong> / <strong className="text-red-500">Ask Size</strong> - Order quantities</li>
+                <li>• <strong className="text-terminal-cyan">Cumulative Depth</strong> - Running total of orders</li>
+                <li>• <strong className="text-purple-400">Delta</strong> - Buy vs Sell pressure at each level</li>
+              </ul>
             </div>
-          )}
 
-          {/* Available indicators */}
-          <Accordion type="multiple" className="w-full">
-            {INDICATOR_CATEGORIES.map(category => (
-              <AccordionItem key={category.name} value={category.name}>
-                <AccordionTrigger className="text-sm hover:no-underline">
-                  <div className="flex items-center gap-2">
-                    <category.icon className="w-4 h-4 text-terminal-green" />
-                    {category.name}
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <div className="space-y-1 pl-6">
-                    {category.indicators.map(indName => {
-                      const indicator = getIndicatorByName(indName);
-                      const isActive = indicator?.visible;
-
-                      return (
-                        <div
-                          key={indName}
-                          className="flex items-center justify-between py-1.5"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-2 h-2 rounded-full"
-                              style={{
-                                backgroundColor: indicator?.color || '#3b82f6',
-                              }}
-                            />
-                            <span className="text-sm">{indName}</span>
-                          </div>
-                          <Switch
-                            checked={isActive}
-                            onCheckedChange={() => {
-                              if (indicator) {
-                                onToggleIndicator(indicator.id);
-                              }
-                            }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-
-          {/* Custom indicator */}
-          <div className="mt-6 pt-4 border-t border-terminal-green/20">
-            <Button
-              variant="outline"
-              className="w-full gap-2 border-dashed"
-              onClick={() => {
-                const customId = `custom-${Date.now()}`;
-                onAddCustomIndicator({
-                  id: customId,
-                  name: 'Custom Indicator',
-                  type: 'overlay',
-                  visible: true,
-                  settings: {},
-                  color: '#f97316',
-                  pineScript: '',
-                });
-              }}
-            >
-              <Plus className="w-4 h-4" />
-              Add Custom (Pine Script)
-            </Button>
+            {/* Data Source */}
+            <div className="text-center text-[10px] text-muted-foreground pt-4">
+              <span>Real-time data from Binance API</span>
+            </div>
           </div>
         </ScrollArea>
       </SheetContent>
