@@ -80,17 +80,24 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
   const [layoutSyncSymbol, setLayoutSyncSymbol] = useState(true);
   const [layoutSyncTimeframe, setLayoutSyncTimeframe] = useState(true);
   const [layoutSyncCrosshair, setLayoutSyncCrosshair] = useState(true);
-  const [isDOMFullscreen, setIsDOMFullscreen] = useState(false);
-  const [selectedDOMPanel, setSelectedDOMPanel] = useState('main');
+
+  const createDefaultIndicators = () =>
+    DEFAULT_INDICATORS.map((ind, i) => ({ ...ind, id: `ind-${i}` }));
+
+  // TradingView-like: indicators belong to the last focused chart panel
+  const [activePanelId, setActivePanelId] = useState<string>('main');
+  const [panelIndicators, setPanelIndicators] = useState<Record<string, ChartIndicator[]>>(() => ({
+    main: createDefaultIndicators(),
+  }));
+  const [domFullscreenByPanel, setDomFullscreenByPanel] = useState<Record<string, boolean>>({});
   const [indicatorsListCollapsed, setIndicatorsListCollapsed] = useState(false);
 
   // Theme
   const [theme, setTheme] = useState<ChartTheme>(loadTheme);
 
-  // Chart state
-  const [indicators, setIndicators] = useState<ChartIndicator[]>(() => 
-    DEFAULT_INDICATORS.map((ind, i) => ({ ...ind, id: `ind-${i}` }))
-  );
+  const activeIndicators = panelIndicators[activePanelId] ?? [];
+  const isDOMFullscreen = domFullscreenByPanel[activePanelId] ?? false;
+
   const [drawings, setDrawings] = useState<DrawingTool[]>([]);
   const [alerts, setAlerts] = useState<ChartAlert[]>([]);
   const [selectedDrawingTool, setSelectedDrawingTool] = useState<string | null>(null);
@@ -100,7 +107,12 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
   });
   const [customIndicators, setCustomIndicators] = useState<ActiveCustomIndicator[]>([]);
 
-  // Zoom state
+  // When going back to single-chart layout, always focus the main panel
+  useEffect(() => {
+    if (currentLayout === '1') {
+      setActivePanelId('main');
+    }
+  }, [currentLayout]);
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 200 });
   const [zoomLevel, setZoomLevel] = useState(100);
   const [crosshair, setCrosshair] = useState<CrosshairData>({
@@ -310,16 +322,34 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
     localStorage.setItem('chart-favorites', JSON.stringify(updated));
   };
 
-  const handleToggleIndicator = (id: string) => {
-    setIndicators(prev =>
+  const updatePanelIndicators = useCallback(
+    (panelId: string, updater: (prev: ChartIndicator[]) => ChartIndicator[]) => {
+      setPanelIndicators(prev => ({
+        ...prev,
+        [panelId]: updater(prev[panelId] ?? []),
+      }));
+    },
+    []
+  );
+
+  const setPanelDomFullscreen = useCallback((panelId: string, next: boolean) => {
+    setDomFullscreenByPanel(prev => ({ ...prev, [panelId]: next }));
+  }, []);
+
+  const handleToggleIndicator = (panelId: string, id: string) => {
+    updatePanelIndicators(panelId, prev =>
       prev.map(ind => (ind.id === id ? { ...ind, visible: !ind.visible } : ind))
     );
   };
 
-  const handleUpdateIndicator = (id: string, settings: Record<string, any>) => {
-    setIndicators(prev =>
+  const handleUpdateIndicator = (panelId: string, id: string, settings: Record<string, any>) => {
+    updatePanelIndicators(panelId, prev =>
       prev.map(ind => (ind.id === id ? { ...ind, settings } : ind))
     );
+  };
+
+  const handleAddIndicator = (panelId: string, indicator: ChartIndicator) => {
+    updatePanelIndicators(panelId, prev => [...prev, indicator]);
   };
 
   const handleApplyPineScript = (results: PineScriptResult[], name: string) => {
@@ -333,7 +363,7 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
         color: result.color || '#f97316',
         pineScript: name,
       };
-      setIndicators(prev => [...prev, newIndicator]);
+      handleAddIndicator(activePanelId, newIndicator);
     });
   };
 
@@ -356,23 +386,28 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
     );
   };
 
-  // Remove indicator from chart
-  const handleRemoveIndicator = (id: string) => {
-    setIndicators(prev => prev.filter(i => i.id !== id));
+  // Remove indicator from chart (panel scoped)
+  const handleRemoveIndicator = (panelId: string, id: string) => {
+    updatePanelIndicators(panelId, prev => prev.filter(i => i.id !== id));
+    setPanelDomFullscreen(panelId, false);
+
     toast({
       title: 'Indicator Removed',
       description: 'Indicator has been removed from chart',
     });
   };
 
-  // Open indicator settings
-  const handleIndicatorSettings = (id: string) => {
+  // Open indicator settings (focus panel, open panel)
+  const handleIndicatorSettings = (panelId: string, id: string) => {
+    setActivePanelId(panelId);
     setShowIndicators(true);
-    // Could scroll to or highlight the specific indicator
   };
 
   const handleSaveChart = () => {
-    localStorage.setItem(`chart-${symbol.symbol}`, JSON.stringify({ drawings, indicators }));
+    localStorage.setItem(
+      `chart-${symbol.symbol}`,
+      JSON.stringify({ drawings, indicators: activeIndicators })
+    );
     toast({ title: 'Chart Saved' });
   };
 
@@ -507,17 +542,19 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
                   width={dimensions.width}
                   height={dimensions.height}
                   theme={theme}
-                  indicators={indicators}
+                  indicators={panelIndicators.main ?? []}
+                  domFullscreen={domFullscreenByPanel.main ?? false}
+                  onDOMFullscreenChange={(next) => setPanelDomFullscreen('main', next)}
                   onCrosshairMove={(data) => setCrosshair({ ...crosshair, ...data, x: 0, y: 0 })}
                 />
               )}
 
               {/* Indicators List - TradingView style */}
               <ChartIndicatorsList
-                indicators={indicators}
-                onToggleVisibility={handleToggleIndicator}
-                onRemove={handleRemoveIndicator}
-                onSettings={handleIndicatorSettings}
+                indicators={panelIndicators.main ?? []}
+                onToggleVisibility={(id) => handleToggleIndicator('main', id)}
+                onRemove={(id) => handleRemoveIndicator('main', id)}
+                onSettings={(id) => handleIndicatorSettings('main', id)}
                 collapsed={indicatorsListCollapsed}
                 onToggleCollapse={() => setIndicatorsListCollapsed(!indicatorsListCollapsed)}
               />
@@ -549,6 +586,10 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
               syncTimeframe={layoutSyncTimeframe}
               syncCrosshair={layoutSyncCrosshair}
               onMainSymbolChange={handleSelectSymbol}
+              indicatorsByPanel={panelIndicators}
+              domFullscreenByPanel={domFullscreenByPanel}
+              onDOMFullscreenChangeForPanel={setPanelDomFullscreen}
+              onFocusPanel={(panelId) => setActivePanelId(panelId)}
             />
           )}
         </div>
@@ -566,22 +607,22 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
         <IndicatorsPanel
           isOpen={showIndicators}
           onClose={() => setShowIndicators(false)}
-          indicators={indicators}
-          onToggleIndicator={handleToggleIndicator}
-          onUpdateIndicator={handleUpdateIndicator}
-          onAddCustomIndicator={(ind) => setIndicators(prev => [...prev, ind])}
-          onRemoveIndicator={(id) => setIndicators(prev => prev.filter(i => i.id !== id))}
+          indicators={activeIndicators}
+          onToggleIndicator={(id) => handleToggleIndicator(activePanelId, id)}
+          onUpdateIndicator={(id, settings) => handleUpdateIndicator(activePanelId, id, settings)}
+          onAddCustomIndicator={(ind) => handleAddIndicator(activePanelId, ind)}
+          onRemoveIndicator={(id) => handleRemoveIndicator(activePanelId, id)}
           chartPanels={
-            currentLayout === '1' 
-              ? [{ id: 'main', label: 'Main Chart' }] 
+            currentLayout === '1'
+              ? [{ id: 'main', label: 'Main Chart' }]
               : Array.from({ length: parseInt(currentLayout) || 2 }, (_, i) => ({
                   id: `panel-${i}`,
-                  label: i === 0 ? 'Main Chart' : `Chart ${i + 1}`
+                  label: i === 0 ? 'Main Chart' : `Chart ${i + 1}`,
                 }))
           }
-          selectedDOMPanel={selectedDOMPanel}
-          onSelectDOMPanel={setSelectedDOMPanel}
-          onDOMClose={() => setIsDOMFullscreen(false)}
+          selectedDOMPanel={activePanelId}
+          onSelectDOMPanel={setActivePanelId}
+          onDOMClose={() => setPanelDomFullscreen(activePanelId, false)}
           isDOMFullscreen={isDOMFullscreen}
         />
 

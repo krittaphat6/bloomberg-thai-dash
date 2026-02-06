@@ -24,10 +24,9 @@ const ChartIndicatorsList: React.FC<ChartIndicatorsListProps> = ({
   collapsed = false,
   onToggleCollapse,
 }) => {
-  // Filter only visible or recently added indicators
-  const activeIndicators = indicators.filter(ind => ind.visible || ind.name === 'DOM');
+  const listIndicators = indicators;
 
-  if (activeIndicators.length === 0) return null;
+  if (listIndicators.length === 0) return null;
 
   return (
     <div 
@@ -45,7 +44,7 @@ const ChartIndicatorsList: React.FC<ChartIndicatorsListProps> = ({
         <div className="flex items-center gap-1.5">
           <GripVertical className="w-3 h-3 text-muted-foreground" />
           <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-            Indicators ({activeIndicators.length})
+            Indicators ({listIndicators.length})
           </span>
         </div>
         {onToggleCollapse && (
@@ -62,7 +61,7 @@ const ChartIndicatorsList: React.FC<ChartIndicatorsListProps> = ({
       {/* Indicators List */}
       {!collapsed && (
         <div className="max-h-[200px] overflow-y-auto">
-          {activeIndicators.map((indicator) => (
+          {listIndicators.map((indicator) => (
             <div
               key={indicator.id}
               className={cn(
