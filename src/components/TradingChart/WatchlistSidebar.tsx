@@ -148,7 +148,6 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
   const [searchResults, setSearchResults] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
   const [fallbackPrices, setFallbackPrices] = useState<Record<string, PriceUpdate>>({});
   const [fallbackTimestamp, setFallbackTimestamp] = useState<number>(0);
   
@@ -285,15 +284,9 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
     }
   }, []);
   
-  // Connect to WebSocket
+  // Connect to WebSocket (for chart kline updates)
   useEffect(() => {
     binanceWS.connect();
-    
-    const unsubscribe = binanceWS.subscribeToStatus(setIsConnected);
-    
-    return () => {
-      unsubscribe();
-    };
   }, []);
 
   const normalizeCryptoSymbol = useCallback((raw: string) => {
@@ -305,10 +298,8 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
     return sym;
   }, []);
 
-  // Polling fallback when WebSocket is blocked/unavailable
+  // Always poll Binance REST API for reliable real-time prices
   useEffect(() => {
-    if (isConnected) return;
-
     const cryptoSymbols = Array.from(
       new Set(
         groups
@@ -324,32 +315,64 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
 
     const fetchTickers = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke('market-data-proxy', {
-          body: { action: 'tickers', symbols: cryptoSymbols },
-        });
-
-        if (error) throw error;
-
-        const tickers = (data as any)?.data?.tickers as Record<string, PriceUpdate> | undefined;
-        const ts = (data as any)?.data?.timestamp as number | undefined;
-
-        if (!cancelled && tickers && typeof tickers === 'object') {
+        // Use direct Binance API for faster response
+        const binanceSymbols = cryptoSymbols.map(s => s.toUpperCase());
+        const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(binanceSymbols))}`;
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Binance API error');
+        
+        const data = await response.json();
+        
+        if (!cancelled && Array.isArray(data)) {
+          const tickers: Record<string, PriceUpdate> = {};
+          data.forEach((ticker: any) => {
+            tickers[ticker.symbol] = {
+              symbol: ticker.symbol,
+              price: parseFloat(ticker.lastPrice),
+              priceChange: parseFloat(ticker.priceChange),
+              priceChangePercent: parseFloat(ticker.priceChangePercent),
+              high24h: parseFloat(ticker.highPrice),
+              low24h: parseFloat(ticker.lowPrice),
+              volume24h: parseFloat(ticker.volume),
+              quoteVolume: parseFloat(ticker.quoteVolume),
+            };
+          });
           setFallbackPrices(tickers);
-          setFallbackTimestamp(ts || Date.now());
+          setFallbackTimestamp(Date.now());
         }
       } catch (e) {
-        // ignore - keep last known fallback prices
+        // If direct API fails, try proxy
+        try {
+          const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+            body: { action: 'tickers', symbols: cryptoSymbols },
+          });
+
+          if (error) throw error;
+
+          const tickers = (data as any)?.data?.tickers as Record<string, PriceUpdate> | undefined;
+          const ts = (data as any)?.data?.timestamp as number | undefined;
+
+          if (!cancelled && tickers && typeof tickers === 'object') {
+            setFallbackPrices(tickers);
+            setFallbackTimestamp(ts || Date.now());
+          }
+        } catch (e2) {
+          // ignore - keep last known prices
+        }
       }
     };
 
+    // Fetch immediately
     fetchTickers();
+    // Poll every 1 second for real-time updates
     const interval = setInterval(fetchTickers, 1000);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [groups, isConnected]);
+  }, [groups]);
 
   // Search symbols
   const handleSearch = useCallback(async (query: string) => {
@@ -453,21 +476,22 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
               variant="outline" 
               className={cn(
                 "text-[9px] px-1 py-0",
-                (isConnected || (fallbackTimestamp > 0 && Date.now() - fallbackTimestamp < 5000))
+                (fallbackTimestamp > 0 && Date.now() - fallbackTimestamp < 3000)
                   ? "bg-green-500/10 text-green-400 border-green-500/30"
-                  : "bg-red-500/10 text-red-400 border-red-500/30"
+                  : "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
               )}
             >
-              {(isConnected || (fallbackTimestamp > 0 && Date.now() - fallbackTimestamp < 5000)) ? '● LIVE' : '○ OFFLINE'}
+              {(fallbackTimestamp > 0 && Date.now() - fallbackTimestamp < 3000) ? '● LIVE' : '○ SYNCING'}
             </Badge>
           </div>
           <Button
-            variant="ghost"
+            variant="default"
             size="sm"
-            className="h-6 w-6 p-0"
+            className="h-6 px-2 bg-terminal-green hover:bg-terminal-green/80 text-black font-semibold text-xs"
             onClick={() => setShowSearch(!showSearch)}
           >
-            {showSearch ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+            {showSearch ? <X className="w-3 h-3 mr-1" /> : <Plus className="w-3 h-3 mr-1" />}
+            {showSearch ? 'Close' : 'Add'}
           </Button>
         </div>
         
