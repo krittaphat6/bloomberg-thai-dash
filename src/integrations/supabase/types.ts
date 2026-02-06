@@ -47,6 +47,108 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_memory: {
+        Row: {
+          action: string
+          confidence: number
+          created_at: string | null
+          error_message: string | null
+          execution_time: number | null
+          goal: string
+          id: string
+          method: string
+          screenshot: string | null
+          success: boolean
+          target: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          confidence?: number
+          created_at?: string | null
+          error_message?: string | null
+          execution_time?: number | null
+          goal: string
+          id?: string
+          method: string
+          screenshot?: string | null
+          success?: boolean
+          target: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          confidence?: number
+          created_at?: string | null
+          error_message?: string | null
+          execution_time?: number | null
+          goal?: string
+          id?: string
+          method?: string
+          screenshot?: string | null
+          success?: boolean
+          target?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      agent_skills: {
+        Row: {
+          category: string
+          code: string
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          enabled: boolean | null
+          id: string
+          last_run: string | null
+          name: string
+          permissions: string[] | null
+          run_count: number | null
+          schedule: string | null
+          success_rate: number | null
+          updated_at: string | null
+          user_id: string | null
+          version: number | null
+        }
+        Insert: {
+          category: string
+          code: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          enabled?: boolean | null
+          id?: string
+          last_run?: string | null
+          name: string
+          permissions?: string[] | null
+          run_count?: number | null
+          schedule?: string | null
+          success_rate?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+          version?: number | null
+        }
+        Update: {
+          category?: string
+          code?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          enabled?: boolean | null
+          id?: string
+          last_run?: string | null
+          name?: string
+          permissions?: string[] | null
+          run_count?: number | null
+          schedule?: string | null
+          success_rate?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+          version?: number | null
+        }
+        Relationships: []
+      }
       alerts: {
         Row: {
           created_at: string | null
@@ -486,6 +588,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      gateway_messages: {
+        Row: {
+          channel: string
+          created_at: string | null
+          id: string
+          payload: Json
+          processed: boolean | null
+          type: string
+          user_id: string | null
+        }
+        Insert: {
+          channel: string
+          created_at?: string | null
+          id?: string
+          payload?: Json
+          processed?: boolean | null
+          type: string
+          user_id?: string | null
+        }
+        Update: {
+          channel?: string
+          created_at?: string | null
+          id?: string
+          payload?: Json
+          processed?: boolean | null
+          type?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       market_data: {
         Row: {
@@ -967,6 +1099,15 @@ export type Database = {
     }
     Functions: {
       cleanup_webhook_logs: { Args: never; Returns: undefined }
+      get_best_method_stats: {
+        Args: { action_type: string }
+        Returns: {
+          avg_confidence: number
+          count: number
+          method: string
+          success_rate: number
+        }[]
+      }
       is_face_admin: { Args: { check_user_id: string }; Returns: boolean }
     }
     Enums: {

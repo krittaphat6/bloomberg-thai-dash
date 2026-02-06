@@ -51,6 +51,7 @@ import MonteCarloSimulator from './MonteCarloSimulator';
 import AbleHF40Modules from './AbleHF40Modules';
 import { FaceSearch } from './FaceSearch';
 import { TacticalCommandMap } from './TacticalMap';
+import { SuperClawPanel } from './SuperClawPanel';
 
 interface PanelData {
   id: string;
@@ -370,6 +371,15 @@ const MarketData = () => {
       icon: <Brain className="w-5 h-5" />,
       description: 'AI-powered face recognition to find social media profiles',
       tags: ['face', 'search', 'recognition', 'instagram', 'social-media', 'ai']
+    },
+    { 
+      id: 'superclaw', 
+      title: '🦞 SUPERCLAW AGENT', 
+      component: <SuperClawPanel />,
+      category: 'intelligence',
+      icon: <Brain className="w-5 h-5" />,
+      description: 'OpenClaw-powered AI agent with vision, skills, and automation',
+      tags: ['ai', 'agent', 'openclaw', 'automation', 'skills', 'superclaw']
     },
     
     // Utilities
