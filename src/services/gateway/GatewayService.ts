@@ -1,7 +1,53 @@
 // GatewayService.ts - SuperClaw Gateway (OpenClaw-style Control Plane)
 // Unified command routing for web UI, AI, and future multi-channel support
 
-import { EventEmitter } from 'events';
+// Browser-compatible EventEmitter implementation
+type EventHandler = (...args: any[]) => void;
+
+class BrowserEventEmitter {
+  private events: Map<string, Set<EventHandler>> = new Map();
+  private maxListeners = 10;
+
+  setMaxListeners(n: number): this {
+    this.maxListeners = n;
+    return this;
+  }
+
+  on(event: string, handler: EventHandler): this {
+    if (!this.events.has(event)) {
+      this.events.set(event, new Set());
+    }
+    this.events.get(event)!.add(handler);
+    return this;
+  }
+
+  off(event: string, handler: EventHandler): this {
+    this.events.get(event)?.delete(handler);
+    return this;
+  }
+
+  emit(event: string, ...args: any[]): boolean {
+    const handlers = this.events.get(event);
+    if (!handlers || handlers.size === 0) return false;
+    handlers.forEach(handler => {
+      try {
+        handler(...args);
+      } catch (e) {
+        console.error(`Event handler error for ${event}:`, e);
+      }
+    });
+    return true;
+  }
+
+  removeAllListeners(event?: string): this {
+    if (event) {
+      this.events.delete(event);
+    } else {
+      this.events.clear();
+    }
+    return this;
+  }
+}
 
 export interface GatewayMessage {
   id: string;
@@ -26,7 +72,7 @@ export interface GatewayStatus {
   uptime: number;
 }
 
-class GatewayServiceClass extends EventEmitter {
+class GatewayServiceClass extends BrowserEventEmitter {
   private clients: Map<string, GatewayClient> = new Map();
   private messageQueue: GatewayMessage[] = [];
   private isRunning = false;
