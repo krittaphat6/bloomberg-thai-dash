@@ -61,12 +61,12 @@ class BinanceOrderBookService {
     });
   }
 
-  // Fetch initial order book snapshot via proxy
+  // Fetch order book snapshot via proxy (direct Binance API blocked by CORS)
   private async fetchSnapshot() {
     if (!this.currentSymbol) return;
 
     try {
-      // Use Supabase edge function proxy to avoid CORS
+      // Use Supabase edge function proxy (CORS-safe)
       const { supabase } = await import('@/integrations/supabase/client');
       
       const { data, error } = await supabase.functions.invoke('market-data-proxy', {
@@ -77,34 +77,36 @@ class BinanceOrderBookService {
         }
       });
       
-      if (error || !data?.success) {
+      if (error || !data?.success || !data?.data) {
         throw new Error(error?.message || 'Failed to fetch order book');
       }
+      
+      const depthData = data.data;
       
       // Process the returned data
       this.orderBook = {
         symbol: this.currentSymbol,
-        lastUpdateId: data.data.lastUpdateId,
-        bids: data.data.bids,
-        asks: data.data.asks,
+        lastUpdateId: depthData.lastUpdateId,
+        bids: depthData.bids,
+        asks: depthData.asks,
         timestamp: Date.now(),
-        midPrice: data.data.midPrice,
-        spread: data.data.spread,
-        spreadPercent: data.data.spreadPercent,
-        totalBidVolume: data.data.totalBidVolume,
-        totalAskVolume: data.data.totalAskVolume,
-        imbalance: data.data.imbalance,
+        midPrice: depthData.midPrice,
+        spread: depthData.spread,
+        spreadPercent: depthData.spreadPercent,
+        totalBidVolume: depthData.totalBidVolume,
+        totalAskVolume: depthData.totalAskVolume,
+        imbalance: depthData.imbalance,
       };
       
       this.notifySubscribers();
       
-      // Start polling for updates (WebSocket blocked by CORS)
+      // Start polling for updates
       this.startPolling();
     } catch (error) {
       console.error('[OrderBook] Failed to fetch snapshot:', error);
     }
   }
-
+  
   // Poll for updates instead of WebSocket (CORS workaround)
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
   
