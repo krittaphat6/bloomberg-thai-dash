@@ -46,6 +46,7 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
   indicators,
   onToggleIndicator,
   onUpdateIndicator,
+  onAddCustomIndicator,
   chartPanels = [{ id: 'main', label: 'Main Chart' }],
   selectedDOMPanel = 'main',
   onSelectDOMPanel,
@@ -59,9 +60,25 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
   const isDOMActive = domIndicator?.visible ?? false;
 
   const handleDOMToggle = () => {
+    // TradingView-like behavior: if DOM was removed, toggling re-adds it to the active panel
     if (domIndicator) {
       onToggleIndicator(domIndicator.id);
+      return;
     }
+
+    onAddCustomIndicator({
+      id: `dom-${Date.now()}`,
+      name: 'DOM',
+      type: 'dom',
+      visible: true,
+      settings: {
+        rows: domRows,
+        showImbalance: true,
+        showProfile: true,
+        showValueArea: true,
+      },
+      color: '#00BCD4',
+    });
   };
 
   const handleRowsChange = (value: number[]) => {

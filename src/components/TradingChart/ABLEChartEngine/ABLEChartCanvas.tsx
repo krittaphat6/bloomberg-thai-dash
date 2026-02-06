@@ -22,6 +22,11 @@ interface ABLEChartCanvasProps {
   drawingMode?: DrawingType | null;
   domConfig?: DOMConfig;
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
+  /**
+   * Optional controlled state for fullscreen DOM.
+   * If provided, the component will not manage fullscreen internally.
+   */
+  domFullscreen?: boolean;
   onDOMFullscreenChange?: (isFullscreen: boolean) => void;
 }
 
@@ -48,6 +53,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   drawingMode,
   domConfig,
   onCrosshairMove,
+  domFullscreen: domFullscreenProp,
   onDOMFullscreenChange,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -79,7 +85,19 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   const [mode, setMode] = useState<ChartMode>('normal');
   const [orderBook, setOrderBook] = useState<OrderBookData | null>(null);
   const [domConnected, setDomConnected] = useState(false);
-  const [domFullscreen, setDomFullscreen] = useState(false);
+
+  const [domFullscreenInternal, setDomFullscreenInternal] = useState(false);
+  const domFullscreen = domFullscreenProp ?? domFullscreenInternal;
+
+  const setDomFullscreen = useCallback(
+    (next: boolean) => {
+      if (domFullscreenProp === undefined) {
+        setDomFullscreenInternal(next);
+      }
+      onDOMFullscreenChange?.(next);
+    },
+    [domFullscreenProp, onDOMFullscreenChange]
+  );
 
   // Convert theme to colors
   const colors: ChartThemeColors = useMemo(() => theme.colors, [theme]);
@@ -172,6 +190,11 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       binanceOrderBook.disconnect();
       setOrderBook(null);
       setDomConnected(false);
+
+      // Ensure fullscreen DOM is closed when DOM gets disabled
+      if (domFullscreen) {
+        setDomFullscreen(false);
+      }
       return;
     }
 
@@ -228,30 +251,27 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     // Only toggle if DOM is enabled and we're in normal mode (not drawing)
     if (mode !== 'normal') return;
-    
+
     if (domConfig?.enabled && orderBook && !domFullscreen) {
       // Activate fullscreen DOM
       setDomFullscreen(true);
-      onDOMFullscreenChange?.(true);
     } else if (domFullscreen) {
       // Close fullscreen DOM
       setDomFullscreen(false);
-      onDOMFullscreenChange?.(false);
     }
-  }, [domConfig?.enabled, orderBook, domFullscreen, mode, onDOMFullscreenChange]);
+  }, [domConfig?.enabled, orderBook, domFullscreen, mode, setDomFullscreen]);
 
   // Handle ESC key to close fullscreen DOM
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && domFullscreen) {
         setDomFullscreen(false);
-        onDOMFullscreenChange?.(false);
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [domFullscreen, onDOMFullscreenChange]);
+  }, [domFullscreen, setDomFullscreen]);
 
   // Initialize interaction handler
   useEffect(() => {

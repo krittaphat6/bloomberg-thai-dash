@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { ChartSymbol, Timeframe } from '@/services/ChartDataService';
 import { ChartTheme } from './ChartThemes';
 import MultiChartPanel from './MultiChartPanel';
+import type { ChartIndicator } from './types';
 
 // Layout configuration type
 interface LayoutConfig {
@@ -138,6 +139,10 @@ interface MultiChartLayoutProps {
   syncTimeframe: boolean;
   syncCrosshair: boolean;
   onMainSymbolChange: (symbol: ChartSymbol) => void;
+  indicatorsByPanel?: Record<string, ChartIndicator[]>;
+  domFullscreenByPanel?: Record<string, boolean>;
+  onDOMFullscreenChangeForPanel?: (panelId: string, isFullscreen: boolean) => void;
+  onFocusPanel?: (panelId: string) => void;
 }
 
 const MultiChartLayout: React.FC<MultiChartLayoutProps> = ({
@@ -149,6 +154,10 @@ const MultiChartLayout: React.FC<MultiChartLayoutProps> = ({
   syncTimeframe,
   syncCrosshair,
   onMainSymbolChange,
+  indicatorsByPanel = {},
+  domFullscreenByPanel = {},
+  onDOMFullscreenChangeForPanel,
+  onFocusPanel,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -239,6 +248,10 @@ const MultiChartLayout: React.FC<MultiChartLayoutProps> = ({
               symbol={panelConfig.symbol}
               timeframe={timeframe}
               theme={theme}
+              indicators={indicatorsByPanel[panelConfig.id] ?? []}
+              domFullscreen={domFullscreenByPanel[panelConfig.id] ?? false}
+              onDOMFullscreenChange={(next) => onDOMFullscreenChangeForPanel?.(panelConfig.id, next)}
+              onFocus={onFocusPanel}
               syncSymbol={syncSymbol ? mainSymbol : undefined}
               syncTimeframe={syncTimeframe ? timeframe : undefined}
               syncCrosshair={syncCrosshair}

@@ -5,12 +5,17 @@ import { Search, X, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react';
 import { chartDataService, ChartSymbol, Timeframe, OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from './ChartThemes';
 import LightweightChartCanvas from './LightweightChartCanvas';
+import { ChartIndicator } from './types';
 
 interface MultiChartPanelProps {
   id: string;
   symbol: ChartSymbol;
   timeframe: Timeframe;
   theme: ChartTheme;
+  indicators?: ChartIndicator[];
+  domFullscreen?: boolean;
+  onDOMFullscreenChange?: (isFullscreen: boolean) => void;
+  onFocus?: (panelId: string) => void;
   syncSymbol?: ChartSymbol;
   syncTimeframe?: Timeframe;
   syncCrosshair?: boolean;
@@ -24,6 +29,10 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
   symbol: initialSymbol,
   timeframe: initialTimeframe,
   theme,
+  indicators = [],
+  domFullscreen,
+  onDOMFullscreenChange,
+  onFocus,
   syncSymbol,
   syncTimeframe,
   syncCrosshair,
@@ -139,6 +148,7 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
   return (
     <div 
       ref={containerRef}
+      onMouseDown={() => onFocus?.(id)}
       className="flex flex-col h-full w-full border border-terminal-green/20 rounded overflow-hidden bg-background"
       style={{ minHeight: '100px', minWidth: '120px' }}
     >
@@ -241,7 +251,9 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
             width={dimensions.width}
             height={dimensions.height}
             theme={theme}
-            indicators={[]}
+            indicators={indicators}
+            domFullscreen={domFullscreen}
+            onDOMFullscreenChange={onDOMFullscreenChange}
           />
         )}
       </div>
