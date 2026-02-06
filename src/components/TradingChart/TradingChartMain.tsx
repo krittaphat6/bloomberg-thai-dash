@@ -20,6 +20,7 @@ import CustomIndicatorsPanel from './CustomIndicatorsPanel';
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
 import MobileTradingChart from './MobileTradingChart';
 import WatchlistSidebar from './WatchlistSidebar';
+import ChartIndicatorsList from './ChartIndicatorsList';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface TradingChartMainProps {
@@ -81,6 +82,7 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
   const [layoutSyncCrosshair, setLayoutSyncCrosshair] = useState(true);
   const [isDOMFullscreen, setIsDOMFullscreen] = useState(false);
   const [selectedDOMPanel, setSelectedDOMPanel] = useState('main');
+  const [indicatorsListCollapsed, setIndicatorsListCollapsed] = useState(false);
 
   // Theme
   const [theme, setTheme] = useState<ChartTheme>(loadTheme);
@@ -354,6 +356,21 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
     );
   };
 
+  // Remove indicator from chart
+  const handleRemoveIndicator = (id: string) => {
+    setIndicators(prev => prev.filter(i => i.id !== id));
+    toast({
+      title: 'Indicator Removed',
+      description: 'Indicator has been removed from chart',
+    });
+  };
+
+  // Open indicator settings
+  const handleIndicatorSettings = (id: string) => {
+    setShowIndicators(true);
+    // Could scroll to or highlight the specific indicator
+  };
+
   const handleSaveChart = () => {
     localStorage.setItem(`chart-${symbol.symbol}`, JSON.stringify({ drawings, indicators }));
     toast({ title: 'Chart Saved' });
@@ -495,9 +512,19 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
                 />
               )}
 
-              {/* Crosshair info */}
+              {/* Indicators List - TradingView style */}
+              <ChartIndicatorsList
+                indicators={indicators}
+                onToggleVisibility={handleToggleIndicator}
+                onRemove={handleRemoveIndicator}
+                onSettings={handleIndicatorSettings}
+                collapsed={indicatorsListCollapsed}
+                onToggleCollapse={() => setIndicatorsListCollapsed(!indicatorsListCollapsed)}
+              />
+
+              {/* Crosshair info - moved to right side */}
               {crosshair.visible && (
-                <div className="absolute top-2 left-2 px-2 py-1 bg-card/80 rounded text-xs font-mono">
+                <div className="absolute top-2 right-2 px-2 py-1 bg-card/80 rounded text-xs font-mono">
                   <span className="text-muted-foreground">Price: </span>
                   <span className="text-foreground">{crosshair.price.toFixed(2)}</span>
                   {crosshair.time > 0 && (
@@ -508,22 +535,6 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
                       </span>
                     </>
                   )}
-                </div>
-              )}
-
-              {/* Custom indicators badge */}
-              {customIndicators.length > 0 && (
-                <div className="absolute top-2 right-2 flex gap-1">
-                  {customIndicators.filter(i => i.visible).map(ind => (
-                    <Badge 
-                      key={ind.id} 
-                      variant="outline" 
-                      className="text-[10px]"
-                      style={{ borderColor: ind.color, color: ind.color }}
-                    >
-                      {ind.name}
-                    </Badge>
-                  ))}
                 </div>
               )}
             </>
