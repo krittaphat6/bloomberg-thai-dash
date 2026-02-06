@@ -253,21 +253,43 @@ async function fetchWorldBankData(): Promise<any> {
 // Fetch Binance Order Book (depth) for DOM
 async function fetchBinanceDepth(symbol: string, limit: number = 20): Promise<any> {
   try {
-    const binanceSymbol = symbol.replace('USD', 'USDT').toUpperCase();
-    const url = `https://api.binance.com/api/v3/depth?symbol=${binanceSymbol}&limit=${limit}`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      },
-    });
-    
-    if (!response.ok) {
-      console.warn(`Binance depth returned ${response.status} for ${symbol}`);
-      return null;
+    // Ensure symbol ends with USDT - avoid double replacing (BTCUSDT -> BTCUSDTT)
+    let binanceSymbol = symbol.toUpperCase();
+    if (!binanceSymbol.endsWith('USDT') && !binanceSymbol.endsWith('BUSD')) {
+      binanceSymbol = binanceSymbol.replace('USD', '') + 'USDT';
     }
     
-    const data = await response.json();
+    // Try multiple endpoints - some may be blocked
+    const endpoints = [
+      `https://api.binance.com/api/v3/depth?symbol=${binanceSymbol}&limit=${limit}`,
+      `https://data-api.binance.vision/api/v3/depth?symbol=${binanceSymbol}&limit=${limit}`,
+      `https://api1.binance.com/api/v3/depth?symbol=${binanceSymbol}&limit=${limit}`,
+    ];
+    
+    let data: any = null;
+    
+    for (const url of endpoints) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+          },
+        });
+        
+        if (response.ok) {
+          data = await response.json();
+          break;
+        }
+      } catch (e) {
+        console.warn(`Binance depth endpoint failed: ${url}`);
+      }
+    }
+    
+    if (!data || !data.bids) {
+      console.warn(`Binance depth: no data for ${binanceSymbol}`);
+      return null;
+    }
     
     // Process bids and asks
     const bids = (data.bids || []).map((b: [string, string]) => ({

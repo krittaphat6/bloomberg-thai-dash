@@ -298,7 +298,7 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
     return sym;
   }, []);
 
-  // Always poll Binance REST API for reliable real-time prices
+  // Always poll via proxy for reliable real-time prices (direct Binance API blocked by CORS)
   useEffect(() => {
     const cryptoSymbols = Array.from(
       new Set(
@@ -315,58 +315,30 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
 
     const fetchTickers = async () => {
       try {
-        // Use direct Binance API for faster response
-        const binanceSymbols = cryptoSymbols.map(s => s.toUpperCase());
-        const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(binanceSymbols))}`;
-        
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Binance API error');
-        
-        const data = await response.json();
-        
-        if (!cancelled && Array.isArray(data)) {
-          const tickers: Record<string, PriceUpdate> = {};
-          data.forEach((ticker: any) => {
-            tickers[ticker.symbol] = {
-              symbol: ticker.symbol,
-              price: parseFloat(ticker.lastPrice),
-              priceChange: parseFloat(ticker.priceChange),
-              priceChangePercent: parseFloat(ticker.priceChangePercent),
-              high24h: parseFloat(ticker.highPrice),
-              low24h: parseFloat(ticker.lowPrice),
-              volume24h: parseFloat(ticker.volume),
-              quoteVolume: parseFloat(ticker.quoteVolume),
-            };
-          });
+        // Use Edge Function proxy (CORS-safe)
+        const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+          body: { action: 'tickers', symbols: cryptoSymbols },
+        });
+
+        if (error) throw error;
+
+        const tickers = (data as any)?.data?.tickers as Record<string, PriceUpdate> | undefined;
+        const ts = (data as any)?.data?.timestamp as number | undefined;
+
+        if (!cancelled && tickers && typeof tickers === 'object') {
           setFallbackPrices(tickers);
-          setFallbackTimestamp(Date.now());
+          setFallbackTimestamp(ts || Date.now());
         }
       } catch (e) {
-        // If direct API fails, try proxy
-        try {
-          const { data, error } = await supabase.functions.invoke('market-data-proxy', {
-            body: { action: 'tickers', symbols: cryptoSymbols },
-          });
-
-          if (error) throw error;
-
-          const tickers = (data as any)?.data?.tickers as Record<string, PriceUpdate> | undefined;
-          const ts = (data as any)?.data?.timestamp as number | undefined;
-
-          if (!cancelled && tickers && typeof tickers === 'object') {
-            setFallbackPrices(tickers);
-            setFallbackTimestamp(ts || Date.now());
-          }
-        } catch (e2) {
-          // ignore - keep last known prices
-        }
+        console.warn('[Watchlist] Proxy fetch failed:', e);
+        // Keep last known prices on error
       }
     };
 
     // Fetch immediately
     fetchTickers();
-    // Poll every 1 second for real-time updates
-    const interval = setInterval(fetchTickers, 1000);
+    // Poll every 2 seconds for real-time updates
+    const interval = setInterval(fetchTickers, 2000);
 
     return () => {
       cancelled = true;
