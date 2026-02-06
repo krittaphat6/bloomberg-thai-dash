@@ -130,16 +130,52 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
                 Professional Depth of Market with real-time order flow, liquidity analysis, and whale detection.
               </p>
 
-              {/* Panel Selector - Only show when multi-chart is active */}
-              {chartPanels.length > 1 && (
-                <div className="mb-4">
-                  <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
-                    <Grid3X3 className="w-3 h-3" />
-                    Display on Chart:
-                  </label>
+              {/* Layout/Panel Selector - Always show when DOM is enabled */}
+              <div className="mb-4 space-y-3">
+                <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
+                  <Grid3X3 className="w-3 h-3" />
+                  Layout & Display Panel:
+                </label>
+                
+                {/* Layout Grid Selection */}
+                <div className="grid grid-cols-4 gap-1">
+                  {[
+                    { id: '1', label: '1', grid: '1×1' },
+                    { id: '2', label: '2', grid: '1×2' },
+                    { id: '4', label: '4', grid: '2×2' },
+                    { id: '6', label: '6', grid: '2×3' },
+                  ].map((layout) => (
+                    <Button
+                      key={layout.id}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        // If there's more than 1 panel, we can select which one to show DOM
+                        if (parseInt(layout.id) > 1) {
+                          onSelectDOMPanel?.('panel-0');
+                        } else {
+                          onSelectDOMPanel?.('main');
+                        }
+                      }}
+                      className={`h-8 text-[10px] ${
+                        chartPanels.length === parseInt(layout.id) 
+                          ? 'border-terminal-cyan bg-terminal-cyan/20' 
+                          : 'border-border'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center">
+                        <Grid3X3 className="w-3 h-3 mb-0.5" />
+                        <span>{layout.grid}</span>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+
+                {/* Panel Selector - Show when multi-chart is active */}
+                {chartPanels.length > 1 && (
                   <Select value={selectedDOMPanel} onValueChange={handlePanelChange}>
                     <SelectTrigger className="h-8 text-xs bg-muted/50 border-terminal-cyan/30">
-                      <SelectValue placeholder="Select panel" />
+                      <SelectValue placeholder="Select panel for DOM" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">
@@ -158,8 +194,16 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
                       ))}
                     </SelectContent>
                   </Select>
+                )}
+
+                {/* Current Layout Status */}
+                <div className="flex items-center justify-between p-2 rounded bg-muted/30 border border-border">
+                  <span className="text-[10px] text-muted-foreground">Current Layout:</span>
+                  <Badge variant="outline" className="text-[10px] border-terminal-cyan/50">
+                    {chartPanels.length} Panel{chartPanels.length > 1 ? 's' : ''}
+                  </Badge>
                 </div>
-              )}
+              </div>
 
               {/* Usage Hint */}
               <div className="flex items-start gap-2 p-3 rounded bg-terminal-cyan/10 border border-terminal-cyan/20 mb-4">
