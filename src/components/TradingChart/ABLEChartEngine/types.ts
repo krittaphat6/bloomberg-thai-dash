@@ -77,6 +77,7 @@ export interface DOMConfig {
   showImbalance: boolean;
   position: 'left' | 'right';
   opacity: number;
+  fullscreen?: boolean;  // If true, DOM renders fullscreen overlay
 }
 
 export type ChartMode = 'normal' | 'drawing' | 'measuring';

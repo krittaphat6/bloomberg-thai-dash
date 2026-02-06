@@ -2,7 +2,8 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { ChartRenderer } from './ChartRenderer';
 import { ChartInteraction, InteractionCallbacks } from './ChartInteraction';
-import { DOMRenderer, DOMRenderConfig } from './DOMRenderer';
+import { DOMRenderer } from './DOMRenderer';
+import { FullscreenDOMRenderer, DEFAULT_ENHANCED_DOM_CONFIG } from './FullscreenDOMRenderer';
 import { Candle, ChartViewport, ChartThemeColors, ChartDimensions, CrosshairState, DrawingObject, ChartMode, DrawingType, IndicatorData, DOMConfig } from './types';
 import { OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from '../ChartThemes';
@@ -21,6 +22,7 @@ interface ABLEChartCanvasProps {
   drawingMode?: DrawingType | null;
   domConfig?: DOMConfig;
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
+  onDOMFullscreenChange?: (isFullscreen: boolean) => void;
 }
 
 const convertToCandles = (data: OHLCVData[]): Candle[] => {
@@ -46,10 +48,12 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   drawingMode,
   domConfig,
   onCrosshairMove,
+  onDOMFullscreenChange,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<ChartRenderer | null>(null);
   const domRendererRef = useRef<DOMRenderer | null>(null);
+  const fullscreenDOMRef = useRef<FullscreenDOMRenderer | null>(null);
   const interactionRef = useRef<ChartInteraction | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
@@ -75,6 +79,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   const [mode, setMode] = useState<ChartMode>('normal');
   const [orderBook, setOrderBook] = useState<OrderBookData | null>(null);
   const [domConnected, setDomConnected] = useState(false);
+  const [domFullscreen, setDomFullscreen] = useState(false);
 
   // Convert theme to colors
   const colors: ChartThemeColors = useMemo(() => theme.colors, [theme]);
@@ -170,8 +175,8 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       return;
     }
 
-    // Connect to order book for this symbol
-    binanceOrderBook.connect(symbol, domConfig.rows || 15);
+    // Connect to order book for this symbol - use more rows for fullscreen
+    binanceOrderBook.connect(symbol, domConfig.rows || 20);
 
     const unsubOrderBook = binanceOrderBook.subscribe((data) => {
       setOrderBook(data);
@@ -209,7 +214,44 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       position: domConfig?.position || 'right',
       opacity: domConfig?.opacity || 0.95,
     });
+    
+    // Initialize fullscreen DOM renderer
+    fullscreenDOMRef.current = new FullscreenDOMRenderer(ctx, dpr, {
+      ...DEFAULT_ENHANCED_DOM_CONFIG,
+      rows: domConfig?.rows || 20,
+      enabled: domConfig?.enabled ?? false,
+      fullscreen: false,
+    });
   }, [width, height, domConfig]);
+
+  // Handle click to toggle fullscreen DOM
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Only toggle if DOM is enabled and we're in normal mode (not drawing)
+    if (mode !== 'normal') return;
+    
+    if (domConfig?.enabled && orderBook && !domFullscreen) {
+      // Activate fullscreen DOM
+      setDomFullscreen(true);
+      onDOMFullscreenChange?.(true);
+    } else if (domFullscreen) {
+      // Close fullscreen DOM
+      setDomFullscreen(false);
+      onDOMFullscreenChange?.(false);
+    }
+  }, [domConfig?.enabled, orderBook, domFullscreen, mode, onDOMFullscreenChange]);
+
+  // Handle ESC key to close fullscreen DOM
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && domFullscreen) {
+        setDomFullscreen(false);
+        onDOMFullscreenChange?.(false);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [domFullscreen, onDOMFullscreenChange]);
 
   // Initialize interaction handler
   useEffect(() => {
@@ -257,8 +299,17 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   const render = useCallback(() => {
     const renderer = rendererRef.current;
     const domRenderer = domRendererRef.current;
+    const fullscreenDOM = fullscreenDOMRef.current;
     if (!renderer || candles.length === 0) return;
 
+    // If fullscreen DOM is active, render only the DOM overlay
+    if (domFullscreen && fullscreenDOM && orderBook) {
+      const currentPrice = candles[candles.length - 1]?.close || 0;
+      fullscreenDOM.drawFullscreenDOM(orderBook, dimensions, colors, currentPrice);
+      return;
+    }
+
+    // Normal chart rendering
     // Clear
     renderer.clear(dimensions, colors);
     
@@ -285,8 +336,8 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     renderer.drawPriceAxis(viewport, dimensions, colors);
     renderer.drawTimeAxis(candles, viewport, dimensions, colors);
     
-    // Draw DOM (Depth of Market) table
-    if (domConfig?.enabled && orderBook && domRenderer) {
+    // Draw mini DOM hint if DOM is enabled but not fullscreen
+    if (domConfig?.enabled && orderBook && domRenderer && !domFullscreen) {
       const currentPrice = candles[candles.length - 1]?.close || 0;
       domRenderer.drawDOM(orderBook, dimensions, colors, currentPrice);
     }
@@ -297,7 +348,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     // Draw crosshair and tooltip last (on top)
     renderer.drawCrosshair(crosshair, dimensions, colors);
     renderer.drawTooltip(crosshair, dimensions, colors);
-  }, [candles, viewport, dimensions, colors, crosshair, drawings, indicators, orderBook, domConfig]);
+  }, [candles, viewport, dimensions, colors, crosshair, drawings, indicators, orderBook, domConfig, domFullscreen]);
 
   // Animation frame for rendering
   useEffect(() => {
@@ -319,10 +370,17 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     <canvas
       ref={canvasRef}
       className="block"
+      onClick={handleCanvasClick}
       style={{
         width: width,
         height: height,
-        cursor: mode === 'drawing' ? 'crosshair' : 'default',
+        cursor: domFullscreen 
+          ? 'pointer' 
+          : mode === 'drawing' 
+            ? 'crosshair' 
+            : domConfig?.enabled && orderBook 
+              ? 'pointer' 
+              : 'default',
       }}
     />
   );
