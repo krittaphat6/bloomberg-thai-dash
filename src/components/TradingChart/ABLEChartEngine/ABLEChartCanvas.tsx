@@ -221,9 +221,6 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     // Clear
     renderer.clear(dimensions, colors);
     
-    // Draw watermark first (behind everything)
-    renderer.drawWatermark(dimensions, 'ABLE');
-    
     // Draw grid
     renderer.drawGrid(dimensions, viewport, colors);
     
@@ -246,6 +243,9 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     // Draw axes
     renderer.drawPriceAxis(viewport, dimensions, colors);
     renderer.drawTimeAxis(candles, viewport, dimensions, colors);
+    
+    // Draw watermark at bottom left (above time axis)
+    renderer.drawWatermark(dimensions);
     
     // Draw crosshair and tooltip last (on top)
     renderer.drawCrosshair(crosshair, dimensions, colors);
