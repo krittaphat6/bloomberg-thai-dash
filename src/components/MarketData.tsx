@@ -505,17 +505,8 @@ const MarketData = () => {
       description: 'Chess puzzles and challenges',
       tags: ['chess', 'puzzle', 'game', 'strategy']
     },
-    
-    // Tactical Command
-    { 
-      id: 'tactical-command', 
-      title: '🎯 TACTICAL COMMAND', 
-      component: <TacticalCommandMap />,
-      category: 'tools',
-      description: 'ระบบบัญชาการทางยุทธวิธี แบบ Palantir AIP',
-      tags: ['tactical', 'military', 'command', 'simulation', 'map', 'ยุทธวิธี']
-    },
   ];
+  // Note: TACTICAL COMMAND moved to GLOBAL MAP (/map route) - accessible via mode switcher there
 
   const handleTabAdd = () => {
     setShowTabSelector(true);
