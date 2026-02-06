@@ -58,20 +58,28 @@ export class ChartRenderer {
     const { chartArea } = dimensions;
     const ctx = this.ctx;
     
-    const startIdx = Math.max(0, viewport.startIndex);
-    const endIdx = Math.min(candles.length - 1, viewport.endIndex);
-    const candleCount = endIdx - startIdx + 1;
+    // Use floor/ceil to handle floating point indices properly
+    const startIdx = Math.max(0, Math.floor(viewport.startIndex));
+    const endIdx = Math.min(candles.length - 1, Math.ceil(viewport.endIndex));
     
-    if (candleCount <= 0) return;
+    if (startIdx > endIdx || candles.length === 0) return;
     
-    const candleWidth = Math.max(1, (chartArea.width / candleCount) * 0.8);
-    const candleGap = (chartArea.width / candleCount) * 0.1;
+    // Calculate candle width based on visible range
+    const visibleRange = viewport.endIndex - viewport.startIndex;
+    if (visibleRange <= 0) return;
+    
+    const candleWidth = Math.max(2, (chartArea.width / visibleRange) * 0.8);
+    const candleGap = (chartArea.width / visibleRange) * 0.1;
 
     for (let i = startIdx; i <= endIdx; i++) {
       const candle = candles[i];
       if (!candle) continue;
 
       const x = this.indexToX(i, viewport, chartArea);
+      
+      // Skip if outside visible area
+      if (x < chartArea.x - candleWidth || x > chartArea.x + chartArea.width + candleWidth) continue;
+      
       const isBullish = candle.close >= candle.open;
       
       const candleColor = isBullish ? colors.bullCandle : colors.bearCandle;
@@ -82,7 +90,7 @@ export class ChartRenderer {
       const lowY = this.priceToY(candle.low, viewport, chartArea);
       
       ctx.strokeStyle = candleColor.border;
-      ctx.lineWidth = Math.max(1, candleWidth * 0.1);
+      ctx.lineWidth = Math.max(1, candleWidth * 0.15);
       ctx.beginPath();
       ctx.moveTo(wickX * this.dpr, highY * this.dpr);
       ctx.lineTo(wickX * this.dpr, lowY * this.dpr);
@@ -120,11 +128,13 @@ export class ChartRenderer {
     
     if (volumeHeight <= 0) return;
     
-    const startIdx = Math.max(0, viewport.startIndex);
-    const endIdx = Math.min(candles.length - 1, viewport.endIndex);
-    const candleCount = endIdx - startIdx + 1;
+    const startIdx = Math.max(0, Math.floor(viewport.startIndex));
+    const endIdx = Math.min(candles.length - 1, Math.ceil(viewport.endIndex));
     
-    if (candleCount <= 0) return;
+    if (startIdx > endIdx || candles.length === 0) return;
+    
+    const visibleRange = viewport.endIndex - viewport.startIndex;
+    if (visibleRange <= 0) return;
 
     // Find max volume for scaling
     let maxVolume = 0;
@@ -136,7 +146,7 @@ export class ChartRenderer {
     
     if (maxVolume === 0) return;
 
-    const candleWidth = Math.max(1, (chartArea.width / candleCount) * 0.8);
+    const candleWidth = Math.max(2, (chartArea.width / visibleRange) * 0.8);
     const volumeY = chartArea.y + chartArea.height;
 
     for (let i = startIdx; i <= endIdx; i++) {
@@ -144,6 +154,10 @@ export class ChartRenderer {
       if (!candle) continue;
 
       const x = this.indexToX(i, viewport, chartArea);
+      
+      // Skip if outside visible area
+      if (x < chartArea.x - candleWidth || x > chartArea.x + chartArea.width + candleWidth) continue;
+      
       const isBullish = candle.close >= candle.open;
       const barHeight = (candle.volume / maxVolume) * volumeHeight;
       
@@ -489,19 +503,45 @@ export class ChartRenderer {
     });
   }
 
-  drawWatermark(dimensions: ChartDimensions, text: string = 'ABLE') {
+  drawWatermark(dimensions: ChartDimensions) {
     const ctx = this.ctx;
+    const { chartArea, volumeHeight, timeAxisHeight } = dimensions;
     
-    ctx.font = `bold ${48 * this.dpr}px 'JetBrains Mono', sans-serif`;
-    ctx.fillStyle = 'rgba(255, 176, 0, 0.08)';
-    ctx.textAlign = 'center';
+    // Position: bottom left corner, above time axis
+    const x = 20;
+    const y = chartArea.y + chartArea.height + volumeHeight - 15;
+    
+    // Draw "ABLE" text
+    ctx.font = `bold ${14 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     
-    ctx.fillText(
-      text,
-      (dimensions.width / 2) * this.dpr,
-      (dimensions.height / 2) * this.dpr
-    );
+    // ABLE text with terminal green color
+    ctx.fillStyle = 'rgba(0, 255, 136, 0.6)';
+    ctx.fillText('ABLE', x * this.dpr, y * this.dpr);
+    
+    // Measure ABLE width
+    const ableWidth = ctx.measureText('ABLE').width / this.dpr;
+    
+    // Draw "TERMINAL" text
+    ctx.fillStyle = 'rgba(0, 255, 136, 0.6)';
+    ctx.fillText('TERMINAL', (x + ableWidth + 8) * this.dpr, y * this.dpr);
+    
+    // Measure TERMINAL width
+    const terminalWidth = ctx.measureText('TERMINAL').width / this.dpr;
+    
+    // Draw green square box at the end (like the reference image)
+    const boxSize = 10;
+    const boxX = x + ableWidth + 8 + terminalWidth + 10;
+    const boxY = y - boxSize / 2;
+    
+    ctx.fillStyle = 'rgba(0, 255, 136, 0.8)';
+    ctx.fillRect(boxX * this.dpr, boxY * this.dpr, boxSize * this.dpr, boxSize * this.dpr);
+    
+    // Draw box border
+    ctx.strokeStyle = 'rgba(0, 255, 136, 1)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(boxX * this.dpr, boxY * this.dpr, boxSize * this.dpr, boxSize * this.dpr);
   }
 
   // Utility methods
