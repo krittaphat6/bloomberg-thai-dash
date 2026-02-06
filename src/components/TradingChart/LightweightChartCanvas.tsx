@@ -29,12 +29,13 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   indicators = [],
   onCrosshairMove,
 }) => {
-  // Filter for DOM indicator - this is now the primary indicator
-  const domIndicator = indicators.find(ind => ind.name === 'DOM' && ind.visible);
+  // Filter for DOM indicator - only show DOM when explicitly enabled via indicator
+  const domIndicator = indicators.find(ind => ind.name === 'DOM');
+  const isDOMEnabled = domIndicator?.visible === true;
   
-  // DOM config - enabled by default for crypto, or when DOM indicator is active
+  // DOM config - ONLY enabled when DOM indicator is visible (removed auto-enable for crypto)
   const domConfig: DOMConfig = {
-    enabled: domIndicator?.visible ?? (symbolType === 'crypto'),
+    enabled: isDOMEnabled,
     rows: (domIndicator?.settings?.rows as number) || 15,
     showVolumeBars: true,
     showImbalance: true,
