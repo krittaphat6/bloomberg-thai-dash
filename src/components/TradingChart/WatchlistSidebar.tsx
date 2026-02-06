@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 import { binanceWS, PriceUpdate } from '@/services/BinanceWebSocketService';
 import { ChartSymbol } from '@/services/ChartDataService';
+import { supabase } from '@/integrations/supabase/client';
 
 interface WatchlistSidebarProps {
   onSelectSymbol: (symbol: ChartSymbol) => void;
@@ -43,16 +44,18 @@ interface WatchlistItem {
 }
 
 // Real-time price row with memo for performance
-const PriceRow = memo(({ 
-  item, 
-  isSelected, 
-  onSelect, 
-  onToggleFavorite 
-}: { 
-  item: WatchlistItem; 
+const PriceRow = memo(({
+  item,
+  isSelected,
+  onSelect,
+  onToggleFavorite,
+  fallbackPrice,
+}: {
+  item: WatchlistItem;
   isSelected: boolean;
   onSelect: () => void;
   onToggleFavorite: () => void;
+  fallbackPrice?: PriceUpdate | null;
 }) => {
   const [priceData, setPriceData] = useState<PriceUpdate | null>(null);
   
@@ -66,8 +69,10 @@ const PriceRow = memo(({
     return unsubscribe;
   }, [item.symbol, item.type]);
   
-  const price = priceData?.price || 0;
-  const change = priceData?.priceChangePercent || 0;
+  const effective = priceData ?? fallbackPrice ?? null;
+
+  const price = effective?.price || 0;
+  const change = effective?.priceChangePercent || 0;
   const isPositive = change >= 0;
   
   const formatPrice = (p: number) => {
@@ -144,6 +149,8 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [fallbackPrices, setFallbackPrices] = useState<Record<string, PriceUpdate>>({});
+  const [fallbackTimestamp, setFallbackTimestamp] = useState<number>(0);
   
   // Watchlist groups
   const [groups, setGroups] = useState<WatchlistGroup[]>([
@@ -288,7 +295,62 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
       unsubscribe();
     };
   }, []);
-  
+
+  const normalizeCryptoSymbol = useCallback((raw: string) => {
+    let sym = raw.trim().toUpperCase();
+    // remove spaces and common separators
+    sym = sym.replace(/[^A-Z0-9]/g, '');
+    if (!sym) return '';
+    if (!sym.endsWith('USDT') && !sym.endsWith('BUSD')) sym = `${sym}USDT`;
+    return sym;
+  }, []);
+
+  // Polling fallback when WebSocket is blocked/unavailable
+  useEffect(() => {
+    if (isConnected) return;
+
+    const cryptoSymbols = Array.from(
+      new Set(
+        groups
+          .flatMap(g => g.symbols)
+          .filter(s => s.type === 'crypto')
+          .map(s => s.symbol)
+      )
+    );
+
+    if (cryptoSymbols.length === 0) return;
+
+    let cancelled = false;
+
+    const fetchTickers = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('market-data-proxy', {
+          body: { action: 'tickers', symbols: cryptoSymbols },
+        });
+
+        if (error) throw error;
+
+        const tickers = (data as any)?.data?.tickers as Record<string, PriceUpdate> | undefined;
+        const ts = (data as any)?.data?.timestamp as number | undefined;
+
+        if (!cancelled && tickers && typeof tickers === 'object') {
+          setFallbackPrices(tickers);
+          setFallbackTimestamp(ts || Date.now());
+        }
+      } catch (e) {
+        // ignore - keep last known fallback prices
+      }
+    };
+
+    fetchTickers();
+    const interval = setInterval(fetchTickers, 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [groups, isConnected]);
+
   // Search symbols
   const handleSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
@@ -317,14 +379,17 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
   };
   
   // Add to watchlist
-  const addToWatchlist = (symbol: string, groupId: string = 'crypto') => {
+  const addToWatchlist = (rawSymbol: string, groupId: string = 'crypto') => {
+    const symbol = normalizeCryptoSymbol(rawSymbol);
+    if (!symbol) return;
+
     const newItem: WatchlistItem = {
       symbol,
       name: symbol.replace('USDT', ''),
       exchange: 'Binance',
       type: 'crypto'
     };
-    
+
     setGroups(prev => prev.map(g => {
       if (g.id === groupId) {
         // Check if already exists
@@ -333,7 +398,7 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
       }
       return g;
     }));
-    
+
     setShowSearch(false);
     setSearchQuery('');
     setSearchResults([]);
@@ -388,10 +453,12 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
               variant="outline" 
               className={cn(
                 "text-[9px] px-1 py-0",
-                isConnected ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-red-500/10 text-red-400 border-red-500/30"
+                (isConnected || (fallbackTimestamp > 0 && Date.now() - fallbackTimestamp < 5000))
+                  ? "bg-green-500/10 text-green-400 border-green-500/30"
+                  : "bg-red-500/10 text-red-400 border-red-500/30"
               )}
             >
-              {isConnected ? '● LIVE' : '○ OFFLINE'}
+              {(isConnected || (fallbackTimestamp > 0 && Date.now() - fallbackTimestamp < 5000)) ? '● LIVE' : '○ OFFLINE'}
             </Badge>
           </div>
           <Button
@@ -412,6 +479,12 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
               placeholder="Search crypto..."
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addToWatchlist(searchQuery);
+                }
+              }}
               className="h-7 pl-7 text-xs bg-background/50"
               autoFocus
             />
@@ -476,6 +549,7 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
                     isSelected={currentSymbol === item.symbol}
                     onSelect={() => handleSelectSymbol(item)}
                     onToggleFavorite={() => toggleFavorite(item)}
+                    fallbackPrice={fallbackPrices[item.symbol]}
                   />
                 ))}
               </div>

@@ -178,6 +178,54 @@ async function fetchBinanceTicker(symbol: string): Promise<any> {
   }
 }
 
+// Fetch multiple Binance tickers at once (used by Watchlist realtime fallback)
+async function fetchBinanceTickers(symbols: string[]): Promise<{ tickers: Record<string, any>; timestamp: number } | null> {
+  try {
+    const binanceSymbols = symbols
+      .map((s) => s.replace('USD', 'USDT').toUpperCase())
+      .filter(Boolean);
+
+    if (binanceSymbols.length === 0) return { tickers: {}, timestamp: Date.now() };
+
+    // Binance supports batch via `symbols=["BTCUSDT","ETHUSDT"]`
+    const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(binanceSymbols))}`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`Binance tickers returned ${response.status}`);
+      return null;
+    }
+
+    const arr = await response.json();
+    const tickers: Record<string, any> = {};
+
+    for (const t of Array.isArray(arr) ? arr : []) {
+      const sym = String(t.symbol || '').toUpperCase();
+      if (!sym) continue;
+      tickers[sym] = {
+        symbol: sym,
+        price: parseFloat(t.lastPrice),
+        priceChange: parseFloat(t.priceChange),
+        priceChangePercent: parseFloat(t.priceChangePercent),
+        high24h: parseFloat(t.highPrice),
+        low24h: parseFloat(t.lowPrice),
+        volume24h: parseFloat(t.volume),
+        quoteVolume: parseFloat(t.quoteVolume),
+      };
+    }
+
+    return { tickers, timestamp: Date.now() };
+  } catch (error) {
+    console.warn('Binance tickers fetch error:', error);
+    return null;
+  }
+}
+
 async function fetchWorldBankData(): Promise<any> {
   try {
     const [gdpRes, inflationRes, unemploymentRes] = await Promise.all([
@@ -294,6 +342,16 @@ serve(async (req) => {
     } = body;
     
     // Handle specific actions
+    if (action === 'tickers') {
+      const tickersData = await fetchBinanceTickers(symbols || []);
+      return new Response(JSON.stringify({
+        success: !!tickersData,
+        data: tickersData || { tickers: {}, timestamp: Date.now() },
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'depth' && depthSymbol) {
       const depthData = await fetchBinanceDepth(depthSymbol, depthLimit || 20);
       return new Response(JSON.stringify({
