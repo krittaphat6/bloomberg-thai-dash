@@ -79,6 +79,8 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
   const [layoutSyncSymbol, setLayoutSyncSymbol] = useState(true);
   const [layoutSyncTimeframe, setLayoutSyncTimeframe] = useState(true);
   const [layoutSyncCrosshair, setLayoutSyncCrosshair] = useState(true);
+  const [isDOMFullscreen, setIsDOMFullscreen] = useState(false);
+  const [selectedDOMPanel, setSelectedDOMPanel] = useState('main');
 
   // Theme
   const [theme, setTheme] = useState<ChartTheme>(loadTheme);
@@ -558,6 +560,18 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
           onUpdateIndicator={handleUpdateIndicator}
           onAddCustomIndicator={(ind) => setIndicators(prev => [...prev, ind])}
           onRemoveIndicator={(id) => setIndicators(prev => prev.filter(i => i.id !== id))}
+          chartPanels={
+            currentLayout === '1' 
+              ? [{ id: 'main', label: 'Main Chart' }] 
+              : Array.from({ length: parseInt(currentLayout) || 2 }, (_, i) => ({
+                  id: `panel-${i}`,
+                  label: i === 0 ? 'Main Chart' : `Chart ${i + 1}`
+                }))
+          }
+          selectedDOMPanel={selectedDOMPanel}
+          onSelectDOMPanel={setSelectedDOMPanel}
+          onDOMClose={() => setIsDOMFullscreen(false)}
+          isDOMFullscreen={isDOMFullscreen}
         />
 
         <PineScriptEditor
