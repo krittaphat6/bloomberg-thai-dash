@@ -2,10 +2,12 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { ChartRenderer } from './ChartRenderer';
 import { ChartInteraction, InteractionCallbacks } from './ChartInteraction';
-import { Candle, ChartViewport, ChartThemeColors, ChartDimensions, CrosshairState, DrawingObject, ChartMode, DrawingType, IndicatorData } from './types';
+import { DOMRenderer, DOMRenderConfig } from './DOMRenderer';
+import { Candle, ChartViewport, ChartThemeColors, ChartDimensions, CrosshairState, DrawingObject, ChartMode, DrawingType, IndicatorData, DOMConfig } from './types';
 import { OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from '../ChartThemes';
 import { binanceWS } from '@/services/BinanceWebSocketService';
+import { binanceOrderBook, OrderBookData } from '@/services/BinanceOrderBookService';
 
 interface ABLEChartCanvasProps {
   data: OHLCVData[];
@@ -17,6 +19,7 @@ interface ABLEChartCanvasProps {
   theme: ChartTheme;
   indicators?: IndicatorData[];
   drawingMode?: DrawingType | null;
+  domConfig?: DOMConfig;
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
 }
 
@@ -41,10 +44,12 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   theme,
   indicators = [],
   drawingMode,
+  domConfig,
   onCrosshairMove,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<ChartRenderer | null>(null);
+  const domRendererRef = useRef<DOMRenderer | null>(null);
   const interactionRef = useRef<ChartInteraction | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
@@ -68,6 +73,8 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   });
   const [drawings, setDrawings] = useState<DrawingObject[]>([]);
   const [mode, setMode] = useState<ChartMode>('normal');
+  const [orderBook, setOrderBook] = useState<OrderBookData | null>(null);
+  const [domConnected, setDomConnected] = useState(false);
 
   // Convert theme to colors
   const colors: ChartThemeColors = useMemo(() => theme.colors, [theme]);
@@ -154,6 +161,32 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     return unsubscribe;
   }, [symbol, symbolType, timeframe, candles.length]);
 
+  // DOM (Depth of Market) connection for crypto
+  useEffect(() => {
+    if (symbolType !== 'crypto' || !domConfig?.enabled) {
+      binanceOrderBook.disconnect();
+      setOrderBook(null);
+      setDomConnected(false);
+      return;
+    }
+
+    // Connect to order book for this symbol
+    binanceOrderBook.connect(symbol, domConfig.rows || 15);
+
+    const unsubOrderBook = binanceOrderBook.subscribe((data) => {
+      setOrderBook(data);
+    });
+
+    const unsubConnection = binanceOrderBook.subscribeToConnection((connected) => {
+      setDomConnected(connected);
+    });
+
+    return () => {
+      unsubOrderBook();
+      unsubConnection();
+    };
+  }, [symbol, symbolType, domConfig?.enabled, domConfig?.rows]);
+
   // Initialize canvas and renderer
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -169,7 +202,14 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     canvas.style.height = `${height}px`;
 
     rendererRef.current = new ChartRenderer(ctx, dpr);
-  }, [width, height]);
+    domRendererRef.current = new DOMRenderer(ctx, dpr, {
+      rows: domConfig?.rows || 15,
+      showVolumeBars: true,
+      showImbalance: domConfig?.showImbalance ?? true,
+      position: domConfig?.position || 'right',
+      opacity: domConfig?.opacity || 0.95,
+    });
+  }, [width, height, domConfig]);
 
   // Initialize interaction handler
   useEffect(() => {
@@ -216,6 +256,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   // Render loop
   const render = useCallback(() => {
     const renderer = rendererRef.current;
+    const domRenderer = domRendererRef.current;
     if (!renderer || candles.length === 0) return;
 
     // Clear
@@ -244,13 +285,19 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     renderer.drawPriceAxis(viewport, dimensions, colors);
     renderer.drawTimeAxis(candles, viewport, dimensions, colors);
     
+    // Draw DOM (Depth of Market) table
+    if (domConfig?.enabled && orderBook && domRenderer) {
+      const currentPrice = candles[candles.length - 1]?.close || 0;
+      domRenderer.drawDOM(orderBook, dimensions, colors, currentPrice);
+    }
+    
     // Draw watermark at bottom left (above time axis)
     renderer.drawWatermark(dimensions);
     
     // Draw crosshair and tooltip last (on top)
     renderer.drawCrosshair(crosshair, dimensions, colors);
     renderer.drawTooltip(crosshair, dimensions, colors);
-  }, [candles, viewport, dimensions, colors, crosshair, drawings, indicators]);
+  }, [candles, viewport, dimensions, colors, crosshair, drawings, indicators, orderBook, domConfig]);
 
   // Animation frame for rendering
   useEffect(() => {

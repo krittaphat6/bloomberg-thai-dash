@@ -202,6 +202,79 @@ async function fetchWorldBankData(): Promise<any> {
   }
 }
 
+// Fetch Binance Order Book (depth) for DOM
+async function fetchBinanceDepth(symbol: string, limit: number = 20): Promise<any> {
+  try {
+    const binanceSymbol = symbol.replace('USD', 'USDT').toUpperCase();
+    const url = `https://api.binance.com/api/v3/depth?symbol=${binanceSymbol}&limit=${limit}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      },
+    });
+    
+    if (!response.ok) {
+      console.warn(`Binance depth returned ${response.status} for ${symbol}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    // Process bids and asks
+    const bids = (data.bids || []).map((b: [string, string]) => ({
+      price: parseFloat(b[0]),
+      quantity: parseFloat(b[1]),
+    }));
+    
+    const asks = (data.asks || []).map((a: [string, string]) => ({
+      price: parseFloat(a[0]),
+      quantity: parseFloat(a[1]),
+    }));
+    
+    // Calculate cumulative totals
+    let bidTotal = 0;
+    bids.forEach((b: any) => {
+      bidTotal += b.quantity;
+      b.total = bidTotal;
+    });
+    
+    let askTotal = 0;
+    asks.forEach((a: any) => {
+      askTotal += a.quantity;
+      a.total = askTotal;
+    });
+    
+    const bestBid = bids[0]?.price || 0;
+    const bestAsk = asks[0]?.price || 0;
+    const midPrice = (bestBid + bestAsk) / 2;
+    const spread = bestAsk - bestBid;
+    const spreadPercent = midPrice > 0 ? (spread / midPrice) * 100 : 0;
+    
+    const totalBidVolume = bids.reduce((s: number, b: any) => s + b.quantity, 0);
+    const totalAskVolume = asks.reduce((s: number, a: any) => s + a.quantity, 0);
+    const total = totalBidVolume + totalAskVolume;
+    const imbalance = total > 0 ? ((totalBidVolume - totalAskVolume) / total) * 100 : 0;
+    
+    return {
+      symbol,
+      lastUpdateId: data.lastUpdateId,
+      bids,
+      asks,
+      midPrice,
+      spread,
+      spreadPercent,
+      totalBidVolume,
+      totalAskVolume,
+      imbalance,
+      timestamp: Date.now(),
+    };
+  } catch (error) {
+    console.error(`Binance depth error for ${symbol}:`, error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -209,7 +282,27 @@ serve(async (req) => {
   }
 
   try {
-    const { symbols = [], includeEconomic = true, includeCrypto = true } = await req.json();
+    const body = await req.json();
+    const { 
+      symbols = [], 
+      includeEconomic = true, 
+      includeCrypto = true,
+      // New: depth endpoint for DOM
+      action,
+      symbol: depthSymbol,
+      limit: depthLimit,
+    } = body;
+    
+    // Handle specific actions
+    if (action === 'depth' && depthSymbol) {
+      const depthData = await fetchBinanceDepth(depthSymbol, depthLimit || 20);
+      return new Response(JSON.stringify({
+        success: !!depthData,
+        data: depthData,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     
     const response: MarketDataResponse = {
       success: true,

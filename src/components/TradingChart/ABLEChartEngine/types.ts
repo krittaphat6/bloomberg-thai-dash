@@ -64,10 +64,19 @@ export interface ChartDimensions {
 export interface IndicatorData {
   id: string;
   name: string;
-  type: 'overlay' | 'oscillator';
+  type: 'overlay' | 'oscillator' | 'dom';
   values: number[];
   color: string;
   visible: boolean;
+}
+
+export interface DOMConfig {
+  enabled: boolean;
+  rows: number;
+  showVolumeBars: boolean;
+  showImbalance: boolean;
+  position: 'left' | 'right';
+  opacity: number;
 }
 
 export type ChartMode = 'normal' | 'drawing' | 'measuring';
