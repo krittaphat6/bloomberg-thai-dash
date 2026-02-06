@@ -1,6 +1,6 @@
 // LightweightChartCanvas - Now uses ABLE Chart Engine (custom canvas-based chart)
 import React from 'react';
-import { ABLEChartCanvas } from './ABLEChartEngine';
+import { ABLEChartCanvas, DOMConfig } from './ABLEChartEngine';
 import { OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from './ChartThemes';
 import { ChartIndicator, DrawingTool } from './types';
@@ -18,36 +18,6 @@ interface LightweightChartCanvasProps {
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
 }
 
-// Calculate indicator values
-const calculateMA = (data: OHLCVData[], length: number, isEMA: boolean): number[] => {
-  const result: number[] = [];
-  
-  if (isEMA) {
-    const k = 2 / (length + 1);
-    let ema = data[0]?.close || 0;
-    
-    for (let i = 0; i < data.length; i++) {
-      if (i < length - 1) {
-        result.push(0);
-      } else {
-        ema = data[i].close * k + ema * (1 - k);
-        result.push(ema);
-      }
-    }
-  } else {
-    for (let i = 0; i < data.length; i++) {
-      if (i < length - 1) {
-        result.push(0);
-      } else {
-        const sum = data.slice(i - length + 1, i + 1).reduce((a, b) => a + b.close, 0);
-        result.push(sum / length);
-      }
-    }
-  }
-  
-  return result;
-};
-
 export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   data,
   symbol,
@@ -59,18 +29,26 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   indicators = [],
   onCrosshairMove,
 }) => {
-  // Convert ChartIndicator to IndicatorData for the ABLE engine
+  // Filter for DOM indicator - this is now the primary indicator
+  const domIndicator = indicators.find(ind => ind.name === 'DOM' && ind.visible);
+  
+  // DOM config - enabled by default for crypto, or when DOM indicator is active
+  const domConfig: DOMConfig = {
+    enabled: domIndicator?.visible ?? (symbolType === 'crypto'),
+    rows: (domIndicator?.settings?.rows as number) || 15,
+    showVolumeBars: true,
+    showImbalance: true,
+    position: 'right',
+    opacity: 0.95,
+  };
+
+  // Convert other indicators (SMA/EMA) if any - but DOM is primary
   const indicatorData: IndicatorData[] = indicators
-    .filter(ind => ind.visible && ind.type === 'overlay')
+    .filter(ind => ind.visible && ind.type === 'overlay' && ind.name !== 'DOM')
     .map(ind => {
       let values: number[] = [];
       
-      if (ind.name.startsWith('SMA') || ind.name.startsWith('EMA')) {
-        const length = (ind.settings.length as number) || 20;
-        const isEMA = ind.name.startsWith('EMA');
-        values = calculateMA(data, length, isEMA);
-      }
-      
+      // Skip calculating MA values - DOM is the focus now
       return {
         id: ind.id,
         name: ind.name,
@@ -102,6 +80,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
       height={height}
       theme={theme}
       indicators={indicatorData}
+      domConfig={domConfig}
       onCrosshairMove={onCrosshairMove}
     />
   );
