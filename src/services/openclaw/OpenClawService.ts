@@ -21,6 +21,14 @@ export interface AgentThought {
   result?: string;
 }
 
+export interface WebSearchResult {
+  success: boolean;
+  result: string;
+  citations: string[];
+  source: string;
+  note?: string;
+}
+
 class OpenClawServiceClass {
   private currentSession: AgentSession | null = null;
   private thoughts: AgentThought[] = [];
@@ -36,6 +44,39 @@ class OpenClawServiceClass {
 
   private emit(type: string, data: any) {
     this.listeners.forEach(cb => cb({ type, data }));
+  }
+
+  // =================== WEB SEARCH ===================
+
+  /**
+   * Search the web for information
+   */
+  async webSearch(query: string, searchType: 'web' | 'deep' = 'web'): Promise<WebSearchResult> {
+    console.log('🔍 OpenClaw Web Search:', query);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('agent-web-search', {
+        body: { query, searchType }
+      });
+
+      if (error) throw error;
+      
+      return {
+        success: data.success,
+        result: data.result || 'ไม่พบข้อมูล',
+        citations: data.citations || [],
+        source: data.source || 'unknown',
+        note: data.note
+      };
+    } catch (error) {
+      console.error('Web search error:', error);
+      return {
+        success: false,
+        result: `เกิดข้อผิดพลาด: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        citations: [],
+        source: 'error'
+      };
+    }
   }
 
   // =================== MAIN API ===================
@@ -59,6 +100,27 @@ class OpenClawServiceClass {
     this.emit('session:start', this.currentSession);
 
     try {
+      // Check if goal needs web search
+      if (this.needsWebSearch(goal)) {
+        this.emit('status', 'searching web...');
+        const searchResult = await this.webSearch(goal);
+        
+        this.thoughts.push({
+          step: 0,
+          thought: searchResult.result,
+          action: undefined,
+          result: searchResult.citations.length > 0 
+            ? `Sources: ${searchResult.citations.slice(0, 3).join(', ')}`
+            : searchResult.note
+        });
+        this.emit('thought', this.thoughts[0]);
+        
+        this.currentSession.status = 'completed';
+        this.currentSession.endTime = Date.now();
+        this.emit('session:end', { status: 'completed' });
+        return this.currentSession;
+      }
+
       // Take initial snapshot
       const snapshot = OpenClawAgent.snapshot();
       this.emit('snapshot', snapshot);
@@ -114,7 +176,7 @@ class OpenClawServiceClass {
 
       this.currentSession.status = completed ? 'completed' : 'failed';
       this.currentSession.endTime = Date.now();
-      this.emit('session:end', this.currentSession);
+      this.emit('session:end', { status: this.currentSession.status });
 
       return this.currentSession;
 
@@ -124,6 +186,21 @@ class OpenClawServiceClass {
       this.emit('session:error', { error, session: this.currentSession });
       return this.currentSession;
     }
+  }
+
+  /**
+   * Check if goal requires web search
+   */
+  private needsWebSearch(goal: string): boolean {
+    const searchKeywords = [
+      'ค้นหา', 'search', 'หาข้อมูล', 'find information',
+      'ราคาตอนนี้', 'current price', 'ข่าว', 'news',
+      'อะไรคือ', 'what is', 'เกิดอะไรขึ้น', 'what happened',
+      'ล่าสุด', 'latest', 'today', 'วันนี้'
+    ];
+    
+    const lowerGoal = goal.toLowerCase();
+    return searchKeywords.some(kw => lowerGoal.includes(kw.toLowerCase()));
   }
 
   /**
@@ -164,14 +241,13 @@ class OpenClawServiceClass {
   // =================== AI INTEGRATION ===================
 
   /**
-   * Ask AI to decide next action
+   * Ask AI to decide next action - uses new agent-execute function
    */
   private async think(goal: string, snapshot: AISnapshot, step: number): Promise<AgentThought> {
     const prompt = this.buildThinkingPrompt(goal, snapshot, step);
     
     try {
-      // Use Gemini for thinking
-      const { data, error } = await supabase.functions.invoke('gemini-file-analysis', {
+      const { data, error } = await supabase.functions.invoke('agent-execute', {
         body: {
           userPrompt: prompt,
           systemPrompt: `คุณเป็น OpenClaw AI Agent ที่เชี่ยวชาญในการควบคุม browser
@@ -249,7 +325,7 @@ ${recentResults}
    */
   private async attemptRecovery(goal: string, failedAction: string, errorMessage: string): Promise<string | null> {
     try {
-      const { data, error } = await supabase.functions.invoke('gemini-file-analysis', {
+      const { data, error } = await supabase.functions.invoke('agent-execute', {
         body: {
           userPrompt: `คำสั่ง "${failedAction}" ล้มเหลว เพราะ: ${errorMessage}
 
