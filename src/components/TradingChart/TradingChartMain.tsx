@@ -21,6 +21,7 @@ import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
 import MobileTradingChart from './MobileTradingChart';
 import WatchlistSidebar from './WatchlistSidebar';
 import ChartIndicatorsList from './ChartIndicatorsList';
+import BrokerConnectButton from './BrokerConnectButton';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface TradingChartMainProps {
@@ -476,6 +477,11 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Broker Connect Button */}
+            <BrokerConnectButton 
+              symbol={symbol.symbol} 
+              currentPrice={currentPrice}
+            />
             <Button
               variant="ghost"
               size="sm"
