@@ -1,5 +1,5 @@
 // ABLE Chart Engine - Fullscreen DOM (Depth of Market) Renderer
-// Based on LuxAlgo DOM with Value Area [Enhanced] indicator
+// Professional-grade order book visualization with advanced trading metrics
 import { ChartDimensions, ChartThemeColors } from './types';
 import { OrderBookData } from '@/services/BinanceOrderBookService';
 
@@ -15,6 +15,10 @@ export interface EnhancedDOMConfig {
   showBuyPercent: boolean;      // Buy pressure percentage
   showKeyLevels: boolean;       // POC, VAH, VAL
   showValueArea: boolean;       // Value Area zone (70% volume)
+  showLargeOrders: boolean;     // Whale detection
+  showLiquidity: boolean;       // Liquidity zones
+  showOrderFlow: boolean;       // Recent trade flow
+  showPressure: boolean;        // Buy/Sell pressure gauge
   imbalanceThreshold: number;   // Highlight threshold (90 = top 10%)
   opacity: number;
 }
@@ -22,7 +26,7 @@ export interface EnhancedDOMConfig {
 export const DEFAULT_ENHANCED_DOM_CONFIG: EnhancedDOMConfig = {
   enabled: true,
   fullscreen: false,
-  rows: 20,
+  rows: 25,
   showProfile: true,
   showVolume: true,
   showInterLevelImbalance: true,
@@ -31,6 +35,10 @@ export const DEFAULT_ENHANCED_DOM_CONFIG: EnhancedDOMConfig = {
   showBuyPercent: true,
   showKeyLevels: true,
   showValueArea: true,
+  showLargeOrders: true,
+  showLiquidity: true,
+  showOrderFlow: true,
+  showPressure: true,
   imbalanceThreshold: 90,
   opacity: 0.97,
 };
@@ -62,10 +70,24 @@ interface ValueAreaData {
   vaVolume: number; // Volume within VA
 }
 
+interface LiquidityZone {
+  price: number;
+  volume: number;
+  isSupport: boolean;
+}
+
+interface WhaleOrder {
+  price: number;
+  quantity: number;
+  side: 'bid' | 'ask';
+  multiplier: number;  // How much larger than average
+}
+
 export class FullscreenDOMRenderer {
   private ctx: CanvasRenderingContext2D;
   private dpr: number;
   private config: EnhancedDOMConfig;
+  private recentTrades: Array<{ price: number; quantity: number; side: 'buy' | 'sell'; time: number }> = [];
 
   constructor(ctx: CanvasRenderingContext2D, dpr: number = 1, config: Partial<EnhancedDOMConfig> = {}) {
     this.ctx = ctx;
@@ -174,9 +196,10 @@ export class FullscreenDOMRenderer {
       );
     });
 
-    // Footer with stats
-    const footerY = tableY + tableHeight - 60;
-    this.drawFooterStats(tableX, footerY, tableWidth, 55, orderBook, valueArea);
+    // Footer with stats - larger for more data
+    const footerHeight = 100;
+    const footerY = tableY + tableHeight - footerHeight - 5;
+    this.drawEnhancedFooterStats(tableX, footerY, tableWidth, footerHeight, orderBook, valueArea);
 
     // Draw close hint
     this.drawCloseHint(dimensions);
@@ -475,7 +498,7 @@ export class FullscreenDOMRenderer {
     );
   }
 
-  private drawFooterStats(
+  private drawEnhancedFooterStats(
     x: number,
     y: number,
     width: number,
@@ -485,61 +508,205 @@ export class FullscreenDOMRenderer {
   ) {
     const ctx = this.ctx;
 
-    // Background
-    ctx.fillStyle = 'rgba(0, 188, 212, 0.1)';
+    // Background with gradient
+    const gradient = ctx.createLinearGradient(x * this.dpr, y * this.dpr, x * this.dpr, (y + height) * this.dpr);
+    gradient.addColorStop(0, 'rgba(0, 188, 212, 0.05)');
+    gradient.addColorStop(1, 'rgba(0, 188, 212, 0.15)');
+    ctx.fillStyle = gradient;
     ctx.fillRect(x * this.dpr, y * this.dpr, width * this.dpr, height * this.dpr);
 
-    const statWidth = width / 5;
-    ctx.font = `${10 * this.dpr}px 'JetBrains Mono', monospace`;
-    ctx.textBaseline = 'middle';
-    const textY1 = y + height / 3;
-    const textY2 = y + height * 2 / 3;
+    // Border top
+    ctx.strokeStyle = 'rgba(0, 188, 212, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x * this.dpr, y * this.dpr);
+    ctx.lineTo((x + width) * this.dpr, y * this.dpr);
+    ctx.stroke();
 
-    // Total Bid Volume
+    // Calculate whale orders and liquidity
+    const avgBidQty = orderBook.totalBidVolume / orderBook.bids.length;
+    const avgAskQty = orderBook.totalAskVolume / orderBook.asks.length;
+    const whaleBids = orderBook.bids.filter(b => b.quantity > avgBidQty * 5);
+    const whaleAsks = orderBook.asks.filter(a => a.quantity > avgAskQty * 5);
+    
+    // Calculate liquidity zones (high concentration areas)
+    const bidLiqZone = orderBook.bids.slice(0, 5).reduce((sum, b) => sum + b.quantity, 0);
+    const askLiqZone = orderBook.asks.slice(0, 5).reduce((sum, a) => sum + a.quantity, 0);
+    
+    // Calculate buy/sell pressure
+    const buyPressure = (orderBook.totalBidVolume / (orderBook.totalBidVolume + orderBook.totalAskVolume)) * 100;
+    
+    // Layout: 2 rows of stats
+    const row1Y = y + 25;
+    const row2Y = y + 60;
+    const statWidth = width / 8;
+
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
+
+    // Row 1: Volume Stats
+    // Total Bid Volume
     ctx.fillStyle = DOM_COLORS.grayLight;
-    ctx.fillText('TOTAL BIDS', (x + statWidth * 0.5) * this.dpr, textY1 * this.dpr);
+    ctx.fillText('TOTAL BIDS', (x + statWidth * 0.5) * this.dpr, (row1Y - 10) * this.dpr);
     ctx.fillStyle = DOM_COLORS.green;
     ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
-    ctx.fillText(this.formatQuantity(orderBook.totalBidVolume), (x + statWidth * 0.5) * this.dpr, textY2 * this.dpr);
+    ctx.fillText(this.formatQuantity(orderBook.totalBidVolume), (x + statWidth * 0.5) * this.dpr, (row1Y + 5) * this.dpr);
 
     // Total Ask Volume
-    ctx.font = `${10 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
     ctx.fillStyle = DOM_COLORS.grayLight;
-    ctx.fillText('TOTAL ASKS', (x + statWidth * 1.5) * this.dpr, textY1 * this.dpr);
+    ctx.fillText('TOTAL ASKS', (x + statWidth * 1.5) * this.dpr, (row1Y - 10) * this.dpr);
     ctx.fillStyle = DOM_COLORS.red;
     ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
-    ctx.fillText(this.formatQuantity(orderBook.totalAskVolume), (x + statWidth * 1.5) * this.dpr, textY2 * this.dpr);
+    ctx.fillText(this.formatQuantity(orderBook.totalAskVolume), (x + statWidth * 1.5) * this.dpr, (row1Y + 5) * this.dpr);
 
     // Bid/Ask Ratio
-    ctx.font = `${10 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
     ctx.fillStyle = DOM_COLORS.grayLight;
-    ctx.fillText('BID/ASK RATIO', (x + statWidth * 2.5) * this.dpr, textY1 * this.dpr);
+    ctx.fillText('BID/ASK RATIO', (x + statWidth * 2.5) * this.dpr, (row1Y - 10) * this.dpr);
     const ratio = orderBook.totalBidVolume / (orderBook.totalAskVolume || 1);
     ctx.fillStyle = ratio > 1 ? DOM_COLORS.green : DOM_COLORS.red;
     ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
-    ctx.fillText(ratio.toFixed(2), (x + statWidth * 2.5) * this.dpr, textY2 * this.dpr);
+    ctx.fillText(ratio.toFixed(2), (x + statWidth * 2.5) * this.dpr, (row1Y + 5) * this.dpr);
 
-    // Value Area (if enabled)
+    // Buy Pressure
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = DOM_COLORS.grayLight;
+    ctx.fillText('BUY PRESSURE', (x + statWidth * 3.5) * this.dpr, (row1Y - 10) * this.dpr);
+    ctx.fillStyle = buyPressure > 50 ? DOM_COLORS.green : DOM_COLORS.red;
+    ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillText(`${buyPressure.toFixed(1)}%`, (x + statWidth * 3.5) * this.dpr, (row1Y + 5) * this.dpr);
+
+    // POC
     if (valueArea) {
-      ctx.font = `${10 * this.dpr}px 'JetBrains Mono', monospace`;
+      ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
       ctx.fillStyle = DOM_COLORS.grayLight;
-      ctx.fillText('POC', (x + statWidth * 3.5) * this.dpr, textY1 * this.dpr);
+      ctx.fillText('POC', (x + statWidth * 4.5) * this.dpr, (row1Y - 10) * this.dpr);
       ctx.fillStyle = DOM_COLORS.yellow;
       ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
-      ctx.fillText(this.formatPrice(valueArea.poc), (x + statWidth * 3.5) * this.dpr, textY2 * this.dpr);
+      ctx.fillText(this.formatPrice(valueArea.poc), (x + statWidth * 4.5) * this.dpr, (row1Y + 5) * this.dpr);
 
-      ctx.font = `${10 * this.dpr}px 'JetBrains Mono', monospace`;
+      // Value Area High
+      ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
       ctx.fillStyle = DOM_COLORS.grayLight;
-      ctx.fillText('VA (70%)', (x + statWidth * 4.5) * this.dpr, textY1 * this.dpr);
+      ctx.fillText('VAH', (x + statWidth * 5.5) * this.dpr, (row1Y - 10) * this.dpr);
       ctx.fillStyle = DOM_COLORS.amber;
-      ctx.font = `bold ${10 * this.dpr}px 'JetBrains Mono', monospace`;
-      ctx.fillText(
-        `${this.formatPrice(valueArea.val)} - ${this.formatPrice(valueArea.vah)}`,
-        (x + statWidth * 4.5) * this.dpr,
-        textY2 * this.dpr
-      );
+      ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+      ctx.fillText(this.formatPrice(valueArea.vah), (x + statWidth * 5.5) * this.dpr, (row1Y + 5) * this.dpr);
+
+      // Value Area Low
+      ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+      ctx.fillStyle = DOM_COLORS.grayLight;
+      ctx.fillText('VAL', (x + statWidth * 6.5) * this.dpr, (row1Y - 10) * this.dpr);
+      ctx.fillStyle = DOM_COLORS.amber;
+      ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+      ctx.fillText(this.formatPrice(valueArea.val), (x + statWidth * 6.5) * this.dpr, (row1Y + 5) * this.dpr);
     }
+
+    // Imbalance
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = DOM_COLORS.grayLight;
+    ctx.fillText('IMBALANCE', (x + statWidth * 7.5) * this.dpr, (row1Y - 10) * this.dpr);
+    ctx.fillStyle = orderBook.imbalance >= 0 ? DOM_COLORS.green : DOM_COLORS.red;
+    ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillText(`${orderBook.imbalance >= 0 ? '+' : ''}${orderBook.imbalance.toFixed(1)}%`, (x + statWidth * 7.5) * this.dpr, (row1Y + 5) * this.dpr);
+
+    // Row 2: Advanced Trading Metrics
+    // Whale Bids
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = DOM_COLORS.grayLight;
+    ctx.fillText('🐋 WHALE BIDS', (x + statWidth * 0.5) * this.dpr, (row2Y - 10) * this.dpr);
+    ctx.fillStyle = whaleBids.length > 0 ? DOM_COLORS.green : DOM_COLORS.grayDark;
+    ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillText(`${whaleBids.length} orders`, (x + statWidth * 0.5) * this.dpr, (row2Y + 5) * this.dpr);
+
+    // Whale Asks
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = DOM_COLORS.grayLight;
+    ctx.fillText('🐋 WHALE ASKS', (x + statWidth * 1.5) * this.dpr, (row2Y - 10) * this.dpr);
+    ctx.fillStyle = whaleAsks.length > 0 ? DOM_COLORS.red : DOM_COLORS.grayDark;
+    ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillText(`${whaleAsks.length} orders`, (x + statWidth * 1.5) * this.dpr, (row2Y + 5) * this.dpr);
+
+    // Bid Liquidity Zone (near price)
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = DOM_COLORS.grayLight;
+    ctx.fillText('BID LIQ ZONE', (x + statWidth * 2.5) * this.dpr, (row2Y - 10) * this.dpr);
+    ctx.fillStyle = DOM_COLORS.teal;
+    ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillText(this.formatQuantity(bidLiqZone), (x + statWidth * 2.5) * this.dpr, (row2Y + 5) * this.dpr);
+
+    // Ask Liquidity Zone
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = DOM_COLORS.grayLight;
+    ctx.fillText('ASK LIQ ZONE', (x + statWidth * 3.5) * this.dpr, (row2Y - 10) * this.dpr);
+    ctx.fillStyle = DOM_COLORS.pink;
+    ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillText(this.formatQuantity(askLiqZone), (x + statWidth * 3.5) * this.dpr, (row2Y + 5) * this.dpr);
+
+    // Best Bid
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = DOM_COLORS.grayLight;
+    ctx.fillText('BEST BID', (x + statWidth * 4.5) * this.dpr, (row2Y - 10) * this.dpr);
+    ctx.fillStyle = DOM_COLORS.green;
+    ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+    const bestBid = orderBook.bids[0]?.price || 0;
+    ctx.fillText(this.formatPrice(bestBid), (x + statWidth * 4.5) * this.dpr, (row2Y + 5) * this.dpr);
+
+    // Best Ask
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = DOM_COLORS.grayLight;
+    ctx.fillText('BEST ASK', (x + statWidth * 5.5) * this.dpr, (row2Y - 10) * this.dpr);
+    ctx.fillStyle = DOM_COLORS.red;
+    ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+    const bestAsk = orderBook.asks[0]?.price || 0;
+    ctx.fillText(this.formatPrice(bestAsk), (x + statWidth * 5.5) * this.dpr, (row2Y + 5) * this.dpr);
+
+    // Spread
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = DOM_COLORS.grayLight;
+    ctx.fillText('SPREAD', (x + statWidth * 6.5) * this.dpr, (row2Y - 10) * this.dpr);
+    ctx.fillStyle = DOM_COLORS.purple;
+    ctx.font = `bold ${12 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillText(`${orderBook.spreadPercent.toFixed(3)}%`, (x + statWidth * 6.5) * this.dpr, (row2Y + 5) * this.dpr);
+
+    // Market Sentiment
+    ctx.font = `${9 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = DOM_COLORS.grayLight;
+    ctx.fillText('SENTIMENT', (x + statWidth * 7.5) * this.dpr, (row2Y - 10) * this.dpr);
+    const sentiment = buyPressure > 55 ? 'BULLISH' : buyPressure < 45 ? 'BEARISH' : 'NEUTRAL';
+    const sentimentColor = buyPressure > 55 ? DOM_COLORS.green : buyPressure < 45 ? DOM_COLORS.red : DOM_COLORS.amber;
+    ctx.fillStyle = sentimentColor;
+    ctx.font = `bold ${11 * this.dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillText(sentiment, (x + statWidth * 7.5) * this.dpr, (row2Y + 5) * this.dpr);
+
+    // Pressure bar at bottom
+    const barY = y + height - 15;
+    const barHeight = 8;
+    const barWidth = width - 40;
+    const barX = x + 20;
+
+    // Background
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.fillRect(barX * this.dpr, barY * this.dpr, barWidth * this.dpr, barHeight * this.dpr);
+
+    // Buy pressure (green from left)
+    const buyWidth = (buyPressure / 100) * barWidth;
+    ctx.fillStyle = DOM_COLORS.green;
+    ctx.fillRect(barX * this.dpr, barY * this.dpr, buyWidth * this.dpr, barHeight * this.dpr);
+
+    // Sell pressure (red from right)
+    ctx.fillStyle = DOM_COLORS.red;
+    ctx.fillRect((barX + buyWidth) * this.dpr, barY * this.dpr, (barWidth - buyWidth) * this.dpr, barHeight * this.dpr);
+
+    // Center line
+    ctx.strokeStyle = DOM_COLORS.white;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo((barX + barWidth / 2) * this.dpr, barY * this.dpr);
+    ctx.lineTo((barX + barWidth / 2) * this.dpr, (barY + barHeight) * this.dpr);
+    ctx.stroke();
   }
 
   private drawCloseHint(dimensions: ChartDimensions) {
