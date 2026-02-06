@@ -60,6 +60,7 @@
     "d3": "^7.9.0",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.3.0",
+    "html2canvas": "^1.4.1",
     "hyperformula": "^3.0.1",
     "input-otp": "^1.2.4",
     "leaflet": "^1.9.4",
