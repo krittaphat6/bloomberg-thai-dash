@@ -62,14 +62,14 @@ const KeyboardShortcutsHelp: React.FC<KeyboardShortcutsHelpProps> = ({
                     <span className="text-sm text-muted-foreground">{item.action}</span>
                     <div className="flex gap-1">
                       {item.keys.map((key, j) => (
-                        <React.Fragment key={j}>
+                        <span key={j} className="inline-flex items-center gap-1">
                           <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">
                             {key}
                           </kbd>
                           {j < item.keys.length - 1 && (
                             <span className="text-muted-foreground">+</span>
                           )}
-                        </React.Fragment>
+                        </span>
                       ))}
                     </div>
                   </div>

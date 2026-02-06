@@ -52,8 +52,12 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent side="right" className="w-[350px] bg-card border-l border-terminal-green/30">
+    <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }} modal={false}>
+      <SheetContent
+        side="right"
+        showOverlay={false}
+        className="w-[350px] bg-card border-l border-terminal-green/30"
+      >
         <SheetHeader>
           <SheetTitle className="text-terminal-green font-mono flex items-center gap-2">
             <BarChart2 className="w-5 h-5" />
