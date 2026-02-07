@@ -110,8 +110,57 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
         </SheetHeader>
 
         <ScrollArea className="h-[calc(100vh-100px)] mt-4 pr-4">
-          {/* DOM Indicator Card */}
           <div className="space-y-4">
+            {/* OI Bubbles Indicator Card */}
+            <div className="p-4 rounded-lg border border-terminal-amber/30 bg-muted/20">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-terminal-amber" />
+                  <span className="text-lg font-mono font-bold text-terminal-amber">OI Bubbles</span>
+                  <Badge variant="outline" className="text-[10px] border-terminal-amber/50">
+                    Crypto
+                  </Badge>
+                </div>
+                <Switch
+                  checked={indicators.some(i => i.name === 'OI Bubbles' && i.visible)}
+                  onCheckedChange={() => {
+                    const oiBubbles = indicators.find(i => i.name === 'OI Bubbles');
+                    if (oiBubbles) {
+                      onToggleIndicator(oiBubbles.id);
+                    } else {
+                      onAddCustomIndicator({
+                        id: `oi-bubbles-${Date.now()}`,
+                        name: 'OI Bubbles',
+                        type: 'overlay',
+                        visible: true,
+                        settings: {
+                          threshold: 1.5,
+                          extremeThreshold: 3.0,
+                          showPositive: true,
+                          showNegative: true,
+                        },
+                        color: '#FFB800',
+                      });
+                    }
+                  }}
+                  className="data-[state=checked]:bg-terminal-amber"
+                />
+              </div>
+              
+              <p className="text-sm text-muted-foreground mb-3">
+                Open Interest bubbles show accumulation/liquidation zones based on Z-Score analysis. 
+                <span className="text-terminal-green"> Green = Accumulation</span>,
+                <span className="text-terminal-red"> Red = Liquidation</span>.
+              </p>
+
+              <div className="flex flex-wrap gap-1">
+                <Badge variant="secondary" className="text-[9px]">Z-Score</Badge>
+                <Badge variant="secondary" className="text-[9px]">Binance Futures</Badge>
+                <Badge variant="secondary" className="text-[9px]">Real-time OI</Badge>
+              </div>
+            </div>
+
+            {/* DOM Indicator Card */}
             <div className="p-4 rounded-lg border border-terminal-cyan/30 bg-muted/20">
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
