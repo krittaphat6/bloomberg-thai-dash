@@ -1,6 +1,15 @@
 // ABLE Chart Engine - Canvas Renderer
 import { Candle, ChartViewport, ChartThemeColors, ChartDimensions, DrawingObject, CrosshairState, IndicatorData } from './types';
 
+export interface OIBubbleData {
+  timestamp: number;
+  price: number;
+  oiDelta: number;
+  normalized: number;
+  isPositive: boolean;
+  size: 'tiny' | 'small' | 'normal' | 'large' | 'huge';
+}
+
 export class ChartRenderer {
   private ctx: CanvasRenderingContext2D;
   private dpr: number;
@@ -499,6 +508,82 @@ export class ChartRenderer {
           }
           break;
         }
+      }
+    });
+  }
+
+  /**
+   * Draw OI Bubbles overlay
+   */
+  drawOIBubbles(
+    bubbles: OIBubbleData[],
+    candles: Candle[],
+    viewport: ChartViewport,
+    dimensions: ChartDimensions
+  ) {
+    if (bubbles.length === 0) return;
+
+    const { chartArea } = dimensions;
+    const ctx = this.ctx;
+
+    const sizeMap: Record<OIBubbleData['size'], number> = {
+      tiny: 6,
+      small: 10,
+      normal: 16,
+      large: 24,
+      huge: 36
+    };
+
+    bubbles.forEach(bubble => {
+      // Find matching candle index
+      const candleIndex = candles.findIndex(c => 
+        Math.abs(c.timestamp - bubble.timestamp) < 60000
+      );
+      
+      if (candleIndex < viewport.startIndex || candleIndex > viewport.endIndex) return;
+
+      const x = this.indexToX(candleIndex, viewport, chartArea);
+      const y = this.priceToY(bubble.price, viewport, chartArea);
+      const radius = sizeMap[bubble.size] * this.dpr / 2;
+
+      // Gradient fill based on direction
+      const gradient = ctx.createRadialGradient(
+        x * this.dpr, y * this.dpr, 0,
+        x * this.dpr, y * this.dpr, radius
+      );
+
+      if (bubble.isPositive) {
+        // Green accumulation bubbles
+        gradient.addColorStop(0, 'rgba(0, 255, 136, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(0, 200, 100, 0.5)');
+        gradient.addColorStop(1, 'rgba(0, 128, 80, 0.2)');
+      } else {
+        // Red liquidation bubbles
+        gradient.addColorStop(0, 'rgba(255, 80, 80, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(200, 50, 50, 0.5)');
+        gradient.addColorStop(1, 'rgba(128, 40, 40, 0.2)');
+      }
+
+      // Draw bubble
+      ctx.beginPath();
+      ctx.arc(x * this.dpr, y * this.dpr, radius, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Draw border
+      ctx.strokeStyle = bubble.isPositive ? 'rgba(0, 255, 136, 0.9)' : 'rgba(255, 80, 80, 0.9)';
+      ctx.lineWidth = 1.5 * this.dpr;
+      ctx.stroke();
+
+      // Draw label for larger bubbles
+      if (bubble.size === 'large' || bubble.size === 'huge') {
+        ctx.fillStyle = bubble.isPositive ? '#00ff88' : '#ff5050';
+        ctx.font = `bold ${10 * this.dpr}px 'JetBrains Mono', monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        
+        const label = `${bubble.isPositive ? '+' : ''}${(bubble.oiDelta / 1000000).toFixed(1)}M`;
+        ctx.fillText(label, x * this.dpr, (y - radius / this.dpr - 4) * this.dpr);
       }
     });
   }
