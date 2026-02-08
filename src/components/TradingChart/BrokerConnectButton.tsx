@@ -1,10 +1,11 @@
 // BrokerConnectButton.tsx - Broker connection & order panel for Trading Chart
-// Supports MT5 real trading with full order form
+// Supports MT5, Tradovate, Settrade with TradingView-style UI
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,12 +17,12 @@ import {
   TrendingDown,
   CheckCircle,
   Loader2,
-  ExternalLink
+  X,
+  Settings
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-import MT5OrderPanel from './MT5OrderPanel';
 
 interface BrokerConnectButtonProps {
   symbol: string;
@@ -245,21 +246,97 @@ export const BrokerConnectButton: React.FC<BrokerConnectButtonProps> = ({
     }
   };
 
+  // Handle submitting order via MT5 commands
+  const handleSubmitMT5Order = async (side: 'buy' | 'sell') => {
+    if (!connection) return;
+    setIsPlacingOrder(true);
+
+    try {
+      const normalizedSymbol = symbol.replace('USDT', 'USD').replace('/', '');
+      const commandType = orderType === 'market' 
+        ? (side === 'buy' ? 'BUY' : 'SELL')
+        : orderType === 'limit'
+          ? (side === 'buy' ? 'BUY_LIMIT' : 'SELL_LIMIT')
+          : (side === 'buy' ? 'BUY_STOP' : 'SELL_STOP');
+
+      const { data, error } = await supabase
+        .from('mt5_commands')
+        .insert({
+          connection_id: connection.id,
+          command_type: commandType,
+          symbol: normalizedSymbol,
+          volume: parseFloat(quantity),
+          price: orderType !== 'market' ? parseFloat(price || currentPrice.toString()) : null,
+          sl: stopLoss ? parseFloat(stopLoss) : null,
+          tp: takeProfit ? parseFloat(takeProfit) : null,
+          deviation: 20,
+          comment: `ABLE-${Date.now()}`,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: `✅ ${side.toUpperCase()} Order Submitted`,
+        description: `${quantity} lots ${normalizedSymbol}`
+      });
+
+      // Poll for result
+      pollOrderStatus(data.id);
+
+    } catch (error: any) {
+      toast({
+        title: '❌ Order Failed',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setIsPlacingOrder(false);
+    }
+  };
+
+  // Poll order status
+  const pollOrderStatus = async (commandId: string) => {
+    let attempts = 0;
+    const maxAttempts = 20;
+
+    const poll = async () => {
+      const { data } = await supabase
+        .from('mt5_commands')
+        .select('*')
+        .eq('id', commandId)
+        .single();
+
+      if (data?.status === 'executed') {
+        toast({
+          title: '✅ Order Executed',
+          description: `Ticket #${data.ticket_id} @ ${data.executed_price}`
+        });
+        return;
+      }
+
+      if (data?.status === 'error') {
+        toast({
+          title: '❌ Execution Error',
+          description: data.error_message,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      attempts++;
+      if (attempts < maxAttempts) {
+        setTimeout(poll, 1000);
+      }
+    };
+
+    setTimeout(poll, 1000);
+  };
+
   return (
     <>
-      {/* MT5 Full Order Panel */}
-      {connection?.broker === 'mt5' && (
-        <MT5OrderPanel
-          isOpen={showMT5Panel}
-          onClose={() => setShowMT5Panel(false)}
-          connectionId={connection.id}
-          accountId={connection.accountId || ''}
-          balance={connection.balance || 100000}
-          currentSymbol={symbol}
-          currentPrice={currentPrice}
-        />
-      )}
-      
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetTrigger asChild>
           <Button
@@ -439,29 +516,35 @@ export const BrokerConnectButton: React.FC<BrokerConnectButtonProps> = ({
               {/* Buy/Sell Buttons */}
               <div className="grid grid-cols-2 gap-2">
                 <Button
-                  className="bg-terminal-green text-black hover:bg-terminal-green/80 font-bold"
+                  className="h-12 bg-terminal-green text-black hover:bg-terminal-green/80 font-bold text-lg"
                   disabled={isPlacingOrder}
-                  onClick={() => handlePlaceOrder('buy')}
+                  onClick={() => connection.broker === 'mt5' 
+                    ? handleSubmitMT5Order('buy') 
+                    : handlePlaceOrder('buy')
+                  }
                 >
                   {isPlacingOrder ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
-                      <TrendingUp className="w-4 h-4 mr-1" />
+                      <TrendingUp className="w-5 h-5 mr-2" />
                       BUY
                     </>
                   )}
                 </Button>
                 <Button
-                  className="bg-terminal-red text-white hover:bg-terminal-red/80 font-bold"
+                  className="h-12 bg-terminal-red text-white hover:bg-terminal-red/80 font-bold text-lg"
                   disabled={isPlacingOrder}
-                  onClick={() => handlePlaceOrder('sell')}
+                  onClick={() => connection.broker === 'mt5' 
+                    ? handleSubmitMT5Order('sell') 
+                    : handlePlaceOrder('sell')
+                  }
                 >
                   {isPlacingOrder ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
-                      <TrendingDown className="w-4 h-4 mr-1" />
+                      <TrendingDown className="w-5 h-5 mr-2" />
                       SELL
                     </>
                   )}
