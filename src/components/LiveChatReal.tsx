@@ -589,18 +589,59 @@ const LiveChatReal = () => {
     loadWebhooks();
   }, [currentRoomId]);
 
-  // Check MT5 connection status - check by last_connected_at within 60 seconds (EA polls every second)
+  // Check MT5 connection status - prioritize active connections, also check by room if available
   const checkMT5Connection = useCallback(async () => {
     if (!currentUser) return;
     
     try {
-      // Get any MT5 connection for this user
+      // First, try to find a CONNECTED MT5 connection for this room
+      if (currentRoomId) {
+        const { data: roomConns } = await supabase
+          .from('broker_connections')
+          .select('*')
+          .eq('room_id', currentRoomId)
+          .eq('broker_type', 'mt5')
+          .eq('is_connected', true)
+          .order('last_connected_at', { ascending: false })
+          .limit(1);
+        
+        if (roomConns && roomConns.length > 0) {
+          const conn = roomConns[0];
+          setMt5ConnectionId(conn.id);
+          setIsMt5Connected(true);
+          return;
+        }
+      }
+      
+      // Second, try to find any CONNECTED MT5 connection for this user
+      const { data: connectedConns } = await supabase
+        .from('broker_connections')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .eq('broker_type', 'mt5')
+        .eq('is_connected', true)
+        .order('last_connected_at', { ascending: false })
+        .limit(1);
+      
+      if (connectedConns && connectedConns.length > 0) {
+        const conn = connectedConns[0];
+        setMt5ConnectionId(conn.id);
+        
+        // Verify connection is recently active (within 60 seconds for EA polling)
+        const lastConnected = conn.last_connected_at ? new Date(conn.last_connected_at) : null;
+        const isRecentlyActive = lastConnected && (Date.now() - lastConnected.getTime()) < 60000;
+        
+        setIsMt5Connected(isRecentlyActive || conn.is_connected === true);
+        return;
+      }
+      
+      // Fallback: Get most recent MT5 connection regardless of status
       const { data: connections, error } = await supabase
         .from('broker_connections')
         .select('*')
         .eq('user_id', currentUser.id)
         .eq('broker_type', 'mt5')
-        .order('last_connected_at', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(1);
       
       if (error) throw error;
@@ -621,7 +662,7 @@ const LiveChatReal = () => {
     } catch (err) {
       console.error('Error checking MT5 connection:', err);
     }
-  }, [currentUser]);
+  }, [currentUser, currentRoomId]);
 
   // Subscribe to MT5 connection changes
   useEffect(() => {
