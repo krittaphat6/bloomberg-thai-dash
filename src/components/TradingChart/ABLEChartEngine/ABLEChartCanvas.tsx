@@ -203,6 +203,8 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
 
     const fetchOIData = async () => {
       try {
+        console.log('🔵 OI Bubbles: Fetching data for', symbol);
+        
         // Fetch OI data via market-data-proxy
         const { data: response, error } = await supabase.functions.invoke('market-data-proxy', {
           body: {
@@ -213,11 +215,13 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
         });
 
         if (error || !response?.openInterest) {
-          console.warn('OI Bubbles: Failed to fetch OI data', error);
+          console.warn('OI Bubbles: Failed to fetch OI data', error, response);
           return;
         }
 
         const oiData = response.openInterest as { oi: number; timestamp: number }[];
+        console.log('🔵 OI Bubbles: Got', oiData.length, 'OI data points');
+        
         if (oiData.length < 2) return;
 
         // Calculate OI deltas
@@ -234,6 +238,10 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
         const threshold = oiBubblesConfig.threshold || 1.5;
         const extremeThreshold = oiBubblesConfig.extremeThreshold || 3.0;
 
+        // Get timeframe window for matching (allow bigger tolerance for higher timeframes)
+        const timeframeMs = getTimeframeMs(timeframe);
+        const matchTolerance = Math.max(timeframeMs, 5 * 60 * 1000); // At least 5 minutes
+
         // Generate bubbles for significant OI changes
         const bubbles: OIBubbleData[] = [];
         for (let i = 0; i < deltas.length; i++) {
@@ -242,10 +250,10 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
 
           if (absNorm < threshold) continue;
 
-          // Find matching candle
+          // Find matching candle - use larger tolerance based on timeframe
           const oiTimestamp = oiData[i + 1].timestamp;
           const matchingCandle = candles.find(c => 
-            Math.abs(c.timestamp - oiTimestamp) < 60000
+            Math.abs(c.timestamp - oiTimestamp) < matchTolerance
           );
 
           if (!matchingCandle) continue;
@@ -267,7 +275,8 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
           });
         }
 
-        setOiBubbles(bubbles.slice(-20)); // Keep last 20 bubbles
+        console.log('🔵 OI Bubbles: Generated', bubbles.length, 'bubbles (threshold:', threshold, ')');
+        setOiBubbles(bubbles.slice(-30)); // Keep last 30 bubbles
       } catch (err) {
         console.warn('OI Bubbles: Error fetching data', err);
       }
@@ -278,7 +287,19 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     // Refresh every 30 seconds
     const interval = setInterval(fetchOIData, 30000);
     return () => clearInterval(interval);
-  }, [symbol, symbolType, oiBubblesConfig?.enabled, candles.length]);
+  }, [symbol, symbolType, oiBubblesConfig?.enabled, candles.length, timeframe]);
+  
+  // Helper to convert timeframe to milliseconds
+  const getTimeframeMs = (tf: string): number => {
+    const num = parseInt(tf) || 1;
+    if (tf.includes('m')) return num * 60 * 1000;
+    if (tf.includes('h')) return num * 60 * 60 * 1000;
+    if (tf.includes('D') || tf.includes('d')) return num * 24 * 60 * 60 * 1000;
+    if (tf.includes('W') || tf.includes('w')) return num * 7 * 24 * 60 * 60 * 1000;
+    if (tf.includes('M')) return num * 30 * 24 * 60 * 60 * 1000;
+    return 60 * 60 * 1000; // default 1h
+  };
+
   useEffect(() => {
     if (symbolType !== 'crypto' || !domConfig?.enabled) {
       binanceOrderBook.disconnect();
