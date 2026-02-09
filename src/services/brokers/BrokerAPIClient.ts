@@ -146,15 +146,33 @@ export const BrokerAPI = {
     userId: string, 
     brokerType: 'tradovate' | 'settrade' | 'mt5'
   ): Promise<BrokerConnection> {
-    // Check existing
-    const { data: existing } = await supabase
+    // First, check for any CONNECTED connection for this room/broker type
+    const { data: connectedList } = await supabase
       .from('broker_connections')
       .select('*')
       .eq('room_id', roomId)
       .eq('broker_type', brokerType)
-      .maybeSingle();
+      .eq('is_connected', true)
+      .order('last_connected_at', { ascending: false })
+      .limit(1);
 
-    if (existing) return existing as BrokerConnection;
+    if (connectedList && connectedList.length > 0) {
+      return connectedList[0] as BrokerConnection;
+    }
+
+    // Check for any existing connection (even if not connected)
+    const { data: existingList } = await supabase
+      .from('broker_connections')
+      .select('*')
+      .eq('room_id', roomId)
+      .eq('broker_type', brokerType)
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (existingList && existingList.length > 0) {
+      return existingList[0] as BrokerConnection;
+    }
 
     // Create new
     const { data: newConn, error } = await supabase
