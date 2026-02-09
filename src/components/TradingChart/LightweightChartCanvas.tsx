@@ -37,6 +37,10 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   const domIndicator = indicators.find(ind => ind.name === 'DOM');
   const isDOMEnabled = domIndicator?.visible === true;
   
+  // Filter for OI Bubbles indicator
+  const oiBubblesIndicator = indicators.find(ind => ind.name === 'OI Bubbles');
+  const isOIBubblesEnabled = oiBubblesIndicator?.visible === true;
+  
   // DOM config - ONLY enabled when DOM indicator is visible (removed auto-enable for crypto)
   const domConfig: DOMConfig = {
     enabled: isDOMEnabled,
@@ -46,6 +50,13 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
     position: 'right',
     opacity: 0.95,
   };
+  
+  // OI Bubbles config
+  const oiBubblesConfig = isOIBubblesEnabled ? {
+    enabled: true,
+    threshold: (oiBubblesIndicator?.settings?.threshold as number) || 1.5,
+    extremeThreshold: (oiBubblesIndicator?.settings?.extremeThreshold as number) || 3.0,
+  } : undefined;
 
   // Convert other indicators (SMA/EMA) if any - but DOM is primary
   const indicatorData: IndicatorData[] = indicators
@@ -86,6 +97,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
       theme={theme}
       indicators={indicatorData}
       domConfig={domConfig}
+      oiBubblesConfig={oiBubblesConfig}
       domFullscreen={domFullscreen}
       onDOMFullscreenChange={onDOMFullscreenChange}
       onCrosshairMove={onCrosshairMove}

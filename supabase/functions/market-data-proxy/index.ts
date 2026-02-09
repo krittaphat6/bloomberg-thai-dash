@@ -345,6 +345,67 @@ async function fetchBinanceDepth(symbol: string, limit: number = 20): Promise<an
   }
 }
 
+// Fetch Binance Open Interest for Futures
+async function fetchBinanceOpenInterest(symbol: string, period: string = '5m', limit: number = 100): Promise<any> {
+  try {
+    // Clean symbol for Binance Futures (must end with USDT)
+    let futuresSymbol = symbol.toUpperCase();
+    if (!futuresSymbol.endsWith('USDT')) {
+      futuresSymbol = futuresSymbol.replace('USD', '') + 'USDT';
+    }
+    
+    // First get current OI
+    const currentOIUrl = `https://fapi.binance.com/fapi/v1/openInterest?symbol=${futuresSymbol}`;
+    
+    // Then get historical OI
+    const historyUrl = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${futuresSymbol}&period=${period}&limit=${limit}`;
+    
+    const [currentRes, historyRes] = await Promise.all([
+      fetch(currentOIUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+        },
+      }),
+      fetch(historyUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+        },
+      }),
+    ]);
+    
+    const currentData = currentRes.ok ? await currentRes.json() : null;
+    const historyData = historyRes.ok ? await historyRes.json() : [];
+    
+    // Process historical data
+    const openInterest = (Array.isArray(historyData) ? historyData : []).map((item: any) => ({
+      timestamp: item.timestamp,
+      oi: parseFloat(item.sumOpenInterest || 0),
+      oiValue: parseFloat(item.sumOpenInterestValue || 0),
+    }));
+    
+    // Add current OI if available
+    if (currentData?.openInterest) {
+      openInterest.push({
+        timestamp: Date.now(),
+        oi: parseFloat(currentData.openInterest),
+        oiValue: 0,
+      });
+    }
+    
+    return {
+      symbol: futuresSymbol,
+      currentOI: currentData?.openInterest ? parseFloat(currentData.openInterest) : null,
+      openInterest,
+      timestamp: Date.now(),
+    };
+  } catch (error) {
+    console.error(`Binance OI error for ${symbol}:`, error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -357,14 +418,20 @@ serve(async (req) => {
       symbols = [], 
       includeEconomic = true, 
       includeCrypto = true,
-      // New: depth endpoint for DOM
+      // Action endpoints
       action,
-      symbol: depthSymbol,
-      limit: depthLimit,
+      endpoint, // Alias for action
+      symbol: reqSymbol,
+      limit: reqLimit,
+      period,
     } = body;
     
+    const effectiveAction = action || endpoint;
+    const effectiveSymbol = reqSymbol || body.depthSymbol;
+    const effectiveLimit = reqLimit || body.depthLimit;
+    
     // Handle specific actions
-    if (action === 'tickers') {
+    if (effectiveAction === 'tickers') {
       const tickersData = await fetchBinanceTickers(symbols || []);
       return new Response(JSON.stringify({
         success: !!tickersData,
@@ -374,11 +441,25 @@ serve(async (req) => {
       });
     }
 
-    if (action === 'depth' && depthSymbol) {
-      const depthData = await fetchBinanceDepth(depthSymbol, depthLimit || 20);
+    if (effectiveAction === 'depth' && effectiveSymbol) {
+      const depthData = await fetchBinanceDepth(effectiveSymbol, effectiveLimit || 20);
       return new Response(JSON.stringify({
         success: !!depthData,
         data: depthData,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    // OI Bubbles / Open Interest endpoint
+    if (effectiveAction === 'openInterest' && effectiveSymbol) {
+      const oiData = await fetchBinanceOpenInterest(effectiveSymbol, period || '5m', effectiveLimit || 100);
+      return new Response(JSON.stringify({
+        success: !!oiData,
+        openInterest: oiData?.openInterest || [],
+        currentOI: oiData?.currentOI,
+        symbol: oiData?.symbol,
+        timestamp: Date.now(),
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
