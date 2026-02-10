@@ -11,17 +11,10 @@ import { useResponsiveContext } from '@/contexts/ResponsiveContext';
 import { usePanelCommander } from '@/contexts/PanelCommanderContext';
 import { MobileLayout } from './mobile/MobileLayout';
 import { TabletLayout } from './tablet/TabletLayout';
-import StockdioCharts from './StockdioCharts';
 import InvestingCharts from './InvestingCharts';
-import CryptoLiveCharts from './CryptoLiveCharts';
-import ForexEconomicData from './ForexEconomicData';
-import ScatterAnalysis from './ScatterChart';
-import MarketPieChart from './MarketPieChart';
 import BloombergNews from './BloombergNews';
 import EconomicCalendar from './EconomicCalendar';
 import MarketDepth from './MarketDepth';
-import TradingVolume from './TradingVolume';
-import HeatMap from './HeatMap';
 import CurrencyTable from './CurrencyTable';
 import EconomicIndicators from './EconomicIndicators';
 import COTData from './COTData';
@@ -41,10 +34,6 @@ import { PythonCodeEditor } from './PythonCodeEditor';
 import LiveChatReal from './LiveChatReal';
 import { TradingChartMain } from './TradingChart';
 import WorldStockMarkets from './WorldStockMarkets';
-import CryptoMarketMap from './CryptoMarketMap';
-import ScatterPointChart from './ScatterPointChart';
-import CorrelationMatrixTable from './CorrelationMatrixTable';
-import CVDChart from './CVDChart';
 import TopNews from './TopNews';
 import { BloombergMap } from './BloombergMap';
 import MonteCarloSimulator from './MonteCarloSimulator';
@@ -165,129 +154,7 @@ const MarketData = () => {
       description: '3D options visualization and analysis',
       tags: ['options', '3d', 'visualization', 'greeks']
     },
-    { 
-      id: 'stockdio', 
-      title: 'STOCKDIO CHARTS', 
-      component: <StockdioCharts />,
-      category: 'trading',
-      description: 'Professional stock charts with real-time updates',
-      tags: ['stocks', 'charts', 'real-time']
-    },
-    { 
-      id: 'forex', 
-      title: '💱 FOREX & ECONOMICS', 
-      component: <ForexEconomicData />,
-      category: 'trading',
-      description: 'Forex pairs and economic indicators',
-      tags: ['forex', 'economics', 'currencies', 'fx']
-    },
-    { 
-      id: 'fedwatch', 
-      title: '🏦 FED WATCH', 
-      component: <FedWatch />,
-      category: 'trading',
-      description: 'Federal Reserve policy monitoring',
-      tags: ['fed', 'interest-rates', 'monetary-policy']
-    },
-    {
-      id: 'screeners',
-      title: '🔍 SCREENERS',
-      component: <ScreenerMain />,
-      category: 'trading',
-      icon: <Search className="w-5 h-5" />,
-      description: 'Advanced multi-market screening system with filters',
-      tags: ['screener', 'filter', 'stock', 'crypto', 'forex', 'scanner']
-    },
     
-    // Market Analysis
-    { 
-      id: 'crypto', 
-      title: '₿ CRYPTO LIVE', 
-      component: <CryptoLiveCharts />,
-      category: 'analysis',
-      description: 'Live cryptocurrency prices and charts',
-      tags: ['crypto', 'bitcoin', 'ethereum', 'live']
-    },
-    { 
-      id: 'crypto-map', 
-      title: '🗺️ CRYPTO MARKET MAP', 
-      component: <CryptoMarketMap />,
-      category: 'analysis',
-      description: 'Visual heatmap of cryptocurrency market by market cap',
-      tags: ['crypto', 'heatmap', 'market-cap', 'visualization']
-    },
-    { 
-      id: 'scatter', 
-      title: 'SCATTER ANALYSIS', 
-      component: <ScatterAnalysis />,
-      category: 'analysis',
-      description: 'RS-Ratio vs RS-Momentum scatter plot',
-      tags: ['scatter', 'correlation', 'relative-strength']
-    },
-    { 
-      id: 'scatter-point', 
-      title: '📍 SCATTER POINT', 
-      component: <ScatterPointChart />,
-      category: 'analysis',
-      description: 'Advanced scatter plot with quadrant analysis (Leading/Lagging)',
-      tags: ['scatter', 'rs-ratio', 'momentum', 'quadrants', 'rrg']
-    },
-    { 
-      id: 'correlation-matrix', 
-      title: '🔢 CORRELATION MATRIX', 
-      component: <CorrelationMatrixTable />,
-      category: 'analysis',
-      description: 'Multi-asset correlation analysis (Pearson/Spearman/Kendall)',
-      tags: ['correlation', 'matrix', 'pearson', 'spearman', 'portfolio']
-    },
-    { 
-      id: 'cvd', 
-      title: '📊 CVD CHART', 
-      component: <CVDChart />,
-      category: 'analysis',
-      description: 'Cumulative Volume Delta with multi-exchange weighted average',
-      tags: ['cvd', 'volume', 'delta', 'orderflow']
-    },
-    { 
-      id: 'topnews', 
-      title: '🔥 TOP NEWS', 
-      component: <TopNews />,
-      category: 'communication',
-      description: 'Multi-source news aggregator with sentiment analysis',
-      tags: ['news', 'reddit', 'twitter', 'sentiment']
-    },
-    { 
-      id: 'pie', 
-      title: '🥧 MARKET PIE', 
-      component: <MarketPieChart />,
-      category: 'analysis',
-      description: 'Market sector allocation pie chart',
-      tags: ['pie-chart', 'sectors', 'allocation']
-    },
-    { 
-      id: 'heatmap', 
-      title: '🔥 HEAT MAP', 
-      component: <HeatMap />,
-      category: 'analysis',
-      description: 'Market performance heatmap',
-      tags: ['heatmap', 'performance', 'sectors']
-    },
-    { 
-      id: 'depth', 
-      title: '📊 MARKET DEPTH', 
-      component: <MarketDepth />,
-      category: 'analysis',
-      description: 'Order book depth visualization',
-      tags: ['depth', 'order-book', 'liquidity']
-    },
-    { 
-      id: 'volume', 
-      title: '📉 TRADING VOLUME', 
-      component: <TradingVolume />,
-      category: 'analysis',
-      description: 'Volume analysis and profile',
-      tags: ['volume', 'trading', 'liquidity']
-    },
     { 
       id: 'currency', 
       title: '💵 CURRENCY TABLE', 
