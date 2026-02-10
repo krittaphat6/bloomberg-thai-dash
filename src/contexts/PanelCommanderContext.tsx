@@ -16,6 +16,7 @@ export const AVAILABLE_PANELS: PanelConfig[] = [
   { id: 'stockdio', title: 'STOCKDIO CHARTS', keywords: ['stockdio', 'stock charts'], category: 'trading' },
   { id: 'forex', title: '💱 FOREX & ECONOMICS', keywords: ['forex', 'fx', 'currency', 'ฟอเร็กซ์', 'สกุลเงิน'], category: 'trading' },
   { id: 'fedwatch', title: '🏦 FED WATCH', keywords: ['fed', 'federal reserve', 'interest rate', 'ดอกเบี้ย', 'fed watch'], category: 'trading' },
+  { id: 'screeners', title: '🔍 SCREENERS', keywords: ['screener', 'filter', 'scan', 'scanner', 'screen', 'ค้นหา', 'กรอง'], category: 'trading' },
   
   // Market Analysis
   { id: 'crypto', title: '₿ CRYPTO LIVE', keywords: ['crypto', 'bitcoin', 'btc', 'ethereum', 'eth', 'คริปโต'], category: 'analysis' },
