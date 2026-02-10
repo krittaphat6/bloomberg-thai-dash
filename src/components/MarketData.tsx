@@ -5,7 +5,7 @@ import TabSelector from './TabSelector';
 import ThemeSwitcher from './ThemeSwitcher';
 import DesignSwitcher from './DesignSwitcher';
 import { Button } from '@/components/ui/button';
-import { Expand, Minimize, LogOut, TrendingUp, Brain, Wrench, MessageSquare, Gamepad2, Globe } from 'lucide-react';
+import { Expand, Minimize, LogOut, TrendingUp, Brain, Wrench, MessageSquare, Gamepad2, Globe, Search } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useResponsiveContext } from '@/contexts/ResponsiveContext';
 import { usePanelCommander } from '@/contexts/PanelCommanderContext';
@@ -52,6 +52,7 @@ import AbleHF40Modules from './AbleHF40Modules';
 import { FaceSearch } from './FaceSearch';
 import { TacticalCommandMap } from './TacticalMap';
 import { SuperClawPanel } from './SuperClawPanel';
+import ScreenerMain from './Screeners/ScreenerMain';
 
 interface PanelData {
   id: string;
@@ -187,6 +188,15 @@ const MarketData = () => {
       category: 'trading',
       description: 'Federal Reserve policy monitoring',
       tags: ['fed', 'interest-rates', 'monetary-policy']
+    },
+    {
+      id: 'screeners',
+      title: '🔍 SCREENERS',
+      component: <ScreenerMain />,
+      category: 'trading',
+      icon: <Search className="w-5 h-5" />,
+      description: 'Advanced multi-market screening system with filters',
+      tags: ['screener', 'filter', 'stock', 'crypto', 'forex', 'scanner']
     },
     
     // Market Analysis
