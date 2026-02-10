@@ -13,23 +13,8 @@ export const AVAILABLE_PANELS: PanelConfig[] = [
   // Trading Tools
   { id: 'trading-chart', title: '📊 TRADING CHART', keywords: ['chart', 'trading chart', 'กราฟ', 'technical', 'price chart', 'แท่งเทียน'], category: 'trading' },
   { id: 'options-3d', title: '📈 OPTIONS-3D', keywords: ['options', '3d', 'greeks', 'ออปชัน'], category: 'trading' },
-  { id: 'stockdio', title: 'STOCKDIO CHARTS', keywords: ['stockdio', 'stock charts'], category: 'trading' },
-  { id: 'forex', title: '💱 FOREX & ECONOMICS', keywords: ['forex', 'fx', 'currency', 'ฟอเร็กซ์', 'สกุลเงิน'], category: 'trading' },
-  { id: 'fedwatch', title: '🏦 FED WATCH', keywords: ['fed', 'federal reserve', 'interest rate', 'ดอกเบี้ย', 'fed watch'], category: 'trading' },
-  { id: 'screeners', title: '🔍 SCREENERS', keywords: ['screener', 'filter', 'scan', 'scanner', 'screen', 'ค้นหา', 'กรอง'], category: 'trading' },
-  
-  // Market Analysis
-  { id: 'crypto', title: '₿ CRYPTO LIVE', keywords: ['crypto', 'bitcoin', 'btc', 'ethereum', 'eth', 'คริปโต'], category: 'analysis' },
-  { id: 'crypto-map', title: '🗺️ CRYPTO MARKET MAP', keywords: ['crypto map', 'market map', 'heatmap crypto'], category: 'analysis' },
-  { id: 'scatter', title: 'SCATTER ANALYSIS', keywords: ['scatter', 'correlation', 'rs ratio'], category: 'analysis' },
-  { id: 'scatter-point', title: '📍 SCATTER POINT', keywords: ['scatter point', 'rrg', 'quadrant'], category: 'analysis' },
-  { id: 'correlation-matrix', title: '🔢 CORRELATION MATRIX', keywords: ['correlation', 'matrix', 'pearson', 'spearman'], category: 'analysis' },
-  { id: 'cvd', title: '📊 CVD CHART', keywords: ['cvd', 'cumulative volume delta', 'volume delta', 'orderflow'], category: 'analysis' },
   { id: 'topnews', title: '🔥 TOP NEWS', keywords: ['news', 'top news', 'ข่าว', 'sentiment'], category: 'communication' },
-  { id: 'pie', title: '🥧 MARKET PIE', keywords: ['pie', 'sector', 'allocation', 'พาย'], category: 'analysis' },
-  { id: 'heatmap', title: '🔥 HEAT MAP', keywords: ['heatmap', 'heat map', 'sector performance'], category: 'analysis' },
   { id: 'depth', title: '📊 MARKET DEPTH', keywords: ['depth', 'order book', 'market depth', 'liquidity'], category: 'analysis' },
-  { id: 'volume', title: '📉 TRADING VOLUME', keywords: ['volume', 'trading volume', 'ปริมาณ'], category: 'analysis' },
   { id: 'currency', title: '💵 CURRENCY TABLE', keywords: ['currency', 'exchange rate', 'ค่าเงิน'], category: 'analysis' },
   { id: 'indicators', title: '📈 ECONOMIC INDICATORS', keywords: ['indicators', 'economic indicators', 'gdp', 'inflation', 'ตัวชี้วัด'], category: 'analysis' },
   { id: 'cot', title: '📋 COT DATA', keywords: ['cot', 'commitment of traders', 'cot data', 'positioning'], category: 'analysis' },
