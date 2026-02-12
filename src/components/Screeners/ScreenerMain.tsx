@@ -73,7 +73,7 @@ const ScreenerMain = () => {
               🔍 MARKET SCREENERS
             </h2>
             <p className="text-[10px] font-mono text-muted-foreground">
-              TradingView-Powered Multi-Market Screening • 130+ Fields • 18+ Strategies
+              TradingView-Powered • 180+ Fields • 40+ Markets • Financial Statements • All Timeframes
             </p>
           </div>
         </div>

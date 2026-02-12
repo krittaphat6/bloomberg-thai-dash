@@ -1,6 +1,6 @@
 // ============================================
 // TradingView Screener Fields - Matching tvscreener library
-// 130+ fields across 10 categories
+// 130+ base fields + financial statements + all timeframe technicals
 // ============================================
 
 export type FieldFormat = 'currency' | 'percent' | 'number' | 'text' | 'date' | 'rating';
@@ -20,20 +20,23 @@ export type FieldCategory =
   | 'volatility'
   | 'volume'
   | 'bollinger'
-  | 'earnings';
+  | 'earnings'
+  | 'balance_sheet'
+  | 'income_statement'
+  | 'cash_flow'
+  | 'growth';
 
 export interface FieldDef {
-  name: string;         // TradingView API field name
-  label: string;        // Human-readable label
+  name: string;
+  label: string;
   format: FieldFormat;
   category: FieldCategory;
-  screeners: ScreenerType[];  // Which screeners support this field
+  screeners: ScreenerType[];
   description?: string;
 }
 
 export type ScreenerType = 'stock' | 'crypto' | 'forex' | 'bond' | 'futures' | 'coin';
 
-// Available time intervals for technical fields
 export const TIME_INTERVALS = [
   { code: '', label: 'Daily (Default)' },
   { code: '1', label: '1 Minute' },
@@ -54,6 +57,10 @@ export const FIELD_CATEGORIES: { id: FieldCategory; label: string; icon: string 
   { id: 'fundamental', label: 'Fundamentals', icon: '📋' },
   { id: 'dividend', label: 'Dividends', icon: '💵' },
   { id: 'earnings', label: 'Earnings', icon: '💹' },
+  { id: 'balance_sheet', label: 'Balance Sheet', icon: '🏦' },
+  { id: 'income_statement', label: 'Income Statement', icon: '💰' },
+  { id: 'cash_flow', label: 'Cash Flow', icon: '💸' },
+  { id: 'growth', label: 'Growth Metrics', icon: '📈' },
   { id: 'oscillator', label: 'Oscillators', icon: '📈' },
   { id: 'moving_average', label: 'Moving Averages', icon: '〰️' },
   { id: 'bollinger', label: 'Bollinger Bands', icon: '📉' },
@@ -69,9 +76,9 @@ const EQUITY: ScreenerType[] = ['stock'];
 const EQUITY_CRYPTO: ScreenerType[] = ['stock', 'crypto', 'coin'];
 const NO_BOND: ScreenerType[] = ['stock', 'crypto', 'forex', 'futures', 'coin'];
 
-// ============ COMPLETE FIELD DEFINITIONS ============
+// ============ BASE FIELD DEFINITIONS ============
 
-export const ALL_FIELDS: FieldDef[] = [
+const BASE_FIELDS: FieldDef[] = [
   // ---- PRICE & VOLUME ----
   { name: 'close', label: 'Price', format: 'currency', category: 'price', screeners: ALL },
   { name: 'open', label: 'Open', format: 'currency', category: 'price', screeners: ALL },
@@ -243,6 +250,17 @@ export const ALL_FIELDS: FieldDef[] = [
   { name: 'coupon', label: 'Coupon', format: 'percent', category: 'price', screeners: ['bond'] },
 ];
 
+// Import and merge financial fields
+import { ALL_FINANCIAL_FIELDS } from './financialFields';
+
+// Merge all fields: base + financial statements
+// Note: ALL_TIMEFRAME_TECHNICAL_FIELDS are intentionally NOT merged into ALL_FIELDS
+// to keep the main field list manageable. They are available via technicalFields.ts for advanced use.
+export const ALL_FIELDS: FieldDef[] = [
+  ...BASE_FIELDS,
+  ...ALL_FINANCIAL_FIELDS,
+];
+
 // ---- HELPER FUNCTIONS ----
 
 export function getFieldsForScreener(type: ScreenerType): FieldDef[] {
@@ -271,7 +289,6 @@ export function getNumericFields(type: ScreenerType): FieldDef[] {
   return getFieldsForScreener(type).filter(f => f.format !== 'text' && f.format !== 'date');
 }
 
-// Apply time interval suffix to a field name
 export function withInterval(fieldName: string, interval: string): string {
   if (!interval || interval === '1D') return fieldName;
   return `${fieldName}|${interval}`;

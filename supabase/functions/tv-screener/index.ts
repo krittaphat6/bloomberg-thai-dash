@@ -2,25 +2,77 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const MARKET_MAP: Record<string, string> = {
-  stock: "america",
-  crypto: "crypto",
-  forex: "forex",
-  bond: "bond",
-  futures: "america",
-  coin: "coin",
+// All supported market scan URLs for TradingView
+const STOCK_SCAN_URLS: Record<string, string> = {
+  america: "https://scanner.tradingview.com/america/scan",
+  canada: "https://scanner.tradingview.com/canada/scan",
+  mexico: "https://scanner.tradingview.com/mexico/scan",
+  uk: "https://scanner.tradingview.com/uk/scan",
+  germany: "https://scanner.tradingview.com/germany/scan",
+  france: "https://scanner.tradingview.com/france/scan",
+  italy: "https://scanner.tradingview.com/italy/scan",
+  spain: "https://scanner.tradingview.com/spain/scan",
+  switzerland: "https://scanner.tradingview.com/switzerland/scan",
+  netherlands: "https://scanner.tradingview.com/netherlands/scan",
+  belgium: "https://scanner.tradingview.com/belgium/scan",
+  sweden: "https://scanner.tradingview.com/sweden/scan",
+  norway: "https://scanner.tradingview.com/norway/scan",
+  denmark: "https://scanner.tradingview.com/denmark/scan",
+  finland: "https://scanner.tradingview.com/finland/scan",
+  poland: "https://scanner.tradingview.com/poland/scan",
+  russia: "https://scanner.tradingview.com/russia/scan",
+  austria: "https://scanner.tradingview.com/austria/scan",
+  portugal: "https://scanner.tradingview.com/portugal/scan",
+  greece: "https://scanner.tradingview.com/greece/scan",
+  ireland: "https://scanner.tradingview.com/ireland/scan",
+  iceland: "https://scanner.tradingview.com/iceland/scan",
+  hungary: "https://scanner.tradingview.com/hungary/scan",
+  czech: "https://scanner.tradingview.com/czech/scan",
+  romania: "https://scanner.tradingview.com/romania/scan",
+  japan: "https://scanner.tradingview.com/japan/scan",
+  china: "https://scanner.tradingview.com/china/scan",
+  hongkong: "https://scanner.tradingview.com/hongkong/scan",
+  india: "https://scanner.tradingview.com/india/scan",
+  korea: "https://scanner.tradingview.com/korea/scan",
+  taiwan: "https://scanner.tradingview.com/taiwan/scan",
+  singapore: "https://scanner.tradingview.com/singapore/scan",
+  thailand: "https://scanner.tradingview.com/thailand/scan",
+  malaysia: "https://scanner.tradingview.com/malaysia/scan",
+  indonesia: "https://scanner.tradingview.com/indonesia/scan",
+  philippines: "https://scanner.tradingview.com/philippines/scan",
+  vietnam: "https://scanner.tradingview.com/vietnam/scan",
+  pakistan: "https://scanner.tradingview.com/pakistan/scan",
+  bangladesh: "https://scanner.tradingview.com/bangladesh/scan",
+  srilanka: "https://scanner.tradingview.com/srilanka/scan",
+  australia: "https://scanner.tradingview.com/australia/scan",
+  newzealand: "https://scanner.tradingview.com/newzealand/scan",
+  brazil: "https://scanner.tradingview.com/brazil/scan",
+  argentina: "https://scanner.tradingview.com/argentina/scan",
+  chile: "https://scanner.tradingview.com/chile/scan",
+  colombia: "https://scanner.tradingview.com/colombia/scan",
+  peru: "https://scanner.tradingview.com/peru/scan",
+  israel: "https://scanner.tradingview.com/israel/scan",
+  turkey: "https://scanner.tradingview.com/turkey/scan",
+  saudi: "https://scanner.tradingview.com/saudi/scan",
+  uae: "https://scanner.tradingview.com/uae/scan",
+  qatar: "https://scanner.tradingview.com/qatar/scan",
+  kuwait: "https://scanner.tradingview.com/kuwait/scan",
+  bahrain: "https://scanner.tradingview.com/bahrain/scan",
+  egypt: "https://scanner.tradingview.com/egypt/scan",
+  southafrica: "https://scanner.tradingview.com/southafrica/scan",
+  nigeria: "https://scanner.tradingview.com/nigeria/scan",
+  kenya: "https://scanner.tradingview.com/kenya/scan",
 };
 
-const SCAN_TYPES: Record<string, string> = {
-  stock: "stock",
-  crypto: "crypto",
-  forex: "forex",
-  bond: "bond",
-  futures: "futures",
-  coin: "coin",
+const NON_STOCK_URLS: Record<string, string> = {
+  crypto: "https://scanner.tradingview.com/crypto/scan",
+  forex: "https://scanner.tradingview.com/forex/scan",
+  bond: "https://scanner.tradingview.com/bond/scan",
+  futures: "https://scanner.tradingview.com/america/scan",
+  coin: "https://scanner.tradingview.com/coin/scan",
 };
 
 const OPERATION_MAP: Record<string, string> = {
@@ -48,13 +100,19 @@ serve(async (req) => {
       filters = [],
       sort,
       range = [0, 150],
-      markets,
+      markets = [],
       search,
       index,
     } = body;
 
-    const market = MARKET_MAP[type] || "america";
-    const scanUrl = `https://scanner.tradingview.com/${market}/scan`;
+    // Determine scan URL based on type and market
+    let scanUrl: string;
+    if (type === "stock") {
+      const marketCode = markets.length > 0 ? markets[0] : "america";
+      scanUrl = STOCK_SCAN_URLS[marketCode] || STOCK_SCAN_URLS["america"];
+    } else {
+      scanUrl = NON_STOCK_URLS[type] || NON_STOCK_URLS["crypto"];
+    }
 
     // Build TradingView filter format
     const tvFilters = filters.map((f: any) => {
@@ -64,7 +122,7 @@ serve(async (req) => {
       };
 
       if (f.operator === "between" || f.operator === "not_between") {
-        filter.right = f.value; // array [min, max]
+        filter.right = f.value;
       } else if (f.operator === "isin") {
         filter.right = f.value;
         filter.operation = "in_range";
@@ -86,7 +144,7 @@ serve(async (req) => {
 
     // Add market filter for stocks
     if (type === "stock") {
-      tvBody.markets = markets || ["america"];
+      tvBody.markets = markets.length > 0 ? markets : ["america"];
       tvBody.symbols = { query: { types: [] } };
     }
 
@@ -100,7 +158,7 @@ serve(async (req) => {
       tvBody.filter2 = { operator: "and", operands: [{ operation: { operator: "match", operand: search } }] };
     }
 
-    console.log(`[tv-screener] Scanning ${type}, filters: ${tvFilters.length}, columns: ${columns.length}`);
+    console.log(`[tv-screener] Scanning ${type} @ ${scanUrl}, filters: ${tvFilters.length}, columns: ${columns.length}, markets: ${JSON.stringify(markets)}`);
 
     const tvResponse = await fetch(scanUrl, {
       method: "POST",
@@ -117,7 +175,6 @@ serve(async (req) => {
       const errorText = await tvResponse.text();
       console.error(`[tv-screener] TV API error ${tvResponse.status}: ${errorText}`);
       
-      // Fallback to mock data
       return new Response(JSON.stringify({
         data: [],
         totalCount: 0,

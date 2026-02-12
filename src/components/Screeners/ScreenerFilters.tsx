@@ -21,6 +21,7 @@ import {
   getPresetsForScreener,
   FieldPreset,
 } from '@/services/screener';
+import { MarketSelector } from './MarketSelector';
 
 interface ScreenerFiltersProps {
   type: ScreenerType;
@@ -54,6 +55,7 @@ const ScreenerFilters = ({ type, onSearch }: ScreenerFiltersProps) => {
   const [expandedCategory, setExpandedCategory] = useState<FieldCategory | null>('oscillator');
   const [selectedPreset, setSelectedPreset] = useState<string>('');
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+  const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
 
   const availableFields = useMemo(() => getNumericFields(type), [type]);
   const categories = useMemo(() => getCategoriesForScreener(type), [type]);
@@ -119,6 +121,11 @@ const ScreenerFilters = ({ type, onSearch }: ScreenerFiltersProps) => {
       screener.select(...selectedColumns);
     }
 
+    // Apply market filter
+    if (selectedMarkets.length > 0) {
+      screener.setMarkets(...selectedMarkets);
+    }
+
     onSearch(screener);
   };
 
@@ -128,10 +135,26 @@ const ScreenerFilters = ({ type, onSearch }: ScreenerFiltersProps) => {
 
   const categoryInfo = FIELD_CATEGORIES.filter(c => categories.includes(c.id));
 
+  const showMarketSelector = type === 'stock' || type === 'crypto' || type === 'coin' || type === 'futures';
+
   return (
     <div className="flex flex-col h-full">
       <ScrollArea className="flex-1">
         <div className="p-2.5 space-y-3">
+          {/* Market Selector */}
+          {showMarketSelector && (
+            <div className="space-y-1">
+              <Label className="text-[10px] font-mono text-muted-foreground">
+                Market / Exchange
+              </Label>
+              <MarketSelector
+                type={type}
+                selectedMarkets={selectedMarkets}
+                onMarketsChange={setSelectedMarkets}
+              />
+            </div>
+          )}
+
           {/* Active Filters */}
           {filters.length > 0 && (
             <div className="space-y-1.5">
@@ -171,7 +194,7 @@ const ScreenerFilters = ({ type, onSearch }: ScreenerFiltersProps) => {
           <div className="space-y-1">
             <Label className="text-[10px] font-mono text-muted-foreground">Search Fields ({availableFields.length}+)</Label>
             <Input
-              placeholder="Search RSI, MACD, SMA..."
+              placeholder="Search RSI, MACD, SMA, Revenue..."
               value={fieldSearch}
               onChange={e => setFieldSearch(e.target.value)}
               className="border-border text-[10px] font-mono h-7"
@@ -253,7 +276,7 @@ const ScreenerFilters = ({ type, onSearch }: ScreenerFiltersProps) => {
               </SelectContent>
             </Select>
 
-            <div className={`flex gap-1 ${operator === 'between' ? '' : ''}`}>
+            <div className={`flex gap-1`}>
               <Input
                 type="number"
                 placeholder={operator === 'between' ? 'Min...' : 'Value...'}
