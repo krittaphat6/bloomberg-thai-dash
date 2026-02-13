@@ -24,7 +24,8 @@ export type FieldCategory =
   | 'balance_sheet'
   | 'income_statement'
   | 'cash_flow'
-  | 'growth';
+  | 'growth'
+  | 'candlestick';
 
 export interface FieldDef {
   name: string;
@@ -60,14 +61,16 @@ export const FIELD_CATEGORIES: { id: FieldCategory; label: string; icon: string 
   { id: 'balance_sheet', label: 'Balance Sheet', icon: '🏦' },
   { id: 'income_statement', label: 'Income Statement', icon: '💰' },
   { id: 'cash_flow', label: 'Cash Flow', icon: '💸' },
-  { id: 'growth', label: 'Growth Metrics', icon: '📈' },
+  { id: 'growth', label: 'Growth & Ratios', icon: '📈' },
   { id: 'oscillator', label: 'Oscillators', icon: '📈' },
   { id: 'moving_average', label: 'Moving Averages', icon: '〰️' },
   { id: 'bollinger', label: 'Bollinger Bands', icon: '📉' },
   { id: 'pivot', label: 'Pivot Points', icon: '🎯' },
+  { id: 'candlestick', label: 'Candlestick Patterns', icon: '🕯️' },
   { id: 'performance', label: 'Performance', icon: '🏆' },
   { id: 'volatility', label: 'Volatility', icon: '⚡' },
   { id: 'recommendation', label: 'Recommendations', icon: '⭐' },
+  { id: 'technical', label: 'Other Technical', icon: '🔧' },
   { id: 'info', label: 'Info', icon: 'ℹ️' },
 ];
 
@@ -248,6 +251,100 @@ const BASE_FIELDS: FieldDef[] = [
   // ---- BOND-SPECIFIC ----
   { name: 'yield_recent', label: 'Yield', format: 'percent', category: 'price', screeners: ['bond'] },
   { name: 'coupon', label: 'Coupon', format: 'percent', category: 'price', screeners: ['bond'] },
+
+  // ---- CANDLESTICK PATTERNS ----
+  { name: 'Candle.Doji', label: 'Doji', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Hammer', label: 'Hammer', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.HangingMan', label: 'Hanging Man', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Engulfing.Bullish', label: 'Bullish Engulfing', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Engulfing.Bearish', label: 'Bearish Engulfing', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.MorningStar', label: 'Morning Star', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.EveningStar', label: 'Evening Star', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.ShootingStar', label: 'Shooting Star', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.InvertedHammer', label: 'Inverted Hammer', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.3BlackCrows', label: '3 Black Crows', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.3WhiteSoldiers', label: '3 White Soldiers', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Harami.Bullish', label: 'Bullish Harami', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Harami.Bearish', label: 'Bearish Harami', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Doji.Dragonfly', label: 'Dragonfly Doji', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Doji.Gravestone', label: 'Gravestone Doji', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Marubozu.White', label: 'White Marubozu', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Marubozu.Black', label: 'Black Marubozu', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Kicking.Bullish', label: 'Bullish Kicking', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.Kicking.Bearish', label: 'Bearish Kicking', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.TriStar.Bullish', label: 'Bullish Tri-Star', format: 'number', category: 'candlestick', screeners: EQUITY },
+  { name: 'Candle.TriStar.Bearish', label: 'Bearish Tri-Star', format: 'number', category: 'candlestick', screeners: EQUITY },
+
+  // ---- ADDITIONAL TECHNICAL (from tvscreener) ----
+  { name: 'Aroon.Up', label: 'Aroon Up (14)', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'Aroon.Down', label: 'Aroon Down (14)', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'ROC', label: 'Rate of Change (9)', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'BBPower', label: 'Bull Bear Power', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'Stoch.RSI.K', label: 'Stochastic RSI Fast', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'Stoch.RSI.D', label: 'Stochastic RSI Slow', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'MoneyFlow', label: 'Money Flow (14)', format: 'number', category: 'oscillator', screeners: EQUITY },
+  { name: 'ChaikinMoneyFlow', label: 'Chaikin Money Flow (20)', format: 'number', category: 'oscillator', screeners: EQUITY },
+  { name: 'VWAP', label: 'VWAP', format: 'number', category: 'oscillator', screeners: NO_BOND },
+  { name: 'P.SAR', label: 'Parabolic SAR', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'ADR', label: 'Average Day Range (14)', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'DonchCh20.Upper', label: 'Donchian Upper (20)', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'DonchCh20.Lower', label: 'Donchian Lower (20)', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'KltChnl.upper', label: 'Keltner Upper (20)', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'KltChnl.lower', label: 'Keltner Lower (20)', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'Value.Traded', label: 'Volume × Price', format: 'number', category: 'volume', screeners: ALL },
+
+  // ---- CHANGE BY TIMEFRAME ----
+  { name: 'change_from_open', label: 'Change from Open %', format: 'percent', category: 'price', screeners: EQUITY },
+  { name: 'change_from_open_abs', label: 'Change from Open', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'change.1', label: 'Change 1m %', format: 'percent', category: 'price', screeners: EQUITY },
+  { name: 'change.5', label: 'Change 5m %', format: 'percent', category: 'price', screeners: EQUITY },
+  { name: 'change.15', label: 'Change 15m %', format: 'percent', category: 'price', screeners: EQUITY },
+  { name: 'change.60', label: 'Change 1h %', format: 'percent', category: 'price', screeners: EQUITY },
+  { name: 'change.240', label: 'Change 4h %', format: 'percent', category: 'price', screeners: EQUITY },
+  { name: 'change.1W', label: 'Change 1W', format: 'percent', category: 'price', screeners: EQUITY },
+  { name: 'change.1M', label: 'Change 1M', format: 'percent', category: 'price', screeners: EQUITY },
+
+  // ---- HIGH/LOW BY PERIOD ----
+  { name: 'High.All', label: 'All Time High', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'Low.All', label: 'All Time Low', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'High.1M', label: '1-Month High', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'Low.1M', label: '1-Month Low', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'High.3M', label: '3-Month High', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'Low.3M', label: '3-Month Low', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'High.6M', label: '6-Month High', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'Low.6M', label: '6-Month Low', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'price_52_week_high', label: '52W High', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'price_52_week_low', label: '52W Low', format: 'currency', category: 'price', screeners: EQUITY },
+
+  // ---- PIVOT WOODIE & DEMARK ----
+  { name: 'Pivot.M.Woodie.Middle', label: 'Woodie Pivot', format: 'number', category: 'pivot', screeners: ALL },
+  { name: 'Pivot.M.Woodie.R1', label: 'Woodie R1', format: 'number', category: 'pivot', screeners: ALL },
+  { name: 'Pivot.M.Woodie.R2', label: 'Woodie R2', format: 'number', category: 'pivot', screeners: ALL },
+  { name: 'Pivot.M.Woodie.R3', label: 'Woodie R3', format: 'number', category: 'pivot', screeners: ALL },
+  { name: 'Pivot.M.Woodie.S1', label: 'Woodie S1', format: 'number', category: 'pivot', screeners: ALL },
+  { name: 'Pivot.M.Woodie.S2', label: 'Woodie S2', format: 'number', category: 'pivot', screeners: ALL },
+  { name: 'Pivot.M.Woodie.S3', label: 'Woodie S3', format: 'number', category: 'pivot', screeners: ALL },
+  { name: 'Pivot.M.Demark.Middle', label: 'DeMark Pivot', format: 'number', category: 'pivot', screeners: ALL },
+  { name: 'Pivot.M.Demark.R1', label: 'DeMark R1', format: 'number', category: 'pivot', screeners: ALL },
+  { name: 'Pivot.M.Demark.S1', label: 'DeMark S1', format: 'number', category: 'pivot', screeners: ALL },
+
+  // ---- ICHIMOKU LEADING SPANS ----
+  { name: 'Ichimoku.Lead1', label: 'Ichimoku Leading Span A', format: 'number', category: 'oscillator', screeners: ALL },
+  { name: 'Ichimoku.Lead2', label: 'Ichimoku Leading Span B', format: 'number', category: 'oscillator', screeners: ALL },
+
+  // ---- PRE/POST MARKET EXTRAS ----
+  { name: 'premarket_open', label: 'Pre-Market Open', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'premarket_high', label: 'Pre-Market High', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'premarket_low', label: 'Pre-Market Low', format: 'currency', category: 'price', screeners: EQUITY },
+  { name: 'premarket_volume', label: 'Pre-Market Volume', format: 'number', category: 'price', screeners: EQUITY },
+  { name: 'premarket_gap', label: 'Pre-Market Gap %', format: 'percent', category: 'price', screeners: EQUITY },
+
+  // ---- ADDITIONAL INFO ----
+  { name: 'logoid', label: 'Logo ID', format: 'text', category: 'info', screeners: ALL },
+  { name: 'fundamental_currency_code', label: 'Fundamental Currency', format: 'text', category: 'info', screeners: EQUITY },
+  { name: 'number_of_shareholders', label: 'Shareholders', format: 'number', category: 'info', screeners: EQUITY },
+  { name: 'earnings_release_next_date', label: 'Next Earnings Date', format: 'date', category: 'earnings', screeners: EQUITY },
+  { name: 'relative_volume_intraday.5', label: 'Rel. Volume at Time', format: 'number', category: 'volume', screeners: EQUITY },
 ];
 
 // Import and merge financial fields
