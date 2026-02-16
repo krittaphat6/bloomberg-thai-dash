@@ -47,6 +47,7 @@ import CorrelationMatrixTable from './CorrelationMatrixTable';
 import CVDChart from './CVDChart';
 import TopNews from './TopNews';
 import { BloombergMap } from './BloombergMap';
+import { WorldMonitorDashboard } from './WorldMonitor/WorldMonitorDashboard';
 import MonteCarloSimulator from './MonteCarloSimulator';
 import AbleHF40Modules from './AbleHF40Modules';
 import { FaceSearch } from './FaceSearch';
@@ -500,11 +501,11 @@ const MarketData = () => {
     { 
       id: 'bloomberg-map', 
       title: '🌐 GLOBAL MAP', 
-      component: <BloombergMap />,
+      component: <WorldMonitorDashboard />,
       category: 'global',
       icon: <Globe className="w-5 h-5" />,
-      description: 'Bloomberg-style interactive world map with real-time earthquakes, markets, and more',
-      tags: ['map', 'global', 'earthquake', 'markets', 'bloomberg', 'world']
+      description: 'World Monitor Intelligence Dashboard with real-time global threat analysis',
+      tags: ['map', 'global', 'earthquake', 'markets', 'intelligence', 'world', 'monitor']
     },
     
     // Entertainment
