@@ -155,7 +155,7 @@ async function generateWorldBrief(disasters: any[], earthquakes: any[], eonet: a
       return generateFallbackBrief(disasters, earthquakes, eonet, protests, fires);
     }
 
-    const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const res = await fetch('https://api.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
