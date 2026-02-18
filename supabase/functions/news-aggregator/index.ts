@@ -1932,6 +1932,78 @@ function generateFallbackAnalysis(news: RawNewsItem[], symbols: string[]): Macro
   });
 }
 
+// ✅ NEW: WorldMonitor Intelligence Sources - GDELT, Defense, Think Tanks, Crisis, Government, Regional
+
+// Generic Google News RSS fetcher (reusable for worldmonitor feeds)
+async function fetchGoogleNewsFeed(query: string, sourceName: string, category: string, maxItems = 12): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch(`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`, {
+      headers: { 'User-Agent': 'AbleTerminal/3.0' }
+    });
+    if (!response.ok) return [];
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    for (let i = 0; i < Math.min(itemMatches.length, maxItems); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment, keyTriggers } = analyzeContextualSentiment(title);
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `${sourceName.toLowerCase().replace(/\s/g, '-')}-${i}-${timestamp}`,
+            title, description: '', url: linkMatch ? linkMatch[1].trim() : '#',
+            source: sourceName, category, publishedAt: new Date(timestamp).toISOString(),
+            timestamp, ageText: getNewsAgeText(timestamp), sentiment,
+            importance: keyTriggers.length > 0 ? 'high' : 'medium',
+            relatedAssets: matchAssets(title)
+          });
+        }
+      }
+    }
+    return items;
+  } catch { return []; }
+}
+
+// Generic RSS feed fetcher
+async function fetchRSSFeed(url: string, sourceName: string, category: string, maxItems = 12): Promise<RawNewsItem[]> {
+  try {
+    const response = await fetch(url, { headers: { 'User-Agent': 'AbleTerminal/3.0' } });
+    if (!response.ok) return [];
+    const text = await response.text();
+    const items: RawNewsItem[] = [];
+    const itemMatches = text.match(/<item>[\s\S]*?<\/item>/g) || [];
+    for (let i = 0; i < Math.min(itemMatches.length, maxItems); i++) {
+      const item = itemMatches[i];
+      const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+      const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+      const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+      const descMatch = item.match(/<description>([\s\S]*?)<\/description>/);
+      if (titleMatch) {
+        const title = titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+        const description = descMatch ? descMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]*>/g, '').trim() : '';
+        const timestamp = dateMatch ? new Date(dateMatch[1].trim()).getTime() : Date.now();
+        const { sentiment, keyTriggers } = analyzeContextualSentiment(title + ' ' + description);
+        if (isNewsFresh(timestamp)) {
+          items.push({
+            id: `${sourceName.toLowerCase().replace(/\s/g, '-')}-${i}-${timestamp}`,
+            title, description: description.substring(0, 300), fullContent: description,
+            url: linkMatch ? linkMatch[1].trim() : '#', source: sourceName, category,
+            publishedAt: new Date(timestamp).toISOString(), timestamp, ageText: getNewsAgeText(timestamp),
+            sentiment, importance: keyTriggers.length > 0 ? 'high' : 'medium',
+            relatedAssets: matchAssets(title + ' ' + description)
+          });
+        }
+      }
+    }
+    return items;
+  } catch { return []; }
+}
+
 // ============================================
 // MAIN HANDLER
 // ============================================
@@ -1942,7 +2014,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log('🚀 ABLE-HF 4.0 Enhanced News Aggregator (50+ sources)...');
+    console.log('🚀 ABLE-HF 4.0 Enhanced News Aggregator (120+ sources)...');
     const startTime = Date.now();
     
     let pinnedAssets: string[] = [];
@@ -1952,9 +2024,9 @@ serve(async (req) => {
     } catch {}
     
     console.log(`📌 Assets: ${pinnedAssets.join(', ') || 'default'}`);
-    console.log('📡 Fetching 80+ global news sources...');
+    console.log('📡 Fetching 120+ global news sources (WorldMonitor integrated)...');
     
-    // ✅ EXPANDED: 80+ sources in parallel - GLOBAL COVERAGE
+    // ✅ EXPANDED: 120+ sources in parallel - GLOBAL + WORLDMONITOR COVERAGE
     const [
       // ✅ Real News APIs
       gNewsGold, gNewsForex, gNewsCrypto, gNewsTariff, gNewsEconomy, gNewsCentralBanks,
@@ -1981,7 +2053,10 @@ serve(async (req) => {
       marketNews, econCalendar,
       
       // Geopolitical (3)
-      tradeWarNews, geoRiskNews, centralBankNews
+      tradeWarNews, geoRiskNews, centralBankNews,
+      
+      // WorldMonitor Intelligence Sources (rest)
+      ...wmSources
     ] = await Promise.all([
       // ✅ Real APIs (if keys configured)
       fetchGNews('gold price XAUUSD', 'Gold'),
@@ -2050,8 +2125,70 @@ serve(async (req) => {
       // Geopolitical (3)
       fetchTradeWarNews(),
       fetchGeopoliticalRiskNews(),
-      fetchCentralBankWatch()
+      fetchCentralBankWatch(),
+      
+      // ✅ NEW: WorldMonitor Intelligence Sources (40+)
+      // Defense & Military
+      fetchGoogleNewsFeed('site:defensenews.com when:2d', 'Defense News', 'Defense'),
+      fetchGoogleNewsFeed('site:breakingdefense.com when:2d', 'Breaking Defense', 'Defense'),
+      fetchRSSFeed('https://www.thedrive.com/the-war-zone/feed', 'The War Zone', 'Defense'),
+      fetchGoogleNewsFeed('NATO OR military deployment OR defense spending when:2d', 'Military Intel', 'Defense'),
+      
+      // Think Tanks & Policy  
+      fetchRSSFeed('https://foreignpolicy.com/feed/', 'Foreign Policy', 'Think Tank'),
+      fetchRSSFeed('https://www.foreignaffairs.com/rss.xml', 'Foreign Affairs', 'Think Tank'),
+      fetchGoogleNewsFeed('site:csis.org when:7d', 'CSIS', 'Think Tank'),
+      fetchGoogleNewsFeed('site:brookings.edu when:7d', 'Brookings', 'Think Tank'),
+      fetchGoogleNewsFeed('site:rand.org when:7d', 'RAND', 'Think Tank'),
+      fetchGoogleNewsFeed('site:carnegieendowment.org when:7d', 'Carnegie', 'Think Tank'),
+      fetchRSSFeed('https://warontherocks.com/feed', 'War on the Rocks', 'Defense Analysis'),
+      fetchRSSFeed('https://responsiblestatecraft.org/feed/', 'Responsible Statecraft', 'Policy'),
+      fetchRSSFeed('https://www.aei.org/feed/', 'AEI', 'Think Tank'),
+      
+      // Government & International Orgs
+      fetchGoogleNewsFeed('site:whitehouse.gov', 'White House', 'Government'),
+      fetchGoogleNewsFeed('site:state.gov OR "State Department"', 'State Dept', 'Government'),
+      fetchGoogleNewsFeed('site:defense.gov OR Pentagon', 'Pentagon', 'Government'),
+      fetchRSSFeed('https://www.federalreserve.gov/feeds/press_all.xml', 'Federal Reserve', 'Central Bank'),
+      fetchRSSFeed('https://www.sec.gov/news/pressreleases.rss', 'SEC', 'Regulation'),
+      fetchRSSFeed('https://www.who.int/rss-feeds/news-english.xml', 'WHO', 'Health'),
+      fetchGoogleNewsFeed('site:unhcr.org OR UNHCR refugees when:3d', 'UNHCR', 'Humanitarian'),
+      fetchRSSFeed('https://www.iaea.org/feeds/topnews', 'IAEA', 'Nuclear'),
+      
+      // Crisis & Conflict
+      fetchRSSFeed('https://www.crisisgroup.org/rss', 'CrisisWatch', 'Crisis'),
+      fetchGoogleNewsFeed('site:kyivindependent.com when:3d', 'Kyiv Independent', 'Ukraine'),
+      fetchRSSFeed('https://www.themoscowtimes.com/rss/news', 'Moscow Times', 'Russia'),
+      
+      // Regional Coverage
+      fetchRSSFeed('https://feeds.bbci.co.uk/news/world/middle_east/rss.xml', 'BBC Middle East', 'Middle East'),
+      fetchRSSFeed('https://feeds.bbci.co.uk/news/world/africa/rss.xml', 'BBC Africa', 'Africa'),
+      fetchRSSFeed('https://feeds.bbci.co.uk/news/world/latin_america/rss.xml', 'BBC Latin America', 'Latin America'),
+      fetchRSSFeed('https://feeds.bbci.co.uk/news/world/asia/rss.xml', 'BBC Asia', 'Asia'),
+      fetchRSSFeed('https://www.theguardian.com/world/rss', 'Guardian World', 'World'),
+      fetchRSSFeed('https://www.theguardian.com/world/middleeast/rss', 'Guardian ME', 'Middle East'),
+      fetchGoogleNewsFeed('site:reuters.com world geopolitics when:2d', 'Reuters World', 'World'),
+      fetchGoogleNewsFeed('site:apnews.com when:1d', 'AP News', 'Wire'),
+      fetchRSSFeed('http://rss.cnn.com/rss/cnn_world.rss', 'CNN World', 'World'),
+      fetchRSSFeed('https://feeds.npr.org/1001/rss.xml', 'NPR News', 'World'),
+      fetchRSSFeed('https://thediplomat.com/feed/', 'The Diplomat', 'Asia-Pacific'),
+      fetchGoogleNewsFeed('site:politico.com when:1d', 'Politico', 'Politics'),
+      
+      // Energy & Resources
+      fetchGoogleNewsFeed('oil price OR OPEC OR "natural gas" OR pipeline OR LNG when:2d', 'Energy Intel', 'Energy'),
+      fetchGoogleNewsFeed('"nuclear energy" OR uranium OR IAEA when:3d', 'Nuclear Energy', 'Energy'),
+      fetchGoogleNewsFeed('lithium OR "rare earth" OR cobalt OR mining when:3d', 'Mining Resources', 'Resources'),
+      
+      // Africa & Sahel
+      fetchGoogleNewsFeed('Sahel OR Mali OR Niger OR "Burkina Faso" OR Wagner when:3d', 'Sahel Crisis', 'Africa'),
+      
+      // Cyber & Security
+      fetchGoogleNewsFeed('cybersecurity OR "data breach" OR ransomware OR APT when:2d', 'Cyber Threats', 'Security'),
     ]);
+
+    // Flatten worldmonitor sources
+    const worldMonitorNews = wmSources.flat();
+    console.log(`🌍 WorldMonitor sources: ${worldMonitorNews.length} articles from ${wmSources.filter((s: any[]) => s.length > 0).length} feeds`);
 
     let allNews = [
       // ✅ Premium RSS Sources first (highest quality)
@@ -2079,12 +2216,15 @@ serve(async (req) => {
       ...marketNews, ...econCalendar,
       
       // Geopolitical
-      ...tradeWarNews, ...geoRiskNews, ...centralBankNews
+      ...tradeWarNews, ...geoRiskNews, ...centralBankNews,
+      
+      // ✅ WorldMonitor Intelligence Sources
+      ...worldMonitorNews,
     ];
 
     const freshNews = allNews.filter(item => isNewsFresh(item.timestamp));
 
-    console.log(`\n📊 News Report:\n   Total fetched: ${allNews.length}\n   Fresh (24h): ${freshNews.length}\n   Sources: 80+\n    `);
+    console.log(`\n📊 News Report:\n   Total fetched: ${allNews.length}\n   Fresh (24h): ${freshNews.length}\n   Sources: 120+ (incl. WorldMonitor)\n    `);
 
     const newsToAnalyze = freshNews.length >= MIN_FRESH_NEWS_COUNT ? freshNews : allNews;
 
@@ -2161,7 +2301,7 @@ serve(async (req) => {
     const processingTime = Date.now() - startTime;
     console.log(`✅ Total: ${processingTime}ms`);
 
-    // ✅ Dynamic sources count - 80+ sources
+    // ✅ Dynamic sources count - 120+ sources (WorldMonitor integrated)
     const activeSources: string[] = [];
     
     // Premium RSS Sources
@@ -2209,6 +2349,12 @@ serve(async (req) => {
     if (tradeWarNews.length > 0) activeSources.push('🌍 TradeWatch');
     if (geoRiskNews.length > 0) activeSources.push('⚔️ GeoRisk');
     if (centralBankNews.length > 0) activeSources.push('🏦 CentralBank');
+    
+    // ✅ WorldMonitor Intelligence Sources
+    if (worldMonitorNews.length > 0) {
+      const wmSourceNames = [...new Set(worldMonitorNews.map((n: any) => n.source))];
+      wmSourceNames.forEach(name => activeSources.push(`🌐 ${name}`));
+    }
     
     const newsMetadata = {
       totalFetched: allNews.length,

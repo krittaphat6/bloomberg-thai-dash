@@ -22,6 +22,7 @@ export class MCPServer {
     this.registerTradingTools();
     this.registerNoteTools();
     this.registerMarketTools();
+    this.registerWorldMonitorTools();
 
     this.isInitialized = true;
     console.log('MCP Server initialized with', this.tools.size, 'tools');
@@ -383,6 +384,165 @@ export class MCPServer {
             totalValue: Math.floor(positionSize) * entryPrice
           }
         };
+      }
+    });
+  }
+
+  private registerWorldMonitorTools(): void {
+    // Tool: Get full world intelligence data
+    this.registerTool({
+      name: 'get_world_intelligence',
+      description: 'ดึงข้อมูลข่าวกรองโลกทั้งหมด: ภัยพิบัติ แผ่นดินไหว ไฟป่า ประท้วง อินเทอร์เน็ตขัดข้อง พร้อม AI World Brief',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async () => {
+        try {
+          const { worldMonitorService } = await import('@/services/WorldMonitorService');
+          const data = await worldMonitorService.fetchIntelligence();
+          return {
+            success: true,
+            worldBrief: data.worldBrief,
+            summary: {
+              disasters: data.disasters.length,
+              earthquakes: data.earthquakes.length,
+              eonet: data.eonet.length,
+              protests: data.protests.length,
+              fires: data.fires.length,
+              outages: data.outages.length,
+            },
+            timestamp: data.timestamp,
+            sources: data.sources,
+            topDisasters: data.disasters.slice(0, 5),
+            topEarthquakes: data.earthquakes.sort((a: any, b: any) => (b.mag || 0) - (a.mag || 0)).slice(0, 5),
+            topProtests: data.protests.slice(0, 5),
+          };
+        } catch (error) {
+          return { success: false, error: 'Failed to fetch world intelligence' };
+        }
+      }
+    });
+
+    // Tool: Get Country Instability Index
+    this.registerTool({
+      name: 'get_country_instability',
+      description: 'ดึง Country Instability Index (CII) - ดัชนีความไม่เสถียรของประเทศต่างๆ ทั่วโลก จัดลำดับจากสูงไปต่ำ',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'จำนวนประเทศที่ต้องการ (default: 10)' }
+        },
+        required: []
+      },
+      handler: async (params) => {
+        try {
+          const { worldMonitorService } = await import('@/services/WorldMonitorService');
+          const intelligence = await worldMonitorService.fetchIntelligence();
+          const cii = worldMonitorService.computeCII(intelligence);
+          const limit = params.limit || 10;
+          return {
+            success: true,
+            countries: cii.slice(0, limit).map(c => ({
+              name: c.country.name,
+              code: c.country.code,
+              region: c.country.region,
+              score: c.score,
+              trend: c.trend,
+              factors: c.factors,
+              baselineRisk: c.country.baselineRisk,
+            })),
+            total: cii.length,
+          };
+        } catch (error) {
+          return { success: false, error: 'Failed to compute CII' };
+        }
+      }
+    });
+
+    // Tool: Get Strategic Theater Posture
+    this.registerTool({
+      name: 'get_theater_posture',
+      description: 'ดึงสถานะท่าทีเชิงยุทธศาสตร์ของ 9 พื้นที่ทั่วโลก (อ่าวเปอร์เซีย, ช่องแคบไต้หวัน, ทะเลจีนใต้ ฯลฯ)',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async () => {
+        try {
+          const { worldMonitorService } = await import('@/services/WorldMonitorService');
+          const intelligence = await worldMonitorService.fetchIntelligence();
+          const theaters = worldMonitorService.computeTheaterPosture(intelligence);
+          return {
+            success: true,
+            theaters: theaters.map(t => ({
+              name: t.name,
+              region: t.region,
+              level: t.level,
+              score: t.score,
+              triggers: t.triggers,
+            })),
+          };
+        } catch (error) {
+          return { success: false, error: 'Failed to compute theater posture' };
+        }
+      }
+    });
+
+    // Tool: Detect geographic convergence
+    this.registerTool({
+      name: 'detect_convergence',
+      description: 'ตรวจจับจุดที่มีสัญญาณข่าวกรองซ้อนทับกัน (แผ่นดินไหว+ประท้วง+ภัยพิบัติ ในพื้นที่เดียวกัน)',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      handler: async () => {
+        try {
+          const { worldMonitorService } = await import('@/services/WorldMonitorService');
+          const intelligence = await worldMonitorService.fetchIntelligence();
+          const convergence = worldMonitorService.detectConvergence(intelligence);
+          return {
+            success: true,
+            hotspots: convergence,
+            count: convergence.length,
+          };
+        } catch (error) {
+          return { success: false, error: 'Failed to detect convergence' };
+        }
+      }
+    });
+
+    // Tool: Get strategic assets data
+    this.registerTool({
+      name: 'get_strategic_assets',
+      description: 'ดึงข้อมูลสินทรัพย์เชิงยุทธศาสตร์: ฐานทัพ, โรงไฟฟ้านิวเคลียร์, สายเคเบิลใต้น้ำ, ท่อส่งน้ำมัน, จุดคอขวด',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', description: 'ประเภท: military_bases, nuclear, cables, pipelines, chokepoints, conflicts, hotspots' }
+        },
+        required: ['type']
+      },
+      handler: async (params) => {
+        try {
+          const { worldMonitorService } = await import('@/services/WorldMonitorService');
+          switch (params.type) {
+            case 'military_bases': return { success: true, data: worldMonitorService.getMilitaryBases().slice(0, 20) };
+            case 'nuclear': return { success: true, data: worldMonitorService.getNuclearFacilities().slice(0, 20) };
+            case 'cables': return { success: true, data: worldMonitorService.getUnderseaCables().slice(0, 20) };
+            case 'pipelines': return { success: true, data: worldMonitorService.getPipelines().slice(0, 20) };
+            case 'chokepoints': return { success: true, data: worldMonitorService.getChokepoints() };
+            case 'conflicts': return { success: true, data: worldMonitorService.getConflictZones() };
+            case 'hotspots': return { success: true, data: worldMonitorService.getHotspots() };
+            default: return { success: false, error: 'Unknown type. Use: military_bases, nuclear, cables, pipelines, chokepoints, conflicts, hotspots' };
+          }
+        } catch (error) {
+          return { success: false, error: 'Failed to get strategic assets' };
+        }
       }
     });
   }
