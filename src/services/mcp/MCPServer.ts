@@ -23,6 +23,8 @@ export class MCPServer {
     this.registerNoteTools();
     this.registerMarketTools();
     this.registerWorldMonitorTools();
+    this.registerOpenClawTools();
+    this.registerNewsTools();
 
     this.isInitialized = true;
     console.log('MCP Server initialized with', this.tools.size, 'tools');
@@ -86,6 +88,9 @@ export class MCPServer {
     }
   }
 
+  // ═══════════════════════════════════════════
+  // COT Tools
+  // ═══════════════════════════════════════════
   private registerCOTTools(): void {
     this.registerTool({
       name: 'get_cot_data',
@@ -103,61 +108,29 @@ export class MCPServer {
         const { asset, startDate, endDate } = params;
         const start = startDate ? new Date(startDate) : new Date(new Date().setFullYear(new Date().getFullYear() - 1));
         const end = endDate ? new Date(endDate) : new Date();
-
         const data = await this.fetchCOTData(asset, start, end);
-
-        return {
-          success: true,
-          data: data.slice(-10),
-          count: data.length,
-          latest: data[data.length - 1]
-        };
+        return { success: true, data: data.slice(-10), count: data.length, latest: data[data.length - 1] };
       }
     });
 
     this.registerTool({
       name: 'analyze_cot',
       description: 'Analyze COT data and provide insights',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          asset: { type: 'string', description: 'Asset name' }
-        },
-        required: ['asset']
-      },
+      inputSchema: { type: 'object', properties: { asset: { type: 'string' } }, required: ['asset'] },
       handler: async (params) => {
-        const { asset } = params;
-        const data = await this.fetchCOTData(
-          asset,
-          new Date(new Date().setFullYear(new Date().getFullYear() - 1)),
-          new Date()
-        );
-
-        if (!data || data.length === 0) {
-          return { success: false, error: 'No data available' };
-        }
-
+        const data = await this.fetchCOTData(params.asset, new Date(new Date().setFullYear(new Date().getFullYear() - 1)), new Date());
+        if (!data || data.length === 0) return { success: false, error: 'No data available' };
         const latest = data[data.length - 1];
         const nets = data.map((d: any) => d.nonCommercialNet);
         const min = Math.min(...nets);
         const max = Math.max(...nets);
         const cotIndex = max === min ? 50 : ((latest.nonCommercialNet - min) / (max - min)) * 100;
-
         return {
           success: true,
           analysis: {
-            cotIndex,
-            sentiment: cotIndex > 70 ? 'Extremely Bullish' :
-                       cotIndex > 50 ? 'Bullish' :
-                       cotIndex < 30 ? 'Extremely Bearish' : 'Bearish',
-            largeTraders: {
-              net: latest.nonCommercialNet,
-              direction: latest.nonCommercialNet > 0 ? 'Long' : 'Short'
-            },
-            commercial: {
-              net: latest.commercialNet,
-              direction: latest.commercialNet > 0 ? 'Long' : 'Short'
-            },
+            cotIndex, sentiment: cotIndex > 70 ? 'Extremely Bullish' : cotIndex > 50 ? 'Bullish' : cotIndex < 30 ? 'Extremely Bearish' : 'Bearish',
+            largeTraders: { net: latest.nonCommercialNet, direction: latest.nonCommercialNet > 0 ? 'Long' : 'Short' },
+            commercial: { net: latest.commercialNet, direction: latest.commercialNet > 0 ? 'Long' : 'Short' },
             openInterest: latest.openInterest,
             interpretation: this.interpretCOT(cotIndex, latest)
           }
@@ -168,76 +141,50 @@ export class MCPServer {
     this.registerTool({
       name: 'get_cot_assets',
       description: 'Get list of available COT assets',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
-      handler: async () => {
-        const defaultAssets = [
-          'GOLD - COMMODITY EXCHANGE INC.',
-          'SILVER - COMMODITY EXCHANGE INC.',
-          'CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE',
-          'EURO FX - CHICAGO MERCANTILE EXCHANGE',
-          'JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE',
-          'BRITISH POUND - CHICAGO MERCANTILE EXCHANGE',
-          'E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE',
-          'BITCOIN - CHICAGO MERCANTILE EXCHANGE'
-        ];
-        return { success: true, assets: defaultAssets };
-      }
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async () => ({
+        success: true,
+        assets: [
+          'GOLD - COMMODITY EXCHANGE INC.', 'SILVER - COMMODITY EXCHANGE INC.',
+          'CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE', 'EURO FX - CHICAGO MERCANTILE EXCHANGE',
+          'JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE', 'BRITISH POUND - CHICAGO MERCANTILE EXCHANGE',
+          'E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE', 'BITCOIN - CHICAGO MERCANTILE EXCHANGE'
+        ]
+      })
     });
   }
 
+  // ═══════════════════════════════════════════
+  // Trading Tools
+  // ═══════════════════════════════════════════
   private registerTradingTools(): void {
     this.registerTool({
       name: 'get_trades',
       description: 'Get user trading history',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: { type: 'number', description: 'Number of trades to return' }
-        },
-        required: []
-      },
+      inputSchema: { type: 'object', properties: { limit: { type: 'number' } }, required: [] },
       handler: async (params) => {
         const trades = JSON.parse(localStorage.getItem('trades') || '[]');
-        return {
-          success: true,
-          trades: trades.slice(0, params.limit || 10),
-          total: trades.length
-        };
+        return { success: true, trades: trades.slice(0, params.limit || 10), total: trades.length };
       }
     });
 
     this.registerTool({
       name: 'analyze_performance',
       description: 'Analyze trading performance metrics',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
+      inputSchema: { type: 'object', properties: {}, required: [] },
       handler: async () => {
         const trades = JSON.parse(localStorage.getItem('trades') || '[]');
-        const winningTrades = trades.filter((t: any) => (t.pnl || 0) > 0);
-        const losingTrades = trades.filter((t: any) => (t.pnl || 0) < 0);
-        const totalPnL = trades.reduce((sum: number, t: any) => sum + (t.pnl || 0), 0);
-
+        const winning = trades.filter((t: any) => (t.pnl || 0) > 0);
+        const losing = trades.filter((t: any) => (t.pnl || 0) < 0);
+        const totalPnL = trades.reduce((s: number, t: any) => s + (t.pnl || 0), 0);
         return {
           success: true,
           metrics: {
-            totalTrades: trades.length,
-            winningTrades: winningTrades.length,
-            losingTrades: losingTrades.length,
-            winRate: trades.length > 0 ? ((winningTrades.length / trades.length) * 100).toFixed(2) + '%' : '0%',
+            totalTrades: trades.length, winningTrades: winning.length, losingTrades: losing.length,
+            winRate: trades.length > 0 ? ((winning.length / trades.length) * 100).toFixed(2) + '%' : '0%',
             totalPnL,
-            averageWin: winningTrades.length > 0
-              ? winningTrades.reduce((sum: number, t: any) => sum + (t.pnl || 0), 0) / winningTrades.length
-              : 0,
-            averageLoss: losingTrades.length > 0
-              ? losingTrades.reduce((sum: number, t: any) => sum + Math.abs(t.pnl || 0), 0) / losingTrades.length
-              : 0
+            averageWin: winning.length > 0 ? winning.reduce((s: number, t: any) => s + (t.pnl || 0), 0) / winning.length : 0,
+            averageLoss: losing.length > 0 ? losing.reduce((s: number, t: any) => s + Math.abs(t.pnl || 0), 0) / losing.length : 0
           }
         };
       }
@@ -249,23 +196,17 @@ export class MCPServer {
       inputSchema: {
         type: 'object',
         properties: {
-          symbol: { type: 'string', description: 'Trading symbol' },
-          direction: { type: 'string', description: 'Long or Short' },
-          entryPrice: { type: 'number', description: 'Entry price' },
-          exitPrice: { type: 'number', description: 'Exit price' },
-          quantity: { type: 'number', description: 'Trade quantity' }
+          symbol: { type: 'string' }, direction: { type: 'string' },
+          entryPrice: { type: 'number' }, exitPrice: { type: 'number' }, quantity: { type: 'number' }
         },
         required: ['symbol', 'direction', 'entryPrice']
       },
       handler: async (params) => {
         const trades = JSON.parse(localStorage.getItem('trades') || '[]');
         const newTrade = {
-          id: Date.now().toString(),
-          ...params,
-          createdAt: new Date().toISOString(),
+          id: Date.now().toString(), ...params, createdAt: new Date().toISOString(),
           pnl: params.exitPrice && params.quantity
-            ? (params.exitPrice - params.entryPrice) * params.quantity * (params.direction === 'Long' ? 1 : -1)
-            : 0
+            ? (params.exitPrice - params.entryPrice) * params.quantity * (params.direction === 'Long' ? 1 : -1) : 0
         };
         trades.push(newTrade);
         localStorage.setItem('trades', JSON.stringify(trades));
@@ -274,17 +215,14 @@ export class MCPServer {
     });
   }
 
+  // ═══════════════════════════════════════════
+  // Note Tools
+  // ═══════════════════════════════════════════
   private registerNoteTools(): void {
     this.registerTool({
       name: 'search_notes',
       description: 'Search user notes by title or content',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Search query' }
-        },
-        required: ['query']
-      },
+      inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
       handler: async (params) => {
         const notes = JSON.parse(localStorage.getItem('notes') || '[]');
         const results = notes.filter((n: any) =>
@@ -298,22 +236,10 @@ export class MCPServer {
     this.registerTool({
       name: 'create_note',
       description: 'Create a new note',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          title: { type: 'string', description: 'Note title' },
-          content: { type: 'string', description: 'Note content' }
-        },
-        required: ['title', 'content']
-      },
+      inputSchema: { type: 'object', properties: { title: { type: 'string' }, content: { type: 'string' } }, required: ['title', 'content'] },
       handler: async (params) => {
         const notes = JSON.parse(localStorage.getItem('notes') || '[]');
-        const newNote = {
-          id: Date.now().toString(),
-          title: params.title,
-          content: params.content,
-          createdAt: new Date().toISOString()
-        };
+        const newNote = { id: Date.now().toString(), title: params.title, content: params.content, createdAt: new Date().toISOString() };
         notes.push(newNote);
         localStorage.setItem('notes', JSON.stringify(notes));
         return { success: true, note: newNote };
@@ -321,32 +247,20 @@ export class MCPServer {
     });
   }
 
+  // ═══════════════════════════════════════════
+  // Market Tools
+  // ═══════════════════════════════════════════
   private registerMarketTools(): void {
     this.registerTool({
       name: 'get_market_overview',
       description: 'Get current market overview and sentiment',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
+      inputSchema: { type: 'object', properties: {}, required: [] },
       handler: async () => {
-        const cachedData = localStorage.getItem('market_data_cache');
-        if (cachedData) {
-          try {
-            return { success: true, ...JSON.parse(cachedData) };
-          } catch {
-            // ignore parse error
-          }
-        }
-        
+        const cached = localStorage.getItem('market_data_cache');
+        if (cached) { try { return { success: true, ...JSON.parse(cached) }; } catch {} }
         return {
           success: true,
-          markets: {
-            crypto: { btc: 'N/A', eth: 'N/A' },
-            forex: { eurusd: 'N/A', usdjpy: 'N/A' },
-            commodities: { gold: 'N/A', oil: 'N/A' }
-          },
+          markets: { crypto: { btc: 'N/A', eth: 'N/A' }, forex: { eurusd: 'N/A', usdjpy: 'N/A' }, commodities: { gold: 'N/A', oil: 'N/A' } },
           lastUpdate: new Date().toISOString()
         };
       }
@@ -358,10 +272,8 @@ export class MCPServer {
       inputSchema: {
         type: 'object',
         properties: {
-          accountSize: { type: 'number', description: 'Account size in USD' },
-          riskPercent: { type: 'number', description: 'Risk percentage per trade' },
-          entryPrice: { type: 'number', description: 'Entry price' },
-          stopLoss: { type: 'number', description: 'Stop loss price' }
+          accountSize: { type: 'number' }, riskPercent: { type: 'number' },
+          entryPrice: { type: 'number' }, stopLoss: { type: 'number' }
         },
         required: ['accountSize', 'riskPercent', 'entryPrice', 'stopLoss']
       },
@@ -370,163 +282,88 @@ export class MCPServer {
         const riskAmount = accountSize * (riskPercent / 100);
         const riskPerUnit = Math.abs(entryPrice - stopLoss);
         const positionSize = riskPerUnit > 0 ? riskAmount / riskPerUnit : 0;
-
         return {
           success: true,
-          calculation: {
-            accountSize,
-            riskPercent,
-            riskAmount,
-            entryPrice,
-            stopLoss,
-            riskPerUnit,
-            positionSize: Math.floor(positionSize),
-            totalValue: Math.floor(positionSize) * entryPrice
-          }
+          calculation: { accountSize, riskPercent, riskAmount, entryPrice, stopLoss, riskPerUnit, positionSize: Math.floor(positionSize), totalValue: Math.floor(positionSize) * entryPrice }
         };
       }
     });
   }
 
+  // ═══════════════════════════════════════════
+  // World Monitor Tools
+  // ═══════════════════════════════════════════
   private registerWorldMonitorTools(): void {
-    // Tool: Get full world intelligence data
     this.registerTool({
       name: 'get_world_intelligence',
-      description: 'ดึงข้อมูลข่าวกรองโลกทั้งหมด: ภัยพิบัติ แผ่นดินไหว ไฟป่า ประท้วง อินเทอร์เน็ตขัดข้อง พร้อม AI World Brief',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
+      description: 'ดึงข้อมูลข่าวกรองโลก: ภัยพิบัติ แผ่นดินไหว ไฟป่า ประท้วง อินเทอร์เน็ตขัดข้อง พร้อม AI World Brief',
+      inputSchema: { type: 'object', properties: {}, required: [] },
       handler: async () => {
         try {
           const { worldMonitorService } = await import('@/services/WorldMonitorService');
           const data = await worldMonitorService.fetchIntelligence();
           return {
-            success: true,
-            worldBrief: data.worldBrief,
-            summary: {
-              disasters: data.disasters.length,
-              earthquakes: data.earthquakes.length,
-              eonet: data.eonet.length,
-              protests: data.protests.length,
-              fires: data.fires.length,
-              outages: data.outages.length,
-            },
-            timestamp: data.timestamp,
-            sources: data.sources,
+            success: true, worldBrief: data.worldBrief,
+            summary: { disasters: data.disasters.length, earthquakes: data.earthquakes.length, eonet: data.eonet.length, protests: data.protests.length, fires: data.fires.length, outages: data.outages.length },
+            timestamp: data.timestamp, sources: data.sources,
             topDisasters: data.disasters.slice(0, 5),
             topEarthquakes: data.earthquakes.sort((a: any, b: any) => (b.mag || 0) - (a.mag || 0)).slice(0, 5),
             topProtests: data.protests.slice(0, 5),
           };
-        } catch (error) {
-          return { success: false, error: 'Failed to fetch world intelligence' };
-        }
+        } catch { return { success: false, error: 'Failed to fetch world intelligence' }; }
       }
     });
 
-    // Tool: Get Country Instability Index
     this.registerTool({
       name: 'get_country_instability',
-      description: 'ดึง Country Instability Index (CII) - ดัชนีความไม่เสถียรของประเทศต่างๆ ทั่วโลก จัดลำดับจากสูงไปต่ำ',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: { type: 'number', description: 'จำนวนประเทศที่ต้องการ (default: 10)' }
-        },
-        required: []
-      },
+      description: 'ดึง Country Instability Index (CII) จัดลำดับจากสูงไปต่ำ',
+      inputSchema: { type: 'object', properties: { limit: { type: 'number' } }, required: [] },
       handler: async (params) => {
         try {
           const { worldMonitorService } = await import('@/services/WorldMonitorService');
           const intelligence = await worldMonitorService.fetchIntelligence();
           const cii = worldMonitorService.computeCII(intelligence);
-          const limit = params.limit || 10;
           return {
             success: true,
-            countries: cii.slice(0, limit).map(c => ({
-              name: c.country.name,
-              code: c.country.code,
-              region: c.country.region,
-              score: c.score,
-              trend: c.trend,
-              factors: c.factors,
-              baselineRisk: c.country.baselineRisk,
-            })),
-            total: cii.length,
+            countries: cii.slice(0, params.limit || 10).map(c => ({ name: c.country.name, code: c.country.code, region: c.country.region, score: c.score, trend: c.trend, factors: c.factors, baselineRisk: c.country.baselineRisk })),
+            total: cii.length
           };
-        } catch (error) {
-          return { success: false, error: 'Failed to compute CII' };
-        }
+        } catch { return { success: false, error: 'Failed to compute CII' }; }
       }
     });
 
-    // Tool: Get Strategic Theater Posture
     this.registerTool({
       name: 'get_theater_posture',
-      description: 'ดึงสถานะท่าทีเชิงยุทธศาสตร์ของ 9 พื้นที่ทั่วโลก (อ่าวเปอร์เซีย, ช่องแคบไต้หวัน, ทะเลจีนใต้ ฯลฯ)',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
+      description: 'ดึงสถานะยุทธศาสตร์ 9 พื้นที่ทั่วโลก',
+      inputSchema: { type: 'object', properties: {}, required: [] },
       handler: async () => {
         try {
           const { worldMonitorService } = await import('@/services/WorldMonitorService');
           const intelligence = await worldMonitorService.fetchIntelligence();
           const theaters = worldMonitorService.computeTheaterPosture(intelligence);
-          return {
-            success: true,
-            theaters: theaters.map(t => ({
-              name: t.name,
-              region: t.region,
-              level: t.level,
-              score: t.score,
-              triggers: t.triggers,
-            })),
-          };
-        } catch (error) {
-          return { success: false, error: 'Failed to compute theater posture' };
-        }
+          return { success: true, theaters: theaters.map(t => ({ name: t.name, region: t.region, level: t.level, score: t.score, triggers: t.triggers })) };
+        } catch { return { success: false, error: 'Failed to compute theater posture' }; }
       }
     });
 
-    // Tool: Detect geographic convergence
     this.registerTool({
       name: 'detect_convergence',
-      description: 'ตรวจจับจุดที่มีสัญญาณข่าวกรองซ้อนทับกัน (แผ่นดินไหว+ประท้วง+ภัยพิบัติ ในพื้นที่เดียวกัน)',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
+      description: 'ตรวจจับจุดที่มีสัญญาณซ้อนทับกัน',
+      inputSchema: { type: 'object', properties: {}, required: [] },
       handler: async () => {
         try {
           const { worldMonitorService } = await import('@/services/WorldMonitorService');
           const intelligence = await worldMonitorService.fetchIntelligence();
           const convergence = worldMonitorService.detectConvergence(intelligence);
-          return {
-            success: true,
-            hotspots: convergence,
-            count: convergence.length,
-          };
-        } catch (error) {
-          return { success: false, error: 'Failed to detect convergence' };
-        }
+          return { success: true, hotspots: convergence, count: convergence.length };
+        } catch { return { success: false, error: 'Failed to detect convergence' }; }
       }
     });
 
-    // Tool: Get strategic assets data
     this.registerTool({
       name: 'get_strategic_assets',
-      description: 'ดึงข้อมูลสินทรัพย์เชิงยุทธศาสตร์: ฐานทัพ, โรงไฟฟ้านิวเคลียร์, สายเคเบิลใต้น้ำ, ท่อส่งน้ำมัน, จุดคอขวด',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          type: { type: 'string', description: 'ประเภท: military_bases, nuclear, cables, pipelines, chokepoints, conflicts, hotspots' }
-        },
-        required: ['type']
-      },
+      description: 'ดึงข้อมูลสินทรัพย์เชิงยุทธศาสตร์: ฐานทัพ, นิวเคลียร์, สายเคเบิล, ท่อส่งน้ำมัน',
+      inputSchema: { type: 'object', properties: { type: { type: 'string' } }, required: ['type'] },
       handler: async (params) => {
         try {
           const { worldMonitorService } = await import('@/services/WorldMonitorService');
@@ -538,25 +375,166 @@ export class MCPServer {
             case 'chokepoints': return { success: true, data: worldMonitorService.getChokepoints() };
             case 'conflicts': return { success: true, data: worldMonitorService.getConflictZones() };
             case 'hotspots': return { success: true, data: worldMonitorService.getHotspots() };
-            default: return { success: false, error: 'Unknown type. Use: military_bases, nuclear, cables, pipelines, chokepoints, conflicts, hotspots' };
+            default: return { success: false, error: 'Unknown type' };
           }
+        } catch { return { success: false, error: 'Failed to get strategic assets' }; }
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════
+  // OpenClaw Tools (Screen Analysis, UI Control, Web Search)
+  // ═══════════════════════════════════════════
+  private registerOpenClawTools(): void {
+    this.registerTool({
+      name: 'analyze_screen',
+      description: 'ถ่ายภาพหน้าจอปัจจุบันแล้วให้ AI วิเคราะห์ — ใช้ได้กับกราฟ, chart, UI',
+      inputSchema: { type: 'object', properties: { question: { type: 'string', description: 'คำถามที่ต้องการวิเคราะห์' } }, required: ['question'] },
+      handler: async (params) => {
+        try {
+          const { VisionService } = await import('../vision/VisionService');
+          const screenshot = await VisionService.captureScreen();
+          const analysis = await VisionService.analyzeWithVision(
+            screenshot.base64, params.question,
+            'คุณเป็น ABLE AI วิเคราะห์ UI และ Trading Charts ตอบเป็นภาษาไทย'
+          );
+          return { success: true, analysis, screenshotSize: screenshot.fileSize };
         } catch (error) {
-          return { success: false, error: 'Failed to get strategic assets' };
+          return { success: false, error: `Screen analysis failed: ${error}` };
+        }
+      }
+    });
+
+    this.registerTool({
+      name: 'analyze_chart',
+      description: 'วิเคราะห์ Trading Chart — หา trend, pattern, support/resistance',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async () => {
+        try {
+          const { VisionService } = await import('../vision/VisionService');
+          const result = await VisionService.analyzeChart();
+          return { success: true, ...result };
+        } catch (error) {
+          return { success: false, error: `Chart analysis failed: ${error}` };
+        }
+      }
+    });
+
+    this.registerTool({
+      name: 'execute_ui_goal',
+      description: 'สั่งให้ OpenClaw AI Agent ทำอะไรบนหน้าจออัตโนมัติ เช่น เปิด panel, คลิก, พิมพ์',
+      inputSchema: { type: 'object', properties: { goal: { type: 'string', description: 'เป้าหมายที่ต้องการ' } }, required: ['goal'] },
+      handler: async (params) => {
+        try {
+          const { OpenClawService } = await import('../openclaw/OpenClawService');
+          const session = await OpenClawService.executeGoal(params.goal);
+          return {
+            success: session.status === 'completed', status: session.status,
+            commandsExecuted: session.commands.length,
+            results: session.results.slice(-3).map(r => r.message)
+          };
+        } catch (error) {
+          return { success: false, error: `UI goal execution failed: ${error}` };
+        }
+      }
+    });
+
+    this.registerTool({
+      name: 'web_search',
+      description: 'ค้นหาข้อมูลจากอินเทอร์เน็ต — ใช้เมื่อต้องการข้อมูล real-time',
+      inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+      handler: async (params) => {
+        try {
+          const { OpenClawService } = await import('../openclaw/OpenClawService');
+          return await OpenClawService.webSearch(params.query);
+        } catch (error) {
+          return { success: false, error: `Web search failed: ${error}` };
+        }
+      }
+    });
+
+    this.registerTool({
+      name: 'take_snapshot',
+      description: 'ดู elements ทั้งหมดบนหน้าจอปัจจุบัน — ใช้ก่อนสั่ง click หรือ interact',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async () => {
+        try {
+          const { OpenClawAgent } = await import('../openclaw/OpenClawAgent');
+          const snapshot = OpenClawAgent.snapshot();
+          return {
+            success: true, title: snapshot.title, url: snapshot.url,
+            elementCount: snapshot.elements.length,
+            elements: snapshot.elements.slice(0, 20).map((e: any) => ({ index: e.index, type: e.tag || e.type, text: e.text?.substring(0, 50) }))
+          };
+        } catch (error) {
+          return { success: false, error: `Snapshot failed: ${error}` };
+        }
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════
+  // News Tools
+  // ═══════════════════════════════════════════
+  private registerNewsTools(): void {
+    this.registerTool({
+      name: 'get_latest_news',
+      description: 'ดึงข่าวล่าสุดจาก 50+ แหล่ง พร้อม sentiment analysis',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          assets: { type: 'array', items: { type: 'string' }, description: 'symbols เช่น ["XAUUSD"]' },
+          limit: { type: 'number', description: 'จำนวนข่าว (default: 20)' }
+        },
+        required: []
+      },
+      handler: async (params) => {
+        try {
+          const { supabase } = await import('@/integrations/supabase/client');
+          const { data, error } = await supabase.functions.invoke('news-aggregator', {
+            body: { pinnedAssets: params.assets || [] }
+          });
+          if (error) throw error;
+          const news = (data?.rawNews || []).slice(0, params.limit || 20);
+          return {
+            success: true, totalFetched: data?.rawNews?.length || 0,
+            news: news.map((n: any) => ({ title: n.title, source: n.source, sentiment: n.sentiment, importance: n.importance, ageText: n.ageText, relatedAssets: n.relatedAssets })),
+            macroSummary: data?.macro?.slice(0, 5) || []
+          };
+        } catch (error) {
+          return { success: false, error: `News fetch failed: ${error}` };
+        }
+      }
+    });
+
+    this.registerTool({
+      name: 'get_global_map_data',
+      description: 'ดึงข้อมูลแผ่นดินไหวล่าสุดจาก USGS',
+      inputSchema: { type: 'object', properties: { type: { type: 'string', enum: ['earthquakes', 'all'] } }, required: [] },
+      handler: async () => {
+        try {
+          const res = await fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit=10&minmagnitude=5&orderby=time');
+          const data = await res.json();
+          return {
+            success: true,
+            earthquakes: data.features?.map((f: any) => ({
+              place: f.properties.place, magnitude: f.properties.mag,
+              time: new Date(f.properties.time).toLocaleString('th-TH'),
+              depth: f.geometry.coordinates[2]
+            })) || []
+          };
+        } catch (error) {
+          return { success: false, error: `Earthquake data failed: ${error}` };
         }
       }
     });
   }
 
   private interpretCOT(index: number, latest: any): string {
-    if (index > 70) {
-      return 'Large speculators are heavily long. This typically indicates strong bullish sentiment, but could also signal a potential market top if extremely overbought.';
-    } else if (index > 50) {
-      return 'Large speculators are moderately long. Market sentiment is bullish but not extreme.';
-    } else if (index < 30) {
-      return 'Large speculators are heavily short. This indicates strong bearish sentiment, but could signal a potential market bottom if extremely oversold.';
-    } else {
-      return 'Large speculators are moderately short. Market sentiment is bearish but not extreme.';
-    }
+    if (index > 70) return 'Large speculators are heavily long. Strong bullish sentiment, but could signal a potential market top.';
+    if (index > 50) return 'Large speculators are moderately long. Market sentiment is bullish but not extreme.';
+    if (index < 30) return 'Large speculators are heavily short. Strong bearish sentiment, but could signal a potential market bottom.';
+    return 'Large speculators are moderately short. Market sentiment is bearish but not extreme.';
   }
 }
 
