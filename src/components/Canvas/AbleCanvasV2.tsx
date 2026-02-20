@@ -27,7 +27,7 @@ import { toast } from '@/hooks/use-toast';
 import { 
   Undo, Redo, ZoomIn, ZoomOut, Maximize, Grid, Layers, Download, Upload,
   MousePointer, Hand, Type, FileText, Image as ImageIcon, Video, Link, Code,
-  StickyNote, Square, Lock, Unlock, Eye, EyeOff
+  StickyNote, Square, Lock, Unlock, Eye, EyeOff, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 // Node Components
@@ -106,6 +106,7 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props)
   const [showGrid, setShowGrid] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
   const [showMinimap, setShowMinimap] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -257,6 +258,7 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props)
       if (key === '=' || key === '+') zoomIn({ duration: 200 });
       if (key === '-') zoomOut({ duration: 200 });
       if (key === 'g' && !ctrl) setShowGrid(!showGrid);
+      if (key === '[' && !ctrl) setIsSidebarOpen(prev => !prev);
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -369,48 +371,74 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props)
   };
 
   return (
-    <div className="h-full flex bg-[#0a0a0a]" ref={reactFlowWrapper}>
-      {/* Sidebar */}
-      <div className="w-64 bg-card/50 border-r border-terminal-green/20 flex flex-col">
-        <div className="p-3 border-b border-terminal-green/20">
-          <h3 className="text-sm font-semibold text-terminal-green flex items-center gap-2">
-            <Layers className="w-4 h-4" />
-            Notes Library
-          </h3>
-          <p className="text-xs text-muted-foreground mt-1">Drag notes to canvas</p>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {notes.map(note => (
-            <div
-              key={note.id}
-              draggable
-              onDragStart={(e) => e.dataTransfer.setData('application/note-id', note.id)}
-              className="p-2 rounded border border-transparent hover:border-terminal-green/30 hover:bg-terminal-green/5 cursor-grab active:cursor-grabbing transition-all"
-            >
-              <div className="font-medium text-sm text-terminal-green truncate">{note.title}</div>
-              <div className="text-xs text-muted-foreground truncate mt-1">
-                {note.content?.substring(0, 50)}...
+    <div className="h-full flex w-full overflow-hidden relative bg-[#0a0a0a]" ref={reactFlowWrapper}>
+      {/* Sidebar Panel — collapsible */}
+      <div
+        className={`
+          flex-shrink-0 flex flex-col border-r border-terminal-green/20 bg-card/50
+          transition-all duration-300 ease-in-out overflow-hidden
+          ${isSidebarOpen ? 'w-[280px]' : 'w-0'}
+        `}
+      >
+        <div className="w-[280px] h-full flex flex-col overflow-hidden">
+          <div className="p-3 border-b border-terminal-green/20">
+            <h3 className="text-sm font-semibold text-terminal-green flex items-center gap-2">
+              <Layers className="w-4 h-4" />
+              Notes Library
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">Drag notes to canvas</p>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {notes.map(note => (
+              <div
+                key={note.id}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData('application/note-id', note.id)}
+                className="p-2 rounded border border-transparent hover:border-terminal-green/30 hover:bg-terminal-green/5 cursor-grab active:cursor-grabbing transition-all"
+              >
+                <div className="font-medium text-sm text-terminal-green truncate">{note.title}</div>
+                <div className="text-xs text-muted-foreground truncate mt-1">
+                  {note.content?.substring(0, 50)}...
+                </div>
+                <div className="flex gap-1 mt-1">
+                  {note.tags?.slice(0, 2).map((tag: string) => (
+                    <Badge key={tag} variant="outline" className="text-[10px] px-1 py-0">
+                      #{tag}
+                    </Badge>
+                  ))}
+                </div>
               </div>
-              <div className="flex gap-1 mt-1">
-                {note.tags?.slice(0, 2).map((tag: string) => (
-                  <Badge key={tag} variant="outline" className="text-[10px] px-1 py-0">
-                    #{tag}
-                  </Badge>
-                ))}
+            ))}
+            {notes.length === 0 && (
+              <div className="text-center text-muted-foreground text-xs py-8">
+                No notes yet. Create some in the Notes tab!
               </div>
-            </div>
-          ))}
-          {notes.length === 0 && (
-            <div className="text-center text-muted-foreground text-xs py-8">
-              No notes yet. Create some in the Notes tab!
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Main Canvas */}
-      <div className="flex-1 flex flex-col">
+      {/* Toggle Button */}
+      <button
+        onClick={() => setIsSidebarOpen(prev => !prev)}
+        className={`
+          absolute top-1/2 -translate-y-1/2 z-50
+          w-5 h-12 flex items-center justify-center
+          bg-card border border-terminal-green/30 rounded-r-md
+          hover:bg-terminal-green/10 transition-all duration-300
+          ${isSidebarOpen ? 'left-[280px]' : 'left-0'}
+        `}
+        title={isSidebarOpen ? 'Close sidebar ( [ )' : 'Open sidebar ( [ )'}
+      >
+        {isSidebarOpen
+          ? <ChevronLeft className="h-3 w-3 text-terminal-green" />
+          : <ChevronRight className="h-3 w-3 text-terminal-green" />
+        }
+      </button>
+
+      {/* Main Canvas — full remaining space */}
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Toolbar */}
         <div className="h-12 bg-card/50 border-b border-terminal-green/20 flex items-center justify-between px-4">
           <div className="flex items-center gap-1">
