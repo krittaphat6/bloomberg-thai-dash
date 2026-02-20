@@ -22,18 +22,77 @@ import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { AgentOverlay, AGENT_QUICK_COMMANDS, AGENT_SYSTEM_PROMPT } from '@/components/agent/AgentOverlay';
 
+interface ThinkingStep {
+  id: string;
+  text: string;
+  status: 'running' | 'done' | 'error';
+  timestamp: Date;
+}
+
 interface Message {
   id: string;
   text: string;
   isUser: boolean;
   timestamp: Date;
   model?: string;
+  thinking?: ThinkingStep[];
+  thinkingCollapsed?: boolean;
   file?: {
     name: string;
     type: string;
     preview?: string;
   };
 }
+
+const ThinkingBlock = ({ steps, collapsed, onToggle }: {
+  steps: ThinkingStep[];
+  collapsed: boolean;
+  onToggle: () => void;
+}) => {
+  const doneCount = steps.filter(s => s.status === 'done').length;
+  const totalCount = steps.length;
+
+  return (
+    <div className="mb-2 rounded-lg border border-purple-500/30 bg-purple-900/10 overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-purple-300 hover:bg-purple-500/10 transition-colors text-left"
+      >
+        <span className="text-purple-400">{collapsed ? '▶' : '▼'}</span>
+        <span className="font-medium">
+          {collapsed ? `คิดมาแล้ว ${totalCount} ขั้นตอน` : 'กระบวนการคิด'}
+        </span>
+        <span className="ml-auto text-purple-500 text-[10px]">
+          {doneCount}/{totalCount} steps
+        </span>
+      </button>
+      {!collapsed && (
+        <div className="px-3 pb-3 space-y-1.5 border-t border-purple-500/20">
+          {steps.map((step) => (
+            <div key={step.id} className="flex items-start gap-2 text-xs py-1">
+              <span className="flex-shrink-0 mt-0.5">
+                {step.status === 'running' ? (
+                  <span className="w-3 h-3 rounded-full border-2 border-purple-400 border-t-transparent animate-spin inline-block" />
+                ) : step.status === 'done' ? (
+                  <span className="text-green-400">✓</span>
+                ) : (
+                  <span className="text-red-400">✗</span>
+                )}
+              </span>
+              <span className={`
+                ${step.status === 'running' ? 'text-purple-200 animate-pulse' : ''}
+                ${step.status === 'done' ? 'text-gray-400' : ''}
+                ${step.status === 'error' ? 'text-red-400' : ''}
+              `}>
+                {step.text}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const ABLE3AI = () => {
   const { isReady: mcpReady, tools, executeTool } = useMCP();
@@ -72,8 +131,37 @@ const ABLE3AI = () => {
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ Conversation history for multi-turn memory
+  // Conversation history for multi-turn memory
   const conversationHistoryRef = useRef<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+
+  // Thinking steps state
+  const [currentThinking, setCurrentThinking] = useState<ThinkingStep[]>([]);
+  const thinkingRef = useRef<ThinkingStep[]>([]);
+
+  const addThinkingStep = useCallback((text: string, status: ThinkingStep['status'] = 'running') => {
+    // Mark previous running step as done
+    thinkingRef.current = thinkingRef.current.map((s, i) =>
+      i === thinkingRef.current.length - 1 && s.status === 'running'
+        ? { ...s, status: 'done' as const }
+        : s
+    );
+    const step: ThinkingStep = {
+      id: Date.now().toString() + Math.random(),
+      text,
+      status,
+      timestamp: new Date()
+    };
+    thinkingRef.current = [...thinkingRef.current, step];
+    setCurrentThinking([...thinkingRef.current]);
+    return step.id;
+  }, []);
+
+  const finishThinking = useCallback(() => {
+    thinkingRef.current = thinkingRef.current.map(s =>
+      s.status === 'running' ? { ...s, status: 'done' as const } : s
+    );
+    setCurrentThinking([...thinkingRef.current]);
+  }, []);
 
   const quickCommands = [
     { label: '📊 Market', cmd: 'What is the current market situation?' },
@@ -132,7 +220,7 @@ const ABLE3AI = () => {
   // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
+  }, [messages, currentThinking]);
 
   // Loading time counter
   useEffect(() => {
@@ -274,6 +362,8 @@ const ABLE3AI = () => {
     setUploadedFile(null);
     setFilePreview(null);
     setIsLoading(true);
+    thinkingRef.current = [];
+    setCurrentThinking([]);
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -301,13 +391,18 @@ const ABLE3AI = () => {
 
       // Priority 1: Agent Mode
       if (agent.isAgentMode && aiProvider === 'gemini' && geminiReady && !currentFile) {
+        addThinkingStep('🤖 เปิด Agent Mode — OpenClaw กำลังวิเคราะห์เป้าหมาย');
+        addThinkingStep('📸 ถ่ายภาพหน้าจอเพื่อดู context');
         agent.addLog(`🚀 Agent Loop Started: ${currentInput}`);
         model = '🤖 Agent Loop (Gemini)';
         const result = await agent.runAgentLoop(currentInput);
         aiResponse = result;
+        addThinkingStep('✅ Agent loop เสร็จสิ้น', 'done');
       }
       // Priority 2: File analysis
       else if (currentFile && currentPreview) {
+        addThinkingStep(`📎 อ่านไฟล์ ${currentFile.name} (${currentFile.type})`);
+        addThinkingStep('👁️ ส่งให้ Gemini Vision วิเคราะห์...');
         if (aiProvider !== 'gemini' || !geminiReady) {
           aiResponse = '❌ การวิเคราะห์ไฟล์ต้องใช้ Gemini';
           model = 'Error';
@@ -318,31 +413,41 @@ const ABLE3AI = () => {
           if (error) throw error;
           aiResponse = data?.analysis || 'ไม่สามารถวิเคราะห์ไฟล์ได้';
           model = `Gemini (${currentFile.type.startsWith('image/') ? 'Vision' : 'File'})`;
+          addThinkingStep('✅ วิเคราะห์เสร็จแล้ว', 'done');
         }
       }
       // Priority 3: Panel commands
       else if (tryPanelCommand(currentInput).handled) {
+        addThinkingStep('🎛️ ตรวจพบคำสั่งควบคุม Panel');
+        addThinkingStep('✅ กำลังเปิด/ปิด Panel...', 'done');
         const panelResult = tryPanelCommand(currentInput);
         aiResponse = panelResult.response || '';
         model = '🎛️ Panel Commander';
       }
       // Priority 4: Help
       else if (currentInput.toLowerCase() === 'help') {
+        addThinkingStep('📖 โหลดรายการคำสั่งทั้งหมด', 'done');
         aiResponse = getHelpText();
         model = 'System';
       }
       // Priority 5: AI with tool detection + history
       else {
+        addThinkingStep('💭 อ่านคำถามและ context การสนทนา...');
+        
         const freshContext = await UniversalDataService.getData(['all']);
         const contextSummary = freshContext.success ? UniversalDataService.formatForAI(freshContext) : '';
+        addThinkingStep('📊 ดึงข้อมูลแอป (broker, trades, alerts)...');
         
         if (aiProvider === 'gemini' && geminiReady) {
           const toolCall = GeminiService.detectToolCall(currentInput);
 
           if (toolCall && mcpReady) {
+            addThinkingStep(`🔧 ตรวจพบ tool call: ${toolCall.tool}`);
+            addThinkingStep(`⚡ กำลัง execute ${toolCall.tool}...`);
             try {
               const result = await executeTool(toolCall.tool, toolCall.params);
               const toolResult = GeminiService.formatToolResult(toolCall.tool, result);
+              addThinkingStep('🧠 Gemini กำลังวิเคราะห์ผลลัพธ์...');
               const analysisPrompt = `User asked: "${currentInput}"\n\nData from ${toolCall.tool}:\n${toolResult}\n\n${contextSummary}\n\nวิเคราะห์และตอบเป็นภาษาไทย`;
               const geminiResponse = await GeminiService.chat(
                 analysisPrompt,
@@ -351,11 +456,12 @@ const ABLE3AI = () => {
               aiResponse = `${toolResult}\n\n---\n\n**🤖 การวิเคราะห์:**\n${geminiResponse.text}`;
               model = `MCP + Gemini`;
             } catch (error) {
+              addThinkingStep(`❌ Tool error: ${error instanceof Error ? error.message : 'Unknown'}`, 'error');
               aiResponse = `❌ Error executing tool: ${error instanceof Error ? error.message : 'Unknown error'}`;
               model = 'Error';
             }
           } else {
-            // Regular Gemini chat with history
+            addThinkingStep('🧠 Gemini 2.5 Flash กำลังประมวลผล...');
             const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}`;
             const response = await GeminiService.chat(
               enhancedPrompt,
@@ -365,8 +471,10 @@ const ABLE3AI = () => {
             model = response.model;
           }
         } else if (aiProvider === 'ollama' && ollamaConnected) {
+          addThinkingStep(`🧠 Ollama (${selectedModel}) กำลังประมวลผล...`);
           const toolCall = OllamaService.detectToolCall(currentInput);
           if (toolCall && mcpReady) {
+            addThinkingStep(`🔧 ตรวจพบ tool call: ${toolCall.tool}`);
             try {
               const result = await executeTool(toolCall.tool, toolCall.params);
               const toolResult = OllamaService.formatToolResult(toolCall.tool, result);
@@ -378,6 +486,7 @@ const ABLE3AI = () => {
               aiResponse = `${toolResult}\n\n---\n\n**AI Analysis:**\n${ollamaResponse.text}`;
               model = `MCP + Ollama`;
             } catch (error) {
+              addThinkingStep(`❌ Error: ${error instanceof Error ? error.message : 'Unknown'}`, 'error');
               aiResponse = `❌ Error: ${error instanceof Error ? error.message : 'Unknown'}`;
               model = 'Error';
             }
@@ -396,6 +505,9 @@ const ABLE3AI = () => {
         }
       }
 
+      finishThinking();
+      const thinkingSnapshot = [...thinkingRef.current];
+
       // Save AI response to history
       conversationHistoryRef.current.push({ role: 'assistant', content: aiResponse });
 
@@ -404,19 +516,27 @@ const ABLE3AI = () => {
         text: aiResponse,
         isUser: false,
         timestamp: new Date(),
-        model
+        model,
+        thinking: thinkingSnapshot.length > 0 ? thinkingSnapshot : undefined,
+        thinkingCollapsed: true
       }]);
 
     } catch (error: any) {
       console.error('Send error:', error);
+      finishThinking();
+      const thinkingSnapshot = [...thinkingRef.current];
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         text: `❌ เกิดข้อผิดพลาด: ${error.message}`,
         isUser: false,
         timestamp: new Date(),
-        model: 'Error'
+        model: 'Error',
+        thinking: thinkingSnapshot.length > 0 ? thinkingSnapshot : undefined,
+        thinkingCollapsed: true
       }]);
     } finally {
+      thinkingRef.current = [];
+      setCurrentThinking([]);
       setIsLoading(false);
     }
   };
@@ -481,7 +601,6 @@ const ABLE3AI = () => {
             </div>
           </CardTitle>
           <div className="flex items-center gap-1">
-            {/* Agent Mode Toggle */}
             <Button
               size="sm"
               variant={agent.isAgentMode ? 'default' : 'ghost'}
@@ -502,7 +621,6 @@ const ABLE3AI = () => {
               <span className="text-xs">Agent</span>
               {agent.isAgentMode && <span className="w-2 h-2 rounded-full bg-purple-300 animate-pulse" />}
             </Button>
-            {/* Clear Chat */}
             <Button
               size="sm"
               variant="ghost"
@@ -597,18 +715,35 @@ const ABLE3AI = () => {
             {messages.map((msg) => (
               <div key={msg.id} className={`flex gap-2 ${msg.isUser ? 'justify-end' : 'justify-start'}`}>
                 {!msg.isUser && (
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 flex items-center justify-center flex-shrink-0 mt-1">
                     <Bot className="w-4 h-4 text-black" />
                   </div>
                 )}
-                <div className={`max-w-[85%] rounded-lg p-3 text-sm ${msg.isUser ? 'bg-blue-600 text-white' : 'bg-black/60 border border-green-500/30 text-green-100'}`}>
-                  {renderMessage(msg.text)}
-                  {!msg.isUser && msg.model && (
-                    <div className="text-xs text-cyan-400 mt-2 flex items-center gap-1 border-t border-green-500/20 pt-2">
-                      <Zap className="w-3 h-3" />
-                      {msg.model}
-                    </div>
+                <div className={`max-w-[85%] ${msg.isUser ? '' : 'flex flex-col'}`}>
+                  {/* Thinking Block for completed AI messages */}
+                  {!msg.isUser && msg.thinking && msg.thinking.length > 0 && (
+                    <ThinkingBlock
+                      steps={msg.thinking}
+                      collapsed={msg.thinkingCollapsed ?? true}
+                      onToggle={() => {
+                        setMessages(prev => prev.map(m =>
+                          m.id === msg.id
+                            ? { ...m, thinkingCollapsed: !m.thinkingCollapsed }
+                            : m
+                        ));
+                      }}
+                    />
                   )}
+                  {/* Message bubble */}
+                  <div className={`rounded-lg p-3 text-sm ${msg.isUser ? 'bg-blue-600 text-white' : 'bg-black/60 border border-green-500/30 text-green-100'}`}>
+                    {renderMessage(msg.text)}
+                    {!msg.isUser && msg.model && (
+                      <div className="text-xs text-cyan-400 mt-2 flex items-center gap-1 border-t border-green-500/20 pt-2">
+                        <Zap className="w-3 h-3" />
+                        {msg.model}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {msg.isUser && (
                   <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
@@ -617,14 +752,38 @@ const ABLE3AI = () => {
                 )}
               </div>
             ))}
+
+            {/* Real-time thinking while loading */}
             {isLoading && (
-              <div className="flex gap-2 items-center">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 flex items-center justify-center">
+              <div className="flex gap-2">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 flex items-center justify-center flex-shrink-0 mt-1">
                   <Sparkles className="w-4 h-4 text-black animate-pulse" />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-sm text-green-400">กำลังคิด...</span>
-                  <span className="text-xs text-muted-foreground">{loadingTime} วินาที</span>
+                <div className="flex-1 max-w-[85%]">
+                  {currentThinking.length > 0 && (
+                    <div className="rounded-lg border border-purple-500/30 bg-purple-900/10 p-3 mb-2 space-y-1.5">
+                      {currentThinking.map((step) => (
+                        <div key={step.id} className="flex items-start gap-2 text-xs">
+                          <span className="flex-shrink-0 mt-0.5">
+                            {step.status === 'running' ? (
+                              <span className="w-3 h-3 rounded-full border-2 border-purple-400 border-t-transparent animate-spin inline-block" />
+                            ) : step.status === 'done' ? (
+                              <span className="text-green-400">✓</span>
+                            ) : (
+                              <span className="text-red-400">✗</span>
+                            )}
+                          </span>
+                          <span className={step.status === 'running' ? 'text-purple-200 animate-pulse' : step.status === 'error' ? 'text-red-400' : 'text-gray-400'}>
+                            {step.text}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span>กำลังคิด</span>
+                    <span className="text-purple-400">{loadingTime}s</span>
+                  </div>
                 </div>
               </div>
             )}
