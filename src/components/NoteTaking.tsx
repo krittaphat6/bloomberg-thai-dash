@@ -474,9 +474,9 @@ export default function NoteTaking() {
         </div>
       </CardHeader>
       <CardContent className="h-full p-4">
-        <div className="flex h-full gap-4">
+        <div className="flex h-full gap-4 overflow-hidden">
           {/* Sidebar */}
-          <div className="w-80 flex flex-col gap-4 border-r border-border pr-4">
+          <div className={`flex flex-col gap-4 border-r border-border pr-4 flex-shrink-0 transition-all duration-300 overflow-hidden ${mainView === 'canvas' ? 'w-0 pr-0 border-r-0 hidden' : 'w-80'}`}>
             {/* Main View Toggle */}
             <div className="grid grid-cols-2 gap-1 mb-4">
               <Button
@@ -765,10 +765,9 @@ export default function NoteTaking() {
             </div>
           </div>
 
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
             {mainView === 'canvas' ? (
-              <div className="flex-1 h-full">
+              <div className="flex-1 h-full min-h-0">
                 <AbleCanvasV2 
                   notes={notes}
                   onUpdateNote={updateNote}
