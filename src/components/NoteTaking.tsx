@@ -772,6 +772,29 @@ export default function NoteTaking() {
                   notes={notes}
                   onUpdateNote={updateNote}
                   onCreateNote={(note) => setNotes(prev => [note, ...prev])}
+                  mainView={mainView}
+                  onChangeView={(v) => setMainView(v as any)}
+                  sidebarContent={
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-1">
+                        <Button variant="outline" size="sm" onClick={() => setMainView('notes')} className="text-xs">
+                          <FileText className="h-3 w-3 mr-1" /> Notes
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setMainView('calendar')} className="text-xs">
+                          <CalendarIcon className="h-3 w-3 mr-1" /> Calendar
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setMainView('templates')} className="text-xs">
+                          <Layers className="h-3 w-3 mr-1" /> Templates
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setMainView('spreadsheets')} className="text-xs">
+                          <Table className="h-3 w-3 mr-1" /> Tables
+                        </Button>
+                        <Button variant="default" size="sm" className="text-xs col-span-2">
+                          <Palette className="h-3 w-3 mr-1" /> Canvas V2
+                        </Button>
+                      </div>
+                    </div>
+                  }
                 />
               </div>
             ) : mainView === 'templates' ? (

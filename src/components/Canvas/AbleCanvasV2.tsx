@@ -93,13 +93,40 @@ const ToolButton = ({ icon: Icon, onClick, active, disabled, tooltip }: ToolButt
   </TooltipProvider>
 );
 
+// Edge color options
+const EDGE_COLORS = [
+  '#22c55e', '#3b82f6', '#ef4444', '#f59e0b', '#a855f7', 
+  '#ec4899', '#06b6d4', '#f97316', '#84cc16', '#ffffff'
+];
+
+// Color blending utility
+function blendColors(colors: string[]): string {
+  if (colors.length === 0) return '#22c55e';
+  if (colors.length === 1) return colors[0];
+  
+  const rgbs = colors.map(hex => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return { r, g, b };
+  });
+  
+  const avg = rgbs.reduce((acc, c) => ({ r: acc.r + c.r, g: acc.g + c.g, b: acc.b + c.b }), { r: 0, g: 0, b: 0 });
+  const len = rgbs.length;
+  const toHex = (n: number) => Math.round(n / len).toString(16).padStart(2, '0');
+  return `#${toHex(avg.r)}${toHex(avg.g)}${toHex(avg.b)}`;
+}
+
 interface AbleCanvasV2Props {
   notes: any[];
   onUpdateNote?: (noteId: string, updates: any) => void;
   onCreateNote?: (note: any) => void;
+  mainView?: string;
+  onChangeView?: (view: string) => void;
+  sidebarContent?: React.ReactNode;
 }
 
-function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props) {
+function CanvasContent({ notes, onUpdateNote, onCreateNote, mainView, onChangeView, sidebarContent }: AbleCanvasV2Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedTool, setSelectedTool] = useState<string>('select');
@@ -107,6 +134,9 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props)
   const [isLocked, setIsLocked] = useState(false);
   const [showMinimap, setShowMinimap] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [selectedEdgeColor, setSelectedEdgeColor] = useState('#22c55e');
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [showEdgeColorPicker, setShowEdgeColorPicker] = useState(false);
   
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -329,11 +359,58 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props)
       target: params.target!,
       type: 'smart',
       animated: true,
-      style: { stroke: '#22c55e', strokeWidth: 2 }
+      style: { stroke: selectedEdgeColor, strokeWidth: 2 },
+      data: { color: selectedEdgeColor }
     };
-    setEdges(eds => addEdge(newEdge, eds));
+    setEdges(eds => {
+      const updated = addEdge(newEdge, eds);
+      // Update node colors based on connected edges
+      updateNodeColorsFromEdges(updated);
+      return updated;
+    });
     saveToHistory();
-  }, [saveToHistory]);
+  }, [saveToHistory, selectedEdgeColor]);
+
+  // Update node border colors based on connected edge colors
+  const updateNodeColorsFromEdges = useCallback((currentEdges: Edge[]) => {
+    setNodes(nds => nds.map(node => {
+      const connectedEdges = currentEdges.filter(
+        e => (typeof e.source === 'string' ? e.source : (e.source as any).id) === node.id || 
+             (typeof e.target === 'string' ? e.target : (e.target as any).id) === node.id
+      );
+      if (connectedEdges.length === 0) return node;
+      
+      const edgeColors = connectedEdges.map(e => (e.data?.color || e.style?.stroke || '#22c55e') as string);
+      const blended = blendColors(edgeColors);
+      
+      return {
+        ...node,
+        style: { ...node.style, borderColor: blended, borderWidth: 2 }
+      };
+    }));
+  }, []);
+
+  // Edge click handler for color picker
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    setSelectedEdgeId(edge.id);
+    setShowEdgeColorPicker(true);
+  }, []);
+
+  const changeEdgeColor = useCallback((color: string) => {
+    if (!selectedEdgeId) return;
+    setEdges(eds => {
+      const updated = eds.map(e => 
+        e.id === selectedEdgeId 
+          ? { ...e, style: { ...e.style, stroke: color }, data: { ...e.data, color } }
+          : e
+      );
+      updateNodeColorsFromEdges(updated);
+      return updated;
+    });
+    setSelectedEdgeColor(color);
+    setShowEdgeColorPicker(false);
+    setSelectedEdgeId(null);
+  }, [selectedEdgeId, updateNodeColorsFromEdges]);
 
   const exportAsJSON = () => {
     const data = { nodes, edges, exportedAt: new Date().toISOString() };
@@ -381,6 +458,14 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props)
         `}
       >
         <div className="w-[280px] h-full flex flex-col overflow-hidden">
+          {/* Tab bar from parent */}
+          {sidebarContent && (
+            <div className="p-2 border-b border-terminal-green/20 flex-shrink-0">
+              {sidebarContent}
+            </div>
+          )}
+
+          {/* Notes Library header */}
           <div className="p-3 border-b border-terminal-green/20">
             <h3 className="text-sm font-semibold text-terminal-green flex items-center gap-2">
               <Layers className="w-4 h-4" />
@@ -462,6 +547,35 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props)
             <ToolButton icon={ZoomOut} onClick={() => zoomOut({ duration: 200 })} tooltip="Zoom Out (-)" />
             <ToolButton icon={ZoomIn} onClick={() => zoomIn({ duration: 200 })} tooltip="Zoom In (+)" />
             <ToolButton icon={Maximize} onClick={() => fitView({ duration: 300, padding: 0.2 })} tooltip="Fit View (F)" />
+            <div className="w-px h-6 bg-terminal-green/20 mx-1" />
+            {/* Edge color selector */}
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-muted-foreground">Edge:</span>
+              {EDGE_COLORS.slice(0, 5).map(color => (
+                <button
+                  key={color}
+                  onClick={() => setSelectedEdgeColor(color)}
+                  className={`w-4 h-4 rounded-full border-2 transition-all ${selectedEdgeColor === color ? 'border-foreground scale-125' : 'border-transparent'}`}
+                  style={{ backgroundColor: color }}
+                  title={`Edge color: ${color}`}
+                />
+              ))}
+              <div className="relative group">
+                <button className="w-4 h-4 rounded-full border border-terminal-green/30 flex items-center justify-center text-[8px] text-muted-foreground hover:text-foreground">
+                  +
+                </button>
+                <div className="absolute top-6 right-0 hidden group-hover:flex flex-wrap gap-1 p-2 bg-card border border-terminal-green/30 rounded-lg z-50 w-24">
+                  {EDGE_COLORS.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => setSelectedEdgeColor(color)}
+                      className={`w-5 h-5 rounded-full border-2 transition-all ${selectedEdgeColor === color ? 'border-foreground scale-110' : 'border-transparent'}`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -505,6 +619,7 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props)
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onEdgeClick={onEdgeClick}
           onDrop={onDrop}
           onDragOver={onDragOver}
           nodeTypes={nodeTypes}
@@ -516,6 +631,8 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props)
           nodesConnectable={!isLocked}
           snapToGrid={true}
           snapGrid={[15, 15]}
+          minZoom={0.02}
+          maxZoom={4}
           fitView
           className="bg-[#0a0a0a]"
         >
@@ -550,6 +667,29 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote }: AbleCanvasV2Props)
               }}
               maskColor="rgba(0, 0, 0, 0.8)"
             />
+          )}
+
+          {/* Edge color picker popup */}
+          {showEdgeColorPicker && selectedEdgeId && (
+            <Panel position="top-center">
+              <div className="flex items-center gap-2 p-2 bg-card border border-terminal-green/30 rounded-lg shadow-lg">
+                <span className="text-xs text-muted-foreground">Edge color:</span>
+                {EDGE_COLORS.map(color => (
+                  <button
+                    key={color}
+                    onClick={() => changeEdgeColor(color)}
+                    className="w-6 h-6 rounded-full border-2 border-transparent hover:border-foreground transition-all hover:scale-110"
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+                <button
+                  onClick={() => { setShowEdgeColorPicker(false); setSelectedEdgeId(null); }}
+                  className="text-xs text-muted-foreground hover:text-foreground ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            </Panel>
           )}
         </ReactFlow>
       </div>
