@@ -17,6 +17,8 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "zod/v3": path.resolve(__dirname, "./node_modules/zod"),
+      "zod": path.resolve(__dirname, "./node_modules/zod"),
     },
   },
 }));
