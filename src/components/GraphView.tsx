@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import { GraphClustering } from '@/utils/GraphClustering';
+// Smart Knowledge Graph v2
 
 interface Note {
   id: string;
