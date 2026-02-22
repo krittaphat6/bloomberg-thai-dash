@@ -149,17 +149,6 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote, mainView, onChangeVi
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView, zoomIn, zoomOut, getViewport } = useReactFlow();
 
-  // Auto-save
-  useEffect(() => {
-    if (nodes.length === 0 && edges.length === 0) return;
-    setHasUnsavedChanges(true);
-    
-    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-    autoSaveRef.current = setTimeout(() => saveCanvas(), 3000);
-    
-    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
-  }, [nodes, edges]);
-
   const saveCanvas = useCallback(() => {
     setIsSaving(true);
     const canvasData = {
@@ -177,12 +166,25 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote, mainView, onChangeVi
       localStorage.setItem(historyKey, JSON.stringify(newHistory));
       setLastSaved(new Date());
       setHasUnsavedChanges(false);
+      console.log('✅ Canvas V2 auto-saved', new Date().toLocaleTimeString());
     } catch (error) {
+      console.error('❌ Failed to save canvas:', error);
       toast({ title: "Save Failed", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
   }, [nodes, edges, getViewport]);
+
+  // Auto-save
+  useEffect(() => {
+    if (nodes.length === 0 && edges.length === 0) return;
+    setHasUnsavedChanges(true);
+    
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => saveCanvas(), 3000);
+    
+    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
+  }, [nodes, edges, saveCanvas]);
 
   // Load saved canvas
   useEffect(() => {
