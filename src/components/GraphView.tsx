@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import { GraphClustering } from '@/utils/GraphClustering';
-// Smart Knowledge Graph v2
 
 interface Note {
   id: string;
@@ -38,7 +37,10 @@ interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
   type?: 'direct' | 'shared-tag' | 'folder';
 }
 
-const COMMUNITY_COLORS = ['#22C55E', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
+const COMMUNITY_COLORS = [
+  '#22C55E', '#3B82F6', '#F59E0B', '#EF4444', 
+  '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'
+];
 
 const importanceScore = (note: Note, allNotes: Note[]): number => {
   const directLinks = note.linkedNotes.length;
@@ -60,12 +62,13 @@ export default function GraphView({
   selectedTag
 }: GraphViewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null);
   const [tooltip, setTooltip] = useState<{ note: Note; x: number; y: number } | null>(null);
-  const [communities, setCommunities] = useState<Map<string, number>>(new Map());
   const [showClusters, setShowClusters] = useState(false);
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   const [resetKey, setResetKey] = useState(0);
+  const [graphStats, setGraphStats] = useState({ nodes: 0, links: 0, clusters: 0 });
 
   const resetPositions = useCallback(() => {
     localStorage.removeItem('graph-positions');
@@ -117,7 +120,7 @@ export default function GraphView({
       };
     });
 
-    // Create links (no proximity)
+    // Create links (no proximity noise)
     const links: (GraphLink & { type: 'direct' | 'shared-tag' | 'folder' })[] = [];
 
     filteredNotes.forEach(note => {
@@ -175,7 +178,28 @@ export default function GraphView({
       filteredNotes.map(n => ({ ...n, connections: 0 })),
       links
     );
-    setCommunities(detectedCommunities);
+
+    // Update stats
+    const uniqueCommunities = new Set(detectedCommunities.values());
+    setGraphStats({ nodes: nodes.length, links: links.length, clusters: uniqueCommunities.size });
+
+    // --- SVG Defs for effects ---
+    const defs = svg.append("defs");
+    
+    // Glow filter for favorite nodes
+    const glowFilter = defs.append("filter").attr("id", "glow").attr("x", "-50%").attr("y", "-50%").attr("width", "200%").attr("height", "200%");
+    glowFilter.append("feGaussianBlur").attr("stdDeviation", "4").attr("result", "coloredBlur");
+    const feMerge = glowFilter.append("feMerge");
+    feMerge.append("feMergeNode").attr("in", "coloredBlur");
+    feMerge.append("feMergeNode").attr("in", "SourceGraphic");
+
+    // Radial gradient for background
+    const bgGrad = defs.append("radialGradient").attr("id", "bg-gradient").attr("cx", "50%").attr("cy", "50%").attr("r", "60%");
+    bgGrad.append("stop").attr("offset", "0%").attr("stop-color", "#1a1a2e").attr("stop-opacity", 1);
+    bgGrad.append("stop").attr("offset", "100%").attr("stop-color", "#0a0a14").attr("stop-opacity", 1);
+
+    // Background
+    svg.append("rect").attr("width", width).attr("height", height).attr("fill", "url(#bg-gradient)");
 
     // Simulation
     const simulation = d3.forceSimulation<GraphNode>(nodes)
@@ -232,15 +256,16 @@ export default function GraphView({
     });
 
     // Cluster boundaries
+    let clusterGroup: d3.Selection<SVGGElement, unknown, null, undefined> | null = null;
     if (showClusters && nodes.length > 1) {
       const clusters = GraphClustering.clusterByConnections(
         nodes.map(n => ({ ...n.note, connections: n.connections, x: n.x || 0, y: n.y || 0 })),
         Math.min(5, Math.ceil(nodes.length / 3))
       );
-      const clusterGroup = g.append("g").attr("class", "clusters");
+      clusterGroup = g.append("g").attr("class", "clusters");
 
       simulation.on("tick.clusters", () => {
-        clusterGroup.selectAll("*").remove();
+        clusterGroup!.selectAll("*").remove();
         clusters.forEach(cluster => {
           const clusterNodes = nodes.filter(n => cluster.nodes.includes(n.id));
           if (clusterNodes.length < 2) return;
@@ -252,46 +277,47 @@ export default function GraphView({
             return Math.sqrt(dx * dx + dy * dy);
           }) || 40;
 
-          clusterGroup.append("circle")
+          // Soft cluster boundary with gradient feel
+          clusterGroup!.append("circle")
             .attr("cx", cx).attr("cy", cy)
-            .attr("r", maxR + 30)
-            .attr("fill", "none")
+            .attr("r", maxR + 40)
+            .attr("fill", cluster.color)
+            .attr("fill-opacity", 0.03)
             .attr("stroke", cluster.color)
             .attr("stroke-width", 1.5)
-            .attr("stroke-dasharray", "6,4")
-            .attr("opacity", 0.4);
+            .attr("stroke-dasharray", "8,4")
+            .attr("stroke-opacity", 0.35);
 
-          clusterGroup.append("text")
-            .attr("x", cx).attr("y", cy - maxR - 35)
+          clusterGroup!.append("text")
+            .attr("x", cx).attr("y", cy - maxR - 45)
             .attr("text-anchor", "middle")
             .attr("fill", cluster.color)
-            .attr("font-size", "10px")
-            .attr("opacity", 0.7)
+            .attr("font-size", "11px")
+            .attr("font-weight", "500")
+            .attr("opacity", 0.6)
+            .attr("letter-spacing", "0.5px")
             .text(cluster.label);
         });
       });
     }
 
-    // Links
+    // --- Links with animated gradients ---
     const link = g.append("g").selectAll("line").data(links).enter().append("line")
       .attr("stroke", d => {
-        if (d.type === 'shared-tag') return "#22C55E";
-        if (d.type === 'folder') return "#3B82F6";
-        return "#FFFFFF";
-      })
-      .attr("stroke-opacity", d => {
-        if (d.type === 'shared-tag') return 0.9;
-        if (d.type === 'folder') return 0.8;
-        return 0.8;
+        if (d.type === 'direct') return "rgba(255,255,255,0.6)";
+        if (d.type === 'shared-tag') return "rgba(34,197,94,0.5)";
+        if (d.type === 'folder') return "rgba(59,130,246,0.4)";
+        return "rgba(255,255,255,0.2)";
       })
       .attr("stroke-width", d => {
-        if (d.type === 'shared-tag') return 2;
-        if (d.type === 'folder') return 2;
-        return 1.5;
+        if (d.type === 'direct') return 1.5;
+        if (d.type === 'shared-tag') return 1;
+        return 0.8;
       })
+      .attr("stroke-dasharray", d => d.type === 'folder' ? "4,3" : d.type === 'shared-tag' ? "2,2" : "none")
       .style("pointer-events", "none");
 
-    // Nodes
+    // --- Nodes ---
     const node = g.append("g").selectAll("g").data(nodes).enter().append("g")
       .style("cursor", "pointer")
       .call(d3.drag<SVGGElement, GraphNode>()
@@ -310,83 +336,119 @@ export default function GraphView({
           localStorage.setItem('graph-positions', JSON.stringify(pos));
         }));
 
-    // Node circles
-    node.append("circle")
-      .attr("r", d => {
-        const r = 8 + Math.min(d.importance * 2, 20);
-        return selectedNote?.id === d.id ? r + 3 : r;
-      })
-      .attr("fill", d => {
+    // Outer glow ring for favorite nodes
+    node.filter(d => d.note.isFavorite).append("circle")
+      .attr("r", d => 8 + Math.min(d.importance * 2, 20) + 6)
+      .attr("fill", "none")
+      .attr("stroke", d => {
         const cId = detectedCommunities.get(d.id) ?? 0;
         return COMMUNITY_COLORS[cId % COMMUNITY_COLORS.length];
       })
-      .attr("stroke", d => selectedNote?.id === d.id ? "#FFFFFF" : "#374151")
-      .attr("stroke-width", d => selectedNote?.id === d.id ? 3 : 1)
-      .style("filter", d => d.note.isFavorite ? "drop-shadow(0 0 8px currentColor)" : "drop-shadow(0px 1px 3px rgba(0,0,0,0.6))");
+      .attr("stroke-width", 2)
+      .attr("stroke-opacity", 0.3)
+      .attr("filter", "url(#glow)");
+
+    // Main node circles
+    node.append("circle")
+      .attr("r", d => {
+        const r = 8 + Math.min(d.importance * 2, 20);
+        return selectedNote?.id === d.id ? r + 2 : r;
+      })
+      .attr("fill", d => {
+        const cId = detectedCommunities.get(d.id) ?? 0;
+        const color = COMMUNITY_COLORS[cId % COMMUNITY_COLORS.length];
+        return color;
+      })
+      .attr("fill-opacity", 0.85)
+      .attr("stroke", d => {
+        if (selectedNote?.id === d.id) return "#FFFFFF";
+        const cId = detectedCommunities.get(d.id) ?? 0;
+        return COMMUNITY_COLORS[cId % COMMUNITY_COLORS.length];
+      })
+      .attr("stroke-width", d => selectedNote?.id === d.id ? 3 : 1.5)
+      .attr("stroke-opacity", d => selectedNote?.id === d.id ? 1 : 0.4)
+      .style("filter", d => d.note.isFavorite ? "url(#glow)" : "none")
+      .style("transition", "all 0.15s ease");
+
+    // Inner highlight dot for important nodes
+    node.filter(d => d.importance >= 5).append("circle")
+      .attr("r", 3)
+      .attr("fill", "white")
+      .attr("fill-opacity", 0.6);
 
     // Label background + text
     node.each(function (d) {
       const el = d3.select(this);
-      const label = d.title.length > 20 ? d.title.substring(0, 20) + '...' : d.title;
-      const fontSize = d.importance >= 5 ? 12 : 10;
+      const label = d.title.length > 20 ? d.title.substring(0, 20) + '…' : d.title;
+      const fontSize = d.importance >= 5 ? 11 : 9;
       const fontWeight = d.importance >= 5 ? '600' : '400';
-      const r = 8 + Math.min(d.importance * 2, 20) + (selectedNote?.id === d.id ? 3 : 0);
+      const r = 8 + Math.min(d.importance * 2, 20) + (selectedNote?.id === d.id ? 2 : 0);
       const yOff = r + 14;
 
-      // Measure text width roughly
       const textWidth = label.length * (fontSize * 0.55);
 
       el.append("rect")
-        .attr("x", -textWidth / 2 - 3)
-        .attr("y", yOff - fontSize + 1)
-        .attr("width", textWidth + 6)
-        .attr("height", fontSize + 4)
-        .attr("rx", 3)
-        .attr("fill", "rgba(0,0,0,0.6)")
+        .attr("x", -textWidth / 2 - 4)
+        .attr("y", yOff - fontSize)
+        .attr("width", textWidth + 8)
+        .attr("height", fontSize + 6)
+        .attr("rx", 4)
+        .attr("fill", "rgba(10,10,20,0.75)")
+        .attr("stroke", "rgba(255,255,255,0.06)")
+        .attr("stroke-width", 0.5)
         .style("pointer-events", "none");
 
       el.append("text")
         .text(label)
         .attr("x", 0)
-        .attr("y", yOff)
+        .attr("y", yOff + 1)
         .attr("text-anchor", "middle")
         .attr("font-size", `${fontSize}px`)
         .attr("font-weight", fontWeight)
-        .attr("fill", selectedNote?.id === d.id ? "#FFFFFF" : "#D1D5DB")
-        .style("pointer-events", "none")
-        .style("text-shadow", "0px 1px 3px rgba(0,0,0,0.9)");
+        .attr("fill", selectedNote?.id === d.id ? "#FFFFFF" : "rgba(209,213,219,0.9)")
+        .attr("letter-spacing", "0.2px")
+        .style("pointer-events", "none");
     });
 
     // Hover events
     node.on("mouseover", function (event, d) {
-      const rect = svgRef.current?.getBoundingClientRect();
+      const rect = containerRef.current?.getBoundingClientRect();
       setTooltip({
         note: d.note,
-        x: event.clientX - (rect?.left || 0) + 12,
-        y: event.clientY - (rect?.top || 0) + 12
+        x: event.clientX - (rect?.left || 0) + 16,
+        y: event.clientY - (rect?.top || 0) - 8
       });
-      d3.select(this).select("circle")
+      d3.select(this).select("circle:nth-child(2), circle:first-child")
         .transition().duration(150)
-        .attr("stroke-width", 3).attr("stroke", "#FFFFFF");
-    })
-      .on("mouseout", function (event, d) {
-        setTooltip(null);
-        d3.select(this).select("circle")
-          .transition().duration(150)
-          .attr("stroke-width", selectedNote?.id === d.id ? 3 : 1)
-          .attr("stroke", selectedNote?.id === d.id ? "#FFFFFF" : "#374151");
-      })
-      .on("mousemove", (event) => {
-        const rect = svgRef.current?.getBoundingClientRect();
-        setTooltip(prev => prev ? {
-          ...prev,
-          x: event.clientX - (rect?.left || 0) + 12,
-          y: event.clientY - (rect?.top || 0) + 12
-        } : null);
+        .attr("stroke-width", 3).attr("stroke", "#FFFFFF").attr("stroke-opacity", 1);
+      d3.select(this).transition().duration(150).attr("transform", function() {
+        const current = d3.select(this).attr("transform");
+        return current; // keep position, just highlight
       });
+    })
+    .on("mouseout", function (_event, d) {
+      setTooltip(null);
+      const mainCircle = d3.select(this).selectAll("circle").filter(function(_, i) { return i === (d.note.isFavorite ? 1 : 0); });
+      mainCircle.transition().duration(200)
+        .attr("stroke-width", selectedNote?.id === d.id ? 3 : 1.5)
+        .attr("stroke", () => {
+          if (selectedNote?.id === d.id) return "#FFFFFF";
+          const cId = detectedCommunities.get(d.id) ?? 0;
+          return COMMUNITY_COLORS[cId % COMMUNITY_COLORS.length];
+        })
+        .attr("stroke-opacity", selectedNote?.id === d.id ? 1 : 0.4);
+    })
+    .on("mousemove", (event) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      setTooltip(prev => prev ? {
+        ...prev,
+        x: event.clientX - (rect?.left || 0) + 16,
+        y: event.clientY - (rect?.top || 0) - 8
+      } : null);
+    });
 
     // Click
-    node.on("click", (event, d) => onNodeClick(d.note));
+    node.on("click", (_event, d) => onNodeClick(d.note));
 
     // Double-click focus
     node.on("dblclick", function (event, d) {
@@ -404,17 +466,17 @@ export default function GraphView({
           if (tgt === newFocus) connectedIds.add(src);
         });
 
-        node.transition().duration(300)
-          .style("opacity", (n: GraphNode) => connectedIds.has(n.id) ? 1 : 0.15);
-        link.transition().duration(300)
+        node.transition().duration(400).ease(d3.easeCubicOut)
+          .style("opacity", (n: GraphNode) => connectedIds.has(n.id) ? 1 : 0.08);
+        link.transition().duration(400).ease(d3.easeCubicOut)
           .style("opacity", (l: any) => {
             const s = typeof l.source === 'object' ? l.source.id : l.source;
             const t = typeof l.target === 'object' ? l.target.id : l.target;
-            return connectedIds.has(s) && connectedIds.has(t) ? 0.9 : 0.05;
+            return connectedIds.has(s) && connectedIds.has(t) ? 1 : 0.03;
           });
       } else {
-        node.transition().duration(300).style("opacity", 1);
-        link.transition().duration(300).style("opacity", null);
+        node.transition().duration(400).ease(d3.easeCubicOut).style("opacity", 1);
+        link.transition().duration(400).ease(d3.easeCubicOut).style("opacity", null);
       }
     });
 
@@ -434,86 +496,149 @@ export default function GraphView({
     };
   }, [notes, onNodeClick, selectedNote, searchTerm, selectedFolder, selectedTag, showClusters, resetKey, focusedNodeId]);
 
-  const totalLinks = notes.reduce((acc, n) => acc + n.linkedNotes.length, 0);
-
   return (
-    <div className="w-full h-full flex flex-col">
-      <div className="flex-1 border border-gray-800 rounded-lg overflow-hidden relative" style={{ background: '#1e1e1e' }}>
-        {/* Toolbar */}
-        <div className="absolute top-2 left-2 z-10 flex gap-1.5">
-          <button
-            onClick={() => setShowClusters(p => !p)}
-            className={`px-2 py-1 text-xs rounded border transition-colors ${showClusters ? 'bg-green-500/20 border-green-500 text-green-400' : 'bg-black/50 border-gray-700 text-gray-400 hover:text-gray-200'}`}
-          >
-            {showClusters ? '🔵 Clusters ON' : '⚪ Clusters'}
-          </button>
-          <button
-            onClick={resetPositions}
-            className="px-2 py-1 text-xs rounded border bg-black/50 border-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
-          >
-            🔄 Reset
-          </button>
-          {focusedNodeId && (
+    <div className="w-full h-full flex flex-col select-none">
+      {/* Main graph area */}
+      <div 
+        ref={containerRef}
+        className="flex-1 rounded-xl overflow-hidden relative border border-white/[0.06]"
+        style={{ background: 'linear-gradient(135deg, #0a0a14 0%, #111122 50%, #0a0a14 100%)' }}
+      >
+        {/* Glassmorphism Toolbar */}
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5">
+          <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg backdrop-blur-xl"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <button
-              onClick={() => setFocusedNodeId(null)}
-              className="px-2 py-1 text-xs rounded border bg-blue-500/20 border-blue-500 text-blue-400"
+              onClick={() => setShowClusters(p => !p)}
+              className={`px-2.5 py-1 text-[11px] rounded-md font-medium transition-all duration-200 ${
+                showClusters 
+                  ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.15)]' 
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'
+              }`}
             >
-              ✕ Exit Focus
+              <span className="mr-1">{showClusters ? '◉' : '○'}</span>
+              Clusters
             </button>
-          )}
+            <div className="w-px h-4 bg-white/10" />
+            <button
+              onClick={resetPositions}
+              className="px-2.5 py-1 text-[11px] rounded-md text-gray-500 hover:text-gray-300 hover:bg-white/[0.04] transition-all duration-200 font-medium"
+            >
+              ↻ Reset
+            </button>
+            {focusedNodeId && (
+              <>
+                <div className="w-px h-4 bg-white/10" />
+                <button
+                  onClick={() => setFocusedNodeId(null)}
+                  className="px-2.5 py-1 text-[11px] rounded-md bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 transition-all duration-200 font-medium"
+                >
+                  ✕ Exit Focus
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
+        {/* Stats badge */}
+        <div className="absolute top-3 right-3 z-10">
+          <div className="px-3 py-1.5 rounded-lg backdrop-blur-xl text-[10px] font-mono tracking-wide"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <span className="text-emerald-400/80">{graphStats.nodes}</span>
+            <span className="text-gray-600 mx-1">nodes</span>
+            <span className="text-gray-700 mx-1">•</span>
+            <span className="text-blue-400/80">{graphStats.links}</span>
+            <span className="text-gray-600 mx-1">links</span>
+            {graphStats.clusters > 1 && (
+              <>
+                <span className="text-gray-700 mx-1">•</span>
+                <span className="text-purple-400/80">{graphStats.clusters}</span>
+                <span className="text-gray-600 mx-1">clusters</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* SVG Canvas */}
         <svg
           ref={svgRef}
           width="100%"
           height="100%"
           className="w-full h-full"
-          style={{ background: '#1e1e1e', minHeight: '600px' }}
+          style={{ minHeight: '500px' }}
         />
 
         {/* Tooltip */}
         {tooltip && (
           <div
-            className="absolute pointer-events-none z-20"
+            className="absolute pointer-events-none z-30 animate-in fade-in duration-150"
             style={{
-              left: tooltip.x,
+              left: Math.min(tooltip.x, (containerRef.current?.clientWidth || 800) - 220),
               top: tooltip.y,
-              maxWidth: 200,
-              background: '#1a1a2e',
-              border: '1px solid #374151',
-              borderRadius: 8,
-              padding: 8,
+              maxWidth: 220,
             }}
           >
-            <div className="text-white text-xs font-bold mb-1 truncate">{tooltip.note.title}</div>
-            {tooltip.note.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-1">
-                {tooltip.note.tags.map(t => (
-                  <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">#{t}</span>
-                ))}
+            <div className="rounded-xl overflow-hidden backdrop-blur-xl"
+              style={{ 
+                background: 'rgba(15,15,30,0.92)', 
+                border: '1px solid rgba(255,255,255,0.1)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.1)'
+              }}>
+              <div className="px-3 py-2.5">
+                <div className="text-white text-xs font-semibold mb-1.5 truncate">{tooltip.note.title}</div>
+                {tooltip.note.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {tooltip.note.tags.slice(0, 4).map(t => (
+                      <span key={t} className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+                        style={{ background: 'rgba(34,197,94,0.12)', color: 'rgba(34,197,94,0.9)' }}>
+                        #{t}
+                      </span>
+                    ))}
+                    {tooltip.note.tags.length > 4 && (
+                      <span className="text-[9px] text-gray-500">+{tooltip.note.tags.length - 4}</span>
+                    )}
+                  </div>
+                )}
+                {tooltip.note.content && (
+                  <div className="text-gray-400 text-[10px] leading-relaxed mb-1.5 line-clamp-2">
+                    {tooltip.note.content.substring(0, 80)}{tooltip.note.content.length > 80 ? '…' : ''}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-[9px] text-gray-500 pt-1 border-t border-white/[0.06]">
+                  <span>{tooltip.note.linkedNotes.length} links</span>
+                  {tooltip.note.folder && <span>📁 {tooltip.note.folder}</span>}
+                  {tooltip.note.isFavorite && <span>⭐</span>}
+                </div>
               </div>
-            )}
-            {tooltip.note.content && (
-              <div className="text-gray-400 text-[10px] mb-1 line-clamp-2">
-                {tooltip.note.content.substring(0, 60)}{tooltip.note.content.length > 60 ? '...' : ''}
-              </div>
-            )}
-            <div className="text-gray-500 text-[9px]">
-              {tooltip.note.linkedNotes.length} links
-              {tooltip.note.folder ? ` • ${tooltip.note.folder}` : ''}
+            </div>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {notes.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-gray-600 text-sm mb-1">No notes to visualize</div>
+              <div className="text-gray-700 text-xs">Create notes and link them to build your knowledge graph</div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Legend */}
-      <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-400 flex-wrap px-1">
-        <span className="flex items-center gap-1"><span className="w-3 h-px bg-white inline-block" /> Direct</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Shared tag</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> Same folder</span>
-        <span>📌 Dbl-click = Focus</span>
-        <span>💾 Drag to pin</span>
-        <span className="ml-auto text-gray-500">{notes.length} notes • {totalLinks} links</span>
+      {/* Legend bar */}
+      <div className="mt-2 flex items-center gap-4 text-[10px] text-gray-500 px-2 py-1">
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-px bg-white/50 inline-block" /> Direct
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-px inline-block" style={{ borderTop: '1px dashed rgba(34,197,94,0.6)' }} /> Shared tag
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-px inline-block" style={{ borderTop: '1px dashed rgba(59,130,246,0.5)' }} /> Folder
+        </span>
+        <span className="text-gray-600">|</span>
+        <span>Double-click → Focus</span>
+        <span>Drag → Save position</span>
       </div>
     </div>
   );
