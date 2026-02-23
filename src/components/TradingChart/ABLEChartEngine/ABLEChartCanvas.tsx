@@ -20,7 +20,7 @@ interface OIBubblesConfig {
 interface ABLEChartCanvasProps {
   data: OHLCVData[];
   symbol: string;
-  symbolType: 'crypto' | 'stock' | 'forex' | 'set';
+  symbolType: 'crypto' | 'stock' | 'forex' | 'set' | 'futures' | 'bond' | 'index' | 'commodity';
   timeframe: string;
   width: number;
   height: number;

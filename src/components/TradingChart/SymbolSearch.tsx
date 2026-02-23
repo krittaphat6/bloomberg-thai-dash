@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, Star, TrendingUp, Bitcoin, DollarSign, Globe } from 'lucide-react';
+import { Search, Star, TrendingUp, Bitcoin, DollarSign, Globe, BarChart3, Landmark, Flame, LineChart, Loader2 } from 'lucide-react';
 import { ChartSymbol, chartDataService } from '@/services/ChartDataService';
 
 interface SymbolSearchProps {
@@ -20,19 +20,39 @@ interface SymbolSearchProps {
   onToggleFavorite: (symbol: string) => void;
 }
 
-const TYPE_ICONS = {
+const TYPE_ICONS: Record<string, any> = {
   crypto: Bitcoin,
   stock: TrendingUp,
   forex: DollarSign,
   set: Globe,
+  futures: Flame,
+  commodity: BarChart3,
+  index: LineChart,
+  bond: Landmark,
 };
 
-const TYPE_COLORS = {
+const TYPE_COLORS: Record<string, string> = {
   crypto: 'text-orange-500',
   stock: 'text-green-500',
   forex: 'text-blue-500',
   set: 'text-purple-500',
+  futures: 'text-red-500',
+  commodity: 'text-yellow-500',
+  index: 'text-cyan-500',
+  bond: 'text-emerald-500',
 };
+
+const ASSET_TYPES = [
+  { key: null, label: 'All' },
+  { key: 'crypto', label: 'Crypto' },
+  { key: 'stock', label: 'Stocks' },
+  { key: 'forex', label: 'Forex' },
+  { key: 'commodity', label: 'Commodities' },
+  { key: 'index', label: 'Indices' },
+  { key: 'futures', label: 'Futures' },
+  { key: 'bond', label: 'Bonds' },
+  { key: 'set', label: 'SET' },
+] as const;
 
 const SymbolSearch: React.FC<SymbolSearchProps> = ({
   isOpen,
@@ -44,11 +64,43 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [screenerResults, setScreenerResults] = useState<ChartSymbol[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  const symbols = useMemo(() => chartDataService.getSymbolsList(), []);
+  const defaultSymbols = useMemo(() => chartDataService.getSymbolsList(), []);
+
+  // Debounced screener search
+  useEffect(() => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setScreenerResults([]);
+      return;
+    }
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await chartDataService.searchViaScreener(searchQuery);
+        setScreenerResults(results);
+      } catch {
+        setScreenerResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const filteredSymbols = useMemo(() => {
-    let result = symbols;
+    // Merge default + screener results
+    const allSymbols = [...defaultSymbols];
+    const seen = new Set(allSymbols.map(s => s.symbol));
+    screenerResults.forEach(s => {
+      if (!seen.has(s.symbol)) {
+        allSymbols.push(s);
+        seen.add(s.symbol);
+      }
+    });
+
+    let result = allSymbols;
 
     if (selectedType) {
       result = result.filter(s => s.type === selectedType);
@@ -64,7 +116,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
       );
     }
 
-    // Sort favorites first
+    // Sort: favorites first, then by name
     return result.sort((a, b) => {
       const aFav = favorites.includes(a.symbol);
       const bFav = favorites.includes(b.symbol);
@@ -72,7 +124,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
       if (!aFav && bFav) return 1;
       return 0;
     });
-  }, [symbols, searchQuery, selectedType, favorites]);
+  }, [defaultSymbols, screenerResults, searchQuery, selectedType, favorites]);
 
   const handleSelect = (symbol: ChartSymbol) => {
     onSelectSymbol(symbol);
@@ -82,62 +134,67 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] bg-card border-terminal-green/30">
+      <DialogContent className="sm:max-w-[560px] bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="text-terminal-green font-mono">Search Symbol</DialogTitle>
+          <DialogTitle className="text-terminal-green font-mono flex items-center gap-2">
+            <Search className="w-4 h-4" />
+            Search Any Asset — Global Markets
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Search input */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search symbols... (e.g., BTC, AAPL, EUR)"
+              placeholder="Search stocks, crypto, forex, commodities, indices..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="pl-10 bg-background border-terminal-green/30 focus:border-terminal-green"
+              className="pl-10 pr-10 bg-background border-border focus:border-terminal-green"
               autoFocus
             />
+            {isSearching && (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-terminal-green" />
+            )}
           </div>
 
-          {/* Type filters */}
-          <div className="flex gap-2">
-            <Button
-              variant={selectedType === null ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setSelectedType(null)}
-              className={selectedType === null ? 'bg-terminal-green text-black' : ''}
-            >
-              All
-            </Button>
-            {(['crypto', 'stock', 'forex', 'set'] as const).map(type => {
-              const Icon = TYPE_ICONS[type];
+          {/* Type filters — scrollable */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            {ASSET_TYPES.map(({ key, label }) => {
+              const Icon = key ? TYPE_ICONS[key] : Search;
+              const isActive = selectedType === key;
               return (
                 <Button
-                  key={type}
-                  variant={selectedType === type ? 'default' : 'outline'}
+                  key={label}
+                  variant={isActive ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setSelectedType(type)}
-                  className={`gap-1 ${selectedType === type ? 'bg-terminal-green text-black' : ''}`}
+                  onClick={() => setSelectedType(key)}
+                  className={`gap-1 shrink-0 text-xs ${isActive ? 'bg-terminal-green text-black' : 'border-border'}`}
                 >
-                  <Icon className="w-3 h-3" />
-                  {type === 'set' ? 'SET' : type.charAt(0).toUpperCase() + type.slice(1)}
+                  {Icon && <Icon className="w-3 h-3" />}
+                  {label}
                 </Button>
               );
             })}
           </div>
 
+          {/* Results count */}
+          <div className="text-[10px] text-muted-foreground px-1">
+            {filteredSymbols.length} results
+            {screenerResults.length > 0 && ` • ${screenerResults.length} from global search`}
+          </div>
+
           {/* Symbol list */}
-          <div className="max-h-[400px] overflow-y-auto space-y-1">
+          <div className="max-h-[400px] overflow-y-auto space-y-0.5">
             {filteredSymbols.map(symbol => {
-              const Icon = TYPE_ICONS[symbol.type];
+              const Icon = TYPE_ICONS[symbol.type] || Globe;
               const isFavorite = favorites.includes(symbol.symbol);
               const isSelected = currentSymbol?.symbol === symbol.symbol;
 
               return (
                 <div
-                  key={symbol.symbol}
-                  className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${
+                  key={`${symbol.exchange}:${symbol.symbol}`}
+                  className={`flex items-center gap-3 px-2 py-1.5 rounded cursor-pointer transition-colors ${
                     isSelected
                       ? 'bg-terminal-green/20 border border-terminal-green/50'
                       : 'hover:bg-muted/50'
@@ -149,24 +206,27 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
                       e.stopPropagation();
                       onToggleFavorite(symbol.symbol);
                     }}
-                    className="p-1 hover:bg-muted rounded"
+                    className="p-0.5 hover:bg-muted rounded"
                   >
                     <Star
-                      className={`w-4 h-4 ${
+                      className={`w-3.5 h-3.5 ${
                         isFavorite ? 'fill-yellow-500 text-yellow-500' : 'text-muted-foreground'
                       }`}
                     />
                   </button>
 
-                  <Icon className={`w-4 h-4 ${TYPE_COLORS[symbol.type]}`} />
+                  <Icon className={`w-4 h-4 ${TYPE_COLORS[symbol.type] || 'text-muted-foreground'}`} />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-medium text-foreground">
+                      <span className="font-mono font-medium text-sm text-foreground">
                         {symbol.symbol}
                       </span>
-                      <Badge variant="outline" className="text-[10px] px-1">
+                      <Badge variant="outline" className="text-[9px] px-1 py-0">
                         {symbol.exchange}
+                      </Badge>
+                      <Badge variant="outline" className={`text-[9px] px-1 py-0 ${TYPE_COLORS[symbol.type] || ''}`}>
+                        {symbol.type}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{symbol.name}</p>
@@ -175,9 +235,15 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
               );
             })}
 
-            {filteredSymbols.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                No symbols found
+            {filteredSymbols.length === 0 && !isSearching && (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No symbols found — try searching for any ticker
+              </div>
+            )}
+            {isSearching && filteredSymbols.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground text-sm flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Searching global markets...
               </div>
             )}
           </div>

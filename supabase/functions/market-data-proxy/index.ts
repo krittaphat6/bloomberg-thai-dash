@@ -424,7 +424,52 @@ serve(async (req) => {
       symbol: reqSymbol,
       limit: reqLimit,
       period,
+      source,
+      range: reqRange,
+      interval: reqInterval,
     } = body;
+    
+    // ===== Yahoo OHLCV chart data mode =====
+    if (source === 'yahoo' && symbols.length > 0) {
+      const yahooResults: Record<string, any> = {};
+      
+      for (const sym of symbols) {
+        try {
+          const yahooSym = SYMBOL_MAP[sym] || sym;
+          const chartRange = reqRange || '1y';
+          const chartInterval = reqInterval || '1d';
+          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSym)}?interval=${chartInterval}&range=${chartRange}`;
+          
+          const resp = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': 'application/json',
+            },
+          });
+          
+          if (resp.ok) {
+            const json = await resp.json();
+            const result = json.chart?.result?.[0];
+            if (result) {
+              yahooResults[sym] = {
+                timestamps: result.timestamp || [],
+                quotes: result.indicators?.quote?.[0] || {},
+                meta: result.meta || {},
+              };
+            }
+          }
+        } catch (e) {
+          console.warn(`Yahoo chart fetch failed for ${sym}:`, e);
+        }
+      }
+      
+      return new Response(JSON.stringify({
+        success: true,
+        yahoo: yahooResults,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     
     const effectiveAction = action || endpoint;
     const effectiveSymbol = reqSymbol || body.depthSymbol;
