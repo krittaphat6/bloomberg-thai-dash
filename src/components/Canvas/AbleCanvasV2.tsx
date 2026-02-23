@@ -142,6 +142,8 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote, mainView, onChangeVi
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const autoSaveRef = useRef<NodeJS.Timeout | null>(null);
+  const nodesRef = useRef<Node[]>(nodes);
+  const edgesRef = useRef<Edge[]>(edges);
   
   const [history, setHistory] = useState<{ nodes: Node[]; edges: Edge[] }[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -149,10 +151,21 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote, mainView, onChangeVi
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView, zoomIn, zoomOut, getViewport } = useReactFlow();
 
+  // Keep refs in sync — this ensures saveCanvas always gets latest data
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
+
+  // Stable saveCanvas that reads from refs (doesn't depend on nodes/edges)
   const saveCanvas = useCallback(() => {
+    const currentNodes = nodesRef.current;
+    const currentEdges = edgesRef.current;
+    
+    if (currentNodes.length === 0 && currentEdges.length === 0) return;
+    
     setIsSaving(true);
     const canvasData = {
-      nodes, edges,
+      nodes: currentNodes,
+      edges: currentEdges,
       viewport: getViewport(),
       savedAt: new Date().toISOString(),
       version: '2.0'
@@ -166,22 +179,24 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote, mainView, onChangeVi
       localStorage.setItem(historyKey, JSON.stringify(newHistory));
       setLastSaved(new Date());
       setHasUnsavedChanges(false);
-      console.log('✅ Canvas V2 auto-saved', new Date().toLocaleTimeString());
+      console.log('✅ Canvas V2 auto-saved at', new Date().toLocaleTimeString(), `(${currentNodes.length} nodes, ${currentEdges.length} edges)`);
     } catch (error) {
       console.error('❌ Failed to save canvas:', error);
       toast({ title: "Save Failed", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
-  }, [nodes, edges, getViewport]);
+  }, [getViewport]);
 
-  // Auto-save
+  // Auto-save: triggers on any node/edge change, debounced 2s
   useEffect(() => {
     if (nodes.length === 0 && edges.length === 0) return;
     setHasUnsavedChanges(true);
     
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-    autoSaveRef.current = setTimeout(() => saveCanvas(), 3000);
+    autoSaveRef.current = setTimeout(() => {
+      saveCanvas();
+    }, 2000);
     
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
   }, [nodes, edges, saveCanvas]);
