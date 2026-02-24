@@ -155,6 +155,33 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote, mainView, onChangeVi
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
+  // Clean node/edge data to remove non-serializable properties
+  const cleanForStorage = useCallback((currentNodes: Node[], currentEdges: Edge[]) => {
+    const cleanNodes = currentNodes.map(n => ({
+      id: n.id,
+      type: n.type,
+      position: { x: n.position.x, y: n.position.y },
+      data: JSON.parse(JSON.stringify(n.data || {})),
+      width: n.width,
+      height: n.height,
+      style: n.style ? JSON.parse(JSON.stringify(n.style)) : undefined,
+      ...(n.parentNode ? { parentNode: n.parentNode } : {}),
+    }));
+    const cleanEdges = currentEdges.map(e => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      type: e.type,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+      data: e.data ? JSON.parse(JSON.stringify(e.data)) : undefined,
+      style: e.style ? JSON.parse(JSON.stringify(e.style)) : undefined,
+      label: e.label,
+      animated: e.animated,
+    }));
+    return { cleanNodes, cleanEdges };
+  }, []);
+
   // Stable saveCanvas that reads from refs (doesn't depend on nodes/edges)
   const saveCanvas = useCallback(() => {
     const currentNodes = nodesRef.current;
@@ -163,30 +190,35 @@ function CanvasContent({ notes, onUpdateNote, onCreateNote, mainView, onChangeVi
     if (currentNodes.length === 0 && currentEdges.length === 0) return;
     
     setIsSaving(true);
-    const canvasData = {
-      nodes: currentNodes,
-      edges: currentEdges,
-      viewport: getViewport(),
-      savedAt: new Date().toISOString(),
-      version: '2.0'
-    };
-    
     try {
-      localStorage.setItem('able-canvas-v2', JSON.stringify(canvasData));
+      const { cleanNodes, cleanEdges } = cleanForStorage(currentNodes, currentEdges);
+      const canvasData = {
+        nodes: cleanNodes,
+        edges: cleanEdges,
+        viewport: getViewport(),
+        savedAt: new Date().toISOString(),
+        version: '2.0'
+      };
+      
+      const serialized = JSON.stringify(canvasData);
+      localStorage.setItem('able-canvas-v2', serialized);
+      
+      // Keep last 9 history snapshots
       const historyKey = 'able-canvas-history';
       const existingHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
       const newHistory = [{ ...canvasData, id: Date.now() }, ...existingHistory.slice(0, 9)];
       localStorage.setItem(historyKey, JSON.stringify(newHistory));
+      
       setLastSaved(new Date());
       setHasUnsavedChanges(false);
-      console.log('✅ Canvas V2 auto-saved at', new Date().toLocaleTimeString(), `(${currentNodes.length} nodes, ${currentEdges.length} edges)`);
+      console.log('✅ Canvas V2 auto-saved', new Date().toLocaleTimeString(), `(${cleanNodes.length} nodes, ${cleanEdges.length} edges, ${(serialized.length / 1024).toFixed(1)}KB)`);
     } catch (error) {
       console.error('❌ Failed to save canvas:', error);
-      toast({ title: "Save Failed", variant: "destructive" });
+      toast({ title: "Save Failed", description: String(error), variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
-  }, [getViewport]);
+  }, [getViewport, cleanForStorage]);
 
   // Auto-save: triggers on any node/edge change, debounced 2s
   useEffect(() => {
