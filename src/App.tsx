@@ -20,6 +20,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const OptionsSurfacePlot = lazy(() => import("./components/OptionsSurfacePlot"));
 const PacManGame = lazy(() => import("./components/PacManGame").then(m => ({ default: m.PacManGame })));
 const GlobalMap = lazy(() => import("./pages/GlobalMap"));
+const ServiceMap = lazy(() => import("./pages/ServiceMap"));
 
 
 const queryClient = new QueryClient();
@@ -55,6 +56,7 @@ const AppContent = () => {
             <Route path="/options" element={<OptionsSurfacePlot />} />
             <Route path="/pacman" element={<PacManGame />} />
             <Route path="/map" element={<GlobalMap />} />
+            <Route path="/service-map" element={<ServiceMap />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
