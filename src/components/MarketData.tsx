@@ -54,6 +54,7 @@ import { FaceSearch } from './FaceSearch';
 import { TacticalCommandMap } from './TacticalMap';
 import { SuperClawPanel } from './SuperClawPanel';
 import ScreenerMain from './Screeners/ScreenerMain';
+import { Network } from 'lucide-react';
 
 interface PanelData {
   id: string;
@@ -525,6 +526,17 @@ const MarketData = () => {
       category: 'entertainment',
       description: 'Chess puzzles and challenges',
       tags: ['chess', 'puzzle', 'game', 'strategy']
+    },
+
+    // Dev / Architecture
+    {
+      id: 'service-map',
+      title: '🗺️ SERVICE MAP',
+      component: <div className="h-full w-full overflow-auto"><iframe src="/service-map" className="w-full h-[800px] border-0" title="Service Map" /></div>,
+      category: 'utilities',
+      icon: <Network className="w-5 h-5" />,
+      description: 'Grafana-style service dependency map showing all connections',
+      tags: ['service', 'map', 'architecture', 'dependencies', 'grafana', 'network']
     },
   ];
   // Note: TACTICAL COMMAND moved to GLOBAL MAP (/map route) - accessible via mode switcher there
