@@ -421,7 +421,7 @@ const ServiceMap: React.FC = () => {
           onPointerUp={onPointerUp}
           style={{ touchAction: 'none' }}
         >
-          <div style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, transformOrigin: '0 0', willChange: 'transform' }}>
+          <div style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, transformOrigin: '0 0', willChange: 'transform', position: 'relative', width: 1900, height: 2100 }}>
             {/* SVG edges */}
             <svg
               key={animKey}
