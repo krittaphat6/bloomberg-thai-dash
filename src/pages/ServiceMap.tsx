@@ -366,7 +366,7 @@ const ServiceMap: React.FC = () => {
   const filterOptions = ['all', 'page', 'service', 'api', 'database', 'context', 'component', 'edge-fn', 'hook', 'store'] as const;
 
   return (
-    <div className="h-full w-full flex flex-col overflow-hidden" style={{ background: '#0b0e14' }}>
+    <div className="w-full flex flex-col overflow-hidden" style={{ background: '#0b0e14', height: '100vh' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: '#1e2330' }}>
         <div className="flex items-center gap-3">
