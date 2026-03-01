@@ -509,22 +509,120 @@ export class MCPServer {
 
     this.registerTool({
       name: 'get_global_map_data',
-      description: 'ดึงข้อมูลแผ่นดินไหวล่าสุดจาก USGS',
-      inputSchema: { type: 'object', properties: { type: { type: 'string', enum: ['earthquakes', 'all'] } }, required: [] },
-      handler: async () => {
+      description: 'ดึงข้อมูลทั้งหมดจาก Global Map: แผ่นดินไหว, เที่ยวบิน, สภาพอากาศ, พายุ, ความขัดแย้ง, ข้อมูลยุทธศาสตร์',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          layers: {
+            type: 'array',
+            items: { type: 'string', enum: ['earthquakes', 'flights', 'weather', 'cyclones', 'conflicts', 'strategic', 'all'] },
+            description: 'เลเยอร์ที่ต้องการ (default: all)'
+          }
+        },
+        required: []
+      },
+      handler: async (params) => {
+        const layers = params.layers || ['all'];
+        const isAll = layers.includes('all');
+        const result: Record<string, any> = { success: true, timestamp: new Date().toISOString() };
+
         try {
-          const res = await fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit=10&minmagnitude=5&orderby=time');
-          const data = await res.json();
-          return {
-            success: true,
-            earthquakes: data.features?.map((f: any) => ({
-              place: f.properties.place, magnitude: f.properties.mag,
-              time: new Date(f.properties.time).toLocaleString('th-TH'),
-              depth: f.geometry.coordinates[2]
-            })) || []
-          };
+          // Earthquakes
+          if (isAll || layers.includes('earthquakes')) {
+            try {
+              const res = await fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit=15&minmagnitude=4.5&orderby=time');
+              const data = await res.json();
+              result.earthquakes = {
+                count: data.features?.length || 0,
+                items: data.features?.map((f: any) => ({
+                  place: f.properties.place, magnitude: f.properties.mag,
+                  time: new Date(f.properties.time).toLocaleString('th-TH'),
+                  depth: f.geometry.coordinates[2],
+                  lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0],
+                  tsunami: f.properties.tsunami === 1
+                })) || []
+              };
+            } catch { result.earthquakes = { count: 0, items: [], error: 'fetch failed' }; }
+          }
+
+          // Live Flights (OpenSky)
+          if (isAll || layers.includes('flights')) {
+            try {
+              const res = await fetch('https://opensky-network.org/api/states/all?lamin=0&lomin=60&lamax=30&lomax=120');
+              if (res.ok) {
+                const data = await res.json();
+                const flights = (data.states || []).slice(0, 30).map((s: any) => ({
+                  callsign: s[1]?.trim(), origin: s[2], lat: s[6], lng: s[5],
+                  altitude: Math.round(s[7] || 0), velocity: Math.round((s[9] || 0) * 3.6),
+                  heading: Math.round(s[10] || 0), onGround: s[8]
+                }));
+                result.flights = { count: flights.length, items: flights };
+              } else {
+                result.flights = { count: 0, items: [], note: 'OpenSky rate limited' };
+              }
+            } catch { result.flights = { count: 0, items: [], error: 'fetch failed' }; }
+          }
+
+          // Weather Alerts
+          if (isAll || layers.includes('weather')) {
+            try {
+              const { WeatherService } = await import('@/services/WeatherService');
+              const alerts = await WeatherService.getWeatherAlerts();
+              result.weather = { count: alerts.length, items: alerts.slice(0, 15) };
+            } catch { result.weather = { count: 0, items: [], error: 'fetch failed' }; }
+          }
+
+          // Cyclones
+          if (isAll || layers.includes('cyclones')) {
+            try {
+              const { default: CycloneService } = await import('@/services/CycloneService');
+              const cyclones = await CycloneService.fetchAllCyclones();
+              result.cyclones = { count: cyclones.length, items: cyclones };
+            } catch { result.cyclones = { count: 0, items: [], error: 'fetch failed' }; }
+          }
+
+          // Conflicts
+          if (isAll || layers.includes('conflicts')) {
+            try {
+              const { ConflictService } = await import('@/services/ConflictService');
+              const conflicts = await ConflictService.getConflictData();
+              result.conflicts = { count: conflicts.length, items: conflicts.slice(0, 20) };
+            } catch { result.conflicts = { count: 0, items: [], error: 'fetch failed' }; }
+          }
+
+          // Strategic Assets (from WorldMonitorService)
+          if (isAll || layers.includes('strategic')) {
+            try {
+              const { worldMonitorService } = await import('@/services/WorldMonitorService');
+              result.strategic = {
+                militaryBases: worldMonitorService.getMilitaryBases().length,
+                nuclearFacilities: worldMonitorService.getNuclearFacilities().length,
+                underseaCables: worldMonitorService.getUnderseaCables().length,
+                pipelines: worldMonitorService.getPipelines().length,
+                datacenters: worldMonitorService.getDatacenters().length,
+                conflictZones: worldMonitorService.getConflictZones().map(z => ({ name: z.name, severity: z.severity, parties: z.parties })),
+                chokepoints: worldMonitorService.getChokepoints().map(c => ({ name: c.name, lat: c.lat, lng: c.lng, currentThreat: c.currentThreat })),
+                hotspots: worldMonitorService.getHotspots().map(h => ({ name: h.name, type: h.type, lat: h.lat, lng: h.lng })).slice(0, 15)
+              };
+            } catch { result.strategic = { error: 'fetch failed' }; }
+          }
+
+          // World Intelligence Brief
+          if (isAll) {
+            try {
+              const { worldMonitorService } = await import('@/services/WorldMonitorService');
+              const intel = await worldMonitorService.fetchIntelligence();
+              result.worldBrief = intel.worldBrief;
+              result.theaterPosture = worldMonitorService.computeTheaterPosture(intel).map(t => ({
+                name: t.name, level: t.level, score: t.score
+              }));
+              result.convergenceHotspots = worldMonitorService.detectConvergence(intel).slice(0, 5);
+            } catch { /* non-critical */ }
+          }
+
+          return result;
         } catch (error) {
-          return { success: false, error: `Earthquake data failed: ${error}` };
+          return { success: false, error: `Global map data failed: ${error}` };
         }
       }
     });
