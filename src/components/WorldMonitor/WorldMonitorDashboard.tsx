@@ -1,9 +1,13 @@
-import BloombergMap from '@/components/BloombergMap';
-
 export const WorldMonitorDashboard = () => {
   return (
     <div className="h-full w-full relative bg-[#060d18]">
-      <BloombergMap />
+      <iframe
+        src="https://worldmonitor.app"
+        title="World Monitor"
+        className="w-full h-full border-0"
+        allow="geolocation; fullscreen"
+        style={{ border: 'none' }}
+      />
     </div>
   );
 };
