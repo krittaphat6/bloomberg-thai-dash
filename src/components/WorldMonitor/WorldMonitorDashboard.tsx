@@ -1,9 +1,9 @@
-import GlobalMapView from '@/components/GlobalMap/GlobalMapView';
+import BloombergMap from '@/components/BloombergMap';
 
 export const WorldMonitorDashboard = () => {
   return (
     <div className="h-full w-full relative bg-[#060d18]">
-      <GlobalMapView />
+      <BloombergMap />
     </div>
   );
 };
