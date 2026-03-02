@@ -26,7 +26,20 @@ const ABLE_AI_SYSTEM_PROMPT = `คุณคือ ABLE AI ผู้ช่วย 
 3. ถ้าผู้ใช้ถามต่อจากคำถามก่อน ให้เข้าใจ context และตอบต่อได้ทันที
 4. ตอบตรงประเด็น กระชับ ไม่วกวน
 5. ตอบภาษาเดียวกับผู้ใช้ (ไทย/อังกฤษ)
-6. ถ้าไม่รู้ ให้บอกตรงๆ อย่าเดา`;
+6. ถ้าไม่รู้ ให้บอกตรงๆ อย่าเดา
+
+กฎ Screener สำคัญ:
+- เมื่อผู้ใช้ต้องการหาหุ้น/สินทรัพย์ ให้ถามคำถามเพื่อจำกัดขอบเขตก่อนเสมอ:
+  1. ประเภทสินทรัพย์? (หุ้น, คริปโต, Forex, พันธบัตร, Futures)
+  2. ตลาด/ประเทศ? (เช่น อเมริกา, ไทย, ญี่ปุ่น)
+  3. เป้าหมายการลงทุน? (เก็งกำไรระยะสั้น, ลงทุนระยะยาว, ปันผล)
+  4. ระดับความเสี่ยง? (ต่ำ, กลาง, สูง)
+  5. งบลงทุน? (ช่วยกรอง market cap)
+  6. เงื่อนไขทางเทคนิค? (RSI, MACD, Volume, Moving Average)
+  7. เงื่อนไขพื้นฐาน? (P/E, ROE, Margin, Dividend)
+- ถามอย่างน้อย 3-4 คำถามก่อนรัน Screener
+- พอได้ข้อมูลเพียงพอ ให้เลือก strategy preset หรือสร้าง custom filter ที่เหมาะสม
+- แสดงผลลัพธ์พร้อมคำแนะนำว่าทำไมถึงเลือกสินทรัพย์เหล่านั้น`;
 
 class GeminiServiceClass {
   /**
@@ -155,6 +168,62 @@ class GeminiServiceClass {
       return { tool: 'analyze_screen', params: { question: message } };
     }
 
+    // Screener - Strategy-based scan
+    if (lowerMessage.includes('top gainer') || lowerMessage.includes('หุ้นขึ้น')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'top_gainers', type: lowerMessage.includes('crypto') || lowerMessage.includes('คริปโต') ? 'crypto' : 'stock' } };
+    }
+    if (lowerMessage.includes('top loser') || lowerMessage.includes('หุ้นตก') || lowerMessage.includes('ร่วง')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'top_losers', type: 'stock' } };
+    }
+    if (lowerMessage.includes('oversold') || lowerMessage.includes('ราคาถูก') || lowerMessage.includes('rsi ต่ำ')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'oversold', type: lowerMessage.includes('forex') ? 'forex' : lowerMessage.includes('crypto') || lowerMessage.includes('คริปโต') ? 'crypto' : 'stock' } };
+    }
+    if (lowerMessage.includes('overbought') || lowerMessage.includes('rsi สูง')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'overbought', type: 'stock' } };
+    }
+    if (lowerMessage.includes('volume spike') || lowerMessage.includes('volume สูง') || lowerMessage.includes('วอลุ่มสูง')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'volume_spike', type: 'stock' } };
+    }
+    if (lowerMessage.includes('strong buy') || lowerMessage.includes('สัญญาณซื้อ')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'strong_buy', type: lowerMessage.includes('crypto') ? 'crypto' : lowerMessage.includes('forex') ? 'forex' : 'stock' } };
+    }
+    if (lowerMessage.includes('strong sell') || lowerMessage.includes('สัญญาณขาย')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'strong_sell', type: 'stock' } };
+    }
+    if (lowerMessage.includes('value stock') || lowerMessage.includes('หุ้นคุณค่า')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'value_stocks', type: 'stock' } };
+    }
+    if (lowerMessage.includes('growth stock') || lowerMessage.includes('หุ้นเติบโต')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'growth_stocks', type: 'stock' } };
+    }
+    if (lowerMessage.includes('dividend') || lowerMessage.includes('ปันผล')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'high_dividend', type: 'stock' } };
+    }
+    if (lowerMessage.includes('volatile') || lowerMessage.includes('ผันผวน')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'most_volatile', type: lowerMessage.includes('crypto') ? 'crypto' : 'stock' } };
+    }
+    if (lowerMessage.includes('golden cross')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'golden_cross', type: 'stock' } };
+    }
+
+    // Screener - Custom scan (generic screener keywords)
+    if (lowerMessage.includes('scan') || lowerMessage.includes('screen') || lowerMessage.includes('สแกน') || 
+        lowerMessage.includes('หาหุ้น') || lowerMessage.includes('หาสินทรัพย์') || lowerMessage.includes('ค้นหาหุ้น') ||
+        lowerMessage.includes('screener') || lowerMessage.includes('filter') || lowerMessage.includes('กรอง')) {
+      // Detect type
+      let type = 'stock';
+      if (lowerMessage.includes('crypto') || lowerMessage.includes('คริปโต') || lowerMessage.includes('เหรียญ')) type = 'crypto';
+      else if (lowerMessage.includes('forex') || lowerMessage.includes('ค่าเงิน')) type = 'forex';
+      else if (lowerMessage.includes('bond') || lowerMessage.includes('พันธบัตร')) type = 'bond';
+      else if (lowerMessage.includes('futures') || lowerMessage.includes('สัญญาซื้อขาย')) type = 'futures';
+      return { tool: 'scan_market', params: { type, limit: 20 } };
+    }
+
+    // Screener strategies list
+    if (lowerMessage.includes('strategy') || lowerMessage.includes('กลยุทธ์') || lowerMessage.includes('preset')) {
+      return { tool: 'get_screener_strategies', params: {} };
+    }
+
     // Market Data
     if (lowerMessage.includes('market') || lowerMessage.includes('ราคา') || lowerMessage.includes('price')) {
       return { tool: 'get_market_overview', params: {} };
@@ -225,6 +294,47 @@ class GeminiServiceClass {
       
       case 'get_market_overview':
         return `📊 **Market Overview**\n\n${JSON.stringify(result.markets || result, null, 2)}`;
+
+      case 'scan_market':
+      case 'run_screener_strategy': {
+        if (!result.data || result.data.length === 0) {
+          return `📋 **Screener** — ไม่พบสินทรัพย์ตามเงื่อนไข`;
+        }
+        const stratLabel = result.strategy ? `${result.strategy.label} — ${result.strategy.description}` : `${result.type} scan`;
+        const header = `📋 **Screener: ${stratLabel}**\n` +
+          `📊 พบ ${result.resultCount}/${result.totalCount} รายการ${result.fallback ? ' (fallback data)' : ''}\n\n`;
+        const rows = result.data.slice(0, 25).map((item: any, i: number) => {
+          const sym = item.symbol || item.name || '?';
+          const desc = item.description || '';
+          const price = item.close != null ? `$${item.close}` : '';
+          const chg = item.change != null ? `${item.change > 0 ? '+' : ''}${item.change}%` : '';
+          const rsi = item.RSI != null ? `RSI:${item.RSI}` : '';
+          const rec = item['Recommend.All'] != null ? `Rating:${Number(item['Recommend.All']).toFixed(2)}` : '';
+          const vol = item.volume != null ? `Vol:${(item.volume / 1e6).toFixed(1)}M` : '';
+          const mcap = item.market_cap_basic != null ? `MCap:${(item.market_cap_basic / 1e9).toFixed(1)}B` : '';
+          return `${i + 1}. **${sym}** ${desc} | ${price} ${chg} ${rsi} ${rec} ${vol} ${mcap}`.trim();
+        }).join('\n');
+        return header + rows;
+      }
+
+      case 'get_screener_strategies': {
+        if (!result.strategies) return JSON.stringify(result, null, 2);
+        return `📋 **Strategy Presets (${result.total})**\n\n` +
+          result.strategies.map((s: any) => `${s.emoji} **${s.label}** (${s.id}) — ${s.description} [${s.screeners.join(',')}]`).join('\n');
+      }
+
+      case 'get_screener_fields': {
+        if (!result.fields) return JSON.stringify(result, null, 2);
+        return `📋 **Screener Fields (${result.totalFields})**\n\n` +
+          `**Categories:** ${result.categories?.map((c: any) => `${c.icon} ${c.label}`).join(' | ')}\n\n` +
+          result.fields.slice(0, 30).map((f: any) => `• \`${f.name}\` — ${f.label} (${f.format})`).join('\n');
+      }
+
+      case 'get_available_markets': {
+        return `🌍 **ตลาดที่รองรับ (${result.totalCountries} ประเทศ, ${result.totalCryptoExchanges} Crypto Exchanges)**\n\n` +
+          `**หุ้น:** ${result.stockMarkets?.slice(0, 20).map((m: any) => `${m.flag} ${m.label}`).join(', ')}...\n\n` +
+          `**Crypto:** ${result.cryptoExchanges?.map((e: any) => e.label).join(', ')}`;
+      }
 
       default:
         return JSON.stringify(result, null, 2);

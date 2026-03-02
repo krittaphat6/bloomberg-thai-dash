@@ -25,6 +25,7 @@ export class MCPServer {
     this.registerWorldMonitorTools();
     this.registerOpenClawTools();
     this.registerNewsTools();
+    this.registerScreenerTools();
 
     this.isInitialized = true;
     console.log('MCP Server initialized with', this.tools.size, 'tools');
@@ -623,6 +624,238 @@ export class MCPServer {
           return result;
         } catch (error) {
           return { success: false, error: `Global map data failed: ${error}` };
+        }
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════
+  // Screener Tools — Full Market Scanning
+  // ═══════════════════════════════════════════
+  private registerScreenerTools(): void {
+    this.registerTool({
+      name: 'scan_market',
+      description: 'สแกนตลาดด้วย Screener — ค้นหาหุ้น, คริปโต, Forex, พันธบัตร, Futures ด้วยเงื่อนไขทางเทคนิค/พื้นฐาน. รองรับ 40+ ประเทศ, 13,000+ fields, 130+ indicators',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['stock', 'crypto', 'forex', 'bond', 'futures', 'coin'], description: 'ประเภทสินทรัพย์' },
+          filters: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                field: { type: 'string', description: 'ชื่อ field เช่น RSI, change, market_cap_basic, price_earnings_ttm, Recommend.All' },
+                operator: { type: 'string', enum: ['>', '<', '>=', '<=', '=', '!=', 'between'] },
+                value: { description: 'ค่าที่ต้องการ filter' }
+              }
+            },
+            description: 'เงื่อนไขการกรอง'
+          },
+          columns: { type: 'array', items: { type: 'string' }, description: 'คอลัมน์ที่ต้องการแสดง' },
+          sort: {
+            type: 'object',
+            properties: {
+              field: { type: 'string' },
+              direction: { type: 'string', enum: ['asc', 'desc'] }
+            },
+            description: 'การเรียงลำดับ'
+          },
+          markets: { type: 'array', items: { type: 'string' }, description: 'ตลาดที่ต้องการ เช่น ["america","thailand"]' },
+          limit: { type: 'number', description: 'จำนวนผลลัพธ์ (default: 20, max: 150)' }
+        },
+        required: ['type']
+      },
+      handler: async (params) => {
+        try {
+          const { MarketScreener } = await import('@/services/screener/service');
+          const screener = new MarketScreener(params.type || 'stock');
+
+          // Apply filters
+          if (params.filters && Array.isArray(params.filters)) {
+            params.filters.forEach((f: any) => {
+              screener.where({ field: f.field, operator: f.operator || '>', value: f.value });
+            });
+          }
+
+          // Select columns
+          const defaultCols = ['description', 'close', 'change', 'volume', 'RSI', 'Recommend.All', 'market_cap_basic'];
+          screener.select(...(params.columns || defaultCols));
+
+          // Sort
+          if (params.sort) {
+            screener.sortBy(params.sort.field, params.sort.direction || 'desc');
+          } else {
+            screener.sortBy('change', 'desc');
+          }
+
+          // Markets
+          if (params.markets && params.markets.length > 0) {
+            screener.setMarkets(...params.markets);
+          }
+
+          // Range
+          const limit = Math.min(params.limit || 20, 150);
+          screener.setRange(0, limit);
+
+          const result = await screener.get();
+          return {
+            success: true,
+            type: params.type,
+            totalCount: result.totalCount,
+            resultCount: result.data.length,
+            fallback: result.fallback || false,
+            data: result.data.map((item: any) => {
+              const clean: any = {};
+              for (const [k, v] of Object.entries(item)) {
+                if (v !== null && v !== undefined && v !== '') clean[k] = v;
+              }
+              return clean;
+            })
+          };
+        } catch (error) {
+          return { success: false, error: `Screener scan failed: ${error}` };
+        }
+      }
+    });
+
+    this.registerTool({
+      name: 'get_screener_strategies',
+      description: 'ดึงรายการ Strategy Presets ที่มีอยู่ — เช่น Top Gainers, Oversold, Value Stocks, Volume Spike ฯลฯ',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['stock', 'crypto', 'forex', 'bond', 'futures', 'coin'], description: 'ประเภทสินทรัพย์' },
+          category: { type: 'string', enum: ['momentum', 'value', 'technical', 'volume', 'dividend', 'custom'], description: 'หมวดหมู่ strategy' }
+        },
+        required: []
+      },
+      handler: async (params) => {
+        try {
+          const { STRATEGY_PRESETS } = await import('@/services/screener/presets');
+          let strategies = STRATEGY_PRESETS;
+          if (params.type) {
+            strategies = strategies.filter(s => s.screeners.includes(params.type));
+          }
+          if (params.category) {
+            strategies = strategies.filter(s => s.category === params.category);
+          }
+          return {
+            success: true,
+            strategies: strategies.map(s => ({
+              id: s.id, label: s.label, emoji: s.emoji, category: s.category,
+              description: s.description, screeners: s.screeners,
+              filterCount: s.filters.length
+            })),
+            total: strategies.length
+          };
+        } catch (error) {
+          return { success: false, error: `Failed to get strategies: ${error}` };
+        }
+      }
+    });
+
+    this.registerTool({
+      name: 'run_screener_strategy',
+      description: 'รัน Strategy Preset ที่เตรียมไว้ — เช่น top_gainers, oversold, value_stocks, volume_spike',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          strategyId: { type: 'string', description: 'ID ของ strategy เช่น "top_gainers", "oversold", "value_stocks"' },
+          type: { type: 'string', enum: ['stock', 'crypto', 'forex', 'bond', 'futures', 'coin'], description: 'ประเภทสินทรัพย์' },
+          markets: { type: 'array', items: { type: 'string' }, description: 'ตลาดที่ต้องการ' },
+          limit: { type: 'number', description: 'จำนวนผลลัพธ์ (default: 20)' }
+        },
+        required: ['strategyId']
+      },
+      handler: async (params) => {
+        try {
+          const { STRATEGY_PRESETS } = await import('@/services/screener/presets');
+          const { MarketScreener } = await import('@/services/screener/service');
+
+          const strategy = STRATEGY_PRESETS.find(s => s.id === params.strategyId);
+          if (!strategy) {
+            return { success: false, error: `Strategy "${params.strategyId}" not found. Available: ${STRATEGY_PRESETS.map(s => s.id).join(', ')}` };
+          }
+
+          const type = params.type || strategy.screeners[0] || 'stock';
+          const screener = new MarketScreener(type);
+
+          strategy.filters.forEach(f => {
+            screener.where({ field: f.field, operator: f.operator as any, value: f.value });
+          });
+          screener.select(...strategy.columns);
+          if (strategy.sort) {
+            screener.sortBy(strategy.sort.field, strategy.sort.direction);
+          }
+          if (params.markets) {
+            screener.setMarkets(...params.markets);
+          }
+          const limit = Math.min(params.limit || 20, 150);
+          screener.setRange(0, limit);
+
+          const result = await screener.get();
+          return {
+            success: true,
+            strategy: { id: strategy.id, label: strategy.label, description: strategy.description },
+            type,
+            totalCount: result.totalCount,
+            resultCount: result.data.length,
+            fallback: result.fallback || false,
+            data: result.data.slice(0, limit)
+          };
+        } catch (error) {
+          return { success: false, error: `Strategy run failed: ${error}` };
+        }
+      }
+    });
+
+    this.registerTool({
+      name: 'get_screener_fields',
+      description: 'ดึงรายการ fields ทั้งหมดที่ Screener รองรับ — ใช้สำหรับตั้งเงื่อนไขการกรอง',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['stock', 'crypto', 'forex', 'bond', 'futures', 'coin'] },
+          category: { type: 'string', description: 'หมวดหมู่ field เช่น oscillator, valuation, fundamental' }
+        },
+        required: []
+      },
+      handler: async (params) => {
+        try {
+          const { ALL_FIELDS, getFieldsForScreener, FIELD_CATEGORIES } = await import('@/services/screener/fields');
+          let fields = params.type ? getFieldsForScreener(params.type) : ALL_FIELDS;
+          if (params.category) {
+            fields = fields.filter(f => f.category === params.category);
+          }
+          return {
+            success: true,
+            categories: FIELD_CATEGORIES.map(c => ({ id: c.id, label: c.label, icon: c.icon })),
+            fields: fields.slice(0, 100).map(f => ({ name: f.name, label: f.label, format: f.format, category: f.category })),
+            totalFields: fields.length
+          };
+        } catch (error) {
+          return { success: false, error: `Failed to get fields: ${error}` };
+        }
+      }
+    });
+
+    this.registerTool({
+      name: 'get_available_markets',
+      description: 'ดึงรายการตลาดหุ้นและ Crypto Exchange ที่รองรับ — 40+ ประเทศ, 10+ exchange',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async () => {
+        try {
+          const { STOCK_MARKETS, CRYPTO_EXCHANGES } = await import('@/services/screener/markets');
+          return {
+            success: true,
+            stockMarkets: STOCK_MARKETS.map(m => ({ code: m.code, label: m.label, flag: m.flag, region: m.region })),
+            cryptoExchanges: CRYPTO_EXCHANGES.map(e => ({ code: e.code, label: e.label })),
+            totalCountries: STOCK_MARKETS.length,
+            totalCryptoExchanges: CRYPTO_EXCHANGES.length
+          };
+        } catch (error) {
+          return { success: false, error: `Failed to get markets: ${error}` };
         }
       }
     });

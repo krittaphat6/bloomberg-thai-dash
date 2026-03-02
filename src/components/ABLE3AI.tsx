@@ -169,7 +169,10 @@ const ABLE3AI = () => {
     { label: '📋 COT Gold', cmd: 'Analyze COT data for gold' },
     { label: '📸 วิเคราะห์กราฟ', cmd: 'วิเคราะห์กราฟที่เห็นบนหน้าจอตอนนี้' },
     { label: '🌍 แผ่นดินไหว', cmd: 'แผ่นดินไหวล่าสุดมีที่ไหนบ้าง' },
-    { label: '🔍 Screener', cmd: 'เปิด screener แล้วบอกว่าใช้งานยังไง' },
+    { label: '🔍 หาหุ้น', cmd: 'ช่วยหาหุ้นที่น่าลงทุนให้หน่อย' },
+    { label: '🚀 Top Gainers', cmd: 'หาหุ้นที่ขึ้นมากที่สุดวันนี้' },
+    { label: '📉 Oversold', cmd: 'หาหุ้นที่ RSI ต่ำกว่า 30 (oversold)' },
+    { label: '💎 Screener', cmd: 'แสดงรายการ strategy presets ทั้งหมดที่ใช้สแกนหุ้นได้' },
   ];
 
   // Fetch universal data context
@@ -207,8 +210,10 @@ const ABLE3AI = () => {
         `**🧠 Memory:** ✅ จำบทสนทนาได้\n` +
         `**📸 Vision:** ✅ วิเคราะห์กราฟจากหน้าจอ\n` +
         `**🌍 Intel:** ✅ ข่าวกรองโลก + ข่าว 50+ แหล่ง\n` +
+        `**🔍 Screener:** ✅ สแกนหุ้น/คริปโต/Forex 40+ ประเทศ, 13,000+ fields\n` +
         `**🤖 OpenClaw:** ✅ ควบคุม UI อัตโนมัติ\n\n` +
-        `💡 พิมพ์ "help" เพื่อดูคำสั่งทั้งหมด`,
+        `💡 พิมพ์ "help" เพื่อดูคำสั่งทั้งหมด\n` +
+        `🔍 ลองถาม "ช่วยหาหุ้นที่น่าลงทุน" — AI จะถามคำถามเพื่อเข้าใจความต้องการก่อนสแกน`,
       isUser: false,
       timestamp: new Date(),
       model: 'System'
@@ -308,6 +313,16 @@ const ABLE3AI = () => {
       `**📸 Vision Commands:**\n` +
       `• "วิเคราะห์กราฟ" — ถ่ายหน้าจอแล้ววิเคราะห์\n` +
       `• "ดูหน้าจอตอนนี้" — snapshot + AI analysis\n\n` +
+      `**🔍 Screener Commands:**\n` +
+      `• "หาหุ้นที่น่าลงทุน" — AI จะถามคำถามก่อนสแกน\n` +
+      `• "top gainers" — หุ้นขึ้นมากสุดวันนี้\n` +
+      `• "oversold" / "RSI ต่ำ" — หุ้น RSI < 30\n` +
+      `• "strong buy signal" — สัญญาณซื้อแรง\n` +
+      `• "volume spike" — วอลุ่มผิดปกติ\n` +
+      `• "value stocks" — หุ้นคุณค่า P/E ต่ำ\n` +
+      `• "dividend" / "ปันผล" — หุ้นปันผลสูง\n` +
+      `• "สแกนคริปโต" — สแกน crypto market\n` +
+      `• "strategy presets" — ดูรายการกลยุทธ์ทั้งหมด\n\n` +
       `**🌍 Intelligence:**\n` +
       `• "แผ่นดินไหวล่าสุด" — USGS data\n` +
       `• "ข่าวล่าสุด" — 50+ แหล่งข่าว\n` +
@@ -316,7 +331,7 @@ const ABLE3AI = () => {
       `• "COT gold" — วิเคราะห์ COT data\n` +
       `• "market overview" — ภาพรวมตลาด\n\n` +
       `**MCP Tools (${tools.length}):**\n` +
-      tools.slice(0, 8).map(t => `• ${t.name}`).join('\n');
+      tools.slice(0, 10).map(t => `• ${t.name}`).join('\n');
   };
 
   const tryPanelCommand = (message: string): { handled: boolean; response?: string } => {
