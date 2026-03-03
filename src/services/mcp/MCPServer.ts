@@ -859,6 +859,107 @@ export class MCPServer {
         }
       }
     });
+
+    // ── Multi-Screener Scan: scan multiple asset types at once ──
+    this.registerTool({
+      name: 'multi_screener_scan',
+      description: 'สแกนหลายประเภทสินทรัพย์พร้อมกัน เช่น เปรียบเทียบ stock vs crypto — รองรับทุก strategy preset',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          types: { type: 'array', items: { type: 'string', enum: ['stock', 'crypto', 'forex', 'bond', 'futures', 'coin'] }, description: 'ประเภทที่ต้องการสแกน' },
+          strategyId: { type: 'string', description: 'Strategy preset ID' },
+          limit: { type: 'number', description: 'จำนวนผลลัพธ์ต่อประเภท (default: 10)' }
+        },
+        required: ['types']
+      },
+      handler: async (params) => {
+        try {
+          const { STRATEGY_PRESETS } = await import('@/services/screener/presets');
+          const { MarketScreener } = await import('@/services/screener/service');
+          const types = params.types || ['stock', 'crypto'];
+          const limit = Math.min(params.limit || 10, 50);
+          const strategy = params.strategyId ? STRATEGY_PRESETS.find(s => s.id === params.strategyId) : null;
+
+          const results = await Promise.all(types.map(async (type: string) => {
+            const screener = new MarketScreener(type as any);
+            if (strategy) {
+              strategy.filters.forEach((f: any) => screener.where({ field: f.field, operator: f.operator as any, value: f.value }));
+              screener.select(...strategy.columns);
+              if (strategy.sort) screener.sortBy(strategy.sort.field, strategy.sort.direction);
+            } else {
+              screener.select('description', 'close', 'change', 'volume', 'RSI', 'Recommend.All', 'market_cap_basic');
+              screener.sortBy('change', 'desc');
+            }
+            screener.setRange(0, limit);
+            const result = await screener.get();
+            return { type, resultCount: result.data.length, totalCount: result.totalCount, fallback: result.fallback, data: result.data };
+          }));
+
+          return { success: true, strategy: strategy ? { id: strategy.id, label: strategy.label } : null, results };
+        } catch (error) {
+          return { success: false, error: `Multi-scan failed: ${error}` };
+        }
+      }
+    });
+
+    // ── AI Screener Recommendation: curated picks across strategies ──
+    this.registerTool({
+      name: 'screener_recommendation',
+      description: 'AI แนะนำสินทรัพย์โดยรันหลาย strategy พร้อมกัน — ได้ผลลัพธ์หลากหลายมุมมอง (momentum, value, technical, dividend)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          risk: { type: 'string', enum: ['low', 'medium', 'high'], description: 'ระดับความเสี่ยง' },
+          type: { type: 'string', enum: ['stock', 'crypto', 'forex'], description: 'ประเภท (default: stock)' }
+        },
+        required: []
+      },
+      handler: async (params) => {
+        try {
+          const { STRATEGY_PRESETS } = await import('@/services/screener/presets');
+          const { MarketScreener } = await import('@/services/screener/service');
+          const type = params.type || 'stock';
+          const risk = params.risk || 'medium';
+
+          // Select strategies based on risk level
+          const strategyMap: Record<string, string[]> = {
+            low: ['sustainable_dividend', 'value_stocks', 'large_cap', 'above_sma200'],
+            medium: ['strong_buy', 'oversold', 'golden_cross', 'growth_stocks', 'best_monthly'],
+            high: ['top_gainers', 'volume_spike', 'high_volume_breakout', 'most_volatile', 'hot_movers_crypto'],
+          };
+
+          const strategyIds = strategyMap[risk] || strategyMap.medium;
+          const recommendations = await Promise.all(strategyIds.map(async (sid) => {
+            const strategy = STRATEGY_PRESETS.find(s => s.id === sid);
+            if (!strategy || !strategy.screeners.includes(type as any)) return null;
+
+            const screener = new MarketScreener(type as any);
+            strategy.filters.forEach((f: any) => screener.where({ field: f.field, operator: f.operator as any, value: f.value }));
+            screener.select(...strategy.columns);
+            if (strategy.sort) screener.sortBy(strategy.sort.field, strategy.sort.direction);
+            screener.setRange(0, 5);
+            const result = await screener.get();
+
+            return {
+              emoji: strategy.emoji,
+              category: strategy.label,
+              description: strategy.description,
+              topPicks: result.data.slice(0, 5)
+            };
+          }));
+
+          return {
+            success: true,
+            risk,
+            type,
+            recommendations: recommendations.filter(Boolean)
+          };
+        } catch (error) {
+          return { success: false, error: `Recommendation failed: ${error}` };
+        }
+      }
+    });
   }
 
   private interpretCOT(index: number, latest: any): string {

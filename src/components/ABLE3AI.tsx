@@ -166,13 +166,18 @@ const ABLE3AI = () => {
   const quickCommands = [
     { label: '📊 Market', cmd: 'What is the current market situation?' },
     { label: '📰 ข่าวล่าสุด', cmd: 'ดึงข่าวการเงินล่าสุดให้หน่อย' },
-    { label: '📋 COT Gold', cmd: 'Analyze COT data for gold' },
-    { label: '📸 วิเคราะห์กราฟ', cmd: 'วิเคราะห์กราฟที่เห็นบนหน้าจอตอนนี้' },
-    { label: '🌍 แผ่นดินไหว', cmd: 'แผ่นดินไหวล่าสุดมีที่ไหนบ้าง' },
-    { label: '🔍 หาหุ้น', cmd: 'ช่วยหาหุ้นที่น่าลงทุนให้หน่อย' },
+    { label: '🎯 แนะนำลงทุน', cmd: 'แนะนำสินทรัพย์ที่น่าลงทุนตอนนี้ให้หน่อย' },
     { label: '🚀 Top Gainers', cmd: 'หาหุ้นที่ขึ้นมากที่สุดวันนี้' },
-    { label: '📉 Oversold', cmd: 'หาหุ้นที่ RSI ต่ำกว่า 30 (oversold)' },
-    { label: '💎 Screener', cmd: 'แสดงรายการ strategy presets ทั้งหมดที่ใช้สแกนหุ้นได้' },
+    { label: '📉 Oversold', cmd: 'หาหุ้นที่ RSI ต่ำกว่า 30 (oversold) พร้อมวิเคราะห์' },
+    { label: '💎 Value', cmd: 'หาหุ้นคุณค่า P/E ต่ำ ที่น่าลงทุนระยะยาว' },
+    { label: '💵 ปันผล', cmd: 'หาหุ้นปันผลสูงที่ยั่งยืน payout ratio ไม่เกิน 60%' },
+    { label: '🌊 Volume Spike', cmd: 'หาหุ้นที่ volume ผิดปกติวันนี้ พร้อมวิเคราะห์' },
+    { label: '🟢 Strong Buy', cmd: 'หาหุ้นที่มีสัญญาณซื้อแรงจาก technical analysis' },
+    { label: '⚡ Breakout', cmd: 'หาหุ้นที่กำลัง breakout ราคาขึ้นพร้อม volume สูง' },
+    { label: '🔍 หาหุ้น', cmd: 'ช่วยหาหุ้นที่น่าลงทุนให้หน่อย' },
+    { label: '📋 Strategies', cmd: 'แสดงรายการ strategy presets ทั้งหมดที่ใช้สแกนได้' },
+    { label: '🌍 แผ่นดินไหว', cmd: 'แผ่นดินไหวล่าสุดมีที่ไหนบ้าง' },
+    { label: '📸 วิเคราะห์กราฟ', cmd: 'วิเคราะห์กราฟที่เห็นบนหน้าจอตอนนี้' },
   ];
 
   // Fetch universal data context
@@ -210,10 +215,12 @@ const ABLE3AI = () => {
         `**🧠 Memory:** ✅ จำบทสนทนาได้\n` +
         `**📸 Vision:** ✅ วิเคราะห์กราฟจากหน้าจอ\n` +
         `**🌍 Intel:** ✅ ข่าวกรองโลก + ข่าว 50+ แหล่ง\n` +
-        `**🔍 Screener:** ✅ สแกนหุ้น/คริปโต/Forex 40+ ประเทศ, 13,000+ fields\n` +
+        `**🔍 Screener:** ✅ สแกน 40+ ประเทศ | 20+ strategies | 13,000+ fields\n` +
+        `**🎯 AI Advisor:** ✅ แนะนำลงทุนตามความเสี่ยง | วิเคราะห์ Technical + Fundamental\n` +
         `**🤖 OpenClaw:** ✅ ควบคุม UI อัตโนมัติ\n\n` +
         `💡 พิมพ์ "help" เพื่อดูคำสั่งทั้งหมด\n` +
-        `🔍 ลองถาม "ช่วยหาหุ้นที่น่าลงทุน" — AI จะถามคำถามเพื่อเข้าใจความต้องการก่อนสแกน`,
+        `🎯 ลอง "แนะนำลงทุน" — AI จะสแกนตลาดแล้วแนะนำพร้อมเหตุผล\n` +
+        `🔍 ลอง "หาหุ้นที่น่าลงทุน" — AI จะถามคำถามเพื่อเข้าใจก่อนสแกน`,
       isUser: false,
       timestamp: new Date(),
       model: 'System'
@@ -306,32 +313,30 @@ const ABLE3AI = () => {
   };
 
   const getHelpText = () => {
-    const panelsList = AVAILABLE_PANELS.slice(0, 15).map(p => `• "${p.keywords[0]}"`).join('\n');
     return `🤖 **ABLE AI Help**\n\n` +
+      `**🔍 Screener & แนะนำ (ระบบหลัก):**\n` +
+      `• "แนะนำลงทุน" — AI สแกนหลาย strategy แล้วแนะนำ\n` +
+      `• "หาหุ้นที่น่าลงทุน" — AI ถามคำถามก่อนสแกน\n` +
+      `• "top gainers" — หุ้น/คริปโตขึ้นมากสุด\n` +
+      `• "oversold" / "RSI ต่ำ" — สินทรัพย์น่าดีดกลับ\n` +
+      `• "strong buy" / "สัญญาณซื้อ" — สัญญาณซื้อแรง\n` +
+      `• "volume spike" / "วอลุ่มผิดปกติ" — Volume สูงผิดปกติ\n` +
+      `• "breakout" / "ฝ่าแนว" — ทะลุแนวต้าน + Volume\n` +
+      `• "value stocks" / "หุ้นคุณค่า" — P/E ต่ำ\n` +
+      `• "growth stocks" / "หุ้นเติบโต" — Revenue Growth สูง\n` +
+      `• "dividend" / "ปันผล" — Yield สูง\n` +
+      `• "large cap" / "หุ้นใหญ่" — MCap > $10B\n` +
+      `• "golden cross" — SMA50 ตัด SMA200\n` +
+      `• "overbought" / "RSI สูง" — ซื้อมากเกิน\n` +
+      `• "most volatile" / "ผันผวน" — ผันผวนสูง\n` +
+      `• "เปรียบเทียบ" — สแกนหลายประเภทพร้อมกัน\n` +
+      `• "strategy presets" — ดูรายการทั้งหมด\n\n` +
       `**🎛️ Panel Commands:**\n` +
-      `• "เปิด trading journal"\n• "open cot data"\n• "list functions"\n\n` +
-      `**📸 Vision Commands:**\n` +
-      `• "วิเคราะห์กราฟ" — ถ่ายหน้าจอแล้ววิเคราะห์\n` +
-      `• "ดูหน้าจอตอนนี้" — snapshot + AI analysis\n\n` +
-      `**🔍 Screener Commands:**\n` +
-      `• "หาหุ้นที่น่าลงทุน" — AI จะถามคำถามก่อนสแกน\n` +
-      `• "top gainers" — หุ้นขึ้นมากสุดวันนี้\n` +
-      `• "oversold" / "RSI ต่ำ" — หุ้น RSI < 30\n` +
-      `• "strong buy signal" — สัญญาณซื้อแรง\n` +
-      `• "volume spike" — วอลุ่มผิดปกติ\n` +
-      `• "value stocks" — หุ้นคุณค่า P/E ต่ำ\n` +
-      `• "dividend" / "ปันผล" — หุ้นปันผลสูง\n` +
-      `• "สแกนคริปโต" — สแกน crypto market\n` +
-      `• "strategy presets" — ดูรายการกลยุทธ์ทั้งหมด\n\n` +
-      `**🌍 Intelligence:**\n` +
-      `• "แผ่นดินไหวล่าสุด" — USGS data\n` +
-      `• "ข่าวล่าสุด" — 50+ แหล่งข่าว\n` +
-      `• "สถานการณ์โลก" — World Monitor\n\n` +
-      `**📊 Trading:**\n` +
-      `• "COT gold" — วิเคราะห์ COT data\n` +
-      `• "market overview" — ภาพรวมตลาด\n\n` +
-      `**MCP Tools (${tools.length}):**\n` +
-      tools.slice(0, 10).map(t => `• ${t.name}`).join('\n');
+      `• "เปิด trading journal" / "open screener"\n\n` +
+      `**📸 Vision:** "วิเคราะห์กราฟ"\n` +
+      `**🌍 Intelligence:** "แผ่นดินไหว" / "ข่าวล่าสุด" / "สถานการณ์โลก"\n` +
+      `**📊 Trading:** "COT gold" / "market overview"\n\n` +
+      `**MCP Tools:** ${tools.length} พร้อมใช้`;
   };
 
   const tryPanelCommand = (message: string): { handled: boolean; response?: string } => {
