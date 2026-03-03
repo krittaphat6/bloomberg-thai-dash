@@ -17,29 +17,67 @@ export interface ToolCallResult {
   params: Record<string, any>;
 }
 
-const ABLE_AI_SYSTEM_PROMPT = `คุณคือ ABLE AI ผู้ช่วย AI สำหรับ Trading Platform ชื่อ ABLE Terminal
-บุคลิก: ฉลาด ตรงประเด็น เป็นมิตร มีความเชี่ยวชาญด้านการเงินและการเทรด
+const ABLE_AI_SYSTEM_PROMPT = `คุณคือ ABLE AI — ผู้เชี่ยวชาญด้านการวิเคราะห์ตลาดการเงินระดับสถาบัน สำหรับ ABLE Terminal
+บุคลิก: ฉลาด ตรงประเด็น เป็นมิตร มีความเชี่ยวชาญด้านการเงิน การเทรด และการลงทุนลึกซึ้ง
 
 กฎสำคัญ:
-1. จำทุกสิ่งที่คุยกันในการสนทนานี้ และอ้างอิงถึงได้เสมอ
-2. ห้ามพูดซ้ำสิ่งที่บอกไปแล้วในการสนทนาเดียวกัน
-3. ถ้าผู้ใช้ถามต่อจากคำถามก่อน ให้เข้าใจ context และตอบต่อได้ทันที
-4. ตอบตรงประเด็น กระชับ ไม่วกวน
-5. ตอบภาษาเดียวกับผู้ใช้ (ไทย/อังกฤษ)
-6. ถ้าไม่รู้ ให้บอกตรงๆ อย่าเดา
+1. จำทุกสิ่งที่คุยกันในการสนทนานี้ อ้างอิงถึงได้เสมอ
+2. ห้ามพูดซ้ำ ตอบตรงประเด็น กระชับ
+3. ตอบภาษาเดียวกับผู้ใช้ (ไทย/อังกฤษ)
+4. ถ้าไม่รู้ ให้บอกตรงๆ อย่าเดา
 
-กฎ Screener สำคัญ:
-- เมื่อผู้ใช้ต้องการหาหุ้น/สินทรัพย์ ให้ถามคำถามเพื่อจำกัดขอบเขตก่อนเสมอ:
-  1. ประเภทสินทรัพย์? (หุ้น, คริปโต, Forex, พันธบัตร, Futures)
-  2. ตลาด/ประเทศ? (เช่น อเมริกา, ไทย, ญี่ปุ่น)
-  3. เป้าหมายการลงทุน? (เก็งกำไรระยะสั้น, ลงทุนระยะยาว, ปันผล)
-  4. ระดับความเสี่ยง? (ต่ำ, กลาง, สูง)
-  5. งบลงทุน? (ช่วยกรอง market cap)
-  6. เงื่อนไขทางเทคนิค? (RSI, MACD, Volume, Moving Average)
-  7. เงื่อนไขพื้นฐาน? (P/E, ROE, Margin, Dividend)
-- ถามอย่างน้อย 3-4 คำถามก่อนรัน Screener
-- พอได้ข้อมูลเพียงพอ ให้เลือก strategy preset หรือสร้าง custom filter ที่เหมาะสม
-- แสดงผลลัพธ์พร้อมคำแนะนำว่าทำไมถึงเลือกสินทรัพย์เหล่านั้น`;
+═══ กฎ SCREENER (สำคัญมาก) ═══
+เมื่อผู้ใช้ต้องการหาสินทรัพย์ ให้ถามคำถามเพื่อเข้าใจความต้องการก่อนเสมอ:
+1. ประเภทสินทรัพย์? (หุ้น, คริปโต, Forex, พันธบัตร, Futures)
+2. ตลาด/ประเทศ? (เช่น อเมริกา, ไทย, ญี่ปุ่น, ยุโรป)
+3. เป้าหมาย? (เก็งกำไรระยะสั้น, ลงทุนระยะยาว, ปันผล, hedging)
+4. ระดับความเสี่ยง? (ต่ำ, กลาง, สูง)
+5. งบลงทุน? (ช่วยกรอง market cap)
+6. เงื่อนไขทางเทคนิค? (RSI, MACD, Volume, Moving Average, Bollinger)
+7. เงื่อนไขพื้นฐาน? (P/E, ROE, Margin, Dividend, Revenue Growth)
+ถามอย่างน้อย 3-4 คำถามก่อนรัน Screener
+
+═══ กฎการให้คำแนะนำ (สำคัญมาก) ═══
+เมื่อแสดงผลลัพธ์จาก Screener ต้อง:
+1. **อธิบายเหตุผล** ว่าทำไมสินทรัพย์เหล่านั้นถึงน่าสนใจ
+2. **แบ่งกลุ่ม** ตามระดับความน่าสนใจ (🟢 น่าสนใจมาก / 🟡 น่าสนใจ / 🟠 ต้องระวัง)
+3. **วิเคราะห์ Technical**: ดู RSI, MACD, Stoch, Moving Average, Volume
+4. **วิเคราะห์ Fundamental**: ดู P/E, ROE, Margin, Revenue Growth, Dividend
+5. **ระบุ Risk**: บอกความเสี่ยงที่ควรระวัง เช่น RSI Overbought, Volume ลดลง
+6. **แนะนำ Entry/Exit**: ถ้าเป็นไปได้ แนะนำช่วงราคาที่น่าสนใจ
+7. **เปรียบเทียบ**: ถ้ามีหลายตัว ให้เรียงลำดับว่าตัวไหนน่าสนใจที่สุดพร้อมเหตุผล
+8. **สรุปชัดเจน**: จบด้วยสรุป 1-2 ประโยคว่าควรทำอะไร
+
+═══ Strategy Presets ที่มี ═══
+- top_gainers: หุ้นขึ้นมากสุด | top_losers: หุ้นลงมากสุด
+- oversold: RSI < 30 | overbought: RSI > 70
+- volume_spike: Volume ผิดปกติ | high_volume_breakout: ราคาขึ้น + Volume สูง
+- strong_buy: สัญญาณซื้อแรง | strong_sell: สัญญาณขายแรง
+- value_stocks: P/E ต่ำ | growth_stocks: Revenue Growth สูง
+- high_dividend: Yield > 4% | sustainable_dividend: Yield ดี + Payout ปลอดภัย
+- large_cap: Market Cap > $10B | most_volatile: ผันผวนสูง
+- golden_cross: SMA50 ตัด SMA200 | above_sma200: ราคาเหนือ SMA200
+- best_monthly: ขึ้นมากสุดรอบเดือน | hot_movers_crypto: Crypto เปลี่ยน > 10%
+- oversold_volume: RSI ต่ำ + Volume สูง (โอกาสดีดกลับ)
+
+═══ Fields สำคัญที่ใช้กรองได้ ═══
+Technical: RSI, MACD.macd, MACD.signal, Stoch.K, Stoch.D, CCI20, ADX, ATR, Mom, W.R, BB.upper, BB.lower
+Moving Avg: SMA20, SMA50, SMA200, EMA20, EMA50, EMA200
+Performance: Perf.W, Perf.1M, Perf.3M, Perf.6M, Perf.YTD, Perf.Y
+Volume: volume, relative_volume_10d_calc, average_volume_10d_calc
+Fundamental: price_earnings_ttm, price_book_fq, price_sales_current, enterprise_value_ebitda_ttm
+Profitability: return_on_equity, gross_margin, net_margin, operating_margin
+Growth: revenue_growth_quarterly, earnings_per_share_basic_ttm
+Dividend: dividend_yield_recent, dividend_payout_ratio_ttm
+Rating: Recommend.All, Recommend.MA, Recommend.Other
+Volatility: Volatility.D, Volatility.W
+
+═══ เทคนิคการใช้ Screener ═══
+- สามารถรันหลาย strategy ต่อกันเพื่อเปรียบเทียบได้
+- สามารถรัน custom scan ด้วย filter หลายเงื่อนไขพร้อมกัน
+- สามารถเรียงลำดับด้วย field ใดก็ได้ (เช่น เรียงตาม RSI, P/E, Volume)
+- รองรับ 40+ ประเทศ และ 10+ Crypto Exchange
+- รองรับ 13,000+ fields ทั้งเทคนิคและพื้นฐาน`;
 
 class GeminiServiceClass {
   /**
@@ -168,59 +206,96 @@ class GeminiServiceClass {
       return { tool: 'analyze_screen', params: { question: message } };
     }
 
-    // Screener - Strategy-based scan
-    if (lowerMessage.includes('top gainer') || lowerMessage.includes('หุ้นขึ้น')) {
+    // Screener - Strategy-based scan (expanded patterns)
+    if (lowerMessage.includes('top gainer') || lowerMessage.includes('หุ้นขึ้น') || lowerMessage.includes('ขึ้นมากสุด')) {
       return { tool: 'run_screener_strategy', params: { strategyId: 'top_gainers', type: lowerMessage.includes('crypto') || lowerMessage.includes('คริปโต') ? 'crypto' : 'stock' } };
     }
-    if (lowerMessage.includes('top loser') || lowerMessage.includes('หุ้นตก') || lowerMessage.includes('ร่วง')) {
+    if (lowerMessage.includes('top loser') || lowerMessage.includes('หุ้นตก') || lowerMessage.includes('ร่วง') || lowerMessage.includes('ตกมากสุด')) {
       return { tool: 'run_screener_strategy', params: { strategyId: 'top_losers', type: 'stock' } };
     }
-    if (lowerMessage.includes('oversold') || lowerMessage.includes('ราคาถูก') || lowerMessage.includes('rsi ต่ำ')) {
-      return { tool: 'run_screener_strategy', params: { strategyId: 'oversold', type: lowerMessage.includes('forex') ? 'forex' : lowerMessage.includes('crypto') || lowerMessage.includes('คริปโต') ? 'crypto' : 'stock' } };
+    if (lowerMessage.includes('oversold') || lowerMessage.includes('ราคาถูก') || lowerMessage.includes('rsi ต่ำ') || lowerMessage.includes('น่าดีดกลับ') || lowerMessage.includes('จุดต่ำ')) {
+      const type = lowerMessage.includes('forex') ? 'forex' : lowerMessage.includes('crypto') || lowerMessage.includes('คริปโต') ? 'crypto' : 'stock';
+      // If mentions volume too, use the combined strategy
+      if (lowerMessage.includes('volume') || lowerMessage.includes('วอลุ่ม')) {
+        return { tool: 'run_screener_strategy', params: { strategyId: 'oversold_volume', type } };
+      }
+      return { tool: 'run_screener_strategy', params: { strategyId: 'oversold', type } };
     }
-    if (lowerMessage.includes('overbought') || lowerMessage.includes('rsi สูง')) {
+    if (lowerMessage.includes('overbought') || lowerMessage.includes('rsi สูง') || lowerMessage.includes('แพงเกิน') || lowerMessage.includes('ซื้อมากเกิน')) {
       return { tool: 'run_screener_strategy', params: { strategyId: 'overbought', type: 'stock' } };
     }
-    if (lowerMessage.includes('volume spike') || lowerMessage.includes('volume สูง') || lowerMessage.includes('วอลุ่มสูง')) {
+    if (lowerMessage.includes('volume spike') || lowerMessage.includes('volume สูง') || lowerMessage.includes('วอลุ่มสูง') || lowerMessage.includes('วอลุ่มผิดปกติ')) {
+      if (lowerMessage.includes('breakout') || lowerMessage.includes('ทะลุ')) {
+        return { tool: 'run_screener_strategy', params: { strategyId: 'high_volume_breakout', type: 'stock' } };
+      }
       return { tool: 'run_screener_strategy', params: { strategyId: 'volume_spike', type: 'stock' } };
     }
-    if (lowerMessage.includes('strong buy') || lowerMessage.includes('สัญญาณซื้อ')) {
+    if (lowerMessage.includes('strong buy') || lowerMessage.includes('สัญญาณซื้อ') || lowerMessage.includes('น่าซื้อ')) {
       return { tool: 'run_screener_strategy', params: { strategyId: 'strong_buy', type: lowerMessage.includes('crypto') ? 'crypto' : lowerMessage.includes('forex') ? 'forex' : 'stock' } };
     }
-    if (lowerMessage.includes('strong sell') || lowerMessage.includes('สัญญาณขาย')) {
+    if (lowerMessage.includes('strong sell') || lowerMessage.includes('สัญญาณขาย') || lowerMessage.includes('น่าขาย')) {
       return { tool: 'run_screener_strategy', params: { strategyId: 'strong_sell', type: 'stock' } };
     }
-    if (lowerMessage.includes('value stock') || lowerMessage.includes('หุ้นคุณค่า')) {
+    if (lowerMessage.includes('value stock') || lowerMessage.includes('หุ้นคุณค่า') || lowerMessage.includes('pe ต่ำ') || lowerMessage.includes('p/e ต่ำ')) {
       return { tool: 'run_screener_strategy', params: { strategyId: 'value_stocks', type: 'stock' } };
     }
-    if (lowerMessage.includes('growth stock') || lowerMessage.includes('หุ้นเติบโต')) {
+    if (lowerMessage.includes('growth stock') || lowerMessage.includes('หุ้นเติบโต') || lowerMessage.includes('revenue growth')) {
       return { tool: 'run_screener_strategy', params: { strategyId: 'growth_stocks', type: 'stock' } };
     }
     if (lowerMessage.includes('dividend') || lowerMessage.includes('ปันผล')) {
+      if (lowerMessage.includes('safe') || lowerMessage.includes('ปลอดภัย') || lowerMessage.includes('sustainable') || lowerMessage.includes('ยั่งยืน')) {
+        return { tool: 'run_screener_strategy', params: { strategyId: 'sustainable_dividend', type: 'stock' } };
+      }
       return { tool: 'run_screener_strategy', params: { strategyId: 'high_dividend', type: 'stock' } };
     }
     if (lowerMessage.includes('volatile') || lowerMessage.includes('ผันผวน')) {
       return { tool: 'run_screener_strategy', params: { strategyId: 'most_volatile', type: lowerMessage.includes('crypto') ? 'crypto' : 'stock' } };
     }
-    if (lowerMessage.includes('golden cross')) {
+    if (lowerMessage.includes('golden cross') || lowerMessage.includes('sma ตัด')) {
       return { tool: 'run_screener_strategy', params: { strategyId: 'golden_cross', type: 'stock' } };
+    }
+    if (lowerMessage.includes('large cap') || lowerMessage.includes('หุ้นใหญ่') || lowerMessage.includes('บริษัทใหญ่')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'large_cap', type: 'stock' } };
+    }
+    if (lowerMessage.includes('above sma') || lowerMessage.includes('เหนือ sma') || lowerMessage.includes('เทรนขาขึ้น')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'above_sma200', type: 'stock' } };
+    }
+    if (lowerMessage.includes('best month') || lowerMessage.includes('ดีที่สุดเดือนนี้') || lowerMessage.includes('เดือนนี้ดี')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'best_monthly', type: lowerMessage.includes('crypto') ? 'crypto' : 'stock' } };
+    }
+    if (lowerMessage.includes('hot mover') || (lowerMessage.includes('crypto') && lowerMessage.includes('10%'))) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'hot_movers_crypto', type: 'crypto' } };
+    }
+    if (lowerMessage.includes('breakout') || lowerMessage.includes('ทะลุ') || lowerMessage.includes('ฝ่าแนว')) {
+      return { tool: 'run_screener_strategy', params: { strategyId: 'high_volume_breakout', type: 'stock' } };
+    }
+
+    // Multi-scan: compare multiple asset types
+    if (lowerMessage.includes('เปรียบเทียบ') || lowerMessage.includes('compare') || lowerMessage.includes('vs')) {
+      return { tool: 'multi_screener_scan', params: { types: ['stock', 'crypto'], strategyId: 'top_gainers' } };
+    }
+
+    // AI recommendation
+    if (lowerMessage.includes('แนะนำ') || lowerMessage.includes('recommend') || lowerMessage.includes('suggest') ||
+        lowerMessage.includes('น่าลงทุน') || lowerMessage.includes('ลงทุนอะไรดี') || lowerMessage.includes('ซื้ออะไรดี')) {
+      return { tool: 'screener_recommendation', params: { risk: 'medium' } };
     }
 
     // Screener - Custom scan (generic screener keywords)
     if (lowerMessage.includes('scan') || lowerMessage.includes('screen') || lowerMessage.includes('สแกน') || 
         lowerMessage.includes('หาหุ้น') || lowerMessage.includes('หาสินทรัพย์') || lowerMessage.includes('ค้นหาหุ้น') ||
-        lowerMessage.includes('screener') || lowerMessage.includes('filter') || lowerMessage.includes('กรอง')) {
-      // Detect type
+        lowerMessage.includes('screener') || lowerMessage.includes('filter') || lowerMessage.includes('กรอง') ||
+        lowerMessage.includes('หาคริปโต') || lowerMessage.includes('หา forex') || lowerMessage.includes('หาเหรียญ')) {
       let type = 'stock';
-      if (lowerMessage.includes('crypto') || lowerMessage.includes('คริปโต') || lowerMessage.includes('เหรียญ')) type = 'crypto';
-      else if (lowerMessage.includes('forex') || lowerMessage.includes('ค่าเงิน')) type = 'forex';
+      if (lowerMessage.includes('crypto') || lowerMessage.includes('คริปโต') || lowerMessage.includes('เหรียญ') || lowerMessage.includes('coin')) type = 'crypto';
+      else if (lowerMessage.includes('forex') || lowerMessage.includes('ค่าเงิน') || lowerMessage.includes('สกุลเงิน')) type = 'forex';
       else if (lowerMessage.includes('bond') || lowerMessage.includes('พันธบัตร')) type = 'bond';
-      else if (lowerMessage.includes('futures') || lowerMessage.includes('สัญญาซื้อขาย')) type = 'futures';
+      else if (lowerMessage.includes('futures') || lowerMessage.includes('สัญญาซื้อขาย') || lowerMessage.includes('ฟิวเจอร์')) type = 'futures';
       return { tool: 'scan_market', params: { type, limit: 20 } };
     }
 
     // Screener strategies list
-    if (lowerMessage.includes('strategy') || lowerMessage.includes('กลยุทธ์') || lowerMessage.includes('preset')) {
+    if (lowerMessage.includes('strategy') || lowerMessage.includes('กลยุทธ์') || lowerMessage.includes('preset') || lowerMessage.includes('รายการสแกน')) {
       return { tool: 'get_screener_strategies', params: {} };
     }
 
@@ -302,19 +377,44 @@ class GeminiServiceClass {
         }
         const stratLabel = result.strategy ? `${result.strategy.label} — ${result.strategy.description}` : `${result.type} scan`;
         const header = `📋 **Screener: ${stratLabel}**\n` +
-          `📊 พบ ${result.resultCount}/${result.totalCount} รายการ${result.fallback ? ' (fallback data)' : ''}\n\n`;
+          `📊 พบ ${result.resultCount}/${result.totalCount} รายการ${result.fallback ? ' ⚠️ (demo data)' : ' ✅ (live data)'}\n\n`;
         const rows = result.data.slice(0, 25).map((item: any, i: number) => {
           const sym = item.symbol || item.name || '?';
           const desc = item.description || '';
           const price = item.close != null ? `$${item.close}` : '';
-          const chg = item.change != null ? `${item.change > 0 ? '+' : ''}${item.change}%` : '';
-          const rsi = item.RSI != null ? `RSI:${item.RSI}` : '';
-          const rec = item['Recommend.All'] != null ? `Rating:${Number(item['Recommend.All']).toFixed(2)}` : '';
+          const chg = item.change != null ? `${item.change > 0 ? '🟢+' : '🔴'}${item.change}%` : '';
+          const rsi = item.RSI != null ? `RSI:${item.RSI}${Number(item.RSI) < 30 ? '⬇️' : Number(item.RSI) > 70 ? '⬆️' : ''}` : '';
+          const rec = item['Recommend.All'] != null ? (() => {
+            const v = Number(item['Recommend.All']);
+            const label = v > 0.5 ? '🟢Strong Buy' : v > 0.1 ? '🟢Buy' : v > -0.1 ? '🟡Neutral' : v > -0.5 ? '🔴Sell' : '🔴Strong Sell';
+            return `${label}`;
+          })() : '';
           const vol = item.volume != null ? `Vol:${(item.volume / 1e6).toFixed(1)}M` : '';
-          const mcap = item.market_cap_basic != null ? `MCap:${(item.market_cap_basic / 1e9).toFixed(1)}B` : '';
-          return `${i + 1}. **${sym}** ${desc} | ${price} ${chg} ${rsi} ${rec} ${vol} ${mcap}`.trim();
+          const mcap = item.market_cap_basic != null ? `MCap:$${(item.market_cap_basic / 1e9).toFixed(1)}B` : '';
+          const pe = item.price_earnings_ttm != null ? `P/E:${Number(item.price_earnings_ttm).toFixed(1)}` : '';
+          const div = item.dividend_yield_recent != null && Number(item.dividend_yield_recent) > 0 ? `Div:${Number(item.dividend_yield_recent).toFixed(1)}%` : '';
+          const perf1m = item['Perf.1M'] != null ? `1M:${Number(item['Perf.1M']) > 0 ? '+' : ''}${Number(item['Perf.1M']).toFixed(1)}%` : '';
+          return `${i + 1}. **${sym}** ${desc}\n   ${price} ${chg} | ${rsi} ${rec} ${pe} ${div} ${vol} ${mcap} ${perf1m}`.trim();
         }).join('\n');
         return header + rows;
+      }
+
+      case 'multi_screener_scan': {
+        if (!result.results || result.results.length === 0) return '📋 ไม่พบข้อมูล';
+        return result.results.map((r: any) => {
+          const typeLabel = r.type?.toUpperCase() || 'UNKNOWN';
+          const items = r.data?.slice(0, 10).map((item: any, i: number) =>
+            `  ${i + 1}. **${item.symbol || item.name}** $${item.close || '?'} ${item.change != null ? `${item.change > 0 ? '+' : ''}${item.change}%` : ''}`
+          ).join('\n') || 'ไม่มีข้อมูล';
+          return `\n📊 **${typeLabel}** (${r.resultCount} รายการ)\n${items}`;
+        }).join('\n\n---');
+      }
+
+      case 'screener_recommendation': {
+        if (!result.recommendations) return JSON.stringify(result, null, 2);
+        return `🎯 **คำแนะนำจาก AI Screener**\n\n` + result.recommendations.map((r: any) =>
+          `${r.emoji} **${r.category}** — ${r.description}\n${r.topPicks?.map((p: any, i: number) => `  ${i + 1}. ${p.symbol} $${p.close} ${p.change > 0 ? '🟢+' : '🔴'}${p.change}%`).join('\n') || 'ไม่มีข้อมูล'}`
+        ).join('\n\n');
       }
 
       case 'get_screener_strategies': {
