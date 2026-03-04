@@ -28,6 +28,16 @@ export const FIELD_PRESETS: FieldPreset[] = [
   { id: 'stock_bollinger', label: 'Bollinger Bands', screeners: ['stock'], fieldNames: ['description', 'close', 'BB.upper', 'BB.lower', 'BB.basis'] },
   { id: 'stock_pivot', label: 'Pivot Points', screeners: ['stock'], fieldNames: ['description', 'close', 'Pivot.M.Classic.Middle', 'Pivot.M.Classic.R1', 'Pivot.M.Classic.R2', 'Pivot.M.Classic.S1', 'Pivot.M.Classic.S2'] },
 
+  // Financial Statement Presets
+  { id: 'fin_balance_sheet', label: '📋 Balance Sheet', screeners: ['stock'], fieldNames: ['description', 'close', 'total_assets', 'total_current_assets', 'cash_n_equivalents_fq', 'total_liabilities_fq', 'total_current_liabilities_fq', 'long_term_debt_fq', 'total_debt', 'net_debt', 'total_equity_fq', 'book_value_per_share_fq'] },
+  { id: 'fin_income_statement', label: '📊 Income Statement', screeners: ['stock'], fieldNames: ['description', 'close', 'total_revenue', 'cost_of_revenue', 'gross_profit', 'oper_income_ttm', 'ebitda', 'net_income', 'earnings_per_share_basic_ttm', 'earnings_per_share_diluted_ttm', 'interest_expense', 'tax_provision'] },
+  { id: 'fin_cash_flow', label: '💰 Cash Flow', screeners: ['stock'], fieldNames: ['description', 'close', 'cash_f_operating_activities_ttm', 'capital_expenditures_ttm', 'free_cash_flow_ttm', 'cash_f_investing_activities_ttm', 'cash_f_financing_activities_ttm', 'dividends_paid', 'free_cash_flow_margin_ttm'] },
+  { id: 'fin_margins_ratios', label: '📐 Margins & Ratios', screeners: ['stock'], fieldNames: ['description', 'close', 'gross_margin', 'operating_margin', 'after_tax_margin', 'ebitda_margin_ttm', 'return_on_equity', 'return_on_assets', 'return_on_invested_capital', 'debt_to_equity', 'current_ratio', 'quick_ratio'] },
+  { id: 'fin_growth', label: '📈 Growth Metrics', screeners: ['stock'], fieldNames: ['description', 'close', 'total_revenue_yoy_growth_fy', 'total_revenue_yoy_growth_ttm', 'earnings_per_share_diluted_yoy_growth_fy', 'net_income_yoy_growth_fy', 'ebitda_yoy_growth_fy', 'gross_profit_yoy_growth_fy', 'free_cash_flow_yoy_growth_fy', 'total_assets_yoy_growth_fy'] },
+  { id: 'fin_debt_analysis', label: '🏦 Debt Analysis', screeners: ['stock'], fieldNames: ['description', 'close', 'total_debt', 'net_debt', 'long_term_debt_fq', 'short_term_debt_fq', 'debt_to_equity', 'net_debt_to_ebitda_fq', 'debt_to_asset_fq', 'debt_to_revenue_ttm', 'interst_cover_ttm', 'cash_n_short_term_invest_to_total_debt_fq'] },
+  { id: 'fin_efficiency', label: '⚙️ Efficiency', screeners: ['stock'], fieldNames: ['description', 'close', 'asset_turnover_current', 'invent_turnover_current', 'receivables_turnover_current', 'revenue_per_employee', 'research_and_dev_ratio_ttm', 'sell_gen_admin_exp_other_ratio_ttm'] },
+  { id: 'fin_per_share', label: '📌 Per Share Data', screeners: ['stock'], fieldNames: ['description', 'close', 'earnings_per_share_basic_ttm', 'earnings_per_share_diluted_ttm', 'earnings_per_share_fq', 'book_value_per_share_fq', 'tangible_book_value_per_share_fq', 'dividends_per_share_fq', 'revenue_per_employee'] },
+
   // Crypto Presets
   { id: 'crypto_price', label: 'Price Overview', screeners: ['crypto', 'coin'], fieldNames: ['description', 'close', 'change', '24h_vol|5', 'market_cap_calc'] },
   { id: 'crypto_technical', label: 'Technical', screeners: ['crypto', 'coin'], fieldNames: ['description', 'close', 'RSI', 'MACD.macd', 'Stoch.K', 'Recommend.All'] },
@@ -54,7 +64,7 @@ export interface StrategyPreset {
   label: string;
   emoji: string;
   screeners: ScreenerType[];
-  category: 'momentum' | 'value' | 'technical' | 'volume' | 'dividend' | 'custom';
+  category: 'momentum' | 'value' | 'technical' | 'volume' | 'dividend' | 'financial' | 'custom';
   description: string;
   filters: { field: string; operator: string; value: any }[];
   columns: string[];
@@ -225,6 +235,81 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     filters: [{ field: 'Perf.1M', operator: '>', value: 10 }],
     columns: ['description', 'close', 'change', 'Perf.W', 'Perf.1M', 'Perf.3M', 'RSI'],
     sort: { field: 'Perf.1M', direction: 'desc' },
+  },
+
+  // ---- FINANCIAL STATEMENT STRATEGIES ----
+  {
+    id: 'strong_balance_sheet', label: 'Strong Balance Sheet', emoji: '🏦', screeners: ['stock'],
+    category: 'financial', description: 'Low debt, high equity, strong current ratio',
+    filters: [
+      { field: 'current_ratio', operator: '>', value: 1.5 },
+      { field: 'debt_to_equity', operator: '<', value: 0.5 },
+    ],
+    columns: ['description', 'close', 'total_assets', 'total_liabilities_fq', 'total_equity_fq', 'current_ratio', 'debt_to_equity', 'net_debt', 'cash_n_equivalents_fq'],
+    sort: { field: 'market_cap_basic', direction: 'desc' },
+  },
+  {
+    id: 'cash_rich', label: 'Cash Rich Companies', emoji: '💎', screeners: ['stock'],
+    category: 'financial', description: 'High cash reserves relative to debt',
+    filters: [
+      { field: 'cash_n_short_term_invest_to_total_debt_fq', operator: '>', value: 1 },
+    ],
+    columns: ['description', 'close', 'cash_n_equivalents_fq', 'cash_n_short_term_invest_fq', 'total_debt', 'net_debt', 'cash_n_short_term_invest_to_total_debt_fq', 'market_cap_basic'],
+    sort: { field: 'cash_n_short_term_invest_to_total_debt_fq', direction: 'desc' },
+  },
+  {
+    id: 'high_profitability', label: 'High Profitability', emoji: '🏆', screeners: ['stock'],
+    category: 'financial', description: 'ROE > 20%, high margins',
+    filters: [
+      { field: 'return_on_equity', operator: '>', value: 20 },
+      { field: 'gross_margin', operator: '>', value: 40 },
+    ],
+    columns: ['description', 'close', 'return_on_equity', 'return_on_assets', 'return_on_invested_capital', 'gross_margin', 'operating_margin', 'after_tax_margin', 'ebitda_margin_ttm'],
+    sort: { field: 'return_on_equity', direction: 'desc' },
+  },
+  {
+    id: 'revenue_growth_machine', label: 'Revenue Growth Machine', emoji: '🚀', screeners: ['stock'],
+    category: 'financial', description: 'Revenue growing >25% YoY with improving margins',
+    filters: [
+      { field: 'total_revenue_yoy_growth_fy', operator: '>', value: 25 },
+    ],
+    columns: ['description', 'close', 'total_revenue', 'total_revenue_yoy_growth_fy', 'total_revenue_yoy_growth_ttm', 'gross_profit_yoy_growth_fy', 'net_income_yoy_growth_fy', 'ebitda_yoy_growth_fy', 'gross_margin'],
+    sort: { field: 'total_revenue_yoy_growth_fy', direction: 'desc' },
+  },
+  {
+    id: 'fcf_powerhouse', label: 'FCF Powerhouse', emoji: '💸', screeners: ['stock'],
+    category: 'financial', description: 'Strong free cash flow with high FCF margin',
+    filters: [
+      { field: 'free_cash_flow_margin_ttm', operator: '>', value: 15 },
+    ],
+    columns: ['description', 'close', 'free_cash_flow_ttm', 'free_cash_flow_margin_ttm', 'cash_f_operating_activities_ttm', 'capital_expenditures_ttm', 'free_cash_flow_yoy_growth_ttm', 'dividends_paid'],
+    sort: { field: 'free_cash_flow_margin_ttm', direction: 'desc' },
+  },
+  {
+    id: 'low_debt_high_return', label: 'Low Debt + High Return', emoji: '🎯', screeners: ['stock'],
+    category: 'financial', description: 'D/E < 0.3, ROIC > 15%',
+    filters: [
+      { field: 'debt_to_equity', operator: '<', value: 0.3 },
+      { field: 'return_on_invested_capital', operator: '>', value: 15 },
+    ],
+    columns: ['description', 'close', 'debt_to_equity', 'return_on_invested_capital', 'return_on_equity', 'net_debt_to_ebitda_fq', 'interst_cover_ttm', 'free_cash_flow_ttm'],
+    sort: { field: 'return_on_invested_capital', direction: 'desc' },
+  },
+  {
+    id: 'earnings_beat', label: 'EPS Growth Leaders', emoji: '📈', screeners: ['stock'],
+    category: 'financial', description: 'EPS growing >30% YoY',
+    filters: [
+      { field: 'earnings_per_share_diluted_yoy_growth_fy', operator: '>', value: 30 },
+    ],
+    columns: ['description', 'close', 'earnings_per_share_basic_ttm', 'earnings_per_share_diluted_yoy_growth_fy', 'earnings_per_share_diluted_yoy_growth_ttm', 'net_income', 'net_income_yoy_growth_fy', 'price_earnings_ttm'],
+    sort: { field: 'earnings_per_share_diluted_yoy_growth_fy', direction: 'desc' },
+  },
+  {
+    id: 'full_financial_overview', label: 'Full Financial Overview', emoji: '📑', screeners: ['stock'],
+    category: 'financial', description: 'Complete financial snapshot: Revenue, Income, FCF, Margins, Returns',
+    filters: [],
+    columns: ['description', 'close', 'total_revenue', 'gross_profit', 'net_income', 'ebitda', 'free_cash_flow_ttm', 'gross_margin', 'operating_margin', 'return_on_equity', 'debt_to_equity', 'current_ratio'],
+    sort: { field: 'market_cap_basic', direction: 'desc' },
   },
 ];
 

@@ -22,6 +22,7 @@ const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
   volume: { label: 'Volume', emoji: '🌊' },
   value: { label: 'Value & Growth', emoji: '💰' },
   dividend: { label: 'Dividend', emoji: '💵' },
+  financial: { label: 'Financial Statements', emoji: '📋' },
   custom: { label: 'Special', emoji: '⚡' },
 };
 
