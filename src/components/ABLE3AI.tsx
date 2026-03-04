@@ -16,11 +16,13 @@ import {
 import {
   Send, Bot, User, Settings, Sparkles, Zap, X,
   RefreshCw, Wifi, WifiOff, Plug, Check, Loader2, Database, Layout,
-  Paperclip, FileText, Image as ImageIcon, BotIcon, Trash2
+  Paperclip, FileText, Image as ImageIcon, BotIcon, Trash2, PanelRightOpen, PanelRightClose
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { AgentOverlay, AGENT_QUICK_COMMANDS, AGENT_SYSTEM_PROMPT } from '@/components/agent/AgentOverlay';
+import ArtifactPanel, { ArtifactData } from '@/components/ABLE3AI/ArtifactPanel';
+import { detectArtifactFromResponse, fetchFinancialStatement } from '@/components/ABLE3AI/ArtifactGenerator';
 
 interface ThinkingStep {
   id: string;
@@ -138,6 +140,10 @@ const ABLE3AI = () => {
   const [currentThinking, setCurrentThinking] = useState<ThinkingStep[]>([]);
   const thinkingRef = useRef<ThinkingStep[]>([]);
 
+  // Artifact state
+  const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
+  const [artifactMode, setArtifactMode] = useState(true);
+
   const addThinkingStep = useCallback((text: string, status: ThinkingStep['status'] = 'running') => {
     // Mark previous running step as done
     thinkingRef.current = thinkingRef.current.map((s, i) =>
@@ -175,7 +181,7 @@ const ABLE3AI = () => {
     { label: '🟢 Strong Buy', cmd: 'หาหุ้นที่มีสัญญาณซื้อแรงจาก technical analysis' },
     { label: '⚡ Breakout', cmd: 'หาหุ้นที่กำลัง breakout ราคาขึ้นพร้อม volume สูง' },
     { label: '🔍 หาหุ้น', cmd: 'ช่วยหาหุ้นที่น่าลงทุนให้หน่อย' },
-    { label: '📋 Strategies', cmd: 'แสดงรายการ strategy presets ทั้งหมดที่ใช้สแกนได้' },
+    { label: '📋 งบการเงิน', cmd: 'ดูงบการเงิน AAPL แบบละเอียด' },
     { label: '🌍 แผ่นดินไหว', cmd: 'แผ่นดินไหวล่าสุดมีที่ไหนบ้าง' },
     { label: '📸 วิเคราะห์กราฟ', cmd: 'วิเคราะห์กราฟที่เห็นบนหน้าจอตอนนี้' },
   ];
@@ -531,6 +537,24 @@ const ABLE3AI = () => {
       // Save AI response to history
       conversationHistoryRef.current.push({ role: 'assistant', content: aiResponse });
 
+      // Artifact generation
+      if (artifactMode) {
+        const lowerInput = currentInput.toLowerCase();
+        // Financial statement detection
+        if (/งบการเงิน|financial.*statement|balance.*sheet|ดูงบ|งบดุล|งบกำไร|pull.*financial/i.test(lowerInput)) {
+          addThinkingStep('📋 กำลังดึงงบการเงินจาก TradingView...');
+          const symbolMatch = currentInput.match(/\b([A-Z]{1,6})\b/);
+          if (symbolMatch) {
+            const finArtifact = await fetchFinancialStatement(symbolMatch[1]);
+            if (finArtifact) setActiveArtifact(finArtifact);
+          }
+        } else {
+          // Auto-detect artifact from response
+          const artifact = detectArtifactFromResponse(currentInput, aiResponse);
+          if (artifact) setActiveArtifact(artifact);
+        }
+      }
+
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         text: aiResponse,
@@ -587,7 +611,8 @@ const ABLE3AI = () => {
   };
 
   return (
-    <Card className="w-full h-full bg-black/90 border-green-500/50 flex flex-col">
+    <div className="w-full h-full flex">
+      <Card className={`${activeArtifact ? 'w-1/2' : 'w-full'} h-full bg-black/90 border-green-500/50 flex flex-col transition-all duration-300`}>
       <CardHeader className="pb-2 px-3 pt-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-green-400 text-base">
@@ -640,6 +665,28 @@ const ABLE3AI = () => {
               <BotIcon className="w-4 h-4" />
               <span className="text-xs">Agent</span>
               {agent.isAgentMode && <span className="w-2 h-2 rounded-full bg-purple-300 animate-pulse" />}
+            </Button>
+            <Button
+              size="sm"
+              variant={artifactMode ? 'default' : 'ghost'}
+              onClick={() => {
+                setArtifactMode(!artifactMode);
+                if (!artifactMode) {
+                  toast({ title: '📋 Artifact Mode ON', description: 'ผลวิเคราะห์จะแสดงเป็น panel ด้านข้าง' });
+                } else {
+                  setActiveArtifact(null);
+                  toast({ title: '📋 Artifact Mode OFF' });
+                }
+              }}
+              className={`h-8 px-2 gap-1 ${
+                artifactMode
+                  ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                  : 'text-cyan-400 hover:bg-cyan-500/20'
+              }`}
+              title="Artifact Mode"
+            >
+              {activeArtifact ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+              <span className="text-xs">Art</span>
             </Button>
             <Button
               size="sm"
@@ -901,6 +948,14 @@ const ABLE3AI = () => {
         </div>
       </CardContent>
     </Card>
+
+      {/* Artifact Side Panel */}
+      {activeArtifact && (
+        <div className="w-1/2 h-full">
+          <ArtifactPanel artifact={activeArtifact} onClose={() => setActiveArtifact(null)} />
+        </div>
+      )}
+    </div>
   );
 };
 
