@@ -15,6 +15,8 @@ export interface ArtifactData {
   timestamp: Date;
   content: any;
   source?: string;
+  aiResponse?: string;
+  userQuery?: string;
 }
 
 interface ArtifactPanelProps {
@@ -477,74 +479,177 @@ const RenderChartAnalysis: React.FC<{ content: any }> = ({ content }) => {
 /* ─── Helpers ─── */
 function extractFlowchartNodes(artifact: ArtifactData): Array<{ label: string; type: string; detail?: string }> {
   const nodes: Array<{ label: string; type: string; detail?: string }> = [];
+  const response = artifact.aiResponse || '';
+  const query = artifact.userQuery || artifact.title;
 
-  if (artifact.type === 'chart_analysis') {
-    const { symbol, indicators, signals, analysis } = artifact.content;
-    nodes.push({ label: `สถานการณ์ปัจจุบัน: ${symbol || 'Market'}`, type: 'start' });
-    if (indicators) {
-      Object.entries(indicators).forEach(([k, v]) => {
-        nodes.push({ label: `${k}: ${typeof v === 'number' ? (v as number).toFixed(2) : v}`, type: 'process', detail: 'Technical Indicator' });
+  // Step 1: Start node from user query
+  nodes.push({ label: query.slice(0, 60), type: 'start', detail: 'คำถามจากผู้ใช้' });
+
+  // Step 2: Extract key points from AI response
+  if (response) {
+    // Extract numbered items or bullet points from AI response
+    const bulletLines = response.split('\n').filter(l => 
+      /^[\d]+[.)]\s|^[-•]\s|^\*\s/.test(l.trim())
+    );
+    
+    // Extract section headers (bold text)
+    const headers = response.match(/\*\*([^*]+)\*\*/g)?.map(h => h.replace(/\*\*/g, '')) || [];
+    
+    // Extract key decisions/conditions from response
+    const conditionPatterns = response.match(/(?:ถ้า|หาก|เมื่อ|if|when|because|เนื่องจาก|สาเหตุ)[^.\n]{5,60}/gi) || [];
+    const actionPatterns = response.match(/(?:ควร|แนะนำ|suggest|recommend|should|buy|sell|ซื้อ|ขาย|hold|ถือ)[^.\n]{5,60}/gi) || [];
+    const resultPatterns = response.match(/(?:ผลลัพธ์|สรุป|conclusion|result|ดังนั้น|therefore|target|เป้า)[^.\n]{5,60}/gi) || [];
+
+    // Add data sources as process nodes
+    if (headers.length > 0) {
+      headers.slice(0, 3).forEach(h => {
+        nodes.push({ label: h.slice(0, 50), type: 'process', detail: 'หัวข้อวิเคราะห์' });
       });
     }
-    if (signals) {
-      (signals as any[]).forEach(s => {
-        nodes.push({ label: s.name, type: s.direction === 'bullish' ? 'action' : s.direction === 'bearish' ? 'decision' : 'condition', detail: s.detail });
-      });
+
+    // Add key data points from bullet items
+    if (bulletLines.length > 0) {
+      const dataNode = bulletLines.length > 3 
+        ? `พบข้อมูล ${bulletLines.length} รายการ`
+        : bulletLines.slice(0, 3).map(l => l.replace(/^[\d]+[.)]\s|^[-•*]\s/, '').trim().slice(0, 40)).join(', ');
+      nodes.push({ label: dataNode, type: 'process', detail: `${bulletLines.length} data points` });
     }
-    nodes.push({ label: analysis ? analysis.slice(0, 80) + '...' : 'สรุปผลวิเคราะห์', type: 'result' });
-  } else if (artifact.type === 'relationship') {
-    const { nodes: rNodes, summary } = artifact.content;
-    nodes.push({ label: 'เริ่มวิเคราะห์', type: 'start' });
-    if (rNodes) {
-      (rNodes as any[]).slice(0, 6).forEach(n => {
-        nodes.push({ label: n.label, type: n.type === 'event' ? 'decision' : n.type === 'asset' ? 'process' : 'condition', detail: n.detail });
-      });
-    }
-    nodes.push({ label: summary ? summary.slice(0, 80) + '...' : 'ผลสรุป', type: 'result' });
-  } else if (artifact.type === 'financial_statement' || artifact.type === 'screener_result' || artifact.type === 'table') {
-    nodes.push({ label: artifact.title, type: 'start' });
-    const groups = artifact.content.groups || [{ title: 'Data', rows: artifact.content.rows || [] }];
-    groups.slice(0, 4).forEach((g: any) => {
-      nodes.push({ label: g.title, type: 'process', detail: `${g.rows?.length || 0} items` });
+
+    // Add conditions
+    conditionPatterns.slice(0, 2).forEach(c => {
+      nodes.push({ label: c.trim().slice(0, 50), type: 'decision', detail: 'เงื่อนไข' });
     });
-    nodes.push({ label: 'ข้อมูลพร้อมวิเคราะห์', type: 'result' });
+
+    // Add actions
+    actionPatterns.slice(0, 2).forEach(a => {
+      nodes.push({ label: a.trim().slice(0, 50), type: 'action', detail: 'แนวทางปฏิบัติ' });
+    });
+
+    // Add results/conclusions
+    if (resultPatterns.length > 0) {
+      nodes.push({ label: resultPatterns[0].trim().slice(0, 60), type: 'result', detail: 'ผลสรุป' });
+    }
   }
 
-  return nodes.length > 0 ? nodes : [{ label: artifact.title, type: 'start' }, { label: 'Processing...', type: 'result' }];
+  // Fallback: use artifact structured data
+  if (nodes.length <= 1) {
+    if (artifact.type === 'chart_analysis') {
+      const { symbol, indicators, signals, analysis } = artifact.content;
+      nodes.push({ label: `วิเคราะห์ ${symbol || 'Asset'}`, type: 'process' });
+      if (indicators) {
+        Object.entries(indicators).slice(0, 3).forEach(([k, v]) => {
+          nodes.push({ label: `${k}: ${typeof v === 'number' ? (v as number).toFixed(2) : v}`, type: 'process', detail: 'Indicator' });
+        });
+      }
+      if (signals) {
+        (signals as any[]).slice(0, 2).forEach(s => {
+          nodes.push({ label: s.name, type: s.direction === 'bullish' ? 'action' : 'decision', detail: s.detail });
+        });
+      }
+      if (analysis) nodes.push({ label: analysis.slice(0, 60) + '...', type: 'result' });
+    } else if (artifact.type === 'financial_statement' || artifact.type === 'screener_result') {
+      const groups = artifact.content.groups || [{ title: 'Data', rows: artifact.content.rows || [] }];
+      groups.slice(0, 4).forEach((g: any) => {
+        nodes.push({ label: g.title, type: 'process', detail: `${g.rows?.length || 0} items` });
+      });
+      nodes.push({ label: 'ข้อมูลพร้อมวิเคราะห์', type: 'result' });
+    }
+  }
+
+  // Ensure we have an end node
+  if (nodes.length > 1 && nodes[nodes.length - 1].type !== 'result') {
+    nodes.push({ label: 'สรุปผลการวิเคราะห์', type: 'result' });
+  }
+
+  return nodes.length > 1 ? nodes : [{ label: query.slice(0, 50), type: 'start' }, { label: 'กำลังรอข้อมูล...', type: 'result' }];
 }
 
 function extractGraphData(artifact: ArtifactData): { nodes: any[]; connections: any[] } {
-  if (artifact.type === 'relationship') {
-    return { nodes: artifact.content.nodes || [], connections: artifact.content.connections || [] };
-  }
-
-  // Convert other artifact types to graph
   const nodes: any[] = [];
   const connections: any[] = [];
+  const response = artifact.aiResponse || '';
+  const query = artifact.userQuery || artifact.title;
 
-  if (artifact.type === 'chart_analysis') {
-    const { symbol, indicators, signals } = artifact.content;
-    nodes.push({ label: symbol || 'Asset', type: 'asset' });
-    if (indicators) {
-      Object.entries(indicators).forEach(([k, v]) => {
-        nodes.push({ label: k, type: 'indicator', value: typeof v === 'number' ? (v as number).toFixed(2) : v });
-        connections.push({ from: symbol || 'Asset', to: k, type: typeof v === 'number' && (v as number) > 50 ? 'positive' : 'negative' });
-      });
-    }
-    if (signals) {
-      (signals as any[]).forEach(s => {
-        nodes.push({ label: s.name, type: s.direction === 'bullish' ? 'event' : 'condition' });
-        connections.push({ from: s.name, to: symbol || 'Asset', type: s.direction === 'bullish' ? 'positive' : 'negative' });
-      });
-    }
-  } else if (artifact.type === 'financial_statement') {
-    nodes.push({ label: artifact.title.replace('📋 งบการเงิน ', ''), type: 'asset' });
-    const groups = artifact.content.groups || [];
-    groups.forEach((g: any) => {
-      nodes.push({ label: g.title.replace(/[💰📊💵📈]\s*/g, ''), type: 'indicator' });
-      connections.push({ from: artifact.title.replace('📋 งบการเงิน ', ''), to: g.title.replace(/[💰📊💵📈]\s*/g, ''), type: 'positive' });
+  // If relationship type, use its data as base
+  if (artifact.type === 'relationship' && artifact.content.nodes?.length) {
+    return { nodes: artifact.content.nodes, connections: artifact.content.connections || [] };
+  }
+
+  // Extract entities from AI response text
+  if (response) {
+    // Extract assets/tickers
+    const assetMatches = [...new Set((response.match(/\b(?:XAU|BTC|ETH|USD|EUR|GBP|JPY|SPX|DXY|VIX|AAPL|TSLA|NVDA|GOOGL|MSFT|Gold|Bitcoin|Oil|ทองคำ|น้ำมัน)[A-Z]*/gi) || []))];
+    assetMatches.slice(0, 6).forEach(a => {
+      nodes.push({ label: a, type: 'asset', detail: 'สินทรัพย์' });
+    });
+
+    // Extract indicators/metrics
+    const indicatorMatches = [...new Set((response.match(/\b(?:RSI|MACD|SMA|EMA|P\/E|ROE|ROA|GDP|CPI|NFP|PMI|ATR|Bollinger|Volume|Market Cap|Revenue|EPS|Dividend)[^,\n]{0,20}/gi) || []))];
+    indicatorMatches.slice(0, 6).forEach(ind => {
+      nodes.push({ label: ind.trim().slice(0, 30), type: 'indicator', detail: 'ตัวชี้วัด' });
+    });
+
+    // Extract events
+    const eventMatches = [...new Set((response.match(/\b(?:Fed|ECB|BOJ|FOMC|ดอกเบี้ย|เงินเฟ้อ|inflation|recession|war|crisis|breakout|support|resistance|แนวรับ|แนวต้าน)[^,.\n]{0,30}/gi) || []))];
+    eventMatches.slice(0, 4).forEach(ev => {
+      nodes.push({ label: ev.trim().slice(0, 30), type: 'event', detail: 'เหตุการณ์' });
+    });
+
+    // Extract decisions/actions
+    const decisionMatches = [...new Set((response.match(/(?:ซื้อ|ขาย|buy|sell|hold|ถือ|Long|Short|strong buy|strong sell)[^,.\n]{0,30}/gi) || []))];
+    decisionMatches.slice(0, 3).forEach(d => {
+      nodes.push({ label: d.trim().slice(0, 30), type: 'condition', detail: 'สัญญาณ' });
     });
   }
+
+  // Fallback to artifact structured data
+  if (nodes.length === 0) {
+    if (artifact.type === 'chart_analysis') {
+      const { symbol, indicators, signals } = artifact.content;
+      nodes.push({ label: symbol || 'Asset', type: 'asset' });
+      if (indicators) {
+        Object.entries(indicators).forEach(([k, v]) => {
+          nodes.push({ label: k, type: 'indicator', value: typeof v === 'number' ? (v as number).toFixed(2) : v });
+        });
+      }
+      if (signals) {
+        (signals as any[]).forEach(s => {
+          nodes.push({ label: s.name, type: s.direction === 'bullish' ? 'event' : 'condition' });
+        });
+      }
+    } else if (artifact.type === 'financial_statement') {
+      nodes.push({ label: artifact.title.replace('📋 งบการเงิน ', ''), type: 'asset' });
+      const groups = artifact.content.groups || [];
+      groups.forEach((g: any) => {
+        nodes.push({ label: g.title.replace(/[💰📊💵📈]\s*/g, ''), type: 'indicator' });
+      });
+    }
+  }
+
+  // Auto-generate connections between nodes
+  const assets = nodes.filter(n => n.type === 'asset');
+  const others = nodes.filter(n => n.type !== 'asset');
+  
+  assets.forEach(asset => {
+    others.slice(0, 5).forEach(other => {
+      const isNegative = response.includes('ลดลง') || response.includes('bearish') || response.includes('sell') || response.includes('ขาย');
+      connections.push({
+        from: asset.label,
+        to: other.label,
+        type: other.type === 'condition' ? (isNegative ? 'negative' : 'positive') : 'neutral',
+        label: other.type === 'indicator' ? 'มีผลต่อ' : other.type === 'event' ? 'ได้รับผลกระทบ' : undefined,
+      });
+    });
+  });
+
+  // Connect events to conditions
+  const events = nodes.filter(n => n.type === 'event');
+  const conditions = nodes.filter(n => n.type === 'condition');
+  events.forEach(ev => {
+    conditions.forEach(cond => {
+      connections.push({ from: ev.label, to: cond.label, type: 'neutral', label: 'นำไปสู่' });
+    });
+  });
 
   return { nodes, connections };
 }
