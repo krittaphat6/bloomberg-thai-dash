@@ -555,12 +555,32 @@ const ABLE3AI = () => {
           const symbolMatch = currentInput.match(/\b([A-Z]{1,6})\b/);
           if (symbolMatch) {
             const finArtifact = await fetchFinancialStatement(symbolMatch[1]);
-            if (finArtifact) setActiveArtifact(finArtifact);
+            if (finArtifact) {
+              finArtifact.aiResponse = aiResponse;
+              finArtifact.userQuery = currentInput;
+              setActiveArtifact(finArtifact);
+            }
           }
         } else {
           // Auto-detect artifact from response
           const artifact = detectArtifactFromResponse(currentInput, aiResponse);
-          if (artifact) setActiveArtifact(artifact);
+          if (artifact) {
+            artifact.aiResponse = aiResponse;
+            artifact.userQuery = currentInput;
+            setActiveArtifact(artifact);
+          } else if (aiResponse.length > 50) {
+            // Always create a generic artifact from chat for flowchart/graph views
+            setActiveArtifact({
+              id: Date.now().toString(),
+              type: 'table',
+              title: currentInput.slice(0, 50),
+              timestamp: new Date(),
+              source: 'AI Chat',
+              aiResponse,
+              userQuery: currentInput,
+              content: { headers: [], rows: [] },
+            });
+          }
         }
       }
 
