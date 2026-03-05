@@ -23,6 +23,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { AgentOverlay, AGENT_QUICK_COMMANDS, AGENT_SYSTEM_PROMPT } from '@/components/agent/AgentOverlay';
 import ArtifactPanel, { ArtifactData } from '@/components/ABLE3AI/ArtifactPanel';
 import { detectArtifactFromResponse, fetchFinancialStatement } from '@/components/ABLE3AI/ArtifactGenerator';
+import { fetchTopNewsContext } from '@/components/ABLE3AI/TopNewsIntegration';
 
 interface ThinkingStep {
   id: string;
@@ -463,6 +464,14 @@ const ABLE3AI = () => {
         const freshContext = await UniversalDataService.getData(['all']);
         const contextSummary = freshContext.success ? UniversalDataService.formatForAI(freshContext) : '';
         addThinkingStep('📊 ดึงข้อมูลแอป (broker, trades, alerts)...');
+
+        // Fetch TOP NEWS context for market/news queries
+        let topNewsContext = '';
+        const lowerInput = currentInput.toLowerCase();
+        if (/ข่าว|news|macro|ตลาด|market|สรุป|overview|ราคา|price|gold|ทอง|btc|sentiment|report|รายงาน|alert|แจ้งเตือน|วิเคราะห์.*ตลาด|สถานการณ์/i.test(lowerInput)) {
+          addThinkingStep('📰 ดึงข้อมูลจาก TOP NEWS Intelligence...');
+          topNewsContext = await fetchTopNewsContext(currentInput);
+        }
         
         if (aiProvider === 'gemini' && geminiReady) {
           const toolCall = GeminiService.detectToolCall(currentInput);
@@ -474,7 +483,7 @@ const ABLE3AI = () => {
               const result = await executeTool(toolCall.tool, toolCall.params);
               const toolResult = GeminiService.formatToolResult(toolCall.tool, result);
               addThinkingStep('🧠 Gemini กำลังวิเคราะห์ผลลัพธ์...');
-              const analysisPrompt = `User asked: "${currentInput}"\n\nData from ${toolCall.tool}:\n${toolResult}\n\n${contextSummary}\n\nวิเคราะห์และตอบเป็นภาษาไทย`;
+              const analysisPrompt = `User asked: "${currentInput}"\n\nData from ${toolCall.tool}:\n${toolResult}\n\n${contextSummary}\n${topNewsContext}\n\nวิเคราะห์และตอบเป็นภาษาไทย`;
               const geminiResponse = await GeminiService.chat(
                 analysisPrompt,
                 conversationHistoryRef.current.slice(0, -1),
@@ -488,7 +497,7 @@ const ABLE3AI = () => {
             }
           } else {
             addThinkingStep('🧠 Gemini 2.5 Flash กำลังประมวลผล...');
-            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}`;
+            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}`;
             const response = await GeminiService.chat(
               enhancedPrompt,
               conversationHistoryRef.current.slice(0, -1),
@@ -612,7 +621,7 @@ const ABLE3AI = () => {
 
   return (
     <div className="w-full h-full flex">
-      <Card className={`${activeArtifact ? 'w-1/2' : 'w-full'} h-full bg-black/90 border-green-500/50 flex flex-col transition-all duration-300`}>
+      <Card className={`${(activeArtifact || artifactMode) ? 'w-1/2' : 'w-full'} h-full bg-black/90 border-green-500/50 flex flex-col transition-all duration-300`}>
       <CardHeader className="pb-2 px-3 pt-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-green-400 text-base">
@@ -950,9 +959,9 @@ const ABLE3AI = () => {
     </Card>
 
       {/* Artifact Side Panel */}
-      {activeArtifact && (
+      {artifactMode && (
         <div className="w-1/2 h-full">
-          <ArtifactPanel artifact={activeArtifact} onClose={() => setActiveArtifact(null)} />
+          <ArtifactPanel artifact={activeArtifact} onClose={() => { setActiveArtifact(null); setArtifactMode(false); }} isOpen={artifactMode} />
         </div>
       )}
     </div>

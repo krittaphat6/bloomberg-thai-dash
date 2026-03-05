@@ -185,9 +185,32 @@ export default function NoteTaking() {
     }
   }, []);
 
-  // Save notes to localStorage
+  // Save notes to localStorage with error handling for large content
   useEffect(() => {
-    localStorage.setItem('able-notes', JSON.stringify(notes));
+    try {
+      const serialized = JSON.stringify(notes);
+      // Check if data is too large (>4MB warning)
+      if (serialized.length > 4 * 1024 * 1024) {
+        console.warn('⚠️ Notes data is very large:', (serialized.length / 1024 / 1024).toFixed(2), 'MB');
+      }
+      localStorage.setItem('able-notes', serialized);
+    } catch (e: any) {
+      console.error('❌ Failed to save notes to localStorage:', e.message);
+      // If quota exceeded, try saving without the largest content
+      if (e.name === 'QuotaExceededError' || e.code === 22) {
+        try {
+          // Save with truncated content for very large notes
+          const truncated = notes.map(note => ({
+            ...note,
+            content: note.content.length > 500000 ? note.content.slice(0, 500000) + '\n\n[... content truncated due to storage limit]' : note.content,
+          }));
+          localStorage.setItem('able-notes', JSON.stringify(truncated));
+          console.warn('⚠️ Saved notes with truncated content due to storage limits');
+        } catch (e2) {
+          console.error('❌ Cannot save notes even with truncation:', e2);
+        }
+      }
+    }
   }, [notes]);
 
   // Load spreadsheets from localStorage
@@ -1030,13 +1053,22 @@ export default function NoteTaking() {
                   <Textarea
                     value={selectedNote.content}
                     onChange={(e) => {
+                      const newContent = e.target.value;
                       // Update the selected note immediately for UI responsiveness
-                      setSelectedNote({ ...selectedNote, content: e.target.value });
+                      setSelectedNote({ ...selectedNote, content: newContent });
                       // Auto-save with debounce
-                      autoSaveNote(selectedNote.id, { content: e.target.value });
+                      autoSaveNote(selectedNote.id, { content: newContent });
                     }}
-                    className="w-full h-full min-h-96 resize-none border-0 focus:ring-0"
+                    onPaste={(e) => {
+                      // Handle large paste operations gracefully
+                      const pastedText = e.clipboardData.getData('text');
+                      if (pastedText.length > 100000) {
+                        console.log(`📋 Large paste detected: ${(pastedText.length / 1024).toFixed(1)} KB`);
+                      }
+                    }}
+                    className="w-full h-full min-h-96 resize-none border-0 focus:ring-0 font-mono text-sm"
                     placeholder="Start writing your note... Use [[note name]] for links and #tag for tags"
+                    spellCheck={false}
                   />
                   <div className="text-xs text-muted-foreground mt-2 text-center">
                     💾 Auto-saves as you type
