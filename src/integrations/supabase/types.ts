@@ -924,6 +924,63 @@ export type Database = {
         }
         Relationships: []
       }
+      user_notes: {
+        Row: {
+          children: string[] | null
+          content: string | null
+          created_at: string
+          folder: string | null
+          icon: string | null
+          id: string
+          is_favorite: boolean | null
+          is_rich_text: boolean | null
+          linked_notes: string[] | null
+          parent_id: string | null
+          properties: Json | null
+          rich_content: string | null
+          tags: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          children?: string[] | null
+          content?: string | null
+          created_at?: string
+          folder?: string | null
+          icon?: string | null
+          id: string
+          is_favorite?: boolean | null
+          is_rich_text?: boolean | null
+          linked_notes?: string[] | null
+          parent_id?: string | null
+          properties?: Json | null
+          rich_content?: string | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          children?: string[] | null
+          content?: string | null
+          created_at?: string
+          folder?: string | null
+          icon?: string | null
+          id?: string
+          is_favorite?: boolean | null
+          is_rich_text?: boolean | null
+          linked_notes?: string[] | null
+          parent_id?: string | null
+          properties?: Json | null
+          rich_content?: string | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       users: {
         Row: {
           avatar_url: string | null
