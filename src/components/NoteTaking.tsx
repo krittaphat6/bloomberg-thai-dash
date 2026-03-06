@@ -18,6 +18,7 @@ import AdvancedSpreadsheet from './AdvancedSpreadsheet';
 import { ExcelClone } from './Excel/ExcelClone';
 import { SupplyChainViz } from './SupplyChainViz';
 import AbleCalendar from './Calendar/AbleCalendar';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { 
   Plus, 
   Search, 
@@ -47,6 +48,9 @@ import {
   Italic,
   Type,
   ArrowLeft,
+  Menu,
+  X,
+  ChevronLeft,
 } from 'lucide-react';
 
 interface Note {
@@ -98,6 +102,8 @@ interface Spreadsheet {
 }
 
 export default function NoteTaking() {
+  const isMobile = useIsMobile();
+  const [showSidebar, setShowSidebar] = useState(!isMobile);
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([
     { id: '1', name: 'General', color: 'bg-blue-500' },
@@ -485,607 +491,400 @@ export default function NoteTaking() {
     }
   };
 
-  return (
-    <Card className="w-full h-full bg-card border-border">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-terminal-green">
-          <BookOpen className="h-5 w-5" />
-          ABLE NOTES - NOTION-STYLE WORKSPACE
-        </CardTitle>
-        <div className="text-xs text-muted-foreground">
-          Advanced note-taking with rich text, blocks, databases, templates, and more
+  // On mobile: show sidebar OR content, not both (unless canvas)
+  const mobileShowList = isMobile && !selectedNote && !selectedSpreadsheet;
+  const mobileShowEditor = isMobile && (selectedNote || selectedSpreadsheet);
+
+  // Helper to select note on mobile (hides sidebar)
+  const handleSelectNote = (note: Note) => {
+    setSelectedNote(note);
+    if (isMobile) setShowSidebar(false);
+  };
+
+  const renderSidebar = () => (
+    <div className={`flex flex-col gap-3 flex-shrink-0 overflow-auto ${
+      mainView === 'canvas' ? 'hidden' : ''
+    } ${isMobile 
+      ? 'w-full h-full' 
+      : 'w-80 border-r border-border pr-4'
+    }`}>
+      {/* Main View Toggle */}
+      <div className={`grid ${isMobile ? 'grid-cols-3' : 'grid-cols-2'} gap-1`}>
+        <Button variant={mainView === 'notes' ? 'default' : 'outline'} size="sm" onClick={() => setMainView('notes')} className="text-xs">
+          <FileText className="h-3 w-3 mr-1" /> Notes
+        </Button>
+        <Button variant={mainView === 'calendar' ? 'default' : 'outline'} size="sm" onClick={() => setMainView('calendar')} className="text-xs">
+          <CalendarIcon className="h-3 w-3 mr-1" /> Calendar
+        </Button>
+        <Button variant={mainView === 'templates' ? 'default' : 'outline'} size="sm" onClick={() => setMainView('templates')} className="text-xs">
+          <Layers className="h-3 w-3 mr-1" /> Templates
+        </Button>
+        <Button variant={mainView === 'spreadsheets' ? 'default' : 'outline'} size="sm" onClick={() => setMainView('spreadsheets')} className="text-xs">
+          <Table className="h-3 w-3 mr-1" /> Tables
+        </Button>
+        <Button variant={mainView === 'canvas' ? 'default' : 'outline'} size="sm" onClick={() => setMainView('canvas')} className={`text-xs ${isMobile ? '' : 'col-span-2'}`}>
+          <Palette className="h-3 w-3 mr-1" /> Canvas
+        </Button>
+        {isMobile && <div />}
+      </div>
+
+      {mainView === 'notes' && (
+        <div className="flex gap-2">
+          <Button variant={viewMode === 'list' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('list')} className="flex-1">
+            <FileText className="h-4 w-4 mr-1" /> List
+          </Button>
+          <Button variant={viewMode === 'graph' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('graph')} className="flex-1">
+            <Network className="h-4 w-4 mr-1" /> Graph
+          </Button>
         </div>
-      </CardHeader>
-      <CardContent className="h-full p-4">
-        <div className="flex h-full gap-4 overflow-hidden">
-          {/* Sidebar */}
-          <div className={`flex flex-col gap-4 border-r border-border pr-4 flex-shrink-0 transition-all duration-300 overflow-hidden ${mainView === 'canvas' ? 'w-0 pr-0 border-r-0 hidden' : 'w-80'}`}>
-            {/* Main View Toggle */}
-            <div className="grid grid-cols-2 gap-1 mb-4">
-              <Button
-                variant={mainView === 'notes' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setMainView('notes')}
-                className="text-xs"
-              >
-                <FileText className="h-3 w-3 mr-1" />
-                Notes
-              </Button>
-              <Button
-                variant={mainView === 'calendar' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setMainView('calendar')}
-                className="text-xs"
-              >
-                <CalendarIcon className="h-3 w-3 mr-1" />
-                Calendar
-              </Button>
-              <Button
-                variant={mainView === 'templates' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setMainView('templates')}
-                className="text-xs"
-              >
-                <Layers className="h-3 w-3 mr-1" />
-                Templates
-              </Button>
-              <Button
-                variant={mainView === 'spreadsheets' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setMainView('spreadsheets')}
-                className="text-xs"
-              >
-                <Table className="h-3 w-3 mr-1" />
-                Tables
-              </Button>
-              <Button
-                variant={mainView === 'canvas' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setMainView('canvas')}
-                className="text-xs col-span-2"
-              >
-                <Palette className="h-3 w-3 mr-1" />
-                Canvas V2
-              </Button>
-            </div>
+      )}
 
-            {mainView === 'notes' && (
-              <>
-                {/* View Mode Toggle */}
-                <div className="flex gap-2 mb-4">
-                  <Button
-                    variant={viewMode === 'list' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setViewMode('list')}
-                    className="flex-1"
-                  >
-                    <FileText className="h-4 w-4 mr-1" />
-                    List
-                  </Button>
-                  <Button
-                    variant={viewMode === 'graph' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setViewMode('graph')}
-                    className="flex-1"
-                  >
-                    <Network className="h-4 w-4 mr-1" />
-                    Graph
-                  </Button>
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+        <Input placeholder="Search notes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+      </div>
+
+      {/* Filters */}
+      <div className="space-y-2">
+        <div className="flex gap-1 flex-wrap">
+          <Button variant={selectedFolder === '' ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFolder('')} className="text-xs">All</Button>
+          {folders.map(folder => (
+            <Button key={folder.id} variant={selectedFolder === folder.id ? 'default' : 'outline'} size="sm" onClick={() => setSelectedFolder(folder.id)} className="text-xs">
+              <div className={`w-2 h-2 rounded-full ${folder.color} mr-1`} />
+              {folder.name}
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {allTags.map(tag => (
+            <Badge key={tag} variant={selectedTag === tag ? 'default' : 'outline'} className="cursor-pointer text-xs" onClick={() => setSelectedTag(selectedTag === tag ? '' : tag)}>
+              #{tag}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="space-y-2">
+        {mainView === 'notes' && (
+          <Dialog open={isCreating} onOpenChange={setIsCreating}>
+            <DialogTrigger asChild>
+              <Button className="w-full" size="sm">
+                <Plus className="h-4 w-4 mr-2" /> New Note
+              </Button>
+            </DialogTrigger>
+            <DialogContent className={isMobile ? 'max-w-[95vw] max-h-[90vh] overflow-auto' : 'max-w-2xl'}>
+              <DialogHeader>
+                <DialogTitle>Create New Note</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <Input placeholder="Note title..." value={editingNote.title || ''} onChange={(e) => setEditingNote({ ...editingNote, title: e.target.value })} />
+                <select className="w-full p-2 border border-input rounded-md bg-background text-sm" value={editingNote.folder || ''} onChange={(e) => setEditingNote({ ...editingNote, folder: e.target.value })}>
+                  <option value="">No folder</option>
+                  {folders.map(folder => (<option key={folder.id} value={folder.id}>{folder.name}</option>))}
+                </select>
+                <Input placeholder="Tags (comma separated)..." value={editingNote.tags?.join(', ') || ''} onChange={(e) => setEditingNote({ ...editingNote, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} />
+                <Textarea placeholder="Write your note here..." value={editingNote.content || ''} onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })} rows={isMobile ? 6 : 10} />
+                <div className="flex gap-2">
+                  <Button onClick={createNote}>Create Note</Button>
+                  <Button variant="outline" onClick={() => setIsCreating(false)}>Cancel</Button>
                 </div>
-              </>
-            )}
-
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search notes..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            {/* Filters */}
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <Button
-                  variant={selectedFolder === '' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setSelectedFolder('')}
-                  className="text-xs"
-                >
-                  All
-                </Button>
-                {folders.map(folder => (
-                  <Button
-                    key={folder.id}
-                    variant={selectedFolder === folder.id ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedFolder(folder.id)}
-                    className="text-xs"
-                  >
-                    <div className={`w-2 h-2 rounded-full ${folder.color} mr-1`} />
-                    {folder.name}
-                  </Button>
-                ))}
               </div>
-              
-              <div className="flex flex-wrap gap-1">
-                {allTags.map(tag => (
-                  <Badge
-                    key={tag}
-                    variant={selectedTag === tag ? 'default' : 'outline'}
-                    className="cursor-pointer text-xs"
-                    onClick={() => setSelectedTag(selectedTag === tag ? '' : tag)}
-                  >
-                    #{tag}
-                  </Badge>
-                ))}
+            </DialogContent>
+          </Dialog>
+        )}
+        {mainView === 'spreadsheets' && (
+          <Button className="w-full" size="sm" onClick={createNewSpreadsheet}>
+            <Plus className="h-4 w-4 mr-2" /> New Spreadsheet
+          </Button>
+        )}
+      </div>
+
+      {/* Content List */}
+      <div className="flex-1 overflow-auto space-y-2">
+        {mainView === 'notes' && filteredNotes.map(note => (
+          <div
+            key={note.id}
+            className={`p-3 border border-border rounded cursor-pointer hover:bg-muted/50 transition-colors active:bg-muted ${
+              selectedNote?.id === note.id ? 'bg-muted border-primary' : ''
+            }`}
+            onClick={() => handleSelectNote(note)}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm flex-shrink-0">{note.icon || '📄'}</span>
+                <h3 className="font-medium text-sm truncate">{note.title}</h3>
               </div>
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); toggleFavorite(note.id); }} className="h-6 w-6 p-0 flex-shrink-0">
+                <Star className={`h-3 w-3 ${note.isFavorite ? 'text-yellow-500 fill-current' : 'text-muted-foreground'}`} />
+              </Button>
             </div>
-
-            {/* Action Buttons */}
-            <div className="space-y-2">
-              {mainView === 'notes' && (
-                <Dialog open={isCreating} onOpenChange={setIsCreating}>
-                  <DialogTrigger asChild>
-                    <Button className="w-full" size="sm">
-                      <Plus className="h-4 w-4 mr-2" />
-                      New Note
-                    </Button>
-                  </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Create New Note</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Note title..."
-                    value={editingNote.title || ''}
-                    onChange={(e) => setEditingNote({ ...editingNote, title: e.target.value })}
-                  />
-                  <select
-                    className="w-full p-2 border border-input rounded-md bg-background"
-                    value={editingNote.folder || ''}
-                    onChange={(e) => setEditingNote({ ...editingNote, folder: e.target.value })}
-                  >
-                    <option value="">No folder</option>
-                    {folders.map(folder => (
-                      <option key={folder.id} value={folder.id}>{folder.name}</option>
-                    ))}
-                  </select>
-                  <Input
-                    placeholder="Tags (comma separated)..."
-                    value={editingNote.tags?.join(', ') || ''}
-                    onChange={(e) => setEditingNote({ 
-                      ...editingNote, 
-                      tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)
-                    })}
-                  />
-                  <Textarea
-                    placeholder="Write your note here... Use [[note name]] for links and #tag for tags"
-                    value={editingNote.content || ''}
-                    onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })}
-                    rows={10}
-                  />
-                  <div className="flex gap-2">
-                    <Button onClick={createNote}>Create Note</Button>
-                    <Button variant="outline" onClick={() => setIsCreating(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-                </Dialog>
-              )}
-              
-              {mainView === 'calendar' && (
-                <div className="text-xs text-muted-foreground text-center py-2">
-                  Create events in the calendar view
-                </div>
-              )}
-              
-              {mainView === 'templates' && (
-                <Button className="w-full" size="sm" onClick={() => setMainView('templates')}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Browse Templates
-                </Button>
-              )}
-            </div>
-
-            {/* Content List */}
-            <div className="flex-1 overflow-auto space-y-2">
-              {mainView === 'notes' && filteredNotes.map(note => (
-                <div
-                  key={note.id}
-                  className={`p-3 border border-border rounded cursor-pointer hover:bg-muted/50 transition-colors ${
-                    selectedNote?.id === note.id ? 'bg-muted border-terminal-green' : ''
-                  }`}
-                  onClick={() => setSelectedNote(note)}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{note.icon || '📄'}</span>
-                      <h3 className="font-medium text-sm truncate">{note.title}</h3>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {note.isFavorite && <Star className="h-3 w-3 text-yellow-400 fill-current" />}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleFavorite(note.id);
-                        }}
-                        className="h-6 w-6 p-0"
-                      >
-                        <Star className={`h-3 w-3 ${note.isFavorite ? 'text-yellow-400 fill-current' : 'text-muted-foreground'}`} />
-                      </Button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate mb-2">
-                    {note.content.slice(0, 100)}...
-                  </p>
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {note.tags.slice(0, 3).map(tag => (
-                      <Badge key={tag} variant="outline" className="text-xs">
-                        #{tag}
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {note.updatedAt.toLocaleDateString()}
-                  </div>
-                </div>
+            <p className="text-xs text-muted-foreground truncate mb-2">{note.content.slice(0, 80)}...</p>
+            <div className="flex flex-wrap gap-1 mb-1">
+              {note.tags.slice(0, 3).map(tag => (
+                <Badge key={tag} variant="outline" className="text-[10px]">#{tag}</Badge>
               ))}
-              
-              {mainView === 'calendar' && (
-                <div className="text-center py-8">
-                  <CalendarIcon className="h-8 w-8 mx-auto mb-2 text-terminal-green" />
-                  <p className="text-sm text-muted-foreground">View calendar in main area</p>
-                </div>
-              )}
-              
-              {mainView === 'templates' && (
-                <div className="text-center py-8">
-                  <Layers className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Browse templates in main area</p>
-                </div>
-              )}
-              
-              {mainView === 'spreadsheets' && spreadsheets.map(sheet => (
-                <div
-                  key={sheet.id}
-                  className="p-3 border border-border rounded cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => setSelectedSpreadsheet(sheet)}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Table className="h-4 w-4 text-terminal-green" />
-                    <h3 className="font-medium text-sm">{sheet.name}</h3>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {sheet.sheets.length} sheets • Updated {sheet.updatedAt.toLocaleDateString()}
-                  </div>
-                </div>
-              ))}
-              
-              {mainView === 'spreadsheets' && spreadsheets.length === 0 && (
-                <div className="text-center py-8">
-                  <Table className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">No spreadsheets yet</p>
-                  <Button onClick={createNewSpreadsheet} size="sm" className="mt-2">
-                    <Plus className="h-4 w-4 mr-1" />
-                    Create Spreadsheet
-                  </Button>
-                </div>
-              )}
             </div>
-
-            <div className="text-xs text-terminal-amber space-y-1">
-              <div>📝 {notes.length} notes • 🏷️ {allTags.length} tags • 📁 {folders.length} folders</div>
-              <div>🗄️ {databases.length} databases • 📋 {templates.length} templates • 📊 {spreadsheets.length} spreadsheets</div>
-            </div>
+            <div className="text-[10px] text-muted-foreground">{note.updatedAt.toLocaleDateString()}</div>
           </div>
+        ))}
 
-          <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
-            {mainView === 'canvas' ? (
-              <div className="flex-1 h-full min-h-0">
-                <AbleCanvasV2 
-                  notes={notes}
-                  onUpdateNote={updateNote}
-                  onCreateNote={(note) => setNotes(prev => [note, ...prev])}
-                  mainView={mainView}
-                  onChangeView={(v) => setMainView(v as any)}
-                  sidebarContent={
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-1">
-                        <Button variant="outline" size="sm" onClick={() => setMainView('notes')} className="text-xs">
-                          <FileText className="h-3 w-3 mr-1" /> Notes
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setMainView('calendar')} className="text-xs">
-                          <CalendarIcon className="h-3 w-3 mr-1" /> Calendar
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setMainView('templates')} className="text-xs">
-                          <Layers className="h-3 w-3 mr-1" /> Templates
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setMainView('spreadsheets')} className="text-xs">
-                          <Table className="h-3 w-3 mr-1" /> Tables
-                        </Button>
-                        <Button variant="default" size="sm" className="text-xs col-span-2">
-                          <Palette className="h-3 w-3 mr-1" /> Canvas V2
-                        </Button>
-                      </div>
-                    </div>
-                  }
-                />
-              </div>
-            ) : mainView === 'templates' ? (
-              <NotionTemplates
-                templates={templates}
-                onUseTemplate={useTemplate}
-                onCreateTemplate={createTemplate}
-              />
-            ) : mainView === 'calendar' ? (
-              <div className="flex-1 h-full">
-                <AbleCalendar />
-              </div>
-            ) : mainView === 'spreadsheets' ? (
-              selectedSpreadsheet ? (
-                <div className="flex-1 flex flex-col">
-                  <div className="flex items-center justify-between p-4 border-b">
-                    <div className="flex items-center gap-2">
-                      <Button onClick={() => setSelectedSpreadsheet(null)} size="sm" variant="ghost">
-                        <ArrowLeft className="h-4 w-4" />
-                      </Button>
-                      <Input 
-                        value={selectedSpreadsheet.name}
-                        onChange={(e) => updateSpreadsheetName(selectedSpreadsheet.id, e.target.value)}
-                        className="font-semibold text-lg border-none bg-transparent"
-                      />
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <Button 
-                        size="sm" 
-                        variant={spreadsheetView === 'grid' ? 'default' : 'outline'}
-                        onClick={() => setSpreadsheetView('grid')}
-                      >
-                        <Table className="h-4 w-4 mr-1" />
-                        Grid View
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant={spreadsheetView === 'relationship' ? 'default' : 'outline'}
-                        onClick={() => setSpreadsheetView('relationship')}
-                      >
-                        <Network className="h-4 w-4 mr-1" />
-                        Relationship Map
-                      </Button>
-                      <Separator orientation="vertical" className="h-6" />
-                      <Button size="sm" variant="outline">
-                        <LinkIcon className="h-4 w-4 mr-1" />
-                        Link Note
-                      </Button>
-                      <Button size="sm" variant="outline">
-                        <Tag className="h-4 w-4 mr-1" />
-                        Tags
-                      </Button>
-                      <Button size="sm" variant="outline">
-                        <Download className="h-4 w-4 mr-1" />
-                        Export
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => deleteSpreadsheet(selectedSpreadsheet.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1">
-                    {spreadsheetView === 'grid' ? (
-                      <ExcelClone 
-                        initialData={selectedSpreadsheet.data}
-                        onSave={(data) => updateSpreadsheetData(selectedSpreadsheet.id, data)}
-                      />
-                    ) : (
-                      <SupplyChainViz 
-                        data={selectedSpreadsheet.data || {}}
-                        columns={['NO.', 'Security', 'Ticker', 'Fund', 'Position', 'Pos Chg', '% Out', 'Current Mkt Val', 'Current MV Chg', 'Filing Date', 'Region']}
-                      />
-                    )}
-                  </div>
+        {mainView === 'calendar' && (
+          <div className="text-center py-8">
+            <CalendarIcon className="h-8 w-8 mx-auto mb-2 text-primary" />
+            <p className="text-sm text-muted-foreground">View calendar in main area</p>
+          </div>
+        )}
+
+        {mainView === 'templates' && (
+          <div className="text-center py-8">
+            <Layers className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Browse templates in main area</p>
+          </div>
+        )}
+
+        {mainView === 'spreadsheets' && spreadsheets.map(sheet => (
+          <div key={sheet.id} className="p-3 border border-border rounded cursor-pointer hover:bg-muted/50 active:bg-muted transition-colors" onClick={() => setSelectedSpreadsheet(sheet)}>
+            <div className="flex items-center gap-2 mb-2">
+              <Table className="h-4 w-4 text-primary" />
+              <h3 className="font-medium text-sm">{sheet.name}</h3>
+            </div>
+            <div className="text-xs text-muted-foreground">{sheet.sheets.length} sheets • Updated {sheet.updatedAt.toLocaleDateString()}</div>
+          </div>
+        ))}
+
+        {mainView === 'spreadsheets' && spreadsheets.length === 0 && (
+          <div className="text-center py-8">
+            <Table className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No spreadsheets yet</p>
+          </div>
+        )}
+      </div>
+
+      {!isMobile && (
+        <div className="text-xs text-terminal-amber space-y-1">
+          <div>📝 {notes.length} notes • 🏷️ {allTags.length} tags • 📁 {folders.length} folders</div>
+          <div>🗄️ {databases.length} databases • 📋 {templates.length} templates • 📊 {spreadsheets.length} spreadsheets</div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderNoteEditor = () => {
+    if (!selectedNote) return null;
+    return (
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Note Header */}
+        <div className={`flex items-center justify-between ${isMobile ? 'mb-2' : 'mb-4'}`}>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={isMobile ? 'text-lg' : 'text-2xl'}>{selectedNote.icon || '📄'}</span>
+            <h1 className={`font-bold truncate ${isMobile ? 'text-base' : 'text-2xl'}`}>{selectedNote.title}</h1>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Editor Mode Toggle */}
+            <div className="flex border border-border rounded">
+              <Button variant={editorMode === 'simple' ? 'default' : 'ghost'} size="sm" onClick={() => setEditorMode('simple')} className="rounded-r-none h-7 w-7 p-0">
+                <Type className="h-3 w-3" />
+              </Button>
+              <Button variant={editorMode === 'rich' ? 'default' : 'ghost'} size="sm" onClick={() => setEditorMode('rich')} className="rounded-none h-7 w-7 p-0">
+                <Bold className="h-3 w-3" />
+              </Button>
+              <Button variant={editorMode === 'blocks' ? 'default' : 'ghost'} size="sm" onClick={() => setEditorMode('blocks')} className="rounded-l-none h-7 w-7 p-0">
+                <Layers className="h-3 w-3" />
+              </Button>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => toggleFavorite(selectedNote.id)} className="h-7 w-7 p-0">
+              <Star className={`h-3 w-3 ${selectedNote.isFavorite ? 'text-yellow-500 fill-current' : ''}`} />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => deleteNote(selectedNote.id)} className="h-7 w-7 p-0">
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Meta info */}
+        {!isMobile && (
+          <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
+            <div className="flex items-center gap-1"><CalendarIcon className="h-4 w-4" /> Created: {selectedNote.createdAt.toLocaleDateString()}</div>
+            <div className="flex items-center gap-1"><Edit className="h-4 w-4" /> Updated: {selectedNote.updatedAt.toLocaleDateString()}</div>
+            {selectedNote.folder && <div className="flex items-center gap-1"><Folder className="h-4 w-4" /> {folders.find(f => f.id === selectedNote.folder)?.name}</div>}
+          </div>
+        )}
+
+        {/* Tags */}
+        <div className="flex flex-wrap gap-1 mb-2">
+          {selectedNote.tags.map(tag => (
+            <Badge key={tag} variant="outline" className="cursor-pointer text-xs" onClick={() => setSelectedTag(tag)}>
+              #{tag}
+              <button onClick={(e) => { e.stopPropagation(); removeTag(selectedNote.id, tag); }} className="ml-1">×</button>
+            </Badge>
+          ))}
+          <Input
+            placeholder="+ tag"
+            className="w-20 h-6 text-xs"
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                const target = e.target as HTMLInputElement;
+                const tag = target.value.trim();
+                if (tag) { addTag(selectedNote.id, tag); target.value = ''; }
+              }
+            }}
+          />
+        </div>
+
+        <Separator className="my-2" />
+
+        {/* Editor */}
+        <div className="flex-1 overflow-auto">
+          <Textarea
+            value={selectedNote.content}
+            onChange={(e) => {
+              const newContent = e.target.value;
+              setSelectedNote({ ...selectedNote, content: newContent });
+              autoSaveNote(selectedNote.id, { content: newContent });
+            }}
+            onPaste={(e) => {
+              const pastedText = e.clipboardData.getData('text');
+              if (pastedText.length > 100000) console.log(`📋 Large paste: ${(pastedText.length / 1024).toFixed(1)} KB`);
+            }}
+            className="w-full h-full min-h-[200px] resize-none border-0 focus:ring-0 font-mono text-sm"
+            placeholder="Start writing..."
+            spellCheck={false}
+          />
+          <div className="text-[10px] text-muted-foreground mt-1 text-center">💾 Auto-saves</div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMainContent = () => {
+    if (mainView === 'canvas') {
+      return (
+        <div className="flex-1 h-full min-h-0">
+          <AbleCanvasV2 
+            notes={notes}
+            onUpdateNote={updateNote}
+            onCreateNote={(note) => setNotes(prev => [note, ...prev])}
+            mainView={mainView}
+            onChangeView={(v) => setMainView(v as any)}
+            sidebarContent={
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-1">
+                  <Button variant="outline" size="sm" onClick={() => setMainView('notes')} className="text-xs"><FileText className="h-3 w-3 mr-1" /> Notes</Button>
+                  <Button variant="outline" size="sm" onClick={() => setMainView('calendar')} className="text-xs"><CalendarIcon className="h-3 w-3 mr-1" /> Calendar</Button>
+                  <Button variant="outline" size="sm" onClick={() => setMainView('templates')} className="text-xs"><Layers className="h-3 w-3 mr-1" /> Templates</Button>
+                  <Button variant="outline" size="sm" onClick={() => setMainView('spreadsheets')} className="text-xs"><Table className="h-3 w-3 mr-1" /> Tables</Button>
+                  <Button variant="default" size="sm" className="text-xs col-span-2"><Palette className="h-3 w-3 mr-1" /> Canvas V2</Button>
                 </div>
+              </div>
+            }
+          />
+        </div>
+      );
+    }
+    if (mainView === 'templates') return <NotionTemplates templates={templates} onUseTemplate={useTemplate} onCreateTemplate={createTemplate} />;
+    if (mainView === 'calendar') return <div className="flex-1 h-full"><AbleCalendar /></div>;
+    if (mainView === 'spreadsheets') {
+      if (selectedSpreadsheet) {
+        return (
+          <div className="flex-1 flex flex-col">
+            <div className={`flex items-center justify-between p-2 border-b ${isMobile ? 'flex-col gap-2' : ''}`}>
+              <div className="flex items-center gap-2 w-full">
+                <Button onClick={() => setSelectedSpreadsheet(null)} size="sm" variant="ghost"><ArrowLeft className="h-4 w-4" /></Button>
+                <Input value={selectedSpreadsheet.name} onChange={(e) => updateSpreadsheetName(selectedSpreadsheet.id, e.target.value)} className="font-semibold border-none bg-transparent" />
+              </div>
+              <div className={`flex gap-1 ${isMobile ? 'w-full overflow-x-auto' : ''}`}>
+                <Button size="sm" variant={spreadsheetView === 'grid' ? 'default' : 'outline'} onClick={() => setSpreadsheetView('grid')}><Table className="h-3 w-3 mr-1" /> Grid</Button>
+                <Button size="sm" variant={spreadsheetView === 'relationship' ? 'default' : 'outline'} onClick={() => setSpreadsheetView('relationship')}><Network className="h-3 w-3 mr-1" /> Map</Button>
+                <Button size="sm" variant="outline" onClick={() => deleteSpreadsheet(selectedSpreadsheet.id)}><Trash2 className="h-3 w-3" /></Button>
+              </div>
+            </div>
+            <div className="flex-1">
+              {spreadsheetView === 'grid' ? (
+                <ExcelClone initialData={selectedSpreadsheet.data} onSave={(data) => updateSpreadsheetData(selectedSpreadsheet.id, data)} />
               ) : (
-                <div className="flex-1 flex items-center justify-center">
-                  <div className="text-center">
-                    <Table className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                    <h3 className="text-lg font-semibold mb-2">Excel-Style Spreadsheets</h3>
-                    <p className="text-muted-foreground mb-4">Create powerful spreadsheets with formulas, charts, and data analysis</p>
-                    <div className="flex gap-2 justify-center flex-wrap">
-                      <Button onClick={createNewSpreadsheet}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        New Spreadsheet
-                      </Button>
-                      <Button variant="outline">
-                        <Upload className="h-4 w-4 mr-2" />
-                        Import Excel
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )
-            ) : viewMode === 'graph' ? (
-              <GraphView
-                notes={notes}
-                onNodeClick={setSelectedNote}
-                selectedNote={selectedNote}
-                searchTerm={searchTerm}
-                selectedFolder={selectedFolder}
-                selectedTag={selectedTag}
-              />
-            ) : selectedNote ? (
-              <>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">{selectedNote.icon || '📄'}</span>
-                    <h1 className="text-2xl font-bold">{selectedNote.title}</h1>
-                    {selectedNote.isFavorite && (
-                      <Star className="h-5 w-5 text-yellow-400 fill-current" />
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {/* Editor Mode Toggle */}
-                    <div className="flex border border-border rounded">
-                      <Button
-                        variant={editorMode === 'simple' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setEditorMode('simple')}
-                        className="rounded-r-none"
-                      >
-                        <Type className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant={editorMode === 'rich' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setEditorMode('rich')}
-                        className="rounded-none"
-                      >
-                        <Bold className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant={editorMode === 'blocks' ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => setEditorMode('blocks')}
-                        className="rounded-l-none"
-                      >
-                        <Layers className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggleFavorite(selectedNote.id)}
-                    >
-                      <Star className={`h-4 w-4 ${selectedNote.isFavorite ? 'text-yellow-400 fill-current' : ''}`} />
-                    </Button>
-                    
-                    <Button variant="outline" size="sm">
-                      <MessageCircle className="h-4 w-4" />
-                    </Button>
-                    
-                    <Button variant="outline" size="sm">
-                      <Share2 className="h-4 w-4" />
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteNote(selectedNote.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <CalendarIcon className="h-4 w-4" />
-                    Created: {selectedNote.createdAt.toLocaleDateString()}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Edit className="h-4 w-4" />
-                    Updated: {selectedNote.updatedAt.toLocaleDateString()}
-                  </div>
-                  {selectedNote.folder && (
-                    <div className="flex items-center gap-1">
-                      <Folder className="h-4 w-4" />
-                      {folders.find(f => f.id === selectedNote.folder)?.name}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {selectedNote.tags.map(tag => (
-                    <Badge
-                      key={tag}
-                      variant="outline"
-                      className="cursor-pointer"
-                      onClick={() => setSelectedTag(tag)}
-                    >
-                      #{tag}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeTag(selectedNote.id, tag);
-                        }}
-                        className="h-4 w-4 p-0 ml-1"
-                      >
-                        ×
-                      </Button>
-                    </Badge>
-                  ))}
-                  <Input
-                    placeholder="Add tag..."
-                    className="w-32 h-6 text-xs"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        const target = e.target as HTMLInputElement;
-                        const tag = target.value.trim();
-                        if (tag) {
-                          addTag(selectedNote.id, tag);
-                          target.value = '';
-                        }
-                      }
-                    }}
-                  />
-                </div>
-
-                <Separator className="my-4" />
-
-                <div className="flex-1 overflow-auto">
-                  <Textarea
-                    value={selectedNote.content}
-                    onChange={(e) => {
-                      const newContent = e.target.value;
-                      // Update the selected note immediately for UI responsiveness
-                      setSelectedNote({ ...selectedNote, content: newContent });
-                      // Auto-save with debounce
-                      autoSaveNote(selectedNote.id, { content: newContent });
-                    }}
-                    onPaste={(e) => {
-                      // Handle large paste operations gracefully
-                      const pastedText = e.clipboardData.getData('text');
-                      if (pastedText.length > 100000) {
-                        console.log(`📋 Large paste detected: ${(pastedText.length / 1024).toFixed(1)} KB`);
-                      }
-                    }}
-                    className="w-full h-full min-h-96 resize-none border-0 focus:ring-0 font-mono text-sm"
-                    placeholder="Start writing your note... Use [[note name]] for links and #tag for tags"
-                    spellCheck={false}
-                  />
-                  <div className="text-xs text-muted-foreground mt-2 text-center">
-                    💾 Auto-saves as you type
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <FileText className="h-16 w-16 mx-auto mb-4" />
-                  <p className="text-lg mb-2">Select a note to edit</p>
-                  <p className="text-sm">Or create a new note to get started</p>
-                </div>
-              </div>
-            )}
+                <SupplyChainViz data={selectedSpreadsheet.data || {}} columns={['NO.', 'Security', 'Ticker', 'Fund', 'Position', 'Pos Chg', '% Out', 'Current Mkt Val', 'Current MV Chg', 'Filing Date', 'Region']} />
+              )}
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center p-4">
+            <Table className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <h3 className="text-lg font-semibold mb-2">Excel-Style Spreadsheets</h3>
+            <p className="text-muted-foreground mb-4 text-sm">Create spreadsheets with formulas and charts</p>
+            <div className="flex gap-2 justify-center flex-wrap">
+              <Button onClick={createNewSpreadsheet}><Plus className="h-4 w-4 mr-2" /> New Spreadsheet</Button>
+              <Button variant="outline"><Upload className="h-4 w-4 mr-2" /> Import Excel</Button>
+            </div>
           </div>
         </div>
+      );
+    }
+    if (viewMode === 'graph') {
+      return <GraphView notes={notes} onNodeClick={setSelectedNote} selectedNote={selectedNote} searchTerm={searchTerm} selectedFolder={selectedFolder} selectedTag={selectedTag} />;
+    }
+    if (selectedNote) return renderNoteEditor();
+    return (
+      <div className="flex-1 flex items-center justify-center text-muted-foreground">
+        <div className="text-center">
+          <FileText className={`mx-auto mb-4 ${isMobile ? 'h-10 w-10' : 'h-16 w-16'}`} />
+          <p className={isMobile ? 'text-base mb-1' : 'text-lg mb-2'}>Select a note to edit</p>
+          <p className="text-sm">Or create a new note to get started</p>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <Card className="w-full h-full bg-card border-border flex flex-col">
+      <CardHeader className={`${isMobile ? 'px-3 py-2' : ''} flex-shrink-0`}>
+        <CardTitle className={`flex items-center gap-2 text-terminal-green ${isMobile ? 'text-sm' : ''}`}>
+          {isMobile && selectedNote && (
+            <Button variant="ghost" size="sm" className="p-1 h-8 w-8" onClick={() => setSelectedNote(null)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          )}
+          {isMobile && !selectedNote && (
+            <Button variant="ghost" size="sm" className="p-1 h-8 w-8" onClick={() => setShowSidebar(!showSidebar)}>
+              {showSidebar ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </Button>
+          )}
+          <BookOpen className={isMobile ? 'h-4 w-4' : 'h-5 w-5'} />
+          {isMobile ? 'NOTES' : 'ABLE NOTES - NOTION-STYLE WORKSPACE'}
+        </CardTitle>
+        {!isMobile && (
+          <div className="text-xs text-muted-foreground">
+            Advanced note-taking with rich text, blocks, databases, templates, and more
+          </div>
+        )}
+      </CardHeader>
+      <CardContent className={`flex-1 ${isMobile ? 'p-2' : 'p-4'} overflow-hidden`}>
+        {isMobile ? (
+          // Mobile: stacked layout
+          <div className="h-full flex flex-col overflow-hidden">
+            {selectedNote ? (
+              // Show editor full screen
+              renderNoteEditor()
+            ) : showSidebar || !selectedNote ? (
+              // Show sidebar/list
+              renderSidebar()
+            ) : (
+              renderMainContent()
+            )}
+          </div>
+        ) : (
+          // Desktop: side-by-side layout
+          <div className="flex h-full gap-4 overflow-hidden">
+            {renderSidebar()}
+            <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+              {renderMainContent()}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
