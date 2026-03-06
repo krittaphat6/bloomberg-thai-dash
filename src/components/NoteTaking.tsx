@@ -113,7 +113,10 @@ export default function NoteTaking() {
     { id: '4', title: 'Portfolio Ideas', content: 'Investment portfolio diversification ideas.', tags: ['strategy', 'portfolio'], createdAt: new Date('2024-01-12'), updatedAt: new Date('2024-01-12'), linkedNotes: [], isFavorite: true, folder: 'Ideas' },
   ];
 
-  const { notes, setNotes, syncing, deleteFromDb } = useNotesSync(sampleNotes);
+  const { notes, setNotes, syncing, deleteFromDb, loaded } = useNotesSync(sampleNotes);
+
+
+
   
   const [folders, setFolders] = useState<Folder[]>([
     { id: '1', name: 'General', color: 'bg-blue-500' },
@@ -205,6 +208,43 @@ export default function NoteTaking() {
     });
   }, [notes, searchTerm, selectedFolder, selectedTag]);
 
+  const updateNote = useCallback((noteId: string, updates: Partial<Note>) => {
+    setNotes(prevNotes => prevNotes.map(note => 
+      note.id === noteId 
+        ? { ...note, ...updates, updatedAt: new Date() }
+        : note
+    ));
+    
+    setSelectedNote(prevSelected => {
+      if (prevSelected?.id === noteId) {
+        return { ...prevSelected, ...updates, updatedAt: new Date() };
+      }
+      return prevSelected;
+    });
+  }, []);
+
+  const autoSaveNote = useCallback((noteId: string, updates: Partial<Note>) => {
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+    
+    const timeout = setTimeout(() => {
+      updateNote(noteId, updates);
+    }, 1000);
+    
+    setAutoSaveTimeout(timeout);
+  }, [autoSaveTimeout, updateNote]);
+
+  if (!loaded) {
+    return (
+      <div className="flex items-center justify-center h-full bg-background">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading notes from cloud...</p>
+        </div>
+      </div>
+    );
+  }
   const createNote = () => {
     const newNote: Note = {
       id: Date.now().toString(),
@@ -282,33 +322,6 @@ export default function NoteTaking() {
     setTemplates([...templates, newTemplate]);
   };
 
-  const updateNote = useCallback((noteId: string, updates: Partial<Note>) => {
-    setNotes(prevNotes => prevNotes.map(note => 
-      note.id === noteId 
-        ? { ...note, ...updates, updatedAt: new Date() }
-        : note
-    ));
-    
-    setSelectedNote(prevSelected => {
-      if (prevSelected?.id === noteId) {
-        return { ...prevSelected, ...updates, updatedAt: new Date() };
-      }
-      return prevSelected;
-    });
-  }, []);
-
-  // Auto-save function with debounce
-  const autoSaveNote = useCallback((noteId: string, updates: Partial<Note>) => {
-    if (autoSaveTimeout) {
-      clearTimeout(autoSaveTimeout);
-    }
-    
-    const timeout = setTimeout(() => {
-      updateNote(noteId, updates);
-    }, 1000); // Auto-save after 1 second of inactivity
-    
-    setAutoSaveTimeout(timeout);
-  }, [autoSaveTimeout, updateNote]);
 
   const deleteNote = (noteId: string) => {
     setNotes(notes.filter(note => note.id !== noteId));
