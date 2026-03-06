@@ -19,6 +19,7 @@ import { ExcelClone } from './Excel/ExcelClone';
 import { SupplyChainViz } from './SupplyChainViz';
 import AbleCalendar from './Calendar/AbleCalendar';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useNotesSync } from '@/hooks/useNotesSync';
 import { 
   Plus, 
   Search, 
@@ -103,8 +104,17 @@ interface Spreadsheet {
 
 export default function NoteTaking() {
   const isMobile = useIsMobile();
-  const [showSidebar, setShowSidebar] = useState(!isMobile);
-  const [notes, setNotes] = useState<Note[]>([]);
+  const [showSidebar, setShowSidebar] = useState(true);
+  
+  const sampleNotes: Note[] = [
+    { id: '1', title: 'Trading Strategy', content: 'This note discusses various trading strategies.', tags: ['strategy', 'trading'], createdAt: new Date('2024-01-15'), updatedAt: new Date('2024-01-15'), linkedNotes: ['2'], isFavorite: true, folder: 'Research' },
+    { id: '2', title: 'Risk Management', content: 'Key principles for managing risk in trading.', tags: ['risk', 'management'], createdAt: new Date('2024-01-14'), updatedAt: new Date('2024-01-14'), linkedNotes: ['3'], isFavorite: false, folder: 'General' },
+    { id: '3', title: 'Market Analysis', content: 'Technical analysis methods and tools.', tags: ['analysis', 'technical'], createdAt: new Date('2024-01-13'), updatedAt: new Date('2024-01-13'), linkedNotes: ['1'], isFavorite: false, folder: 'Research' },
+    { id: '4', title: 'Portfolio Ideas', content: 'Investment portfolio diversification ideas.', tags: ['strategy', 'portfolio'], createdAt: new Date('2024-01-12'), updatedAt: new Date('2024-01-12'), linkedNotes: [], isFavorite: true, folder: 'Ideas' },
+  ];
+
+  const { notes, setNotes, syncing, deleteFromDb } = useNotesSync(sampleNotes);
+  
   const [folders, setFolders] = useState<Folder[]>([
     { id: '1', name: 'General', color: 'bg-blue-500' },
     { id: '2', name: 'Research', color: 'bg-green-500' },
@@ -117,58 +127,7 @@ export default function NoteTaking() {
   const [spreadsheetView, setSpreadsheetView] = useState<'grid' | 'relationship'>('grid');
   const [mainView, setMainView] = useState<'notes' | 'calendar' | 'templates' | 'spreadsheets' | 'canvas'>('notes');
   const [editorMode, setEditorMode] = useState<'simple' | 'rich' | 'blocks' | 'spreadsheet'>('simple');
-  
-  // Initialize with sample data on mount to avoid hydration issues
-  useEffect(() => {
-    if (notes.length === 0) {
-      setNotes([
-        {
-          id: '1',
-          title: 'Trading Strategy',
-          content: 'This note discusses various trading strategies. It links to [[Risk Management]] and mentions #strategy.',
-          tags: ['strategy', 'trading'],
-          createdAt: new Date('2024-01-15'),
-          updatedAt: new Date('2024-01-15'),
-          linkedNotes: ['2'],
-          isFavorite: true,
-          folder: 'Research'
-        },
-        {
-          id: '2', 
-          title: 'Risk Management',
-          content: 'Key principles for managing risk in trading. Related to [[Trading Strategy]] and uses #risk #management tags.',
-          tags: ['risk', 'management'],
-          createdAt: new Date('2024-01-14'),
-          updatedAt: new Date('2024-01-14'),
-          linkedNotes: ['3'],
-          isFavorite: false,
-          folder: 'General'
-        },
-        {
-          id: '3',
-          title: 'Market Analysis',
-          content: 'Technical analysis methods and tools. Connected to risk management through shared tags #analysis.',
-          tags: ['analysis', 'technical'],
-          createdAt: new Date('2024-01-13'),
-          updatedAt: new Date('2024-01-13'),
-          linkedNotes: ['1'],
-          isFavorite: false,
-          folder: 'Research'
-        },
-        {
-          id: '4',
-          title: 'Portfolio Ideas',
-          content: 'Investment portfolio diversification ideas. Uses #strategy tag like Trading Strategy.',
-          tags: ['strategy', 'portfolio'],
-          createdAt: new Date('2024-01-12'),
-          updatedAt: new Date('2024-01-12'),
-          linkedNotes: [],
-          isFavorite: true,
-          folder: 'Ideas'
-        }
-      ]);
-    }
-  }, [notes.length]);
+
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<string>('');
@@ -177,47 +136,6 @@ export default function NoteTaking() {
   const [editingNote, setEditingNote] = useState<Partial<Note>>({});
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
-
-  // Load notes from localStorage
-  useEffect(() => {
-    const savedNotes = localStorage.getItem('able-notes');
-    if (savedNotes) {
-      const parsedNotes = JSON.parse(savedNotes);
-      setNotes(parsedNotes.map((note: any) => ({
-        ...note,
-        createdAt: new Date(note.createdAt),
-        updatedAt: new Date(note.updatedAt)
-      })));
-    }
-  }, []);
-
-  // Save notes to localStorage with error handling for large content
-  useEffect(() => {
-    try {
-      const serialized = JSON.stringify(notes);
-      // Check if data is too large (>4MB warning)
-      if (serialized.length > 4 * 1024 * 1024) {
-        console.warn('⚠️ Notes data is very large:', (serialized.length / 1024 / 1024).toFixed(2), 'MB');
-      }
-      localStorage.setItem('able-notes', serialized);
-    } catch (e: any) {
-      console.error('❌ Failed to save notes to localStorage:', e.message);
-      // If quota exceeded, try saving without the largest content
-      if (e.name === 'QuotaExceededError' || e.code === 22) {
-        try {
-          // Save with truncated content for very large notes
-          const truncated = notes.map(note => ({
-            ...note,
-            content: note.content.length > 500000 ? note.content.slice(0, 500000) + '\n\n[... content truncated due to storage limit]' : note.content,
-          }));
-          localStorage.setItem('able-notes', JSON.stringify(truncated));
-          console.warn('⚠️ Saved notes with truncated content due to storage limits');
-        } catch (e2) {
-          console.error('❌ Cannot save notes even with truncation:', e2);
-        }
-      }
-    }
-  }, [notes]);
 
   // Load spreadsheets from localStorage
   useEffect(() => {
@@ -394,8 +312,10 @@ export default function NoteTaking() {
 
   const deleteNote = (noteId: string) => {
     setNotes(notes.filter(note => note.id !== noteId));
+    deleteFromDb(noteId);
     if (selectedNote?.id === noteId) {
       setSelectedNote(null);
+      if (isMobile) setShowSidebar(true);
     }
   };
 
@@ -510,22 +430,26 @@ export default function NoteTaking() {
     }`}>
       {/* Main View Toggle */}
       <div className={`grid ${isMobile ? 'grid-cols-3' : 'grid-cols-2'} gap-1`}>
-        <Button variant={mainView === 'notes' ? 'default' : 'outline'} size="sm" onClick={() => setMainView('notes')} className="text-xs">
+        <Button variant={mainView === 'notes' ? 'default' : 'outline'} size="sm" onClick={() => { setMainView('notes'); setViewMode('list'); }} className="text-xs">
           <FileText className="h-3 w-3 mr-1" /> Notes
         </Button>
-        <Button variant={mainView === 'calendar' ? 'default' : 'outline'} size="sm" onClick={() => setMainView('calendar')} className="text-xs">
+        <Button variant={mainView === 'calendar' ? 'default' : 'outline'} size="sm" onClick={() => { setMainView('calendar'); if (isMobile) setShowSidebar(false); }} className="text-xs">
           <CalendarIcon className="h-3 w-3 mr-1" /> Calendar
         </Button>
-        <Button variant={mainView === 'templates' ? 'default' : 'outline'} size="sm" onClick={() => setMainView('templates')} className="text-xs">
+        <Button variant={mainView === 'templates' ? 'default' : 'outline'} size="sm" onClick={() => { setMainView('templates'); if (isMobile) setShowSidebar(false); }} className="text-xs">
           <Layers className="h-3 w-3 mr-1" /> Templates
         </Button>
-        <Button variant={mainView === 'spreadsheets' ? 'default' : 'outline'} size="sm" onClick={() => setMainView('spreadsheets')} className="text-xs">
+        <Button variant={mainView === 'spreadsheets' ? 'default' : 'outline'} size="sm" onClick={() => { setMainView('spreadsheets'); if (isMobile) setShowSidebar(false); }} className="text-xs">
           <Table className="h-3 w-3 mr-1" /> Tables
         </Button>
-        <Button variant={mainView === 'canvas' ? 'default' : 'outline'} size="sm" onClick={() => setMainView('canvas')} className={`text-xs ${isMobile ? '' : 'col-span-2'}`}>
+        <Button variant={mainView === 'canvas' ? 'default' : 'outline'} size="sm" onClick={() => { setMainView('canvas'); if (isMobile) setShowSidebar(false); }} className={`text-xs ${isMobile ? '' : 'col-span-2'}`}>
           <Palette className="h-3 w-3 mr-1" /> Canvas
         </Button>
-        {isMobile && <div />}
+        {isMobile && (
+          <Button variant={viewMode === 'graph' && mainView === 'notes' ? 'default' : 'outline'} size="sm" onClick={() => { setMainView('notes'); setViewMode('graph'); if (isMobile) setShowSidebar(false); }} className="text-xs">
+            <Network className="h-3 w-3 mr-1" /> Graph
+          </Button>
+        )}
       </div>
 
       {mainView === 'notes' && (
@@ -839,22 +763,33 @@ export default function NoteTaking() {
     );
   };
 
+  // Determine what to show on mobile
+  const mobileShowContent = !showSidebar && (mainView !== 'notes' || viewMode === 'graph' || selectedNote || selectedSpreadsheet);
+
   return (
     <Card className="w-full h-full bg-card border-border flex flex-col">
       <CardHeader className={`${isMobile ? 'px-3 py-2' : ''} flex-shrink-0`}>
         <CardTitle className={`flex items-center gap-2 text-terminal-green ${isMobile ? 'text-sm' : ''}`}>
-          {isMobile && selectedNote && (
-            <Button variant="ghost" size="sm" className="p-1 h-8 w-8" onClick={() => setSelectedNote(null)}>
+          {isMobile && mobileShowContent && (
+            <Button variant="ghost" size="sm" className="p-1 h-8 w-8" onClick={() => {
+              if (selectedNote) { setSelectedNote(null); setShowSidebar(true); }
+              else if (selectedSpreadsheet) { setSelectedSpreadsheet(null); setShowSidebar(true); }
+              else { setShowSidebar(true); }
+            }}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
           )}
-          {isMobile && !selectedNote && (
+          {isMobile && !mobileShowContent && (
             <Button variant="ghost" size="sm" className="p-1 h-8 w-8" onClick={() => setShowSidebar(!showSidebar)}>
               {showSidebar ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </Button>
           )}
           <BookOpen className={isMobile ? 'h-4 w-4' : 'h-5 w-5'} />
-          {isMobile ? 'NOTES' : 'ABLE NOTES - NOTION-STYLE WORKSPACE'}
+          {isMobile 
+            ? (selectedNote ? selectedNote.title : mainView === 'calendar' ? 'Calendar' : mainView === 'templates' ? 'Templates' : mainView === 'spreadsheets' ? 'Tables' : mainView === 'canvas' ? 'Canvas' : viewMode === 'graph' ? 'Graph' : 'NOTES')
+            : 'ABLE NOTES - NOTION-STYLE WORKSPACE'
+          }
+          {syncing && <span className="text-[10px] text-muted-foreground ml-2 animate-pulse">☁️</span>}
         </CardTitle>
         {!isMobile && (
           <div className="text-xs text-muted-foreground">
@@ -864,20 +799,14 @@ export default function NoteTaking() {
       </CardHeader>
       <CardContent className={`flex-1 ${isMobile ? 'p-2' : 'p-4'} overflow-hidden`}>
         {isMobile ? (
-          // Mobile: stacked layout
           <div className="h-full flex flex-col overflow-hidden">
-            {selectedNote ? (
-              // Show editor full screen
-              renderNoteEditor()
-            ) : showSidebar || !selectedNote ? (
-              // Show sidebar/list
-              renderSidebar()
-            ) : (
+            {mobileShowContent ? (
               renderMainContent()
+            ) : (
+              renderSidebar()
             )}
           </div>
         ) : (
-          // Desktop: side-by-side layout
           <div className="flex h-full gap-4 overflow-hidden">
             {renderSidebar()}
             <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
