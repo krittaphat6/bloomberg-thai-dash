@@ -215,7 +215,7 @@ export function computeDeepCharts(
   const oiStrength = Math.min(Math.abs(oiImbalance) / config.oiSensitivity * 100, 100);
   const oiSpike = Math.abs(oiImbalance) > config.oiSensitivity;
 
-  for (let i = Math.max(period, visibleStart); i <= Math.min(candles.length - 1, visibleEnd + 5); i++) {
+  for (let i = Math.max(period, safeStart); i <= Math.min(candles.length - 1, safeEnd + 5); i++) {
     const c = candles[i];
     
     // Buy Z-score
