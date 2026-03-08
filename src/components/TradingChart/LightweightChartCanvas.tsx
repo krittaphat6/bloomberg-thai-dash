@@ -30,6 +30,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   height,
   theme,
   indicators = [],
+  drawingMode,
   domFullscreen,
   onDOMFullscreenChange,
   onCrosshairMove,
