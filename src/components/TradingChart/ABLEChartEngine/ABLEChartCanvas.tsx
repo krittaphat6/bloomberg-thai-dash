@@ -10,6 +10,7 @@ import { ChartTheme } from '../ChartThemes';
 import { binanceWS } from '@/services/BinanceWebSocketService';
 import { binanceOrderBook, OrderBookData } from '@/services/BinanceOrderBookService';
 import { supabase } from '@/integrations/supabase/client';
+import DrawingToolbar from '../DrawingToolbar';
 
 interface OIBubblesConfig {
   enabled: boolean;
