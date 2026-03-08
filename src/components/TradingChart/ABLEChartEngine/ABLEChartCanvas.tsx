@@ -406,6 +406,10 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       },
       onDrawingUpdate: setDrawings,
       onModeChange: setMode,
+      onDrawingSelect: (drawing, pos) => {
+        setSelectedDrawing(drawing);
+        setToolbarPos(pos);
+      },
     };
 
     interactionRef.current = new ChartInteraction(
