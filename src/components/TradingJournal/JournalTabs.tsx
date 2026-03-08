@@ -80,7 +80,7 @@ export default function JournalTabs({
           onCloseTrade={onCloseTrade!}
         />
       </TabsContent>
-      <TabsContent value="graph" className="mt-0">
+      <TabsContent value="graph" className="mt-0 flex-1 min-h-0">
         <TradeGraphTab trades={trades} initialCapital={initialCapital} />
       </TabsContent>
     </Tabs>
