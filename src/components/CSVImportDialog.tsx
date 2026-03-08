@@ -469,7 +469,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
           </div>
 
           {/* Main Content */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto flex flex-col">
             {/* Upload Step */}
             {currentStep === 'upload' && (
               <div className="flex items-center justify-center h-full">
