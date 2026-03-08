@@ -163,11 +163,11 @@ export default function TradeListTab({ trades, onDeleteTrade, onCloseTrade }: Tr
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAndSortedTrades.length === 0 ? (
+                {paginatedTrades.length === 0 ? (
                   <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground py-8">No trades found</TableCell></TableRow>
                 ) : (
-                  filteredAndSortedTrades.map((trade) => (
-                    <>
+                  paginatedTrades.map((trade) => (
+                    <React.Fragment key={trade.id}>
                       <TableRow 
                         key={trade.id} 
                         className={`border-border/10 hover:bg-accent/30 transition-colors cursor-pointer ${
