@@ -15,6 +15,7 @@ interface LightweightChartCanvasProps {
   height: number;
   theme: ChartTheme;
   indicators?: ChartIndicator[];
+  drawingMode?: string | null;
   domFullscreen?: boolean;
   onDOMFullscreenChange?: (isFullscreen: boolean) => void;
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
@@ -29,6 +30,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   height,
   theme,
   indicators = [],
+  drawingMode,
   domFullscreen,
   onDOMFullscreenChange,
   onCrosshairMove,
@@ -96,6 +98,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
       height={height}
       theme={theme}
       indicators={indicatorData}
+      drawingMode={drawingMode as any}
       domConfig={domConfig}
       oiBubblesConfig={oiBubblesConfig}
       domFullscreen={domFullscreen}

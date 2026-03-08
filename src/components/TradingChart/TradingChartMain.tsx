@@ -143,53 +143,16 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Keyboard shortcuts
+  // Escape key only - to cancel drawing tool
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Zoom shortcuts
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key === '=' || e.key === '+') {
-          e.preventDefault();
-          handleZoom(-1, dimensions.width / 2);
-        } else if (e.key === '-') {
-          e.preventDefault();
-          handleZoom(1, dimensions.width / 2);
-        } else if (e.key === '0') {
-          e.preventDefault();
-          handleZoomReset();
-        } else if (e.key === 's') {
-          e.preventDefault();
-          handleSaveChart();
-        }
-        return;
-      }
-
-      // Navigation
-      if (e.key === 'ArrowLeft') {
-        handlePan(50);
-      } else if (e.key === 'ArrowRight') {
-        handlePan(-50);
-      } else if (e.key === 'Home') {
-        setVisibleRange({ start: 0, end: 200 });
-      } else if (e.key === 'End') {
-        setVisibleRange({ start: Math.max(0, data.length - 200), end: data.length });
-      }
-
-      // Panel toggles
-      if (e.key === 'i' || e.key === 'I') {
-        setShowIndicators(prev => !prev);
-      } else if (e.key === 'p' || e.key === 'P') {
-        setShowPineScript(prev => !prev);
-      } else if (e.key === 't' || e.key === 'T') {
-        setShowTheme(prev => !prev);
-      } else if (e.key === 'Escape') {
+      if (e.key === 'Escape') {
         setSelectedDrawingTool(null);
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [dimensions, data.length]);
+  }, []);
 
   // Fetch data - 1000 candles for crypto, 500 for others
   const fetchData = useCallback(async () => {
@@ -549,6 +512,7 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
                   height={dimensions.height}
                   theme={theme}
                   indicators={panelIndicators.main ?? []}
+                  drawingMode={selectedDrawingTool}
                   domFullscreen={domFullscreenByPanel.main ?? false}
                   onDOMFullscreenChange={(next) => setPanelDomFullscreen('main', next)}
                   onCrosshairMove={(data) => setCrosshair({ ...crosshair, ...data, x: 0, y: 0 })}
