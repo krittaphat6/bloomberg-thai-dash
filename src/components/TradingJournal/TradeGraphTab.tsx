@@ -25,6 +25,7 @@ export default function TradeGraphTab({ trades }: { trades: Trade[]; initialCapi
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
   const [showClusters, setShowClusters] = useState(true);
   const [groupBy, setGroupBy] = useState<GroupBy>('symbol');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Limit nodes for performance
   const activeTrades = useMemo(() => trades.slice(0, 200), [trades]);
