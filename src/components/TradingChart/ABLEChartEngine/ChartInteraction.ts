@@ -671,6 +671,7 @@ export class ChartInteraction {
       points: [{ x, y, price, time }],
       color: '#ffb000',
       lineWidth: 2,
+      lineStyle: 'solid',
       isComplete: false,
     };
   }
