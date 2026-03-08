@@ -184,13 +184,13 @@ export class ChartRenderer {
     const { chartArea, priceAxisWidth, width } = dimensions;
     const ctx = this.ctx;
     
-    // Background
+    // Background - extend to full height
     ctx.fillStyle = colors.background;
     ctx.fillRect(
       (width - priceAxisWidth) * this.dpr,
       0,
       priceAxisWidth * this.dpr,
-      chartArea.height * this.dpr
+      dimensions.height * this.dpr
     );
 
     // Price labels
