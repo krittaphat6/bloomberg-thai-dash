@@ -327,8 +327,8 @@ export class ChartInteraction {
     const { chartArea } = this.dimensions;
     const indexRange = this.viewport.endIndex - this.viewport.startIndex;
     
-    // Use floating point for smooth scrolling (no rounding!)
-    const deltaIndex = (deltaX / chartArea.width) * indexRange;
+    // Apply sensitivity multiplier for more responsive panning
+    const deltaIndex = (deltaX * this.PAN_SENSITIVITY / chartArea.width) * indexRange;
     
     const newViewport = { ...this.viewport };
     
