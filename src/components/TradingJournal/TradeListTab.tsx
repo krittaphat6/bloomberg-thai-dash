@@ -30,6 +30,8 @@ export default function TradeListTab({ trades, onDeleteTrade, onCloseTrade }: Tr
   const [closePrice, setClosePrice] = useState('');
   const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
   
   const filteredAndSortedTrades = useMemo(() => {
     let result = [...trades];
