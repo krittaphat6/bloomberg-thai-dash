@@ -385,7 +385,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     // Draw crosshair and tooltip last (on top)
     renderer.drawCrosshair(crosshair, dimensions, colors);
     renderer.drawTooltip(crosshair, dimensions, colors);
-  }, [candles, viewport, dimensions, colors, crosshair, drawings, indicators, orderBook, domConfig, domFullscreen, oiBubblesConfig, oiBubbles]);
+  }, [candles, viewport, dimensions, colors, crosshair, drawings, indicators, orderBook, domConfig, domFullscreen]);
 
   // Animation frame for rendering
   useEffect(() => {
