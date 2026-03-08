@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import JournalTabs from './TradingJournal/JournalTabs';
 import { Trade } from '@/utils/tradingMetrics';
 import { supabase } from '@/integrations/supabase/client';
+import { useRef, useCallback } from 'react';
 
 interface TradingFolder {
   id: string;
@@ -78,24 +79,72 @@ export default function TradingJournalV2() {
   const [selectedMistakes, setSelectedMistakes] = useState<string[]>([]);
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
 
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLoadedRef = useRef(false);
+
+  // Load from database (primary) or localStorage (fallback)
   useEffect(() => {
-    const savedTrades = localStorage.getItem('tradingJournal');
-    if (savedTrades) setTrades(JSON.parse(savedTrades));
-    const savedFolders = localStorage.getItem('tradingJournalFolders');
-    if (savedFolders) setFolders(JSON.parse(savedFolders));
+    const loadData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await supabase
+            .from('trading_journal_data')
+            .select('trades, folders')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          if (data) {
+            if (data.trades && Array.isArray(data.trades)) setTrades(data.trades as unknown as Trade[]);
+            if (data.folders && Array.isArray(data.folders)) setFolders(data.folders as unknown as TradingFolder[]);
+            isLoadedRef.current = true;
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('DB load failed, falling back to localStorage');
+      }
+      // Fallback to localStorage
+      const savedTrades = localStorage.getItem('tradingJournal');
+      if (savedTrades) setTrades(JSON.parse(savedTrades));
+      const savedFolders = localStorage.getItem('tradingJournalFolders');
+      if (savedFolders) setFolders(JSON.parse(savedFolders));
+      isLoadedRef.current = true;
+    };
+    loadData();
+  }, []);
+
+  // Auto-save to database with debounce
+  const saveToDatabase = useCallback(async (tradesToSave: Trade[], foldersToSave: TradingFolder[]) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        // Not logged in, save to localStorage as fallback
+        try { localStorage.setItem('tradingJournal', JSON.stringify(tradesToSave)); } catch {}
+        try { localStorage.setItem('tradingJournalFolders', JSON.stringify(foldersToSave)); } catch {}
+        return;
+      }
+      await supabase
+        .from('trading_journal_data')
+        .upsert({
+          user_id: user.id,
+          trades: tradesToSave as unknown as any,
+          folders: foldersToSave as unknown as any,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+    } catch (e) {
+      console.warn('DB save failed, saving to localStorage');
+      try { localStorage.setItem('tradingJournal', JSON.stringify(tradesToSave)); } catch {}
+    }
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('tradingJournal', JSON.stringify(trades));
-    } catch (e) {
-      console.warn('localStorage quota exceeded, trades not saved locally');
-    }
-  }, [trades]);
-
-  useEffect(() => {
-    localStorage.setItem('tradingJournalFolders', JSON.stringify(folders));
-  }, [folders]);
+    if (!isLoadedRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveToDatabase(trades, folders);
+    }, 1500);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [trades, folders, saveToDatabase]);
 
   const filteredTrades = selectedFolderId === 'default' 
     ? trades : trades.filter(t => t.folderId === selectedFolderId);
