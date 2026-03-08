@@ -163,10 +163,29 @@ function detectSymbolFromText(text: string): string {
   return 'UNKNOWN';
 }
 
+// Sanitize log output
+function sanitizeLog(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  const sensitive = ['password', 'secret', 'token', 'appSecret', 'pin', 'cid', 'credentials', 'apiKey'];
+  const sanitized = { ...obj };
+  for (const key of sensitive) {
+    if (sanitized[key]) sanitized[key] = '[REDACTED]';
+  }
+  return sanitized;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  // Payload size limit (50KB)
+  const contentLength = req.headers.get('content-length');
+  if (contentLength && parseInt(contentLength) > 51200) {
+    return new Response(JSON.stringify({ error: 'Payload too large' }), { 
+      status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
   }
 
   const startTime = Date.now();

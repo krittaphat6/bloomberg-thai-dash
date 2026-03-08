@@ -13,16 +13,24 @@ serve(async (req) => {
   }
 
   try {
+    // Payload size limit (10KB)
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 10240) {
+      return new Response(JSON.stringify({ error: 'Payload too large' }), { 
+        status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
     const {
       connectionId,
       roomId,
       messageId,
-      action,      // 'buy' | 'sell' | 'close' | 'cancel'
+      action,
       symbol,
       quantity,
       price,
-      orderType,   // 'Market' | 'Limit' | 'Stop'
-      orderId      // For cancel
+      orderType,
+      orderId
     } = await req.json()
 
     if (!connectionId || !action) {
@@ -32,7 +40,7 @@ serve(async (req) => {
       )
     }
 
-    console.log(`📤 Broker order: ${action} ${quantity || ''} ${symbol || ''}`)
+    console.log(`📤 Broker order: ${action} ${symbol || ''}`)
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

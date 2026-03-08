@@ -14,6 +14,14 @@ serve(async (req) => {
   }
 
   try {
+    // Payload size limit (5KB)
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 5120) {
+      return new Response(JSON.stringify({ error: 'Payload too large' }), { 
+        status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
     const { connectionId, credentials, brokerType } = await req.json()
 
     if (!connectionId || !credentials || !brokerType) {
