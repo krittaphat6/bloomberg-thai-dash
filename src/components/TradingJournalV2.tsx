@@ -344,14 +344,14 @@ export default function TradingJournalV2() {
               <div><Label className="text-xs">Setup</Label>
                 <Input value={newTrade.setup || ''} onChange={e => setNewTrade({...newTrade, setup: e.target.value})} placeholder="Breakout" /></div>
               <div><Label className="text-xs">Timeframe</Label>
-                <Select value={newTrade.timeframe || ''} onValueChange={v => setNewTrade({...newTrade, timeframe: v})}>
+                <Select value={newTrade.timeframe || 'none'} onValueChange={v => setNewTrade({...newTrade, timeframe: v === 'none' ? undefined : v})}>
                   <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>{TIMEFRAMES.map(tf => <SelectItem key={tf} value={tf}>{tf}</SelectItem>)}</SelectContent>
+                  <SelectContent><SelectItem value="none">—</SelectItem>{TIMEFRAMES.map(tf => <SelectItem key={tf} value={tf}>{tf}</SelectItem>)}</SelectContent>
                 </Select></div>
               <div><Label className="text-xs">Session</Label>
-                <Select value={newTrade.session || ''} onValueChange={v => setNewTrade({...newTrade, session: v as Trade['session']})}>
+                <Select value={newTrade.session || 'none'} onValueChange={v => setNewTrade({...newTrade, session: v === 'none' ? undefined : v as Trade['session']})}>
                   <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>{SESSIONS.map(s => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}</SelectContent>
+                  <SelectContent><SelectItem value="none">—</SelectItem>{SESSIONS.map(s => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}</SelectContent>
                 </Select></div>
             </div>
             {/* Strategy & Notes */}
@@ -359,9 +359,9 @@ export default function TradingJournalV2() {
               <div><Label className="text-xs">Strategy</Label>
                 <Input value={newTrade.strategy || ''} onChange={e => setNewTrade({...newTrade, strategy: e.target.value})} /></div>
               <div><Label className="text-xs">Emotion</Label>
-                <Select value={newTrade.emotion || ''} onValueChange={v => setNewTrade({...newTrade, emotion: v as Trade['emotion']})}>
+                <Select value={newTrade.emotion || 'none'} onValueChange={v => setNewTrade({...newTrade, emotion: v === 'none' ? undefined : v as Trade['emotion']})}>
                   <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>{EMOTIONS.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
+                  <SelectContent><SelectItem value="none">—</SelectItem>{EMOTIONS.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
                 </Select></div>
             </div>
 

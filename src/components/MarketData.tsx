@@ -48,7 +48,7 @@ import CVDChart from './CVDChart';
 import TopNews from './TopNews';
 import { BloombergMap } from './BloombergMap';
 import { WorldMonitorDashboard } from './WorldMonitor/WorldMonitorDashboard';
-import MonteCarloSimulator from './MonteCarloSimulator';
+
 import AbleHF40Modules from './AbleHF40Modules';
 import { FaceSearch } from './FaceSearch';
 import { TacticalCommandMap } from './TacticalMap';
@@ -419,15 +419,6 @@ const MarketData = () => {
       category: 'utilities',
       description: 'Track and analyze your trades',
       tags: ['journal', 'trades', 'tracking', 'analytics', 'performance']
-    },
-    { 
-      id: 'monte-carlo', 
-      title: '🎲 MONTE CARLO SIM', 
-      component: <MonteCarloSimulator />,
-      category: 'utilities',
-      icon: <TrendingUp className="w-5 h-5" />,
-      description: 'Monte Carlo simulation for strategy backtesting and risk analysis',
-      tags: ['monte-carlo', 'simulation', 'risk', 'backtesting', 'probability']
     },
     {
       id: 'calendar', 
