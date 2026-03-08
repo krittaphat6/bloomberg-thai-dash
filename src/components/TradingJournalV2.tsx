@@ -60,6 +60,7 @@ export default function TradingJournalV2() {
   ]);
   const [selectedFolderId, setSelectedFolderId] = useState('default');
   const [showFolderManager, setShowFolderManager] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [newFolder, setNewFolder] = useState({ name: '', description: '', icon: '📁' });
   
   const [newTrade, setNewTrade] = useState<Partial<Trade>>({
