@@ -387,7 +387,12 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
   const handleNextStep = () => {
     if (currentStep === 'preview') {
       if (parsedTrades.length === 0) autoProcessData();
-      setCurrentStep('mapping');
+      // For known formats, skip mapping and go to validation
+      if (detectedFormat === 'able_v3' || detectedFormat === 'thai_oanda') {
+        setCurrentStep('validation');
+      } else {
+        setCurrentStep('mapping');
+      }
     } else if (currentStep === 'mapping') {
       if (parsedTrades.length === 0) autoProcessData();
       setCurrentStep('validation');
