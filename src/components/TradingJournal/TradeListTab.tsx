@@ -59,6 +59,15 @@ export default function TradeListTab({ trades, onDeleteTrade, onCloseTrade }: Tr
     });
     return result;
   }, [trades, searchQuery, statusFilter, sideFilter, sortField, sortDirection]);
+
+  const totalPages = Math.ceil(filteredAndSortedTrades.length / pageSize);
+  const paginatedTrades = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAndSortedTrades.slice(start, start + pageSize);
+  }, [filteredAndSortedTrades, currentPage]);
+
+  // Reset page when filters change
+  useMemo(() => { setCurrentPage(1); }, [searchQuery, statusFilter, sideFilter]);
   
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
