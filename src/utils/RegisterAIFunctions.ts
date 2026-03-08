@@ -1,5 +1,7 @@
 import { AIFunctionRegistry } from './AIFunctionRegistry';
 
+import { Trade, TradingMetrics, calculateMetrics, calculateRMultiples, runMonteCarloSimulation, detectPsychologyPatterns, calculateCostOfEmotions, calculatePnLByDimension } from './tradingMetrics';
+
 export interface AppContext {
   navigate?: (path: string) => void;
   createNote?: (params: { title: string; content: string; tags: string[] }) => void;
@@ -8,6 +10,8 @@ export interface AppContext {
   runPineScript?: (code: string) => Promise<any>;
   addTrade?: (params: any) => void;
   analyzeTrades?: (timeframe: string) => Promise<any>;
+  getTrades?: (timeframe?: string) => Trade[];
+  getJournalMetrics?: (timeframe?: string) => TradingMetrics;
 }
 
 /**
