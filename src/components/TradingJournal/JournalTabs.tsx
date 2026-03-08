@@ -7,6 +7,7 @@ import RiskRewardTab from './RiskRewardTab';
 import TradeListTab from './TradeListTab';
 import PsychologyTab from './PsychologyTab';
 import ReportsTab from './ReportsTab';
+import TradeGraphTab from './TradeGraphTab';
 import { Trade } from '@/utils/tradingMetrics';
 
 interface JournalTabsProps {
