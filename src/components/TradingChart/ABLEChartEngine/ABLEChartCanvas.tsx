@@ -56,7 +56,6 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   indicators = [],
   drawingMode,
   domConfig,
-  oiBubblesConfig,
   onCrosshairMove,
   domFullscreen: domFullscreenProp,
   onDOMFullscreenChange,
