@@ -15,6 +15,7 @@ interface LightweightChartCanvasProps {
   height: number;
   theme: ChartTheme;
   indicators?: ChartIndicator[];
+  drawingMode?: string | null;
   domFullscreen?: boolean;
   onDOMFullscreenChange?: (isFullscreen: boolean) => void;
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
