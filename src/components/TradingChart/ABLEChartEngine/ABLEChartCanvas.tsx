@@ -134,7 +134,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       timeAxisHeight,
       volumeHeight,
     };
-  }, [width, height]);
+  }, [width, height, isVolumeActive]);
 
   // Convert data to candles
   useEffect(() => {
