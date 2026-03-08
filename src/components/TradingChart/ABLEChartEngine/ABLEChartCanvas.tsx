@@ -1,22 +1,17 @@
 // ABLE Chart Engine - Main Canvas Component
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
-import { ChartRenderer, OIBubbleData } from './ChartRenderer';
+import { ChartRenderer } from './ChartRenderer';
 import { ChartInteraction, InteractionCallbacks } from './ChartInteraction';
 import { DOMRenderer } from './DOMRenderer';
 import { FullscreenDOMRenderer, DEFAULT_ENHANCED_DOM_CONFIG } from './FullscreenDOMRenderer';
-import { Candle, ChartViewport, ChartThemeColors, ChartDimensions, CrosshairState, DrawingObject, ChartMode, DrawingType, IndicatorData, DOMConfig, OIBubbleData as OIBubbleType } from './types';
+import { Candle, ChartViewport, ChartThemeColors, ChartDimensions, CrosshairState, DrawingObject, ChartMode, DrawingType, IndicatorData, DOMConfig } from './types';
 import { OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from '../ChartThemes';
 import { binanceWS } from '@/services/BinanceWebSocketService';
 import { binanceOrderBook, OrderBookData } from '@/services/BinanceOrderBookService';
-import { supabase } from '@/integrations/supabase/client';
+
 import DrawingToolbar from '../DrawingToolbar';
 
-interface OIBubblesConfig {
-  enabled: boolean;
-  threshold: number;
-  extremeThreshold: number;
-}
 
 interface ABLEChartCanvasProps {
   data: OHLCVData[];
@@ -29,7 +24,7 @@ interface ABLEChartCanvasProps {
   indicators?: IndicatorData[];
   drawingMode?: DrawingType | null;
   domConfig?: DOMConfig;
-  oiBubblesConfig?: OIBubblesConfig;
+  
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
   /**
    * Optional controlled state for fullscreen DOM.
@@ -61,7 +56,6 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   indicators = [],
   drawingMode,
   domConfig,
-  oiBubblesConfig,
   onCrosshairMove,
   domFullscreen: domFullscreenProp,
   onDOMFullscreenChange,
@@ -95,7 +89,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   const [mode, setMode] = useState<ChartMode>('normal');
   const [orderBook, setOrderBook] = useState<OrderBookData | null>(null);
   const [domConnected, setDomConnected] = useState(false);
-  const [oiBubbles, setOiBubbles] = useState<OIBubbleData[]>([]);
+  
   const [selectedDrawing, setSelectedDrawing] = useState<DrawingObject | null>(null);
   const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number } | null>(null);
   const [domFullscreenInternal, setDomFullscreenInternal] = useState(false);
@@ -199,111 +193,6 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     return unsubscribe;
   }, [symbol, symbolType, timeframe, candles.length]);
 
-  // Fetch OI data for bubbles indicator
-  useEffect(() => {
-    if (symbolType !== 'crypto' || !oiBubblesConfig?.enabled || candles.length === 0) {
-      setOiBubbles([]);
-      return;
-    }
-
-    const fetchOIData = async () => {
-      try {
-        console.log('🔵 OI Bubbles: Fetching data for', symbol);
-        
-        // Fetch OI data via market-data-proxy
-        const { data: response, error } = await supabase.functions.invoke('market-data-proxy', {
-          body: {
-            endpoint: 'openInterest',
-            symbol: symbol.replace('/', ''),
-            limit: 100
-          }
-        });
-
-        if (error || !response?.openInterest) {
-          console.warn('OI Bubbles: Failed to fetch OI data', error, response);
-          return;
-        }
-
-        const oiData = response.openInterest as { oi: number; timestamp: number }[];
-        console.log('🔵 OI Bubbles: Got', oiData.length, 'OI data points');
-        
-        if (oiData.length < 2) return;
-
-        // Calculate OI deltas
-        const deltas: number[] = [];
-        for (let i = 1; i < oiData.length; i++) {
-          deltas.push(oiData[i].oi - oiData[i - 1].oi);
-        }
-
-        // Calculate Z-Score normalization
-        const mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
-        const variance = deltas.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / deltas.length;
-        const std = Math.sqrt(variance);
-
-        const threshold = oiBubblesConfig.threshold || 1.5;
-        const extremeThreshold = oiBubblesConfig.extremeThreshold || 3.0;
-
-        // Get timeframe window for matching (allow bigger tolerance for higher timeframes)
-        const timeframeMs = getTimeframeMs(timeframe);
-        const matchTolerance = Math.max(timeframeMs, 5 * 60 * 1000); // At least 5 minutes
-
-        // Generate bubbles for significant OI changes
-        const bubbles: OIBubbleData[] = [];
-        for (let i = 0; i < deltas.length; i++) {
-          const normalized = std > 0 ? (deltas[i] - mean) / std : 0;
-          const absNorm = Math.abs(normalized);
-
-          if (absNorm < threshold) continue;
-
-          // Find matching candle - use larger tolerance based on timeframe
-          const oiTimestamp = oiData[i + 1].timestamp;
-          const matchingCandle = candles.find(c => 
-            Math.abs(c.timestamp - oiTimestamp) < matchTolerance
-          );
-
-          if (!matchingCandle) continue;
-
-          // Determine size based on normalized value
-          let size: OIBubbleData['size'] = 'tiny';
-          if (absNorm >= extremeThreshold) size = 'huge';
-          else if (absNorm >= threshold * 2) size = 'large';
-          else if (absNorm >= threshold * 1.5) size = 'normal';
-          else if (absNorm >= threshold * 1.2) size = 'small';
-
-          bubbles.push({
-            timestamp: oiTimestamp,
-            price: matchingCandle.close,
-            oiDelta: deltas[i],
-            normalized,
-            isPositive: normalized > 0,
-            size
-          });
-        }
-
-        console.log('🔵 OI Bubbles: Generated', bubbles.length, 'bubbles (threshold:', threshold, ')');
-        setOiBubbles(bubbles.slice(-30)); // Keep last 30 bubbles
-      } catch (err) {
-        console.warn('OI Bubbles: Error fetching data', err);
-      }
-    };
-
-    fetchOIData();
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchOIData, 30000);
-    return () => clearInterval(interval);
-  }, [symbol, symbolType, oiBubblesConfig?.enabled, candles.length, timeframe]);
-  
-  // Helper to convert timeframe to milliseconds
-  const getTimeframeMs = (tf: string): number => {
-    const num = parseInt(tf) || 1;
-    if (tf.includes('m')) return num * 60 * 1000;
-    if (tf.includes('h')) return num * 60 * 60 * 1000;
-    if (tf.includes('D') || tf.includes('d')) return num * 24 * 60 * 60 * 1000;
-    if (tf.includes('W') || tf.includes('w')) return num * 7 * 24 * 60 * 60 * 1000;
-    if (tf.includes('M')) return num * 30 * 24 * 60 * 60 * 1000;
-    return 60 * 60 * 1000; // default 1h
-  };
 
   useEffect(() => {
     if (symbolType !== 'crypto' || !domConfig?.enabled) {
@@ -474,10 +363,6 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       renderer.drawIndicators(indicators, candles, viewport, dimensions);
     }
     
-    // Draw OI Bubbles if enabled
-    if (oiBubblesConfig?.enabled && oiBubbles.length > 0) {
-      renderer.drawOIBubbles(oiBubbles, candles, viewport, dimensions);
-    }
     
     // Draw drawings
     if (drawings.length > 0) {
@@ -500,7 +385,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     // Draw crosshair and tooltip last (on top)
     renderer.drawCrosshair(crosshair, dimensions, colors);
     renderer.drawTooltip(crosshair, dimensions, colors);
-  }, [candles, viewport, dimensions, colors, crosshair, drawings, indicators, orderBook, domConfig, domFullscreen, oiBubblesConfig, oiBubbles]);
+  }, [candles, viewport, dimensions, colors, crosshair, drawings, indicators, orderBook, domConfig, domFullscreen]);
 
   // Animation frame for rendering
   useEffect(() => {
