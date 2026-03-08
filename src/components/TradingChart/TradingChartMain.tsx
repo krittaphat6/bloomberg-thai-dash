@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { DeepChartsConfig, DEFAULT_DEEPCHARTS_CONFIG } from './indicators/DeepChartsEngine';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
@@ -107,6 +108,7 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
     return saved ? JSON.parse(saved) : ['BTCUSDT', 'ETHUSDT', 'AAPL'];
   });
   const [customIndicators, setCustomIndicators] = useState<ActiveCustomIndicator[]>([]);
+  const [deepChartsConfig, setDeepChartsConfig] = useState<DeepChartsConfig>(DEFAULT_DEEPCHARTS_CONFIG);
 
   // When going back to single-chart layout, always focus the main panel
   useEffect(() => {
@@ -516,6 +518,7 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
                   domFullscreen={domFullscreenByPanel.main ?? false}
                   onDOMFullscreenChange={(next) => setPanelDomFullscreen('main', next)}
                   onCrosshairMove={(data) => setCrosshair({ ...crosshair, ...data, x: 0, y: 0 })}
+                  deepChartsConfig={deepChartsConfig}
                 />
               )}
 
@@ -594,6 +597,8 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
           onSelectDOMPanel={setActivePanelId}
           onDOMClose={() => setPanelDomFullscreen(activePanelId, false)}
           isDOMFullscreen={isDOMFullscreen}
+          deepChartsConfig={deepChartsConfig}
+          onDeepChartsConfigChange={(updates) => setDeepChartsConfig(prev => ({ ...prev, ...updates }))}
         />
 
         <PineScriptEditor

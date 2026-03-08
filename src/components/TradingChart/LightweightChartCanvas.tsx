@@ -5,6 +5,7 @@ import { OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from './ChartThemes';
 import { ChartIndicator, DrawingTool } from './types';
 import { IndicatorData } from './ABLEChartEngine/types';
+import { DeepChartsConfig } from './indicators/DeepChartsEngine';
 
 interface LightweightChartCanvasProps {
   data: OHLCVData[];
@@ -19,6 +20,7 @@ interface LightweightChartCanvasProps {
   domFullscreen?: boolean;
   onDOMFullscreenChange?: (isFullscreen: boolean) => void;
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
+  deepChartsConfig?: DeepChartsConfig;
 }
 
 export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
@@ -34,8 +36,9 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   domFullscreen,
   onDOMFullscreenChange,
   onCrosshairMove,
+  deepChartsConfig,
 }) => {
-  // Filter for DOM indicator - only show DOM when explicitly enabled via indicator
+  // Filter for DOM indicator
   const domIndicator = indicators.find(ind => ind.name === 'DOM');
   const isDOMEnabled = domIndicator?.visible === true;
   
@@ -49,22 +52,17 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
     opacity: 0.95,
   };
 
-  // Convert other indicators (SMA/EMA/Volume) - but DOM is primary
+  // Convert other indicators
   const indicatorData: IndicatorData[] = indicators
-    .filter(ind => ind.visible && ind.name !== 'DOM')
-    .map(ind => {
-      let values: number[] = [];
-      
-      // Skip calculating MA values - DOM is the focus now
-      return {
-        id: ind.id,
-        name: ind.name,
-        type: ind.type,
-        values,
-        color: ind.color,
-        visible: ind.visible,
-      };
-    });
+    .filter(ind => ind.visible && ind.name !== 'DOM' && ind.name !== 'DeepCharts')
+    .map(ind => ({
+      id: ind.id,
+      name: ind.name,
+      type: ind.type,
+      values: [],
+      color: ind.color,
+      visible: ind.visible,
+    }));
 
   if (width <= 0 || height <= 0) {
     return (
@@ -89,7 +87,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
       indicators={indicatorData}
       drawingMode={drawingMode as any}
       domConfig={domConfig}
-      
+      deepChartsConfig={deepChartsConfig}
       domFullscreen={domFullscreen}
       onDOMFullscreenChange={onDOMFullscreenChange}
       onCrosshairMove={onCrosshairMove}

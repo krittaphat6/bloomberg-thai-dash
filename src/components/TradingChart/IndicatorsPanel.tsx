@@ -19,6 +19,8 @@ import {
 } from '@/components/ui/select';
 import { BarChart2, X, Layers, MousePointerClick, Grid3X3, Monitor, Zap, Activity, TrendingUp, DollarSign, Users, AlertTriangle } from 'lucide-react';
 import { ChartIndicator } from './types';
+import { DeepChartsConfig } from './indicators/DeepChartsEngine';
+import DeepChartsSettingsPanel from './indicators/DeepChartsSettingsPanel';
 
 interface ChartPanel {
   id: string;
@@ -36,8 +38,10 @@ interface IndicatorsPanelProps {
   chartPanels?: ChartPanel[];  // Available chart panels
   selectedDOMPanel?: string;   // Which panel shows DOM
   onSelectDOMPanel?: (panelId: string) => void;  // Callback to change DOM panel
-  onDOMClose?: () => void;  // Close DOM view
-  isDOMFullscreen?: boolean;  // Is DOM currently in fullscreen mode
+  onDOMClose?: () => void;
+  isDOMFullscreen?: boolean;
+  deepChartsConfig?: DeepChartsConfig;
+  onDeepChartsConfigChange?: (updates: Partial<DeepChartsConfig>) => void;
 }
 
 const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
@@ -52,6 +56,8 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
   onSelectDOMPanel,
   onDOMClose,
   isDOMFullscreen = false,
+  deepChartsConfig,
+  onDeepChartsConfigChange,
 }) => {
   const [domRows, setDomRows] = useState(25);
   const [showAdvancedMetrics, setShowAdvancedMetrics] = useState(true);
@@ -138,6 +144,28 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
                 />
               </div>
               <p className="text-xs text-muted-foreground mt-1">แสดง Volume bars ด้านล่างกราฟ</p>
+            </div>
+
+            {/* DeepCharts Pro Indicator Card */}
+            <div className="p-4 rounded-lg border border-purple-500/30 bg-muted/20">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🐋</span>
+                  <span className="text-lg font-mono font-bold text-purple-400">DeepCharts Pro</span>
+                  <Badge variant="outline" className="text-[10px] border-purple-500/50">V4.1</Badge>
+                </div>
+                <Switch
+                  checked={deepChartsConfig?.enabled ?? false}
+                  onCheckedChange={(v) => onDeepChartsConfigChange?.({ enabled: v })}
+                  className="data-[state=checked]:bg-purple-500"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                Big Trade Detection, Volume Profile, Anomaly Detection & OI Filter
+              </p>
+              {deepChartsConfig?.enabled && deepChartsConfig && onDeepChartsConfigChange && (
+                <DeepChartsSettingsPanel config={deepChartsConfig} onUpdate={onDeepChartsConfigChange} />
+              )}
             </div>
 
             {/* DOM Indicator Card */}

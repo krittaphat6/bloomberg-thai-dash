@@ -9,6 +9,8 @@ import { OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from '../ChartThemes';
 import { binanceWS } from '@/services/BinanceWebSocketService';
 import { binanceOrderBook, OrderBookData } from '@/services/BinanceOrderBookService';
+import { DeepChartsConfig, DEFAULT_DEEPCHARTS_CONFIG, computeDeepCharts } from '../indicators/DeepChartsEngine';
+import { DeepChartsRenderer } from '../indicators/DeepChartsRenderer';
 
 import DrawingToolbar from '../DrawingToolbar';
 
@@ -24,12 +26,9 @@ interface ABLEChartCanvasProps {
   indicators?: IndicatorData[];
   drawingMode?: DrawingType | null;
   domConfig?: DOMConfig;
+  deepChartsConfig?: DeepChartsConfig;
   
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
-  /**
-   * Optional controlled state for fullscreen DOM.
-   * If provided, the component will not manage fullscreen internally.
-   */
   domFullscreen?: boolean;
   onDOMFullscreenChange?: (isFullscreen: boolean) => void;
 }
@@ -56,6 +55,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   indicators = [],
   drawingMode,
   domConfig,
+  deepChartsConfig,
   onCrosshairMove,
   domFullscreen: domFullscreenProp,
   onDOMFullscreenChange,
@@ -64,6 +64,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   const rendererRef = useRef<ChartRenderer | null>(null);
   const domRendererRef = useRef<DOMRenderer | null>(null);
   const fullscreenDOMRef = useRef<FullscreenDOMRenderer | null>(null);
+  const deepChartsRendererRef = useRef<DeepChartsRenderer | null>(null);
   const interactionRef = useRef<ChartInteraction | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
@@ -138,7 +139,6 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       const newCandles = convertToCandles(data);
       setCandles(newCandles);
       
-      // Initialize viewport
       const visibleCount = Math.min(100, newCandles.length);
       const startIdx = Math.max(0, newCandles.length - visibleCount);
       
@@ -200,14 +200,12 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       setOrderBook(null);
       setDomConnected(false);
 
-      // Ensure fullscreen DOM is closed when DOM gets disabled
       if (domFullscreen) {
         setDomFullscreen(false);
       }
       return;
     }
 
-    // Connect to order book for this symbol - use more rows for fullscreen
     binanceOrderBook.connect(symbol, domConfig.rows || 20);
 
     const unsubOrderBook = binanceOrderBook.subscribe((data) => {
@@ -247,25 +245,23 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       opacity: domConfig?.opacity || 0.95,
     });
     
-    // Initialize fullscreen DOM renderer
     fullscreenDOMRef.current = new FullscreenDOMRenderer(ctx, dpr, {
       ...DEFAULT_ENHANCED_DOM_CONFIG,
       rows: domConfig?.rows || 20,
       enabled: domConfig?.enabled ?? false,
       fullscreen: false,
     });
+
+    deepChartsRendererRef.current = new DeepChartsRenderer(ctx, dpr);
   }, [width, height, domConfig]);
 
   // Handle click to toggle fullscreen DOM
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    // Only toggle if DOM is enabled and we're in normal mode (not drawing)
     if (mode !== 'normal') return;
 
     if (domConfig?.enabled && orderBook && !domFullscreen) {
-      // Activate fullscreen DOM
       setDomFullscreen(true);
     } else if (domFullscreen) {
-      // Close fullscreen DOM
       setDomFullscreen(false);
     }
   }, [domConfig?.enabled, orderBook, domFullscreen, mode, setDomFullscreen]);
@@ -328,11 +324,24 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     }
   }, [drawingMode]);
 
+  // Compute DeepCharts data
+  const deepChartsResult = useMemo(() => {
+    if (!deepChartsConfig?.enabled || candles.length < 30) return null;
+    return computeDeepCharts(
+      candles,
+      deepChartsConfig,
+      orderBook,
+      viewport.startIndex,
+      viewport.endIndex
+    );
+  }, [candles, deepChartsConfig, orderBook, viewport.startIndex, viewport.endIndex]);
+
   // Render loop
   const render = useCallback(() => {
     const renderer = rendererRef.current;
     const domRenderer = domRendererRef.current;
     const fullscreenDOM = fullscreenDOMRef.current;
+    const deepChartsRenderer = deepChartsRendererRef.current;
     if (!renderer || candles.length === 0) return;
 
     // If fullscreen DOM is active, render only the DOM overlay
@@ -343,49 +352,40 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     }
 
     // Normal chart rendering
-    // Clear
     renderer.clear(dimensions, colors);
-    
-    // Draw grid
     renderer.drawGrid(dimensions, viewport, colors);
-    
-    // Draw candles
     renderer.drawCandles(candles, viewport, dimensions, colors);
     
-    // Draw volume only if Volume indicator is active
     const volumeIndicatorActive = indicators.some(ind => ind.name.toLowerCase() === 'volume' && ind.visible);
     if (volumeIndicatorActive) {
       renderer.drawVolume(candles, viewport, dimensions, colors);
     }
     
-    // Draw indicators
     if (indicators.length > 0) {
       renderer.drawIndicators(indicators, candles, viewport, dimensions);
     }
+
+    // Draw DeepCharts overlay
+    if (deepChartsConfig?.enabled && deepChartsResult && deepChartsRenderer) {
+      deepChartsRenderer.drawDeepCharts(deepChartsResult, deepChartsConfig, candles, viewport, dimensions, colors);
+    }
     
-    
-    // Draw drawings
     if (drawings.length > 0) {
       renderer.drawDrawings(drawings, viewport, dimensions, colors);
     }
     
-    // Draw axes
     renderer.drawPriceAxis(viewport, dimensions, colors);
     renderer.drawTimeAxis(candles, viewport, dimensions, colors);
     
-    // Draw mini DOM hint if DOM is enabled but not fullscreen
     if (domConfig?.enabled && orderBook && domRenderer && !domFullscreen) {
       const currentPrice = candles[candles.length - 1]?.close || 0;
       domRenderer.drawDOM(orderBook, dimensions, colors, currentPrice);
     }
     
-    // Draw watermark at bottom left (above time axis)
     renderer.drawWatermark(dimensions);
-    
-    // Draw crosshair and tooltip last (on top)
     renderer.drawCrosshair(crosshair, dimensions, colors);
     renderer.drawTooltip(crosshair, dimensions, colors);
-  }, [candles, viewport, dimensions, colors, crosshair, drawings, indicators, orderBook, domConfig, domFullscreen]);
+  }, [candles, viewport, dimensions, colors, crosshair, drawings, indicators, orderBook, domConfig, domFullscreen, deepChartsConfig, deepChartsResult]);
 
   // Animation frame for rendering
   useEffect(() => {
