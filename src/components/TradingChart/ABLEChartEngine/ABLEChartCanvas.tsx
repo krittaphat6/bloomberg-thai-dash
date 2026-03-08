@@ -327,13 +327,18 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   // Compute DeepCharts data
   const deepChartsResult = useMemo(() => {
     if (!deepChartsConfig?.enabled || candles.length < 30) return null;
-    return computeDeepCharts(
-      candles,
-      deepChartsConfig,
-      orderBook,
-      viewport.startIndex,
-      viewport.endIndex
-    );
+    try {
+      return computeDeepCharts(
+        candles,
+        deepChartsConfig,
+        orderBook,
+        viewport.startIndex,
+        viewport.endIndex
+      );
+    } catch (e) {
+      console.warn('[DeepCharts] Computation error:', e);
+      return null;
+    }
   }, [candles, deepChartsConfig, orderBook, viewport.startIndex, viewport.endIndex]);
 
   // Render loop

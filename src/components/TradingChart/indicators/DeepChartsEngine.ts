@@ -195,7 +195,7 @@ export function computeDeepCharts(
 
   for (let idx = 0; idx < candles.length; idx++) {
     const c = candles[idx];
-    if (!c) {
+    if (!c || typeof c.high !== 'number' || typeof c.low !== 'number' || typeof c.close !== 'number') {
       buyVols.push(0);
       sellVols.push(0);
       totalVols.push(0);
@@ -205,9 +205,10 @@ export function computeDeepCharts(
     const safeRange = range > 0 ? range : 1;
     const buyWt = (c.close - c.low) / safeRange;
     const sellWt = (c.high - c.close) / safeRange;
-    buyVols.push(c.volume * buyWt);
-    sellVols.push(c.volume * sellWt);
-    totalVols.push(c.volume);
+    const vol = c.volume || 0;
+    buyVols.push(vol * buyWt);
+    sellVols.push(vol * sellWt);
+    totalVols.push(vol);
   }
 
   // === Big Trade Detection (Z-score based) ===
@@ -224,7 +225,7 @@ export function computeDeepCharts(
 
   for (let i = Math.max(period, safeStart); i <= Math.min(candles.length - 1, safeEnd + 5); i++) {
     const c = candles[i];
-    
+    if (!c || typeof c.high !== 'number') continue;
     // Buy Z-score
     const zBuy = buyStd[i] > 0 ? (buyVols[i] - buyMean[i]) / buyStd[i] : 0;
     const zSell = sellStd[i] > 0 ? (sellVols[i] - sellMean[i]) / sellStd[i] : 0;
@@ -318,9 +319,12 @@ export function computeDeepCharts(
     let windowHigh = -Infinity;
     let windowLow = Infinity;
     for (let i = profileStart; i <= profileEnd; i++) {
-      windowHigh = Math.max(windowHigh, candles[i].high);
-      windowLow = Math.min(windowLow, candles[i].low);
+      const c = candles[i];
+      if (!c || typeof c.high !== 'number') continue;
+      windowHigh = Math.max(windowHigh, c.high);
+      windowLow = Math.min(windowLow, c.low);
     }
+    if (windowHigh === -Infinity || windowLow === Infinity) windowHigh = windowLow = 0;
 
     const priceStep = (windowHigh - windowLow) / config.profileBins;
     if (priceStep > 0) {
