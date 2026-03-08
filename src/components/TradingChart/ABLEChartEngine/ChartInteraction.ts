@@ -34,10 +34,11 @@ export class ChartInteraction {
   private currentDrawing: DrawingObject | null = null;
 
   // Smooth animation constants
-  private readonly ZOOM_SMOOTHNESS = 0.15;
-  private readonly PAN_SMOOTHNESS = 0.2;
-  private readonly INERTIA_DECAY = 0.95;
-  private readonly MIN_VELOCITY = 0.01;
+  private readonly ZOOM_SMOOTHNESS = 0.18;
+  private readonly PAN_SMOOTHNESS = 0.25;
+  private readonly INERTIA_DECAY = 0.92;
+  private readonly MIN_VELOCITY = 0.05;
+  private readonly PAN_SENSITIVITY = 1.5;
 
   constructor(
     canvas: HTMLCanvasElement,
