@@ -6,6 +6,7 @@ export interface InteractionCallbacks {
   onCrosshairMove: (crosshair: CrosshairState) => void;
   onDrawingUpdate: (drawings: DrawingObject[]) => void;
   onModeChange: (mode: ChartMode) => void;
+  onDrawingSelect?: (drawing: DrawingObject | null, screenPos: { x: number; y: number } | null) => void;
 }
 
 export class ChartInteraction {
