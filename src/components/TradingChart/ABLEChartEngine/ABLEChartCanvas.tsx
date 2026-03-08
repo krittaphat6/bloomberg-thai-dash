@@ -454,8 +454,11 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     // Draw candles
     renderer.drawCandles(candles, viewport, dimensions, colors);
     
-    // Draw volume
-    renderer.drawVolume(candles, viewport, dimensions, colors);
+    // Draw volume only if Volume indicator is active
+    const volumeIndicatorActive = indicators.some(ind => ind.name.toLowerCase() === 'volume' && ind.visible);
+    if (volumeIndicatorActive) {
+      renderer.drawVolume(candles, viewport, dimensions, colors);
+    }
     
     // Draw indicators
     if (indicators.length > 0) {

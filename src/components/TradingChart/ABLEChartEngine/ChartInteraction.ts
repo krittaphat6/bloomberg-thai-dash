@@ -499,15 +499,11 @@ export class ChartInteraction {
     let newStartIndex = anchorIndex - newRange * centerRatio;
     let newEndIndex = newStartIndex + newRange;
     
-    // Clamp
+    // Clamp right only - no left limit for full history access
     const maxEndIndex = this.candles.length - 1 + newRange * this.RIGHT_PADDING_RATIO;
-    if (newStartIndex < 0) {
-      newStartIndex = 0;
-      newEndIndex = newRange;
-    }
     if (newEndIndex > maxEndIndex) {
       newEndIndex = maxEndIndex;
-      newStartIndex = Math.max(0, newEndIndex - newRange);
+      newStartIndex = Math.max(newEndIndex - newRange, newEndIndex - newRange);
     }
     
     newViewport.startIndex = newStartIndex;
