@@ -123,13 +123,29 @@ export default function TradingJournalV2() {
     }
   };
 
+  const calculatePnL = (trade: Partial<Trade> & { entryPrice: number; quantity: number; side: string; type?: string }, exitPrice: number) => {
+    const isCFD = trade.type === 'CFD';
+    const contractSize = (trade as any).contractSize || 1;
+    const priceDiff = trade.side === 'LONG' ? (exitPrice - trade.entryPrice) : (trade.entryPrice - exitPrice);
+    
+    let pnl: number;
+    if (isCFD) {
+      // CFD: P&L = (price diff) * lots * contract size
+      pnl = priceDiff * trade.quantity * contractSize;
+    } else {
+      // Stock: P&L = (price diff) * shares
+      pnl = priceDiff * trade.quantity;
+    }
+    
+    const investment = trade.entryPrice * trade.quantity * (isCFD ? contractSize : 1);
+    const pnlPercentage = investment !== 0 ? (pnl / investment) * 100 : 0;
+    return { pnl, pnlPercentage };
+  };
+
   const handleCloseTrade = (tradeId: string, exitPrice: number) => {
     setTrades(prev => prev.map(trade => {
       if (trade.id === tradeId) {
-        let pnl = trade.side === 'LONG' 
-          ? (exitPrice - trade.entryPrice) * trade.quantity
-          : (trade.entryPrice - exitPrice) * trade.quantity;
-        let pnlPercentage = (pnl / (trade.entryPrice * trade.quantity)) * 100;
+        const { pnl, pnlPercentage } = calculatePnL(trade, exitPrice);
         return { ...trade, exitPrice, pnl, pnlPercentage, status: 'CLOSED' as const, exitTime: new Date().toISOString() };
       }
       return trade;
