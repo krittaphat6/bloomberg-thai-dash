@@ -55,5 +55,6 @@ export const CHART_COLORS = {
 };
 
 export const DEFAULT_INDICATORS: Omit<ChartIndicator, 'id'>[] = [
+  { name: 'Volume', type: 'oscillator', visible: false, settings: {}, color: '#3b82f6' },
   { name: 'DOM', type: 'dom', visible: true, settings: { rows: 20, showImbalance: true, showProfile: true, showValueArea: true }, color: '#00BCD4' },
 ];
