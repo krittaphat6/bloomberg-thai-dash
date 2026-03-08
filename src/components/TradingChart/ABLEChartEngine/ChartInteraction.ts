@@ -250,6 +250,9 @@ export class ChartInteraction {
   };
 
   private handleMouseLeave = () => {
+    if (this.isPriceAxisDragging) {
+      this.isPriceAxisDragging = false;
+    }
     if (this.isPanning) {
       this.isPanning = false;
       this.canvas.style.cursor = 'default';
@@ -260,6 +263,7 @@ export class ChartInteraction {
         this.startKineticScroll(velocity);
       }
     }
+    this.canvas.style.cursor = 'default';
     this.callbacks.onCrosshairMove({ visible: false, x: 0, y: 0, price: 0, time: 0, candle: null });
   };
 
