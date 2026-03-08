@@ -305,7 +305,7 @@ export function computeDeepCharts(
   // === Volume Profile ===
   let volumeProfile: VolumeProfileResult | null = null;
   if (config.enablePriceMap && candles.length > 0) {
-    const profileEnd = Math.min(visibleEnd, candles.length - 1);
+    const profileEnd = Math.min(safeEnd, candles.length - 1);
     const profileStart = Math.max(0, profileEnd - config.profileLookback);
     
     let windowHigh = -Infinity;
