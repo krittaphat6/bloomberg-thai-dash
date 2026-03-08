@@ -5,6 +5,8 @@ import PerformanceTab from './PerformanceTab';
 import TradeAnalysisTab from './TradeAnalysisTab';
 import RiskRewardTab from './RiskRewardTab';
 import TradeListTab from './TradeListTab';
+import PsychologyTab from './PsychologyTab';
+import ReportsTab from './ReportsTab';
 import { Trade } from '@/utils/tradingMetrics';
 
 interface JournalTabsProps {
@@ -18,20 +20,17 @@ interface JournalTabsProps {
 }
 
 export default function JournalTabs({
-  activeTab,
-  onTabChange,
-  trades,
-  initialCapital = 100,
-  onEditTrade,
-  onDeleteTrade,
-  onCloseTrade
+  activeTab, onTabChange, trades, initialCapital = 100,
+  onEditTrade, onDeleteTrade, onCloseTrade
 }: JournalTabsProps) {
   const tabs = [
     { id: 'overview', label: 'ภาพรวม' },
     { id: 'performance', label: 'ประสิทธิภาพ' },
-    { id: 'analysis', label: 'การวิเคราะห์การซื้อขาย' },
-    { id: 'risk', label: 'อัตราส่วน ความเสี่ยง/ผลตอบแทน' },
-    { id: 'trades', label: 'รายการของการซื้อขาย' },
+    { id: 'analysis', label: 'วิเคราะห์' },
+    { id: 'risk', label: 'ความเสี่ยง / R-Metrics' },
+    { id: 'psychology', label: '🧠 จิตวิทยา' },
+    { id: 'reports', label: '📊 รายงาน' },
+    { id: 'trades', label: 'รายการซื้อขาย' },
   ];
 
   return (
@@ -56,25 +55,27 @@ export default function JournalTabs({
       <TabsContent value="overview" className="mt-0">
         <OverviewTab trades={trades} initialCapital={initialCapital} />
       </TabsContent>
-
       <TabsContent value="performance" className="mt-0">
         <PerformanceTab trades={trades} initialCapital={initialCapital} />
       </TabsContent>
-
       <TabsContent value="analysis" className="mt-0">
         <TradeAnalysisTab trades={trades} initialCapital={initialCapital} />
       </TabsContent>
-
       <TabsContent value="risk" className="mt-0">
         <RiskRewardTab trades={trades} initialCapital={initialCapital} />
       </TabsContent>
-
+      <TabsContent value="psychology" className="mt-0">
+        <PsychologyTab trades={trades} initialCapital={initialCapital} />
+      </TabsContent>
+      <TabsContent value="reports" className="mt-0">
+        <ReportsTab trades={trades} initialCapital={initialCapital} />
+      </TabsContent>
       <TabsContent value="trades" className="mt-0">
-        <TradeListTab 
-          trades={trades} 
+        <TradeListTab
+          trades={trades}
           onEditTrade={onEditTrade}
-          onDeleteTrade={onDeleteTrade}
-          onCloseTrade={onCloseTrade}
+          onDeleteTrade={onDeleteTrade!}
+          onCloseTrade={onCloseTrade!}
         />
       </TabsContent>
     </Tabs>
