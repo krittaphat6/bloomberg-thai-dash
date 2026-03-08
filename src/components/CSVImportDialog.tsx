@@ -443,7 +443,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex h-full gap-4">
+        <div className="flex flex-1 gap-4 min-h-0 overflow-hidden">
           {/* Steps Sidebar */}
           <div className="w-64 border-r border-border pr-4">
             <div className="space-y-2">
