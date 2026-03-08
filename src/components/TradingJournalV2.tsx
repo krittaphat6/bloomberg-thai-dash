@@ -353,7 +353,10 @@ export default function TradingJournalV2() {
               <div><Label className="text-xs">Stop Loss</Label>
                 <Input type="number" value={newTrade.stopLoss || ''} onChange={e => setNewTrade({...newTrade, stopLoss: parseFloat(e.target.value)})} placeholder="SL" /></div>
               <div><Label className="text-xs">Take Profit</Label>
-                <Input type="number" value={newTrade.takeProfit || ''} onChange={e => setNewTrade({...newTrade, takeProfit: parseFloat(e.target.value)})} placeholder="TP" /></div>
+                <Input type="number" value={newTrade.takeProfit ?? ''} onChange={e => {
+                  const val = e.target.value;
+                  setNewTrade({...newTrade, takeProfit: val === '' ? undefined : parseFloat(val)});
+                }} placeholder="ราคา TP" /></div>
               <div><Label className="text-xs">Initial Risk $</Label>
                 <Input type="number" disabled value={
                   newTrade.stopLoss && newTrade.entryPrice 
