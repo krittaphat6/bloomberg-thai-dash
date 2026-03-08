@@ -195,6 +195,22 @@ export class ChartInteraction {
     if (this.mode === 'drawing') {
       this.startDrawing(x, y);
     } else {
+      // Try to select a drawing first
+      const hitDrawing = this.hitTestDrawings(x, y);
+      if (hitDrawing) {
+        this.drawings = this.drawings.map(d => ({ ...d, selected: d.id === hitDrawing.id }));
+        this.selectedDrawingId = hitDrawing.id;
+        const rect = this.canvas.getBoundingClientRect();
+        this.callbacks.onDrawingSelect?.(hitDrawing, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+        this.callbacks.onDrawingUpdate([...this.drawings]);
+        return;
+      }
+      
+      // Deselect if clicking empty area
+      if (this.selectedDrawingId) {
+        this.deselectAll();
+      }
+      
       this.isPanning = true;
       this.canvas.style.cursor = 'grabbing';
     }
