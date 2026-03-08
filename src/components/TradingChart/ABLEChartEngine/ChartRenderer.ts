@@ -592,9 +592,9 @@ export class ChartRenderer {
     const ctx = this.ctx;
     const { chartArea, volumeHeight, timeAxisHeight } = dimensions;
     
-    // Position: bottom left corner, above time axis
+    // Position: bottom left corner, raised above time axis
     const x = 20;
-    const y = chartArea.y + chartArea.height + volumeHeight - 15;
+    const y = chartArea.y + chartArea.height + volumeHeight - 35;
     
     // Draw "ABLE" text
     ctx.font = `bold ${14 * this.dpr}px 'JetBrains Mono', monospace`;

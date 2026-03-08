@@ -34,10 +34,11 @@ export class ChartInteraction {
   private currentDrawing: DrawingObject | null = null;
 
   // Smooth animation constants
-  private readonly ZOOM_SMOOTHNESS = 0.15;
-  private readonly PAN_SMOOTHNESS = 0.2;
-  private readonly INERTIA_DECAY = 0.95;
-  private readonly MIN_VELOCITY = 0.01;
+  private readonly ZOOM_SMOOTHNESS = 0.18;
+  private readonly PAN_SMOOTHNESS = 0.25;
+  private readonly INERTIA_DECAY = 0.92;
+  private readonly MIN_VELOCITY = 0.05;
+  private readonly PAN_SENSITIVITY = 1.5;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -201,8 +202,8 @@ export class ChartInteraction {
     
     const { x } = this.getCanvasCoords(e);
     
-    // Use smaller zoom factor for smoother zooming
-    const zoomIntensity = 0.05;
+    // Adaptive zoom: smaller steps for smoother feel
+    const zoomIntensity = 0.08;
     const zoomFactor = 1 + (e.deltaY > 0 ? zoomIntensity : -zoomIntensity);
     
     this.zoomSmooth(zoomFactor, x);
@@ -326,8 +327,8 @@ export class ChartInteraction {
     const { chartArea } = this.dimensions;
     const indexRange = this.viewport.endIndex - this.viewport.startIndex;
     
-    // Use floating point for smooth scrolling (no rounding!)
-    const deltaIndex = (deltaX / chartArea.width) * indexRange;
+    // Apply sensitivity multiplier for more responsive panning
+    const deltaIndex = (deltaX * this.PAN_SENSITIVITY / chartArea.width) * indexRange;
     
     const newViewport = { ...this.viewport };
     
