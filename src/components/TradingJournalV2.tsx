@@ -288,16 +288,24 @@ export default function TradingJournalV2() {
   };
 
   return (
-    <div className="w-full min-h-screen flex bg-background text-xs">
-      {/* Sidebar */}
-      <div className="w-52 border-r border-border/30 flex flex-col bg-card/50 hidden lg:flex">
+    <div className="w-full h-screen flex bg-background text-xs overflow-hidden">
+      {/* Sidebar - collapsible */}
+      <div className={cn(
+        "border-r border-border/30 flex flex-col bg-card/50 transition-all duration-300 hidden lg:flex",
+        sidebarCollapsed ? "w-0 overflow-hidden border-r-0" : "w-52"
+      )}>
         <div className="p-3 border-b border-border/30 flex items-center justify-between">
-          <span className="flex items-center gap-2 text-terminal-green font-bold text-sm">
+          <span className="flex items-center gap-2 text-terminal-green font-bold text-sm whitespace-nowrap">
             <Folder className="h-4 w-4" /> Trading Rooms
           </span>
-          <Button variant="ghost" size="sm" onClick={() => setShowFolderManager(true)} className="h-7 w-7 p-0">
-            <Settings2 className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setShowFolderManager(true)} className="h-7 w-7 p-0">
+              <Settings2 className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSidebarCollapsed(true)} className="h-7 w-7 p-0">
+              <PanelLeftClose className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <ScrollArea className="flex-1 p-2">
           <div className="space-y-1">
@@ -322,7 +330,7 @@ export default function TradingJournalV2() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col p-4 space-y-4 overflow-auto">
+      <div className="flex-1 flex flex-col p-4 overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-center pb-2 border-b border-border/30">
           <div>
