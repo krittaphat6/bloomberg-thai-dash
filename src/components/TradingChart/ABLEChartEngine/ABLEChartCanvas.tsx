@@ -24,7 +24,7 @@ interface ABLEChartCanvasProps {
   indicators?: IndicatorData[];
   drawingMode?: DrawingType | null;
   domConfig?: DOMConfig;
-  oiBubblesConfig?: OIBubblesConfig;
+  
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
   /**
    * Optional controlled state for fullscreen DOM.
