@@ -444,11 +444,9 @@ export class ChartRenderer {
       switch (drawing.type) {
         case 'horizontal': {
           const y = this.priceToY(drawing.points[0].price, viewport, chartArea);
-          ctx.setLineDash([5, 5]);
           ctx.moveTo(chartArea.x * this.dpr, y * this.dpr);
           ctx.lineTo((chartArea.x + chartArea.width) * this.dpr, y * this.dpr);
           ctx.stroke();
-          ctx.setLineDash([]);
           break;
         }
         case 'vertical': {
