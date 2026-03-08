@@ -16,6 +16,11 @@ export class ChartInteraction {
   private callbacks: InteractionCallbacks;
   
   private isPanning = false;
+  private isPriceAxisDragging = false;
+  private priceAxisDragStartY = 0;
+  private priceAxisDragStartPriceMin = 0;
+  private priceAxisDragStartPriceMax = 0;
+  private isAutoScalePrice = true; // TradingView default: auto-scale on
   private lastMouseX = 0;
   private lastMouseY = 0;
   private touchStartDistance = 0;
@@ -129,6 +134,11 @@ export class ChartInteraction {
   // MOUSE EVENTS - TradingView style: direct 1:1 panning, no smoothing
   // =========================================================================
 
+  private isOnPriceAxis(x: number): boolean {
+    const { chartArea } = this.dimensions;
+    return x > chartArea.x + chartArea.width;
+  }
+
   private handleMouseDown = (e: MouseEvent) => {
     const { x, y } = this.getCanvasCoords(e);
     this.lastMouseX = x;
@@ -137,6 +147,17 @@ export class ChartInteraction {
     // Stop any ongoing kinetic scroll immediately
     this.stopKineticScroll();
     this.velocityTracker = [];
+
+    // Check if clicking on price axis (right side) for vertical scaling
+    if (this.isOnPriceAxis(x)) {
+      this.isPriceAxisDragging = true;
+      this.priceAxisDragStartY = y;
+      this.priceAxisDragStartPriceMin = this.viewport.priceMin;
+      this.priceAxisDragStartPriceMax = this.viewport.priceMax;
+      this.isAutoScalePrice = false; // Disable auto-scale when manually adjusting
+      this.canvas.style.cursor = 'ns-resize';
+      return;
+    }
 
     if (this.mode === 'drawing') {
       this.startDrawing(x, y);
@@ -149,6 +170,26 @@ export class ChartInteraction {
   private handleMouseMove = (e: MouseEvent) => {
     const { x, y } = this.getCanvasCoords(e);
     const { chartArea } = this.dimensions;
+
+    // Price axis dragging - TradingView vertical scale
+    if (this.isPriceAxisDragging) {
+      const deltaY = y - this.priceAxisDragStartY;
+      const priceRange = this.priceAxisDragStartPriceMax - this.priceAxisDragStartPriceMin;
+      const center = (this.priceAxisDragStartPriceMax + this.priceAxisDragStartPriceMin) / 2;
+      
+      // Drag up = zoom in (shrink range), drag down = zoom out (expand range)
+      // TradingView uses ~0.005 per pixel sensitivity
+      const scaleFactor = Math.exp(deltaY * 0.005);
+      const newHalfRange = (priceRange / 2) * scaleFactor;
+      
+      const newViewport = { ...this.viewport };
+      newViewport.priceMin = center - newHalfRange;
+      newViewport.priceMax = center + newHalfRange;
+      
+      this.viewport = newViewport;
+      this.callbacks.onViewportChange(newViewport);
+      return;
+    }
 
     if (this.isPanning) {
       const deltaX = x - this.lastMouseX;
@@ -172,6 +213,11 @@ export class ChartInteraction {
       this.updateDrawing(x, y);
     }
 
+    // Update cursor based on position
+    if (!this.isPanning && !this.isPriceAxisDragging && this.mode !== 'drawing') {
+      this.canvas.style.cursor = this.isOnPriceAxis(x) ? 'ns-resize' : 'default';
+    }
+
     // Update crosshair
     if (x >= chartArea.x && x <= chartArea.x + chartArea.width &&
         y >= chartArea.y && y <= chartArea.y + chartArea.height) {
@@ -181,6 +227,12 @@ export class ChartInteraction {
   };
 
   private handleMouseUp = (_e: MouseEvent) => {
+    if (this.isPriceAxisDragging) {
+      this.isPriceAxisDragging = false;
+      this.canvas.style.cursor = 'default';
+      return;
+    }
+
     if (this.isPanning) {
       this.isPanning = false;
       this.canvas.style.cursor = this.mode === 'drawing' ? 'crosshair' : 'default';
@@ -198,6 +250,9 @@ export class ChartInteraction {
   };
 
   private handleMouseLeave = () => {
+    if (this.isPriceAxisDragging) {
+      this.isPriceAxisDragging = false;
+    }
     if (this.isPanning) {
       this.isPanning = false;
       this.canvas.style.cursor = 'default';
@@ -208,6 +263,7 @@ export class ChartInteraction {
         this.startKineticScroll(velocity);
       }
     }
+    this.canvas.style.cursor = 'default';
     this.callbacks.onCrosshairMove({ visible: false, x: 0, y: 0, price: 0, time: 0, candle: null });
   };
 
@@ -228,9 +284,23 @@ export class ChartInteraction {
     this.zoomAtPoint(zoomFactor, x);
   };
 
-  private handleDoubleClick = (_e: MouseEvent) => {
+  private handleDoubleClick = (e: MouseEvent) => {
+    const { x } = this.getCanvasCoords(e);
+    
+    // Double-click on price axis = reset to auto-scale (TradingView behavior)
+    if (this.isOnPriceAxis(x)) {
+      this.isAutoScalePrice = true;
+      // Force recalculate price range
+      const newViewport = { ...this.viewport };
+      this.forceUpdatePriceRange(newViewport);
+      this.viewport = newViewport;
+      this.callbacks.onViewportChange(newViewport);
+      return;
+    }
+    
     // Reset viewport to fit all data with smooth animation
     if (this.candles.length > 0) {
+      this.isAutoScalePrice = true;
       const newViewport = { ...this.viewport };
       newViewport.startIndex = 0;
       newViewport.endIndex = this.candles.length - 1;
@@ -493,6 +563,9 @@ export class ChartInteraction {
   // =========================================================================
 
   private updatePriceRange(viewport: ChartViewport) {
+    // Skip auto-scale if user is manually controlling price axis
+    if (!this.isAutoScalePrice) return;
+    
     let min = Infinity, max = -Infinity;
     
     const startIdx = Math.max(0, Math.floor(viewport.startIndex));
@@ -517,7 +590,29 @@ export class ChartInteraction {
     }
   }
 
+  private forceUpdatePriceRange(viewport: ChartViewport) {
+    let min = Infinity, max = -Infinity;
+    
+    const startIdx = Math.max(0, Math.floor(viewport.startIndex));
+    const endIdx = Math.min(this.candles.length - 1, Math.ceil(viewport.endIndex));
+    
+    for (let i = startIdx; i <= endIdx; i++) {
+      const candle = this.candles[i];
+      if (candle) {
+        min = Math.min(min, candle.low);
+        max = Math.max(max, candle.high);
+      }
+    }
+    
+    if (min !== Infinity && max !== -Infinity) {
+      const padding = (max - min) * 0.08;
+      viewport.priceMin = min - padding;
+      viewport.priceMax = max + padding;
+    }
+  }
+
   private updatePriceRangeSmooth(viewport: ChartViewport) {
+    if (!this.isAutoScalePrice) return;
     let min = Infinity, max = -Infinity;
     
     const startIdx = Math.max(0, Math.floor(viewport.startIndex));
