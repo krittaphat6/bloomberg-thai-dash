@@ -284,7 +284,7 @@ export default function TradeGraphTab({ trades }: { trades: Trade[]; initialCapi
   }
 
   return (
-    <div className={isFullscreen ? 'fixed inset-0 z-50 bg-background flex flex-col p-3' : 'space-y-3'}>
+    <div className={isFullscreen ? 'fixed inset-0 z-50 bg-background flex flex-col p-3' : 'flex flex-col gap-3 h-[calc(100vh-280px)] min-h-[400px]'}>
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
         <Button variant="outline" size="sm" onClick={() => handleZoom(1)} className="h-7 px-2">
@@ -332,7 +332,7 @@ export default function TradeGraphTab({ trades }: { trades: Trade[]; initialCapi
       </div>
 
       {/* Graph */}
-      <div ref={containerRef} className={`relative w-full rounded-lg border border-border/50 overflow-hidden bg-background/50 ${isFullscreen ? 'flex-1' : ''}`} style={isFullscreen ? undefined : { height: 480 }}>
+      <div ref={containerRef} className="relative w-full rounded-lg border border-border/50 overflow-hidden bg-background/50 flex-1 min-h-0">
         <svg ref={svgRef} className="w-full h-full" />
       </div>
 
