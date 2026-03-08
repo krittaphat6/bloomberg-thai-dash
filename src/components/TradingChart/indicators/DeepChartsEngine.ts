@@ -373,8 +373,8 @@ export function computeDeepCharts(
   const prevCandle = candles.length > 1 ? candles[candles.length - 2] : null;
   const isUptick = lastCandle && prevCandle ? lastCandle.close >= prevCandle.close : true;
 
-  // === Signal Detection ===
-  for (let i = Math.max(period, safeStart); i <= Math.min(candles.length - 1, safeEnd + 5); i++) {
+  // === Signal Detection (compute ALL candles, renderer clips to viewport) ===
+  for (let i = period; i < candles.length; i++) {
     const c = candles[i];
     if (!c || typeof c.high !== 'number') continue;
 
