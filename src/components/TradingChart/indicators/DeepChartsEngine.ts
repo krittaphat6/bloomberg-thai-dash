@@ -390,10 +390,10 @@ export function computeDeepCharts(
   }
 
   // Stats
-  const visibleBuyVol = buyVols.slice(visibleStart, visibleEnd + 1).reduce((s, v) => s + v, 0);
-  const visibleSellVol = sellVols.slice(visibleStart, visibleEnd + 1).reduce((s, v) => s + v, 0);
+  const visibleBuyVol = buyVols.slice(safeStart, safeEnd + 1).reduce((s, v) => s + v, 0);
+  const visibleSellVol = sellVols.slice(safeStart, safeEnd + 1).reduce((s, v) => s + v, 0);
   const totalVis = visibleBuyVol + visibleSellVol;
-  const visibleTotalVols = totalVols.slice(visibleStart, visibleEnd + 1);
+  const visibleTotalVols = totalVols.slice(safeStart, safeEnd + 1);
   const avgVol = visibleTotalVols.length > 0 ? visibleTotalVols.reduce((s, v) => s + v, 0) / visibleTotalVols.length : 0;
 
   return {
