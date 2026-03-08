@@ -542,7 +542,7 @@ const ABLE3AI = () => {
             }
           } else {
             addThinkingStep('🧠 Gemini 2.5 Flash กำลังประมวลผล...');
-            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}`;
+            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}\n${journalContext}`;
             const response = await GeminiService.chat(
               enhancedPrompt,
               conversationHistoryRef.current.slice(0, -1),

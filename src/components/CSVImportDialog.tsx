@@ -510,9 +510,18 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
                     </TableBody>
                   </Table>
                 </div>
+                {parsedTrades.length > 0 && (
+                  <Alert className="border-terminal-green/30 bg-terminal-green/5">
+                    <AlertDescription className="text-xs text-terminal-green">
+                      ✓ พบ {parsedTrades.length} เทรดจากข้อมูล ({detectedFormat === 'able_v3' ? 'ABLE v3.1' : detectedFormat === 'thai_oanda' ? 'Thai OANDA' : 'Generic'})
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => { setCurrentStep('upload'); setCsvData([]); setFullCsvData([]); }}>Back</Button>
-                  <Button onClick={handleNextStep} className="bg-terminal-green text-black">Continue to Mapping</Button>
+                  <Button variant="outline" onClick={() => { setCurrentStep('upload'); setCsvData([]); setFullCsvData([]); setParsedTrades([]); }}>Back</Button>
+                  <Button onClick={handleNextStep} className="bg-terminal-green text-black">
+                    {detectedFormat !== 'generic' ? `Import ${parsedTrades.length} Trades →` : 'Continue to Mapping →'}
+                  </Button>
                 </div>
               </div>
             )}

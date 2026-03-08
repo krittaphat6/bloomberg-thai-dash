@@ -302,6 +302,81 @@ function parseRelationshipArtifact(response: string, query: string): ArtifactDat
   };
 }
 
+/* ─── Journal Artifact ─── */
+
+function hasJournalPattern(q: string): boolean {
+  return /journal|trading journal|เทรด.*journal|สรุป.*เทรด|ผลการเทรด|win.*rate|p&l|pnl|กำไร.*ขาดทุน|สถิติ.*เทรด|performance|ประสิทธิภาพ|วิเคราะห์.*เทรด|able.*score|psychology|จิตวิทยา|monte.*carlo|r-?multiple|risk.*reward|drawdown|streak|setup.*performance|สรุปผล/i.test(q);
+}
+
+function parseJournalArtifact(response: string, query: string): ArtifactData | null {
+  // Extract metrics from AI response
+  const headers: string[] = [];
+  const rows: string[][] = [];
+  const groups: { title: string; headers: string[]; rows: string[][] }[] = [];
+
+  // Try to extract table data from response
+  const lines = response.split('\n');
+  let currentGroup: { title: string; headers: string[]; rows: string[][] } | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Detect section headers
+    if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
+      if (currentGroup && currentGroup.rows.length > 0) groups.push(currentGroup);
+      currentGroup = { title: trimmed.replace(/\*\*/g, ''), headers: [], rows: [] };
+      continue;
+    }
+    // Detect table rows
+    if (trimmed.includes('|')) {
+      const cells = trimmed.split('|').map(c => c.trim()).filter(Boolean);
+      if (cells.length > 1 && !cells.every(c => /^[-:]+$/.test(c))) {
+        if (currentGroup) {
+          if (currentGroup.headers.length === 0) currentGroup.headers = cells;
+          else currentGroup.rows.push(cells);
+        } else {
+          if (headers.length === 0) headers.push(...cells);
+          else rows.push(cells);
+        }
+      }
+    }
+    // Detect key-value pairs like "Win Rate: 65%"
+    const kvMatch = trimmed.match(/^[•\-]\s*(.+?):\s*(.+)$/);
+    if (kvMatch && currentGroup) {
+      if (currentGroup.headers.length === 0) currentGroup.headers = ['Metric', 'Value'];
+      currentGroup.rows.push([kvMatch[1], kvMatch[2]]);
+    }
+  }
+  if (currentGroup && currentGroup.rows.length > 0) groups.push(currentGroup);
+
+  // If no structured data found, create from numbered items
+  if (groups.length === 0 && rows.length === 0) {
+    const bulletLines = lines.filter(l => /^[\d]+[.)]\s|^[-•]\s/.test(l.trim()));
+    if (bulletLines.length >= 2) {
+      groups.push({
+        title: '📊 Trading Journal Analysis',
+        headers: ['#', 'Detail'],
+        rows: bulletLines.map((l, i) => [
+          String(i + 1),
+          l.replace(/^[\d]+[.)]\s|^[-•]\s/, '').trim()
+        ])
+      });
+    }
+  }
+
+  if (groups.length === 0 && rows.length === 0) return null;
+
+  return {
+    id: Date.now().toString(),
+    type: 'table',
+    title: `📔 ${query.slice(0, 50)}`,
+    timestamp: new Date(),
+    source: 'Trading Journal',
+    content: groups.length > 0 ? { groups } : { headers, rows },
+    aiResponse: response,
+    userQuery: query,
+  };
+}
+
 /* ─── Helpers ─── */
 
 function hasScreenerPattern(q: string): boolean {
