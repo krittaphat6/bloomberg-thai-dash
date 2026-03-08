@@ -80,7 +80,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
       indicators={indicatorData}
       drawingMode={drawingMode as any}
       domConfig={domConfig}
-      oiBubblesConfig={oiBubblesConfig}
+      
       domFullscreen={domFullscreen}
       onDOMFullscreenChange={onDOMFullscreenChange}
       onCrosshairMove={onCrosshairMove}
