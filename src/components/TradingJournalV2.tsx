@@ -359,9 +359,9 @@ export default function TradingJournalV2() {
               <div><Label className="text-xs">Strategy</Label>
                 <Input value={newTrade.strategy || ''} onChange={e => setNewTrade({...newTrade, strategy: e.target.value})} /></div>
               <div><Label className="text-xs">Emotion</Label>
-                <Select value={newTrade.emotion || ''} onValueChange={v => setNewTrade({...newTrade, emotion: v as Trade['emotion']})}>
+                <Select value={newTrade.emotion || 'none'} onValueChange={v => setNewTrade({...newTrade, emotion: v === 'none' ? undefined : v as Trade['emotion']})}>
                   <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>{EMOTIONS.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
+                  <SelectContent><SelectItem value="none">—</SelectItem>{EMOTIONS.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
                 </Select></div>
             </div>
 
