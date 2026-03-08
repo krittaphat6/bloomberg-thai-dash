@@ -10,6 +10,7 @@ import { ChartTheme } from '../ChartThemes';
 import { binanceWS } from '@/services/BinanceWebSocketService';
 import { binanceOrderBook, OrderBookData } from '@/services/BinanceOrderBookService';
 import { supabase } from '@/integrations/supabase/client';
+import DrawingToolbar from '../DrawingToolbar';
 
 interface OIBubblesConfig {
   enabled: boolean;
@@ -95,7 +96,8 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   const [orderBook, setOrderBook] = useState<OrderBookData | null>(null);
   const [domConnected, setDomConnected] = useState(false);
   const [oiBubbles, setOiBubbles] = useState<OIBubbleData[]>([]);
-
+  const [selectedDrawing, setSelectedDrawing] = useState<DrawingObject | null>(null);
+  const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number } | null>(null);
   const [domFullscreenInternal, setDomFullscreenInternal] = useState(false);
   const domFullscreen = domFullscreenProp ?? domFullscreenInternal;
 
@@ -404,6 +406,10 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       },
       onDrawingUpdate: setDrawings,
       onModeChange: setMode,
+      onDrawingSelect: (drawing, pos) => {
+        setSelectedDrawing(drawing);
+        setToolbarPos(pos);
+      },
     };
 
     interactionRef.current = new ChartInteraction(
@@ -513,22 +519,42 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   }, [render]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="block"
-      onClick={handleCanvasClick}
-      style={{
-        width: width,
-        height: height,
-        cursor: domFullscreen 
-          ? 'pointer' 
-          : mode === 'drawing' 
-            ? 'crosshair' 
-            : domConfig?.enabled && orderBook 
-              ? 'pointer' 
-              : 'default',
-      }}
-    />
+    <div className="relative" style={{ width, height }}>
+      <canvas
+        ref={canvasRef}
+        className="block"
+        onClick={handleCanvasClick}
+        style={{
+          width: width,
+          height: height,
+          cursor: domFullscreen 
+            ? 'pointer' 
+            : mode === 'drawing' 
+              ? 'crosshair' 
+              : domConfig?.enabled && orderBook 
+                ? 'pointer' 
+                : 'default',
+        }}
+      />
+      {selectedDrawing && toolbarPos && (
+        <DrawingToolbar
+          drawing={selectedDrawing}
+          position={toolbarPos}
+          onUpdate={(updates) => {
+            interactionRef.current?.updateDrawingById(selectedDrawing.id, updates);
+            setSelectedDrawing(prev => prev ? { ...prev, ...updates } : null);
+          }}
+          onDelete={() => {
+            interactionRef.current?.deleteDrawingById(selectedDrawing.id);
+            setSelectedDrawing(null);
+            setToolbarPos(null);
+          }}
+          onDuplicate={() => {
+            interactionRef.current?.duplicateDrawingById(selectedDrawing.id);
+          }}
+        />
+      )}
+    </div>
   );
 };
 

@@ -6,6 +6,7 @@ export interface InteractionCallbacks {
   onCrosshairMove: (crosshair: CrosshairState) => void;
   onDrawingUpdate: (drawings: DrawingObject[]) => void;
   onModeChange: (mode: ChartMode) => void;
+  onDrawingSelect?: (drawing: DrawingObject | null, screenPos: { x: number; y: number } | null) => void;
 }
 
 export class ChartInteraction {
@@ -48,6 +49,7 @@ export class ChartInteraction {
   private drawingType: DrawingType = 'trendline';
   private drawings: DrawingObject[] = [];
   private currentDrawing: DrawingObject | null = null;
+  private selectedDrawingId: string | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -87,6 +89,37 @@ export class ChartInteraction {
     this.callbacks.onDrawingUpdate(drawings);
   }
 
+  updateDrawingById(id: string, updates: Partial<DrawingObject>) {
+    this.drawings = this.drawings.map(d => d.id === id ? { ...d, ...updates } : d);
+    this.callbacks.onDrawingUpdate([...this.drawings]);
+  }
+
+  deleteDrawingById(id: string) {
+    this.drawings = this.drawings.filter(d => d.id !== id);
+    this.selectedDrawingId = null;
+    this.callbacks.onDrawingSelect?.(null, null);
+    this.callbacks.onDrawingUpdate([...this.drawings]);
+  }
+
+  duplicateDrawingById(id: string) {
+    const drawing = this.drawings.find(d => d.id === id);
+    if (!drawing) return;
+    const clone: DrawingObject = {
+      ...drawing,
+      id: `drawing_${Date.now()}`,
+      points: drawing.points.map(p => ({ ...p, y: p.y + 20, price: p.price * 0.999 })),
+      selected: false,
+    };
+    this.drawings.push(clone);
+    this.callbacks.onDrawingUpdate([...this.drawings]);
+  }
+
+  deselectAll() {
+    this.selectedDrawingId = null;
+    this.drawings = this.drawings.map(d => ({ ...d, selected: false }));
+    this.callbacks.onDrawingSelect?.(null, null);
+    this.callbacks.onDrawingUpdate([...this.drawings]);
+  }
   clearDrawings() {
     this.drawings = [];
     this.currentDrawing = null;
@@ -162,6 +195,22 @@ export class ChartInteraction {
     if (this.mode === 'drawing') {
       this.startDrawing(x, y);
     } else {
+      // Try to select a drawing first
+      const hitDrawing = this.hitTestDrawings(x, y);
+      if (hitDrawing) {
+        this.drawings = this.drawings.map(d => ({ ...d, selected: d.id === hitDrawing.id }));
+        this.selectedDrawingId = hitDrawing.id;
+        const rect = this.canvas.getBoundingClientRect();
+        this.callbacks.onDrawingSelect?.(hitDrawing, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+        this.callbacks.onDrawingUpdate([...this.drawings]);
+        return;
+      }
+      
+      // Deselect if clicking empty area
+      if (this.selectedDrawingId) {
+        this.deselectAll();
+      }
+      
       this.isPanning = true;
       this.canvas.style.cursor = 'grabbing';
     }
@@ -671,6 +720,7 @@ export class ChartInteraction {
       points: [{ x, y, price, time }],
       color: '#ffb000',
       lineWidth: 2,
+      lineStyle: 'solid',
       isComplete: false,
     };
   }
@@ -705,5 +755,99 @@ export class ChartInteraction {
     
     this.currentDrawing = null;
     this.callbacks.onDrawingUpdate([...this.drawings]);
+  }
+
+  // =========================================================================
+  // HIT TESTING - detect clicks on existing drawings
+  // =========================================================================
+
+  private hitTestDrawings(x: number, y: number): DrawingObject | null {
+    const { chartArea } = this.dimensions;
+    const HIT_TOLERANCE = 8; // pixels
+
+    // Test in reverse order (topmost first)
+    for (let i = this.drawings.length - 1; i >= 0; i--) {
+      const drawing = this.drawings[i];
+      if (!drawing.isComplete || drawing.points.length === 0) continue;
+
+      switch (drawing.type) {
+        case 'horizontal': {
+          const dy = this.priceToScreenY(drawing.points[0].price);
+          if (Math.abs(y - dy) < HIT_TOLERANCE && x >= chartArea.x && x <= chartArea.x + chartArea.width) {
+            return drawing;
+          }
+          break;
+        }
+        case 'vertical': {
+          // Use time-based positioning
+          const dx = drawing.points[0].x;
+          if (Math.abs(x - dx) < HIT_TOLERANCE && y >= chartArea.y && y <= chartArea.y + chartArea.height) {
+            return drawing;
+          }
+          break;
+        }
+        case 'trendline': {
+          if (drawing.points.length >= 2) {
+            const x1 = drawing.points[0].x;
+            const y1 = this.priceToScreenY(drawing.points[0].price);
+            const x2 = drawing.points[1].x;
+            const y2 = this.priceToScreenY(drawing.points[1].price);
+            if (this.distToSegment(x, y, x1, y1, x2, y2) < HIT_TOLERANCE) {
+              return drawing;
+            }
+          }
+          break;
+        }
+        case 'rectangle': {
+          if (drawing.points.length >= 2) {
+            const x1 = drawing.points[0].x;
+            const y1 = this.priceToScreenY(drawing.points[0].price);
+            const x2 = drawing.points[1].x;
+            const y2 = this.priceToScreenY(drawing.points[1].price);
+            const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+            const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+            // Check edges
+            const onEdge = (
+              (Math.abs(x - minX) < HIT_TOLERANCE || Math.abs(x - maxX) < HIT_TOLERANCE) && y >= minY - HIT_TOLERANCE && y <= maxY + HIT_TOLERANCE
+            ) || (
+              (Math.abs(y - minY) < HIT_TOLERANCE || Math.abs(y - maxY) < HIT_TOLERANCE) && x >= minX - HIT_TOLERANCE && x <= maxX + HIT_TOLERANCE
+            );
+            if (onEdge) return drawing;
+          }
+          break;
+        }
+        case 'fibonacci': {
+          if (drawing.points.length >= 2) {
+            const y1 = this.priceToScreenY(drawing.points[0].price);
+            const y2 = this.priceToScreenY(drawing.points[1].price);
+            const range = y2 - y1;
+            const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+            for (const level of levels) {
+              const ly = y1 + range * level;
+              if (Math.abs(y - ly) < HIT_TOLERANCE && x >= chartArea.x && x <= chartArea.x + chartArea.width) {
+                return drawing;
+              }
+            }
+          }
+          break;
+        }
+      }
+    }
+    return null;
+  }
+
+  private priceToScreenY(price: number): number {
+    const { chartArea } = this.dimensions;
+    return chartArea.y + (this.viewport.priceMax - price) / (this.viewport.priceMax - this.viewport.priceMin) * chartArea.height;
+  }
+
+  private distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
   }
 }

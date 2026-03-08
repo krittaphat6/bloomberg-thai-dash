@@ -430,26 +430,30 @@ export class ChartRenderer {
       if (drawing.points.length === 0) return;
 
       ctx.strokeStyle = drawing.color;
-      ctx.lineWidth = drawing.lineWidth;
+      ctx.lineWidth = drawing.lineWidth * this.dpr;
+      
+      // Apply line style
+      const dashMap: Record<string, number[]> = {
+        solid: [],
+        dashed: [8 * this.dpr, 4 * this.dpr],
+        dotted: [2 * this.dpr, 4 * this.dpr],
+      };
+      ctx.setLineDash(dashMap[drawing.lineStyle || 'solid'] || []);
       ctx.beginPath();
 
       switch (drawing.type) {
         case 'horizontal': {
           const y = this.priceToY(drawing.points[0].price, viewport, chartArea);
-          ctx.setLineDash([5, 5]);
           ctx.moveTo(chartArea.x * this.dpr, y * this.dpr);
           ctx.lineTo((chartArea.x + chartArea.width) * this.dpr, y * this.dpr);
           ctx.stroke();
-          ctx.setLineDash([]);
           break;
         }
         case 'vertical': {
           const x = drawing.points[0].x;
-          ctx.setLineDash([5, 5]);
           ctx.moveTo(x * this.dpr, chartArea.y * this.dpr);
           ctx.lineTo(x * this.dpr, (chartArea.y + chartArea.height) * this.dpr);
           ctx.stroke();
-          ctx.setLineDash([]);
           break;
         }
         case 'trendline': {
@@ -488,7 +492,6 @@ export class ChartRenderer {
             const range = y2 - y1;
             const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
             
-            ctx.setLineDash([3, 3]);
             levels.forEach((level, i) => {
               const y = y1 + range * level;
               ctx.beginPath();
@@ -504,12 +507,66 @@ export class ChartRenderer {
                 (y - 3) * this.dpr
               );
             });
-            ctx.setLineDash([]);
           }
           break;
         }
       }
+
+      ctx.setLineDash([]);
+
+      // Draw selection handles
+      if (drawing.selected) {
+        this.drawSelectionHandles(drawing, viewport, chartArea);
+      }
     });
+  }
+
+  private drawSelectionHandles(drawing: DrawingObject, viewport: ChartViewport, chartArea: ChartDimensions['chartArea']) {
+    const ctx = this.ctx;
+    const HANDLE_SIZE = 5 * this.dpr;
+
+    const handlePoints: { x: number; y: number }[] = [];
+    
+    drawing.points.forEach(p => {
+      const screenY = this.priceToY(p.price, viewport, chartArea);
+      handlePoints.push({ x: p.x * this.dpr, y: screenY * this.dpr });
+    });
+
+    handlePoints.forEach(hp => {
+      // Blue circle handles like TradingView
+      ctx.beginPath();
+      ctx.arc(hp.x, hp.y, HANDLE_SIZE, 0, Math.PI * 2);
+      ctx.fillStyle = '#007aff';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5 * this.dpr;
+      ctx.stroke();
+    });
+
+    // For rectangles, also draw corner & edge midpoints
+    if (drawing.type === 'rectangle' && drawing.points.length >= 2) {
+      const x1 = drawing.points[0].x * this.dpr;
+      const y1 = this.priceToY(drawing.points[0].price, viewport, chartArea) * this.dpr;
+      const x2 = drawing.points[1].x * this.dpr;
+      const y2 = this.priceToY(drawing.points[1].price, viewport, chartArea) * this.dpr;
+      
+      const midPoints = [
+        { x: (x1 + x2) / 2, y: y1 },
+        { x: (x1 + x2) / 2, y: y2 },
+        { x: x1, y: (y1 + y2) / 2 },
+        { x: x2, y: (y1 + y2) / 2 },
+      ];
+      
+      midPoints.forEach(mp => {
+        ctx.beginPath();
+        ctx.rect(mp.x - HANDLE_SIZE / 2, mp.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+        ctx.fillStyle = '#007aff';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5 * this.dpr;
+        ctx.stroke();
+      });
+    }
   }
 
   /**
