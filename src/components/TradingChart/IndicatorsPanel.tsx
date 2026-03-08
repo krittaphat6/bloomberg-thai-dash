@@ -111,6 +111,35 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
 
         <ScrollArea className="h-[calc(100vh-100px)] mt-4 pr-4">
           <div className="space-y-4">
+            {/* Volume Indicator Card */}
+            <div className="p-4 rounded-lg border border-blue-500/30 bg-muted/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart2 className="w-5 h-5 text-blue-400" />
+                  <span className="text-lg font-mono font-bold text-blue-400">Volume</span>
+                </div>
+                <Switch
+                  checked={indicators.some(i => i.name === 'Volume' && i.visible)}
+                  onCheckedChange={() => {
+                    const vol = indicators.find(i => i.name === 'Volume');
+                    if (vol) {
+                      onToggleIndicator(vol.id);
+                    } else {
+                      onAddCustomIndicator({
+                        id: `volume-${Date.now()}`,
+                        name: 'Volume',
+                        type: 'oscillator',
+                        visible: true,
+                        settings: {},
+                        color: '#3b82f6',
+                      });
+                    }
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">แสดง Volume bars ด้านล่างกราฟ</p>
+            </div>
+
             {/* OI Bubbles Indicator Card */}
             <div className="p-4 rounded-lg border border-terminal-amber/30 bg-muted/20">
               <div className="flex items-center justify-between mb-3">
