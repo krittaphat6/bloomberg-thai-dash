@@ -16,6 +16,11 @@ export class ChartInteraction {
   private callbacks: InteractionCallbacks;
   
   private isPanning = false;
+  private isPriceAxisDragging = false;
+  private priceAxisDragStartY = 0;
+  private priceAxisDragStartPriceMin = 0;
+  private priceAxisDragStartPriceMax = 0;
+  private isAutoScalePrice = true; // TradingView default: auto-scale on
   private lastMouseX = 0;
   private lastMouseY = 0;
   private touchStartDistance = 0;
