@@ -519,22 +519,42 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   }, [render]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="block"
-      onClick={handleCanvasClick}
-      style={{
-        width: width,
-        height: height,
-        cursor: domFullscreen 
-          ? 'pointer' 
-          : mode === 'drawing' 
-            ? 'crosshair' 
-            : domConfig?.enabled && orderBook 
-              ? 'pointer' 
-              : 'default',
-      }}
-    />
+    <div className="relative" style={{ width, height }}>
+      <canvas
+        ref={canvasRef}
+        className="block"
+        onClick={handleCanvasClick}
+        style={{
+          width: width,
+          height: height,
+          cursor: domFullscreen 
+            ? 'pointer' 
+            : mode === 'drawing' 
+              ? 'crosshair' 
+              : domConfig?.enabled && orderBook 
+                ? 'pointer' 
+                : 'default',
+        }}
+      />
+      {selectedDrawing && toolbarPos && (
+        <DrawingToolbar
+          drawing={selectedDrawing}
+          position={toolbarPos}
+          onUpdate={(updates) => {
+            interactionRef.current?.updateDrawingById(selectedDrawing.id, updates);
+            setSelectedDrawing(prev => prev ? { ...prev, ...updates } : null);
+          }}
+          onDelete={() => {
+            interactionRef.current?.deleteDrawingById(selectedDrawing.id);
+            setSelectedDrawing(null);
+            setToolbarPos(null);
+          }}
+          onDuplicate={() => {
+            interactionRef.current?.duplicateDrawingById(selectedDrawing.id);
+          }}
+        />
+      )}
+    </div>
   );
 };
 
