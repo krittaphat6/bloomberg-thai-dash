@@ -524,7 +524,6 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
                   </Button>
                 </div>
               </div>
-              </div>
             )}
 
             {/* Mapping Step */}
