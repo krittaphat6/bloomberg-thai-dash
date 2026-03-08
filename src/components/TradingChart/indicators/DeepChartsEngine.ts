@@ -175,7 +175,11 @@ export function computeDeepCharts(
   const signals: BigTradeSignal[] = [];
   const anomalies: AnomalyZone[] = [];
   
-  if (candles.length < 30) {
+  // Clamp visible range to valid indices
+  const safeStart = Math.max(0, Math.min(visibleStart, candles.length - 1));
+  const safeEnd = Math.max(0, Math.min(visibleEnd, candles.length - 1));
+
+  if (candles.length < 30 || safeStart > safeEnd) {
     return {
       signals,
       anomalies,
@@ -211,7 +215,7 @@ export function computeDeepCharts(
   const oiStrength = Math.min(Math.abs(oiImbalance) / config.oiSensitivity * 100, 100);
   const oiSpike = Math.abs(oiImbalance) > config.oiSensitivity;
 
-  for (let i = Math.max(period, visibleStart); i <= Math.min(candles.length - 1, visibleEnd + 5); i++) {
+  for (let i = Math.max(period, safeStart); i <= Math.min(candles.length - 1, safeEnd + 5); i++) {
     const c = candles[i];
     
     // Buy Z-score
@@ -301,7 +305,7 @@ export function computeDeepCharts(
   // === Volume Profile ===
   let volumeProfile: VolumeProfileResult | null = null;
   if (config.enablePriceMap && candles.length > 0) {
-    const profileEnd = Math.min(visibleEnd, candles.length - 1);
+    const profileEnd = Math.min(safeEnd, candles.length - 1);
     const profileStart = Math.max(0, profileEnd - config.profileLookback);
     
     let windowHigh = -Infinity;
@@ -386,10 +390,10 @@ export function computeDeepCharts(
   }
 
   // Stats
-  const visibleBuyVol = buyVols.slice(visibleStart, visibleEnd + 1).reduce((s, v) => s + v, 0);
-  const visibleSellVol = sellVols.slice(visibleStart, visibleEnd + 1).reduce((s, v) => s + v, 0);
+  const visibleBuyVol = buyVols.slice(safeStart, safeEnd + 1).reduce((s, v) => s + v, 0);
+  const visibleSellVol = sellVols.slice(safeStart, safeEnd + 1).reduce((s, v) => s + v, 0);
   const totalVis = visibleBuyVol + visibleSellVol;
-  const visibleTotalVols = totalVols.slice(visibleStart, visibleEnd + 1);
+  const visibleTotalVols = totalVols.slice(safeStart, safeEnd + 1);
   const avgVol = visibleTotalVols.length > 0 ? visibleTotalVols.reduce((s, v) => s + v, 0) / visibleTotalVols.length : 0;
 
   return {
