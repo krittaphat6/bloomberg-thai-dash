@@ -86,7 +86,11 @@ export default function TradingJournalV2() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('tradingJournal', JSON.stringify(trades));
+    try {
+      localStorage.setItem('tradingJournal', JSON.stringify(trades));
+    } catch (e) {
+      console.warn('localStorage quota exceeded, trades not saved locally');
+    }
   }, [trades]);
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,8 @@ export default function TradeListTab({ trades, onDeleteTrade, onCloseTrade }: Tr
   const [closePrice, setClosePrice] = useState('');
   const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
   
   const filteredAndSortedTrades = useMemo(() => {
     let result = [...trades];
@@ -57,6 +59,15 @@ export default function TradeListTab({ trades, onDeleteTrade, onCloseTrade }: Tr
     });
     return result;
   }, [trades, searchQuery, statusFilter, sideFilter, sortField, sortDirection]);
+
+  const totalPages = Math.ceil(filteredAndSortedTrades.length / pageSize);
+  const paginatedTrades = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAndSortedTrades.slice(start, start + pageSize);
+  }, [filteredAndSortedTrades, currentPage]);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, sideFilter]);
   
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -152,11 +163,11 @@ export default function TradeListTab({ trades, onDeleteTrade, onCloseTrade }: Tr
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAndSortedTrades.length === 0 ? (
+                {paginatedTrades.length === 0 ? (
                   <TableRow><TableCell colSpan={15} className="text-center text-muted-foreground py-8">No trades found</TableCell></TableRow>
                 ) : (
-                  filteredAndSortedTrades.map((trade) => (
-                    <>
+                  paginatedTrades.map((trade) => (
+                    <React.Fragment key={trade.id}>
                       <TableRow 
                         key={trade.id} 
                         className={`border-border/10 hover:bg-accent/30 transition-colors cursor-pointer ${
@@ -320,12 +331,25 @@ export default function TradeListTab({ trades, onDeleteTrade, onCloseTrade }: Tr
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </React.Fragment>
                   ))
                 )}
               </TableBody>
             </Table>
           </ScrollArea>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2 border-t border-border/20">
+              <span className="text-xs text-muted-foreground">
+                Showing {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, filteredAndSortedTrades.length)} of {filteredAndSortedTrades.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>← Prev</Button>
+                <span className="text-xs px-2">{currentPage}/{totalPages}</span>
+                <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>Next →</Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
