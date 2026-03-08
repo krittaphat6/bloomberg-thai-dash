@@ -114,7 +114,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
 
   // Calculate dimensions
   const dimensions: ChartDimensions = useMemo(() => {
-    const priceAxisWidth = 80;
+    const priceAxisWidth = 100; // Increased for large price numbers like BTC
     const timeAxisHeight = 25;
     const volumeHeight = Math.max(30, height * 0.15);
     
