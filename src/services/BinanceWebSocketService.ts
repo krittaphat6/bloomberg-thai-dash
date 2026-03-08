@@ -32,6 +32,9 @@ class BinanceWebSocketService {
   private subscribedKlines: Map<string, string> = new Map(); // symbol -> interval
   private isConnected = false;
   private prices: Map<string, PriceUpdate> = new Map();
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 10;
+  private suppressErrors = false;
   
   // All available crypto symbols from Binance (loaded dynamically)
   private allSymbols: string[] = [];
