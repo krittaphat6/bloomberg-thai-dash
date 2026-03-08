@@ -195,7 +195,7 @@ export function computeDeepCharts(
 
   for (let idx = 0; idx < candles.length; idx++) {
     const c = candles[idx];
-    if (!c) {
+    if (!c || typeof c.high !== 'number' || typeof c.low !== 'number' || typeof c.close !== 'number') {
       buyVols.push(0);
       sellVols.push(0);
       totalVols.push(0);
@@ -205,9 +205,10 @@ export function computeDeepCharts(
     const safeRange = range > 0 ? range : 1;
     const buyWt = (c.close - c.low) / safeRange;
     const sellWt = (c.high - c.close) / safeRange;
-    buyVols.push(c.volume * buyWt);
-    sellVols.push(c.volume * sellWt);
-    totalVols.push(c.volume);
+    const vol = c.volume || 0;
+    buyVols.push(vol * buyWt);
+    sellVols.push(vol * sellWt);
+    totalVols.push(vol);
   }
 
   // === Big Trade Detection (Z-score based) ===
