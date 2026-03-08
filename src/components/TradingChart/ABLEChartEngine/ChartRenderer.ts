@@ -511,7 +511,62 @@ export class ChartRenderer {
           break;
         }
       }
+
+      ctx.setLineDash([]);
+
+      // Draw selection handles
+      if (drawing.selected) {
+        this.drawSelectionHandles(drawing, viewport, chartArea);
+      }
     });
+  }
+
+  private drawSelectionHandles(drawing: DrawingObject, viewport: ChartViewport, chartArea: ChartDimensions['chartArea']) {
+    const ctx = this.ctx;
+    const HANDLE_SIZE = 5 * this.dpr;
+
+    const handlePoints: { x: number; y: number }[] = [];
+    
+    drawing.points.forEach(p => {
+      const screenY = this.priceToY(p.price, viewport, chartArea);
+      handlePoints.push({ x: p.x * this.dpr, y: screenY * this.dpr });
+    });
+
+    handlePoints.forEach(hp => {
+      // Blue circle handles like TradingView
+      ctx.beginPath();
+      ctx.arc(hp.x, hp.y, HANDLE_SIZE, 0, Math.PI * 2);
+      ctx.fillStyle = '#007aff';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5 * this.dpr;
+      ctx.stroke();
+    });
+
+    // For rectangles, also draw corner & edge midpoints
+    if (drawing.type === 'rectangle' && drawing.points.length >= 2) {
+      const x1 = drawing.points[0].x * this.dpr;
+      const y1 = this.priceToY(drawing.points[0].price, viewport, chartArea) * this.dpr;
+      const x2 = drawing.points[1].x * this.dpr;
+      const y2 = this.priceToY(drawing.points[1].price, viewport, chartArea) * this.dpr;
+      
+      const midPoints = [
+        { x: (x1 + x2) / 2, y: y1 },
+        { x: (x1 + x2) / 2, y: y2 },
+        { x: x1, y: (y1 + y2) / 2 },
+        { x: x2, y: (y1 + y2) / 2 },
+      ];
+      
+      midPoints.forEach(mp => {
+        ctx.beginPath();
+        ctx.rect(mp.x - HANDLE_SIZE / 2, mp.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+        ctx.fillStyle = '#007aff';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5 * this.dpr;
+        ctx.stroke();
+      });
+    }
   }
 
   /**
