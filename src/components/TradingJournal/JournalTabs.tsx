@@ -32,6 +32,7 @@ export default function JournalTabs({
     { id: 'psychology', label: '🧠 จิตวิทยา' },
     { id: 'reports', label: '📊 รายงาน' },
     { id: 'trades', label: 'รายการซื้อขาย' },
+    { id: 'graph', label: '🔗 กราฟ' },
   ];
 
   return (
