@@ -39,7 +39,16 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   const domIndicator = indicators.find(ind => ind.name === 'DOM');
   const isDOMEnabled = domIndicator?.visible === true;
   
-  
+  // DOM config
+  const domConfig: DOMConfig = {
+    enabled: isDOMEnabled,
+    rows: (domIndicator?.settings?.rows as number) || 15,
+    showVolumeBars: true,
+    showImbalance: true,
+    position: 'right',
+    opacity: 0.95,
+  };
+
   // Convert other indicators (SMA/EMA/Volume) - but DOM is primary
   const indicatorData: IndicatorData[] = indicators
     .filter(ind => ind.visible && ind.name !== 'DOM')
