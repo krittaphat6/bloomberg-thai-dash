@@ -612,6 +612,7 @@ export class ChartInteraction {
   }
 
   private updatePriceRangeSmooth(viewport: ChartViewport) {
+    if (!this.isAutoScalePrice) return;
     let min = Infinity, max = -Infinity;
     
     const startIdx = Math.max(0, Math.floor(viewport.startIndex));
