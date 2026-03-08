@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { DeepChartsConfig, DEFAULT_DEEPCHARTS_CONFIG } from './indicators/DeepChartsEngine';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
