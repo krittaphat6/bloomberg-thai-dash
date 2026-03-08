@@ -32,7 +32,7 @@ import BitcoinMempool from './BitcoinMempool';
 import LiveUAMap from './LiveUAMap';
 import USDebtClock from './USDebtClock';
 import NoteTaking from './NoteTaking';
-import TradingJournal from './TradingJournal';
+import TradingJournalV2 from './TradingJournalV2';
 import FedWatch from './FedWatch';
 import PenguinSticker from './PenguinSticker';
 import ChessGame from './ChessGame';
@@ -415,7 +415,7 @@ const MarketData = () => {
     { 
       id: 'journal', 
       title: '📔 TRADING JOURNAL', 
-      component: <TradingJournal />,
+      component: <TradingJournalV2 />,
       category: 'utilities',
       description: 'Track and analyze your trades',
       tags: ['journal', 'trades', 'tracking', 'analytics', 'performance']
