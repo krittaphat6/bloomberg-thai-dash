@@ -333,13 +333,20 @@ export default function TradingJournalV2() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col p-4 overflow-hidden">
         {/* Header */}
-        <div className="flex justify-between items-center pb-2 border-b border-border/30">
-          <div>
-            <span className="font-bold text-terminal-green text-sm">
-              📔 ABLE TRADING JOURNAL — {folders.find(f => f.id === selectedFolderId)?.name.toUpperCase()}
-            </span>
-            <div className="text-xs text-muted-foreground mt-1">
-              {filteredTrades.length} trades • Last updated: {new Date().toLocaleString()}
+        <div className="flex justify-between items-center pb-2 border-b border-border/30 shrink-0">
+          <div className="flex items-center gap-2">
+            {sidebarCollapsed && (
+              <Button variant="ghost" size="sm" onClick={() => setSidebarCollapsed(false)} className="h-7 w-7 p-0 hidden lg:flex">
+                <PanelLeftOpen className="h-4 w-4" />
+              </Button>
+            )}
+            <div>
+              <span className="font-bold text-terminal-green text-sm">
+                📔 ABLE TRADING JOURNAL — {folders.find(f => f.id === selectedFolderId)?.name.toUpperCase()}
+              </span>
+              <div className="text-xs text-muted-foreground mt-1">
+                {filteredTrades.length} trades • Last updated: {new Date().toLocaleString()}
+              </div>
             </div>
           </div>
           <div className="flex gap-2 items-center">
@@ -365,15 +372,17 @@ export default function TradingJournalV2() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <JournalTabs
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          trades={filteredTrades}
-          initialCapital={100}
-          onDeleteTrade={(id) => setTrades(prev => prev.filter(t => t.id !== id))}
-          onCloseTrade={handleCloseTrade}
-        />
+        {/* Tabs - fill remaining space */}
+        <div className="flex-1 min-h-0 overflow-auto">
+          <JournalTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            trades={filteredTrades}
+            initialCapital={100}
+            onDeleteTrade={(id) => setTrades(prev => prev.filter(t => t.id !== id))}
+            onCloseTrade={handleCloseTrade}
+          />
+        </div>
       </div>
 
       {/* CSV Import */}
