@@ -72,14 +72,6 @@ export interface IndicatorData {
   visible: boolean;
 }
 
-export interface OIBubbleData {
-  timestamp: number;
-  price: number;
-  oiDelta: number;
-  normalized: number;
-  isPositive: boolean;
-  size: 'tiny' | 'small' | 'normal' | 'large' | 'huge';
-}
 
 export interface DOMConfig {
   enabled: boolean;

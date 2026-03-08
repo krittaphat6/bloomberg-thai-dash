@@ -1,14 +1,6 @@
 // ABLE Chart Engine - Canvas Renderer
 import { Candle, ChartViewport, ChartThemeColors, ChartDimensions, DrawingObject, CrosshairState, IndicatorData } from './types';
 
-export interface OIBubbleData {
-  timestamp: number;
-  price: number;
-  oiDelta: number;
-  normalized: number;
-  isPositive: boolean;
-  size: 'tiny' | 'small' | 'normal' | 'large' | 'huge';
-}
 
 export class ChartRenderer {
   private ctx: CanvasRenderingContext2D;
