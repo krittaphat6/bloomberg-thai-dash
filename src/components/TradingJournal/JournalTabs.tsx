@@ -36,7 +36,7 @@ export default function JournalTabs({
   ];
 
   return (
-    <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
+    <Tabs value={activeTab} onValueChange={onTabChange} className="w-full h-full flex flex-col">
       <TabsList className="w-full h-auto flex flex-wrap gap-1 bg-transparent border-b border-terminal-green/30 pb-2 mb-4">
         {tabs.map(tab => (
           <TabsTrigger
@@ -80,7 +80,7 @@ export default function JournalTabs({
           onCloseTrade={onCloseTrade!}
         />
       </TabsContent>
-      <TabsContent value="graph" className="mt-0">
+      <TabsContent value="graph" className="mt-0 flex-1 min-h-0">
         <TradeGraphTab trades={trades} initialCapital={initialCapital} />
       </TabsContent>
     </Tabs>

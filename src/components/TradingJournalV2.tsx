@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Upload, Folder, Settings2, ChevronRight, Image } from 'lucide-react';
+import { Plus, Trash2, Upload, Folder, Settings2, ChevronRight, Image, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import CSVImportDialog from './CSVImportDialog';
@@ -60,6 +60,7 @@ export default function TradingJournalV2() {
   ]);
   const [selectedFolderId, setSelectedFolderId] = useState('default');
   const [showFolderManager, setShowFolderManager] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [newFolder, setNewFolder] = useState({ name: '', description: '', icon: '📁' });
   
   const [newTrade, setNewTrade] = useState<Partial<Trade>>({
@@ -288,16 +289,24 @@ export default function TradingJournalV2() {
   };
 
   return (
-    <div className="w-full min-h-screen flex bg-background text-xs">
-      {/* Sidebar */}
-      <div className="w-52 border-r border-border/30 flex flex-col bg-card/50 hidden lg:flex">
+    <div className="w-full h-screen flex bg-background text-xs overflow-hidden">
+      {/* Sidebar - collapsible */}
+      <div className={cn(
+        "border-r border-border/30 flex flex-col bg-card/50 transition-all duration-300 hidden lg:flex",
+        sidebarCollapsed ? "w-0 overflow-hidden border-r-0" : "w-52"
+      )}>
         <div className="p-3 border-b border-border/30 flex items-center justify-between">
-          <span className="flex items-center gap-2 text-terminal-green font-bold text-sm">
+          <span className="flex items-center gap-2 text-terminal-green font-bold text-sm whitespace-nowrap">
             <Folder className="h-4 w-4" /> Trading Rooms
           </span>
-          <Button variant="ghost" size="sm" onClick={() => setShowFolderManager(true)} className="h-7 w-7 p-0">
-            <Settings2 className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setShowFolderManager(true)} className="h-7 w-7 p-0">
+              <Settings2 className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSidebarCollapsed(true)} className="h-7 w-7 p-0">
+              <PanelLeftClose className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <ScrollArea className="flex-1 p-2">
           <div className="space-y-1">
@@ -322,15 +331,22 @@ export default function TradingJournalV2() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col p-4 space-y-4 overflow-auto">
+      <div className="flex-1 flex flex-col p-4 overflow-hidden">
         {/* Header */}
-        <div className="flex justify-between items-center pb-2 border-b border-border/30">
-          <div>
-            <span className="font-bold text-terminal-green text-sm">
-              📔 ABLE TRADING JOURNAL — {folders.find(f => f.id === selectedFolderId)?.name.toUpperCase()}
-            </span>
-            <div className="text-xs text-muted-foreground mt-1">
-              {filteredTrades.length} trades • Last updated: {new Date().toLocaleString()}
+        <div className="flex justify-between items-center pb-2 border-b border-border/30 shrink-0">
+          <div className="flex items-center gap-2">
+            {sidebarCollapsed && (
+              <Button variant="ghost" size="sm" onClick={() => setSidebarCollapsed(false)} className="h-7 w-7 p-0 hidden lg:flex">
+                <PanelLeftOpen className="h-4 w-4" />
+              </Button>
+            )}
+            <div>
+              <span className="font-bold text-terminal-green text-sm">
+                📔 ABLE TRADING JOURNAL — {folders.find(f => f.id === selectedFolderId)?.name.toUpperCase()}
+              </span>
+              <div className="text-xs text-muted-foreground mt-1">
+                {filteredTrades.length} trades • Last updated: {new Date().toLocaleString()}
+              </div>
             </div>
           </div>
           <div className="flex gap-2 items-center">
@@ -356,15 +372,17 @@ export default function TradingJournalV2() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <JournalTabs
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          trades={filteredTrades}
-          initialCapital={100}
-          onDeleteTrade={(id) => setTrades(prev => prev.filter(t => t.id !== id))}
-          onCloseTrade={handleCloseTrade}
-        />
+        {/* Tabs - fill remaining space */}
+        <div className="flex-1 min-h-0 overflow-auto">
+          <JournalTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            trades={filteredTrades}
+            initialCapital={100}
+            onDeleteTrade={(id) => setTrades(prev => prev.filter(t => t.id !== id))}
+            onCloseTrade={handleCloseTrade}
+          />
+        </div>
       </div>
 
       {/* CSV Import */}

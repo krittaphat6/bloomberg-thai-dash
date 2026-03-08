@@ -128,16 +128,20 @@ export default function TradeGraphTab({ trades }: { trades: Trade[]; initialCapi
 
     // Zoom
     const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.2, 5])
+      .scaleExtent([0.1, 8])
       .on('zoom', (e) => g.attr('transform', e.transform));
     svg.call(zoom);
 
-    // Simulation
+    // Simulation - smarter forces for better distribution
     const sim = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink<TradeNode, TradeLink>(links).id(d => d.id).distance(60).strength(0.3))
-      .force('charge', d3.forceManyBody().strength(-80))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide<TradeNode>().radius(d => d.radius + 4));
+      .force('link', d3.forceLink<TradeNode, TradeLink>(links).id(d => d.id).distance(40).strength(0.4))
+      .force('charge', d3.forceManyBody().strength(-120).distanceMax(300))
+      .force('center', d3.forceCenter(width / 2, height / 2).strength(0.05))
+      .force('collision', d3.forceCollide<TradeNode>().radius(d => d.radius + 3).strength(0.8))
+      .force('x', d3.forceX(width / 2).strength(0.03))
+      .force('y', d3.forceY(height / 2).strength(0.03))
+      .alphaDecay(0.02)
+      .velocityDecay(0.3);
 
     // Links
     const link = g.append('g')
@@ -284,7 +288,7 @@ export default function TradeGraphTab({ trades }: { trades: Trade[]; initialCapi
   }
 
   return (
-    <div className={isFullscreen ? 'fixed inset-0 z-50 bg-background flex flex-col p-3' : 'flex flex-col gap-3 h-[calc(100vh-280px)] min-h-[400px]'}>
+    <div className={isFullscreen ? 'fixed inset-0 z-50 bg-background flex flex-col p-3' : 'flex flex-col h-full min-h-0'}>
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
         <Button variant="outline" size="sm" onClick={() => handleZoom(1)} className="h-7 px-2">
