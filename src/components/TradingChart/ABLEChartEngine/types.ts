@@ -35,7 +35,9 @@ export interface DrawingObject {
   points: { x: number; y: number; price: number; time: number }[];
   color: string;
   lineWidth: number;
+  lineStyle: 'solid' | 'dashed' | 'dotted';
   isComplete: boolean;
+  selected?: boolean;
 }
 
 export interface CrosshairState {
