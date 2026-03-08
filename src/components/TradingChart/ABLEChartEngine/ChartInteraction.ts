@@ -202,8 +202,8 @@ export class ChartInteraction {
     
     const { x } = this.getCanvasCoords(e);
     
-    // Use smaller zoom factor for smoother zooming
-    const zoomIntensity = 0.05;
+    // Adaptive zoom: smaller steps for smoother feel
+    const zoomIntensity = 0.08;
     const zoomFactor = 1 + (e.deltaY > 0 ? zoomIntensity : -zoomIntensity);
     
     this.zoomSmooth(zoomFactor, x);
