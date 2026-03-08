@@ -42,7 +42,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   
   // Convert other indicators (SMA/EMA/Volume) - but DOM is primary
   const indicatorData: IndicatorData[] = indicators
-    .filter(ind => ind.visible && ind.name !== 'DOM' && ind.name !== 'OI Bubbles')
+    .filter(ind => ind.visible && ind.name !== 'DOM')
     .map(ind => {
       let values: number[] = [];
       
