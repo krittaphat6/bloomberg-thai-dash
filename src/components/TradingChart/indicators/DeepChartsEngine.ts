@@ -175,7 +175,11 @@ export function computeDeepCharts(
   const signals: BigTradeSignal[] = [];
   const anomalies: AnomalyZone[] = [];
   
-  if (candles.length < 30) {
+  // Clamp visible range to valid indices
+  const safeStart = Math.max(0, Math.min(visibleStart, candles.length - 1));
+  const safeEnd = Math.max(0, Math.min(visibleEnd, candles.length - 1));
+
+  if (candles.length < 30 || safeStart > safeEnd) {
     return {
       signals,
       anomalies,
