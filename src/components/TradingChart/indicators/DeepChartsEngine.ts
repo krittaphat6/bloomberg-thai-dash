@@ -193,7 +193,14 @@ export function computeDeepCharts(
   const sellVols: number[] = [];
   const totalVols: number[] = [];
 
-  for (const c of candles) {
+  for (let idx = 0; idx < candles.length; idx++) {
+    const c = candles[idx];
+    if (!c) {
+      buyVols.push(0);
+      sellVols.push(0);
+      totalVols.push(0);
+      continue;
+    }
     const range = c.high - c.low;
     const safeRange = range > 0 ? range : 1;
     const buyWt = (c.close - c.low) / safeRange;
