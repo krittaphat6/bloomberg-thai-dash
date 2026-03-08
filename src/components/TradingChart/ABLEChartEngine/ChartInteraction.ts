@@ -284,9 +284,23 @@ export class ChartInteraction {
     this.zoomAtPoint(zoomFactor, x);
   };
 
-  private handleDoubleClick = (_e: MouseEvent) => {
+  private handleDoubleClick = (e: MouseEvent) => {
+    const { x } = this.getCanvasCoords(e);
+    
+    // Double-click on price axis = reset to auto-scale (TradingView behavior)
+    if (this.isOnPriceAxis(x)) {
+      this.isAutoScalePrice = true;
+      // Force recalculate price range
+      const newViewport = { ...this.viewport };
+      this.forceUpdatePriceRange(newViewport);
+      this.viewport = newViewport;
+      this.callbacks.onViewportChange(newViewport);
+      return;
+    }
+    
     // Reset viewport to fit all data with smooth animation
     if (this.candles.length > 0) {
+      this.isAutoScalePrice = true;
       const newViewport = { ...this.viewport };
       newViewport.startIndex = 0;
       newViewport.endIndex = this.candles.length - 1;
