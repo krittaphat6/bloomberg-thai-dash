@@ -332,7 +332,7 @@ export default function TradeGraphTab({ trades }: { trades: Trade[]; initialCapi
       </div>
 
       {/* Graph */}
-      <div ref={containerRef} className={`relative w-full rounded-lg border border-border/50 overflow-hidden bg-background/50 ${isFullscreen ? 'flex-1' : ''}`} style={isFullscreen ? undefined : { height: 480 }}>
+      <div ref={containerRef} className="relative w-full rounded-lg border border-border/50 overflow-hidden bg-background/50 flex-1 min-h-0">
         <svg ref={svgRef} className="w-full h-full" />
       </div>
 
