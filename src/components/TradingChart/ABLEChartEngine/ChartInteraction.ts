@@ -1,4 +1,4 @@
-// ABLE Chart Engine - Interaction Handler (Smooth Scrolling & Zoom)
+// ABLE Chart Engine - Interaction Handler (TradingView-style Scrolling & Zoom)
 import { Candle, ChartViewport, ChartDimensions, DrawingObject, CrosshairState, DrawingType, ChartMode } from './types';
 
 export interface InteractionCallbacks {
@@ -15,30 +15,34 @@ export class ChartInteraction {
   private candles: Candle[];
   private callbacks: InteractionCallbacks;
   
-  private isDragging = false;
   private isPanning = false;
   private lastMouseX = 0;
   private lastMouseY = 0;
   private touchStartDistance = 0;
   
-  // Smooth scrolling state
-  private targetViewport: ChartViewport | null = null;
+  // TradingView-style kinetic scroll
   private animationFrame: number | null = null;
-  private velocity = { x: 0, y: 0 };
-  private lastPanTime = 0;
   private inertiaAnimationFrame: number | null = null;
   
+  // Velocity tracking with EMA (exponential moving average) like TradingView
+  private velocityTracker: { time: number; deltaIndex: number }[] = [];
+  private readonly VELOCITY_WINDOW = 100; // ms - track last 100ms of movement
+  
+  // Kinetic scroll physics
+  private kineticVelocity = 0;
+  private readonly KINETIC_FRICTION = 0.97; // Per-frame friction (TradingView uses ~0.95-0.97)
+  private readonly KINETIC_MIN_VELOCITY = 0.001; // Stop threshold in index units
+  
+  // Right-side padding: TradingView allows ~50% of visible range as empty space on the right
+  private readonly RIGHT_PADDING_RATIO = 0.5;
+  
+  // Zoom
+  private readonly ZOOM_INTENSITY = 0.1;
+
   private mode: ChartMode = 'normal';
   private drawingType: DrawingType = 'trendline';
   private drawings: DrawingObject[] = [];
   private currentDrawing: DrawingObject | null = null;
-
-  // Smooth animation constants
-  private readonly ZOOM_SMOOTHNESS = 0.18;
-  private readonly PAN_SMOOTHNESS = 0.25;
-  private readonly INERTIA_DECAY = 0.92;
-  private readonly MIN_VELOCITY = 0.05;
-  private readonly PAN_SENSITIVITY = 1.5;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -85,7 +89,6 @@ export class ChartInteraction {
   }
 
   private bindEvents() {
-    // Mouse events
     this.canvas.addEventListener('mousedown', this.handleMouseDown);
     this.canvas.addEventListener('mousemove', this.handleMouseMove);
     this.canvas.addEventListener('mouseup', this.handleMouseUp);
@@ -93,8 +96,6 @@ export class ChartInteraction {
     this.canvas.addEventListener('wheel', this.handleWheel, { passive: false });
     this.canvas.addEventListener('dblclick', this.handleDoubleClick);
     this.canvas.addEventListener('contextmenu', this.handleContextMenu);
-
-    // Touch events
     this.canvas.addEventListener('touchstart', this.handleTouchStart, { passive: false });
     this.canvas.addEventListener('touchmove', this.handleTouchMove, { passive: false });
     this.canvas.addEventListener('touchend', this.handleTouchEnd);
@@ -124,18 +125,18 @@ export class ChartInteraction {
     };
   }
 
+  // =========================================================================
+  // MOUSE EVENTS - TradingView style: direct 1:1 panning, no smoothing
+  // =========================================================================
+
   private handleMouseDown = (e: MouseEvent) => {
     const { x, y } = this.getCanvasCoords(e);
     this.lastMouseX = x;
     this.lastMouseY = y;
-    this.velocity = { x: 0, y: 0 };
-    this.lastPanTime = performance.now();
 
-    // Stop any ongoing inertia
-    if (this.inertiaAnimationFrame) {
-      cancelAnimationFrame(this.inertiaAnimationFrame);
-      this.inertiaAnimationFrame = null;
-    }
+    // Stop any ongoing kinetic scroll immediately
+    this.stopKineticScroll();
+    this.velocityTracker = [];
 
     if (this.mode === 'drawing') {
       this.startDrawing(x, y);
@@ -148,21 +149,25 @@ export class ChartInteraction {
   private handleMouseMove = (e: MouseEvent) => {
     const { x, y } = this.getCanvasCoords(e);
     const { chartArea } = this.dimensions;
-    const now = performance.now();
 
     if (this.isPanning) {
       const deltaX = x - this.lastMouseX;
-      const deltaTime = now - this.lastPanTime;
       
-      // Track velocity for inertia
-      if (deltaTime > 0) {
-        this.velocity.x = deltaX / deltaTime * 16; // Normalize to ~60fps
-      }
+      // Convert pixel delta to index delta (direct 1:1 mapping like TradingView)
+      const indexRange = this.viewport.endIndex - this.viewport.startIndex;
+      const deltaIndex = -(deltaX / chartArea.width) * indexRange;
       
-      this.panSmooth(deltaX);
+      // Track velocity for kinetic scroll
+      this.velocityTracker.push({ time: performance.now(), deltaIndex });
+      // Keep only recent samples
+      const now = performance.now();
+      this.velocityTracker = this.velocityTracker.filter(v => now - v.time < this.VELOCITY_WINDOW);
+      
+      // Apply pan directly (no smoothing - this is the TradingView way)
+      this.panDirect(deltaIndex);
+      
       this.lastMouseX = x;
       this.lastMouseY = y;
-      this.lastPanTime = now;
     } else if (this.mode === 'drawing' && this.currentDrawing) {
       this.updateDrawing(x, y);
     }
@@ -175,14 +180,15 @@ export class ChartInteraction {
     }
   };
 
-  private handleMouseUp = (e: MouseEvent) => {
+  private handleMouseUp = (_e: MouseEvent) => {
     if (this.isPanning) {
       this.isPanning = false;
       this.canvas.style.cursor = this.mode === 'drawing' ? 'crosshair' : 'default';
       
-      // Start inertia scrolling if there's velocity
-      if (Math.abs(this.velocity.x) > this.MIN_VELOCITY) {
-        this.startInertiaScroll();
+      // Calculate kinetic velocity from tracked samples
+      const velocity = this.calculateKineticVelocity();
+      if (Math.abs(velocity) > this.KINETIC_MIN_VELOCITY) {
+        this.startKineticScroll(velocity);
       }
     }
     
@@ -192,31 +198,43 @@ export class ChartInteraction {
   };
 
   private handleMouseLeave = () => {
-    this.isPanning = false;
-    this.canvas.style.cursor = 'default';
+    if (this.isPanning) {
+      this.isPanning = false;
+      this.canvas.style.cursor = 'default';
+      
+      // Still allow kinetic scroll when leaving
+      const velocity = this.calculateKineticVelocity();
+      if (Math.abs(velocity) > this.KINETIC_MIN_VELOCITY) {
+        this.startKineticScroll(velocity);
+      }
+    }
     this.callbacks.onCrosshairMove({ visible: false, x: 0, y: 0, price: 0, time: 0, candle: null });
   };
+
+  // =========================================================================
+  // WHEEL - Zoom centered on cursor (TradingView behavior)
+  // =========================================================================
 
   private handleWheel = (e: WheelEvent) => {
     e.preventDefault();
     
     const { x } = this.getCanvasCoords(e);
     
-    // Adaptive zoom: smaller steps for smoother feel
-    const zoomIntensity = 0.08;
-    const zoomFactor = 1 + (e.deltaY > 0 ? zoomIntensity : -zoomIntensity);
+    // TradingView uses a continuous zoom feel
+    // deltaY is typically ±100 for a single wheel tick
+    const normalizedDelta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 100) / 100;
+    const zoomFactor = 1 + normalizedDelta * this.ZOOM_INTENSITY;
     
-    this.zoomSmooth(zoomFactor, x);
+    this.zoomAtPoint(zoomFactor, x);
   };
 
-  private handleDoubleClick = (e: MouseEvent) => {
-    // Reset viewport to fit all data with animation
+  private handleDoubleClick = (_e: MouseEvent) => {
+    // Reset viewport to fit all data with smooth animation
     if (this.candles.length > 0) {
       const newViewport = { ...this.viewport };
       newViewport.startIndex = 0;
       newViewport.endIndex = this.candles.length - 1;
       
-      // Calculate price range
       let min = Infinity, max = -Infinity;
       for (const candle of this.candles) {
         min = Math.min(min, candle.low);
@@ -235,47 +253,45 @@ export class ChartInteraction {
     e.preventDefault();
   };
 
+  // =========================================================================
+  // TOUCH EVENTS
+  // =========================================================================
+
   private handleTouchStart = (e: TouchEvent) => {
     e.preventDefault();
-    
-    // Stop inertia
-    if (this.inertiaAnimationFrame) {
-      cancelAnimationFrame(this.inertiaAnimationFrame);
-      this.inertiaAnimationFrame = null;
-    }
+    this.stopKineticScroll();
+    this.velocityTracker = [];
     
     if (e.touches.length === 1) {
       const { x, y } = this.getCanvasCoords(e.touches[0]);
       this.lastMouseX = x;
       this.lastMouseY = y;
       this.isPanning = true;
-      this.velocity = { x: 0, y: 0 };
-      this.lastPanTime = performance.now();
     } else if (e.touches.length === 2) {
+      this.isPanning = false;
       this.touchStartDistance = this.getTouchDistance(e.touches);
     }
   };
 
   private handleTouchMove = (e: TouchEvent) => {
     e.preventDefault();
-    const now = performance.now();
     
     if (e.touches.length === 1 && this.isPanning) {
       const { x, y } = this.getCanvasCoords(e.touches[0]);
+      const { chartArea } = this.dimensions;
       const deltaX = x - this.lastMouseX;
-      const deltaTime = now - this.lastPanTime;
       
-      // Track velocity for inertia
-      if (deltaTime > 0) {
-        this.velocity.x = deltaX / deltaTime * 16;
-      }
+      const indexRange = this.viewport.endIndex - this.viewport.startIndex;
+      const deltaIndex = -(deltaX / chartArea.width) * indexRange;
       
-      this.panSmooth(deltaX);
+      this.velocityTracker.push({ time: performance.now(), deltaIndex });
+      const now = performance.now();
+      this.velocityTracker = this.velocityTracker.filter(v => now - v.time < this.VELOCITY_WINDOW);
+      
+      this.panDirect(deltaIndex);
       this.lastMouseX = x;
       this.lastMouseY = y;
-      this.lastPanTime = now;
       
-      // Update crosshair
       const crosshair = this.getCrosshairData(x, y);
       this.callbacks.onCrosshairMove(crosshair);
     } else if (e.touches.length === 2) {
@@ -284,18 +300,20 @@ export class ChartInteraction {
       
       const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
       const rect = this.canvas.getBoundingClientRect();
-      this.zoomSmooth(zoomFactor, centerX - rect.left);
+      this.zoomAtPoint(zoomFactor, centerX - rect.left);
       
       this.touchStartDistance = newDistance;
     }
   };
 
   private handleTouchEnd = () => {
-    this.isPanning = false;
-    
-    // Start inertia scrolling if there's velocity
-    if (Math.abs(this.velocity.x) > this.MIN_VELOCITY) {
-      this.startInertiaScroll();
+    if (this.isPanning) {
+      this.isPanning = false;
+      
+      const velocity = this.calculateKineticVelocity();
+      if (Math.abs(velocity) > this.KINETIC_MIN_VELOCITY) {
+        this.startKineticScroll(velocity);
+      }
     }
     
     this.callbacks.onCrosshairMove({ visible: false, x: 0, y: 0, price: 0, time: 0, candle: null });
@@ -307,15 +325,79 @@ export class ChartInteraction {
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  private startInertiaScroll() {
+  // =========================================================================
+  // PANNING - Direct 1:1 mapping (TradingView style)
+  // =========================================================================
+
+  private panDirect(deltaIndex: number) {
+    const indexRange = this.viewport.endIndex - this.viewport.startIndex;
+    const newViewport = { ...this.viewport };
+    
+    let newStartIndex = this.viewport.startIndex + deltaIndex;
+    let newEndIndex = this.viewport.endIndex + deltaIndex;
+    
+    // TradingView allows scrolling past the right edge (future empty space)
+    const maxEndIndex = this.candles.length - 1 + indexRange * this.RIGHT_PADDING_RATIO;
+    
+    // Clamp left: don't go before index 0
+    if (newStartIndex < 0) {
+      newStartIndex = 0;
+      newEndIndex = indexRange;
+    }
+    // Clamp right: allow some empty space on the right (like TradingView)
+    if (newEndIndex > maxEndIndex) {
+      newEndIndex = maxEndIndex;
+      newStartIndex = newEndIndex - indexRange;
+    }
+    
+    newViewport.startIndex = newStartIndex;
+    newViewport.endIndex = newEndIndex;
+    
+    // Auto-scale price range for visible candles
+    this.updatePriceRange(newViewport);
+    
+    this.viewport = newViewport;
+    this.callbacks.onViewportChange(newViewport);
+  }
+
+  // =========================================================================
+  // KINETIC SCROLL - TradingView-style momentum after mouse release
+  // =========================================================================
+
+  private calculateKineticVelocity(): number {
+    if (this.velocityTracker.length < 2) return 0;
+    
+    const now = performance.now();
+    // Only use samples from the last 50ms for velocity calculation
+    const recentSamples = this.velocityTracker.filter(v => now - v.time < 50);
+    
+    if (recentSamples.length < 1) return 0;
+    
+    // Sum up all deltaIndex values and divide by time span
+    let totalDelta = 0;
+    for (const sample of recentSamples) {
+      totalDelta += sample.deltaIndex;
+    }
+    
+    const timeSpan = recentSamples.length > 1
+      ? recentSamples[recentSamples.length - 1].time - recentSamples[0].time
+      : 16;
+    
+    // Velocity in index units per frame (~16ms)
+    return (totalDelta / Math.max(timeSpan, 1)) * 16;
+  }
+
+  private startKineticScroll(initialVelocity: number) {
+    this.kineticVelocity = initialVelocity;
+    
     const scroll = () => {
-      if (Math.abs(this.velocity.x) < this.MIN_VELOCITY) {
+      if (Math.abs(this.kineticVelocity) < this.KINETIC_MIN_VELOCITY) {
         this.inertiaAnimationFrame = null;
         return;
       }
       
-      this.panSmooth(this.velocity.x);
-      this.velocity.x *= this.INERTIA_DECAY;
+      this.panDirect(this.kineticVelocity);
+      this.kineticVelocity *= this.KINETIC_FRICTION;
       
       this.inertiaAnimationFrame = requestAnimationFrame(scroll);
     };
@@ -323,86 +405,70 @@ export class ChartInteraction {
     this.inertiaAnimationFrame = requestAnimationFrame(scroll);
   }
 
-  private panSmooth(deltaX: number) {
-    const { chartArea } = this.dimensions;
-    const indexRange = this.viewport.endIndex - this.viewport.startIndex;
-    
-    // Apply sensitivity multiplier for more responsive panning
-    const deltaIndex = (deltaX * this.PAN_SENSITIVITY / chartArea.width) * indexRange;
-    
-    const newViewport = { ...this.viewport };
-    
-    // Calculate new indices with floating point precision
-    let newStartIndex = this.viewport.startIndex - deltaIndex;
-    let newEndIndex = this.viewport.endIndex - deltaIndex;
-    
-    // Clamp to valid range
-    if (newStartIndex < 0) {
-      newStartIndex = 0;
-      newEndIndex = indexRange;
+  private stopKineticScroll() {
+    if (this.inertiaAnimationFrame) {
+      cancelAnimationFrame(this.inertiaAnimationFrame);
+      this.inertiaAnimationFrame = null;
     }
-    if (newEndIndex > this.candles.length - 1) {
-      newEndIndex = this.candles.length - 1;
-      newStartIndex = Math.max(0, newEndIndex - indexRange);
-    }
-    
-    newViewport.startIndex = newStartIndex;
-    newViewport.endIndex = newEndIndex;
-    
-    // Update price range for visible candles
-    this.updatePriceRange(newViewport);
-    
-    this.viewport = newViewport;
-    this.callbacks.onViewportChange(newViewport);
+    this.kineticVelocity = 0;
   }
 
-  private zoomSmooth(factor: number, centerX: number) {
+  // =========================================================================
+  // ZOOM - Anchored at cursor position (TradingView style)
+  // =========================================================================
+
+  private zoomAtPoint(factor: number, centerX: number) {
     const { chartArea } = this.dimensions;
     const indexRange = this.viewport.endIndex - this.viewport.startIndex;
     
-    // Calculate center index with floating point
+    // Anchor point: the index under the cursor stays in place
     const centerRatio = (centerX - chartArea.x) / chartArea.width;
-    const centerIndex = this.viewport.startIndex + indexRange * centerRatio;
+    const anchorIndex = this.viewport.startIndex + indexRange * centerRatio;
     
-    // Calculate new range (smooth, no rounding during calculation)
-    const newRange = Math.max(5, Math.min(this.candles.length, indexRange * factor));
+    // New range
+    const newRange = Math.max(5, Math.min(this.candles.length * 2, indexRange * factor));
     
-    // Calculate new start/end maintaining center point
+    // Reposition around anchor
     const newViewport = { ...this.viewport };
-    let newStartIndex = centerIndex - newRange * centerRatio;
+    let newStartIndex = anchorIndex - newRange * centerRatio;
     let newEndIndex = newStartIndex + newRange;
     
-    // Clamp to valid range
+    // Clamp
+    const maxEndIndex = this.candles.length - 1 + newRange * this.RIGHT_PADDING_RATIO;
     if (newStartIndex < 0) {
       newStartIndex = 0;
       newEndIndex = newRange;
     }
-    if (newEndIndex > this.candles.length - 1) {
-      newEndIndex = this.candles.length - 1;
+    if (newEndIndex > maxEndIndex) {
+      newEndIndex = maxEndIndex;
       newStartIndex = Math.max(0, newEndIndex - newRange);
     }
     
     newViewport.startIndex = newStartIndex;
     newViewport.endIndex = newEndIndex;
     
-    // Update price range with smooth auto-scaling
+    // Smooth price auto-scale during zoom
     this.updatePriceRangeSmooth(newViewport);
     
     this.viewport = newViewport;
     this.callbacks.onViewportChange(newViewport);
   }
 
+  // =========================================================================
+  // ANIMATED VIEWPORT TRANSITION (for double-click reset)
+  // =========================================================================
+
   private animateToViewport(targetViewport: ChartViewport) {
+    const LERP_SPEED = 0.15;
+    
     const animate = () => {
       const currentViewport = { ...this.viewport };
       
-      // Lerp all values
-      currentViewport.startIndex += (targetViewport.startIndex - currentViewport.startIndex) * this.ZOOM_SMOOTHNESS;
-      currentViewport.endIndex += (targetViewport.endIndex - currentViewport.endIndex) * this.ZOOM_SMOOTHNESS;
-      currentViewport.priceMin += (targetViewport.priceMin - currentViewport.priceMin) * this.ZOOM_SMOOTHNESS;
-      currentViewport.priceMax += (targetViewport.priceMax - currentViewport.priceMax) * this.ZOOM_SMOOTHNESS;
+      currentViewport.startIndex += (targetViewport.startIndex - currentViewport.startIndex) * LERP_SPEED;
+      currentViewport.endIndex += (targetViewport.endIndex - currentViewport.endIndex) * LERP_SPEED;
+      currentViewport.priceMin += (targetViewport.priceMin - currentViewport.priceMin) * LERP_SPEED;
+      currentViewport.priceMax += (targetViewport.priceMax - currentViewport.priceMax) * LERP_SPEED;
       
-      // Check if animation is complete
       const delta = Math.abs(targetViewport.startIndex - currentViewport.startIndex) +
                     Math.abs(targetViewport.endIndex - currentViewport.endIndex);
       
@@ -422,6 +488,10 @@ export class ChartInteraction {
     this.animationFrame = requestAnimationFrame(animate);
   }
 
+  // =========================================================================
+  // PRICE RANGE AUTO-SCALING
+  // =========================================================================
+
   private updatePriceRange(viewport: ChartViewport) {
     let min = Infinity, max = -Infinity;
     
@@ -437,9 +507,13 @@ export class ChartInteraction {
     }
     
     if (min !== Infinity && max !== -Infinity) {
-      const padding = (max - min) * 0.05;
-      viewport.priceMin = min - padding;
-      viewport.priceMax = max + padding;
+      const padding = (max - min) * 0.08;
+      const targetMin = min - padding;
+      const targetMax = max + padding;
+      
+      // Smooth price transitions during panning (like TradingView)
+      viewport.priceMin = this.viewport.priceMin + (targetMin - this.viewport.priceMin) * 0.15;
+      viewport.priceMax = this.viewport.priceMax + (targetMax - this.viewport.priceMax) * 0.15;
     }
   }
 
@@ -458,20 +532,22 @@ export class ChartInteraction {
     }
     
     if (min !== Infinity && max !== -Infinity) {
-      const padding = (max - min) * 0.05;
+      const padding = (max - min) * 0.08;
       const targetMin = min - padding;
       const targetMax = max + padding;
       
-      // Smooth lerp for price range changes
-      viewport.priceMin = this.viewport.priceMin + (targetMin - this.viewport.priceMin) * 0.3;
-      viewport.priceMax = this.viewport.priceMax + (targetMax - this.viewport.priceMax) * 0.3;
+      viewport.priceMin = this.viewport.priceMin + (targetMin - this.viewport.priceMin) * 0.25;
+      viewport.priceMax = this.viewport.priceMax + (targetMax - this.viewport.priceMax) * 0.25;
     }
   }
+
+  // =========================================================================
+  // CROSSHAIR
+  // =========================================================================
 
   private getCrosshairData(x: number, y: number): CrosshairState {
     const { chartArea } = this.dimensions;
     
-    // Calculate index and price (using floating point for smooth tracking)
     const indexRange = this.viewport.endIndex - this.viewport.startIndex;
     const index = Math.floor(this.viewport.startIndex + (x - chartArea.x) / chartArea.width * indexRange);
     
@@ -490,6 +566,10 @@ export class ChartInteraction {
       candle,
     };
   }
+
+  // =========================================================================
+  // DRAWING TOOLS
+  // =========================================================================
 
   private startDrawing(x: number, y: number) {
     const { chartArea } = this.dimensions;
@@ -523,7 +603,6 @@ export class ChartInteraction {
       this.currentDrawing.points[1] = { x, y, price, time };
     }
     
-    // Preview drawing
     this.callbacks.onDrawingUpdate([...this.drawings, this.currentDrawing]);
   }
 
