@@ -363,10 +363,6 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       renderer.drawIndicators(indicators, candles, viewport, dimensions);
     }
     
-    // Draw OI Bubbles if enabled
-    if (oiBubblesConfig?.enabled && oiBubbles.length > 0) {
-      renderer.drawOIBubbles(oiBubbles, candles, viewport, dimensions);
-    }
     
     // Draw drawings
     if (drawings.length > 0) {
