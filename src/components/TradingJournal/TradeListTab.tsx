@@ -67,7 +67,7 @@ export default function TradeListTab({ trades, onDeleteTrade, onCloseTrade }: Tr
   }, [filteredAndSortedTrades, currentPage]);
 
   // Reset page when filters change
-  useMemo(() => { setCurrentPage(1); }, [searchQuery, statusFilter, sideFilter]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, sideFilter]);
   
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
