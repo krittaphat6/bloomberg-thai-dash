@@ -924,6 +924,30 @@ export type Database = {
         }
         Relationships: []
       }
+      trading_journal_data: {
+        Row: {
+          folders: Json
+          id: string
+          trades: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          folders?: Json
+          id?: string
+          trades?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          folders?: Json
+          id?: string
+          trades?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_notes: {
         Row: {
           children: string[] | null
