@@ -319,9 +319,12 @@ export function computeDeepCharts(
     let windowHigh = -Infinity;
     let windowLow = Infinity;
     for (let i = profileStart; i <= profileEnd; i++) {
-      windowHigh = Math.max(windowHigh, candles[i].high);
-      windowLow = Math.min(windowLow, candles[i].low);
+      const c = candles[i];
+      if (!c || typeof c.high !== 'number') continue;
+      windowHigh = Math.max(windowHigh, c.high);
+      windowLow = Math.min(windowLow, c.low);
     }
+    if (windowHigh === -Infinity || windowLow === Infinity) windowHigh = windowLow = 0;
 
     const priceStep = (windowHigh - windowLow) / config.profileBins;
     if (priceStep > 0) {
