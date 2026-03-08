@@ -472,6 +472,34 @@ const ABLE3AI = () => {
           addThinkingStep('📰 ดึงข้อมูลจาก TOP NEWS Intelligence...');
           topNewsContext = await fetchTopNewsContext(currentInput);
         }
+
+        // Trading Journal context for journal-related queries
+        let journalContext = '';
+        if (/journal|เทรด|trade|win.*rate|p&l|pnl|กำไร|ขาดทุน|สถิติ|performance|ประสิทธิภาพ|able.*score|psychology|จิตวิทยา|monte.*carlo|risk|drawdown|setup|สรุป.*ผล|วิเคราะห์.*เทรด/i.test(lowerInput)) {
+          addThinkingStep('📔 ดึงข้อมูลจาก Trading Journal...');
+          try {
+            const savedTrades = localStorage.getItem('tradingJournal');
+            if (savedTrades) {
+              const trades = JSON.parse(savedTrades);
+              const closedTrades = trades.filter((t: any) => t.status === 'CLOSED');
+              const totalPnL = closedTrades.reduce((sum: number, t: any) => sum + (t.pnl || 0), 0);
+              const wins = closedTrades.filter((t: any) => (t.pnl || 0) > 0);
+              const winRate = closedTrades.length > 0 ? (wins.length / closedTrades.length * 100).toFixed(1) : '0';
+              const avgPnL = closedTrades.length > 0 ? (totalPnL / closedTrades.length).toFixed(2) : '0';
+              const symbols = [...new Set(trades.map((t: any) => t.symbol))] as string[];
+              const setups = [...new Set(trades.map((t: any) => t.setup).filter(Boolean))] as string[];
+              const emotions = trades.map((t: any) => t.emotion).filter(Boolean);
+              const followedPlan = trades.filter((t: any) => t.followedPlan === true).length;
+              const symbolStats = symbols.map((sym: string) => {
+                const symTrades = closedTrades.filter((t: any) => t.symbol === sym);
+                const symPnL = symTrades.reduce((s: number, t: any) => s + (t.pnl || 0), 0);
+                const symWins = symTrades.filter((t: any) => (t.pnl || 0) > 0).length;
+                return `${sym}: ${symTrades.length} trades, WR ${symTrades.length > 0 ? (symWins/symTrades.length*100).toFixed(0) : 0}%, P&L $${symPnL.toFixed(2)}`;
+              }).join('\n');
+              journalContext = `\n--- Trading Journal Data ---\nTotal: ${trades.length} (${closedTrades.length} closed)\nP&L: $${totalPnL.toFixed(2)} | WR: ${winRate}% | Avg: $${avgPnL}\nSymbols: ${symbols.join(', ')}\nSetups: ${setups.join(', ') || 'N/A'}\nPlan adherence: ${followedPlan}/${trades.length}\n\nPer-symbol:\n${symbolStats}\n\nRecent:\n${trades.slice(-10).map((t: any) => `${t.date} ${t.symbol} ${t.side} ${t.type||'CFD'} E:${t.entryPrice} X:${t.exitPrice||'OPEN'} PnL:${t.pnl?.toFixed(2)||'-'}`).join('\n')}\n`;
+            }
+          } catch (e) { console.error('Journal context error:', e); }
+        }
         
         if (aiProvider === 'gemini' && geminiReady) {
           const toolCall = GeminiService.detectToolCall(currentInput);
@@ -497,7 +525,7 @@ const ABLE3AI = () => {
             }
           } else {
             addThinkingStep('🧠 Gemini 2.5 Flash กำลังประมวลผล...');
-            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}`;
+            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}\n${journalContext}`;
             const response = await GeminiService.chat(
               enhancedPrompt,
               conversationHistoryRef.current.slice(0, -1),

@@ -123,13 +123,29 @@ export default function TradingJournalV2() {
     }
   };
 
+  const calculatePnL = (trade: Partial<Trade> & { entryPrice: number; quantity: number; side: string; type?: string }, exitPrice: number) => {
+    const isCFD = trade.type === 'CFD';
+    const contractSize = (trade as any).contractSize || 1;
+    const priceDiff = trade.side === 'LONG' ? (exitPrice - trade.entryPrice) : (trade.entryPrice - exitPrice);
+    
+    let pnl: number;
+    if (isCFD) {
+      // CFD: P&L = (price diff) * lots * contract size
+      pnl = priceDiff * trade.quantity * contractSize;
+    } else {
+      // Stock: P&L = (price diff) * shares
+      pnl = priceDiff * trade.quantity;
+    }
+    
+    const investment = trade.entryPrice * trade.quantity * (isCFD ? contractSize : 1);
+    const pnlPercentage = investment !== 0 ? (pnl / investment) * 100 : 0;
+    return { pnl, pnlPercentage };
+  };
+
   const handleCloseTrade = (tradeId: string, exitPrice: number) => {
     setTrades(prev => prev.map(trade => {
       if (trade.id === tradeId) {
-        let pnl = trade.side === 'LONG' 
-          ? (exitPrice - trade.entryPrice) * trade.quantity
-          : (trade.entryPrice - exitPrice) * trade.quantity;
-        let pnlPercentage = (pnl / (trade.entryPrice * trade.quantity)) * 100;
+        const { pnl, pnlPercentage } = calculatePnL(trade, exitPrice);
         return { ...trade, exitPrice, pnl, pnlPercentage, status: 'CLOSED' as const, exitTime: new Date().toISOString() };
       }
       return trade;
@@ -315,8 +331,13 @@ export default function TradingJournalV2() {
               <div><Label className="text-xs">Date</Label>
                 <Input type="date" value={newTrade.date || ''} onChange={e => setNewTrade({...newTrade, date: e.target.value})} /></div>
             </div>
-            {/* Row 2 */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Row 2: Type + Side */}
+            <div className="grid grid-cols-4 gap-3">
+              <div><Label className="text-xs">Instrument</Label>
+                <Select value={newTrade.type || 'CFD'} onValueChange={v => setNewTrade({...newTrade, type: v as 'CFD' | 'STOCK'})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="CFD">CFD</SelectItem><SelectItem value="STOCK">Stock</SelectItem></SelectContent>
+                </Select></div>
               <div><Label className="text-xs">Side</Label>
                 <Select value={newTrade.side} onValueChange={v => setNewTrade({...newTrade, side: v as 'LONG' | 'SHORT'})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -324,15 +345,21 @@ export default function TradingJournalV2() {
                 </Select></div>
               <div><Label className="text-xs">Entry Price *</Label>
                 <Input type="number" value={newTrade.entryPrice || ''} onChange={e => setNewTrade({...newTrade, entryPrice: parseFloat(e.target.value)})} /></div>
-              <div><Label className="text-xs">Quantity</Label>
-                <Input type="number" value={newTrade.quantity || 1} onChange={e => setNewTrade({...newTrade, quantity: parseInt(e.target.value)})} /></div>
+              <div><Label className="text-xs">{newTrade.type === 'CFD' ? 'Lots' : 'Shares'}</Label>
+                <Input type="number" value={newTrade.quantity || 1} onChange={e => setNewTrade({...newTrade, quantity: parseFloat(e.target.value)})} step={newTrade.type === 'CFD' ? '0.01' : '1'} /></div>
             </div>
             {/* Row 3: SL/TP */}
             <div className="grid grid-cols-3 gap-3">
               <div><Label className="text-xs">Stop Loss</Label>
-                <Input type="number" value={newTrade.stopLoss || ''} onChange={e => setNewTrade({...newTrade, stopLoss: parseFloat(e.target.value)})} placeholder="SL" /></div>
+                <Input type="number" value={newTrade.stopLoss ?? ''} onChange={e => {
+                  const val = e.target.value;
+                  setNewTrade({...newTrade, stopLoss: val === '' ? undefined : parseFloat(val)});
+                }} placeholder="ราคา SL" /></div>
               <div><Label className="text-xs">Take Profit</Label>
-                <Input type="number" value={newTrade.takeProfit || ''} onChange={e => setNewTrade({...newTrade, takeProfit: parseFloat(e.target.value)})} placeholder="TP" /></div>
+                <Input type="number" value={newTrade.takeProfit ?? ''} onChange={e => {
+                  const val = e.target.value;
+                  setNewTrade({...newTrade, takeProfit: val === '' ? undefined : parseFloat(val)});
+                }} placeholder="ราคา TP" /></div>
               <div><Label className="text-xs">Initial Risk $</Label>
                 <Input type="number" disabled value={
                   newTrade.stopLoss && newTrade.entryPrice 
