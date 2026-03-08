@@ -112,11 +112,14 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   // Convert theme to colors
   const colors: ChartThemeColors = useMemo(() => theme.colors, [theme]);
 
+  // Check if volume indicator is active
+  const isVolumeActive = indicators.some(ind => ind.name.toLowerCase() === 'volume' && ind.visible);
+
   // Calculate dimensions
   const dimensions: ChartDimensions = useMemo(() => {
-    const priceAxisWidth = 100; // Increased for large price numbers like BTC
+    const priceAxisWidth = 100;
     const timeAxisHeight = 25;
-    const volumeHeight = Math.max(30, height * 0.15);
+    const volumeHeight = isVolumeActive ? Math.max(30, height * 0.15) : 0;
     
     return {
       width,
@@ -131,7 +134,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
       timeAxisHeight,
       volumeHeight,
     };
-  }, [width, height]);
+  }, [width, height, isVolumeActive]);
 
   // Convert data to candles
   useEffect(() => {
