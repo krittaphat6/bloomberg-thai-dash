@@ -134,6 +134,11 @@ export class ChartInteraction {
   // MOUSE EVENTS - TradingView style: direct 1:1 panning, no smoothing
   // =========================================================================
 
+  private isOnPriceAxis(x: number): boolean {
+    const { chartArea } = this.dimensions;
+    return x > chartArea.x + chartArea.width;
+  }
+
   private handleMouseDown = (e: MouseEvent) => {
     const { x, y } = this.getCanvasCoords(e);
     this.lastMouseX = x;
@@ -142,6 +147,17 @@ export class ChartInteraction {
     // Stop any ongoing kinetic scroll immediately
     this.stopKineticScroll();
     this.velocityTracker = [];
+
+    // Check if clicking on price axis (right side) for vertical scaling
+    if (this.isOnPriceAxis(x)) {
+      this.isPriceAxisDragging = true;
+      this.priceAxisDragStartY = y;
+      this.priceAxisDragStartPriceMin = this.viewport.priceMin;
+      this.priceAxisDragStartPriceMax = this.viewport.priceMax;
+      this.isAutoScalePrice = false; // Disable auto-scale when manually adjusting
+      this.canvas.style.cursor = 'ns-resize';
+      return;
+    }
 
     if (this.mode === 'drawing') {
       this.startDrawing(x, y);
