@@ -19,6 +19,8 @@ import {
 } from '@/components/ui/select';
 import { BarChart2, X, Layers, MousePointerClick, Grid3X3, Monitor, Zap, Activity, TrendingUp, DollarSign, Users, AlertTriangle } from 'lucide-react';
 import { ChartIndicator } from './types';
+import { DeepChartsConfig } from './indicators/DeepChartsEngine';
+import DeepChartsSettingsPanel from './indicators/DeepChartsSettingsPanel';
 
 interface ChartPanel {
   id: string;
