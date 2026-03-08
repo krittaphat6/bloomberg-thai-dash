@@ -465,6 +465,51 @@ const ABLE3AI = () => {
         const contextSummary = freshContext.success ? UniversalDataService.formatForAI(freshContext) : '';
         addThinkingStep('📊 ดึงข้อมูลแอป (broker, trades, alerts)...');
 
+        // Trading Journal context for journal-related queries
+        let journalContext = '';
+        if (/journal|เทรด|trade|win.*rate|p&l|pnl|กำไร|ขาดทุน|สถิติ|performance|ประสิทธิภาพ|able.*score|psychology|จิตวิทยา|monte.*carlo|risk|drawdown|setup|สรุป.*ผล|วิเคราะห์.*เทรด/i.test(lowerInput)) {
+          addThinkingStep('📔 ดึงข้อมูลจาก Trading Journal...');
+          try {
+            const savedTrades = localStorage.getItem('tradingJournal');
+            if (savedTrades) {
+              const trades = JSON.parse(savedTrades);
+              const closedTrades = trades.filter((t: any) => t.status === 'CLOSED');
+              const totalPnL = closedTrades.reduce((sum: number, t: any) => sum + (t.pnl || 0), 0);
+              const wins = closedTrades.filter((t: any) => (t.pnl || 0) > 0);
+              const winRate = closedTrades.length > 0 ? (wins.length / closedTrades.length * 100).toFixed(1) : '0';
+              const avgPnL = closedTrades.length > 0 ? (totalPnL / closedTrades.length).toFixed(2) : '0';
+              const symbols = [...new Set(trades.map((t: any) => t.symbol))];
+              const setups = [...new Set(trades.map((t: any) => t.setup).filter(Boolean))];
+              const emotions = trades.map((t: any) => t.emotion).filter(Boolean);
+              const followedPlan = trades.filter((t: any) => t.followedPlan === true).length;
+              
+              // Per-symbol breakdown
+              const symbolStats = symbols.map((sym: string) => {
+                const symTrades = closedTrades.filter((t: any) => t.symbol === sym);
+                const symPnL = symTrades.reduce((s: number, t: any) => s + (t.pnl || 0), 0);
+                const symWins = symTrades.filter((t: any) => (t.pnl || 0) > 0).length;
+                return `${sym}: ${symTrades.length} trades, WR ${symTrades.length > 0 ? (symWins/symTrades.length*100).toFixed(0) : 0}%, P&L $${symPnL.toFixed(2)}`;
+              }).join('\n');
+
+              journalContext = `\n--- Trading Journal Data ---\n` +
+                `Total trades: ${trades.length} (${closedTrades.length} closed, ${trades.length - closedTrades.length} open)\n` +
+                `Net P&L: $${totalPnL.toFixed(2)}\n` +
+                `Win Rate: ${winRate}%\n` +
+                `Avg P&L per trade: $${avgPnL}\n` +
+                `Symbols traded: ${symbols.join(', ')}\n` +
+                `Setups used: ${setups.join(', ') || 'N/A'}\n` +
+                `Followed plan: ${followedPlan}/${trades.length}\n` +
+                `Emotions recorded: ${emotions.length > 0 ? emotions.join(', ') : 'N/A'}\n` +
+                `\nPer-symbol breakdown:\n${symbolStats}\n` +
+                `\nRecent 10 trades:\n${trades.slice(-10).map((t: any) => 
+                  `${t.date} ${t.symbol} ${t.side} ${t.type || 'CFD'} Entry:${t.entryPrice} Exit:${t.exitPrice || 'OPEN'} P&L:${t.pnl?.toFixed(2) || '-'} Setup:${t.setup || '-'} Emotion:${t.emotion || '-'}`
+                ).join('\n')}\n`;
+            }
+          } catch (e) {
+            console.error('Journal context error:', e);
+          }
+        }
+
         // Fetch TOP NEWS context for market/news queries
         let topNewsContext = '';
         const lowerInput = currentInput.toLowerCase();
