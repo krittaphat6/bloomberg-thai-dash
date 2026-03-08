@@ -36,7 +36,7 @@ export default function JournalTabs({
   ];
 
   return (
-    <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
+    <Tabs value={activeTab} onValueChange={onTabChange} className="w-full h-full flex flex-col">
       <TabsList className="w-full h-auto flex flex-wrap gap-1 bg-transparent border-b border-terminal-green/30 pb-2 mb-4">
         {tabs.map(tab => (
           <TabsTrigger
