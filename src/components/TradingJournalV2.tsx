@@ -331,8 +331,13 @@ export default function TradingJournalV2() {
               <div><Label className="text-xs">Date</Label>
                 <Input type="date" value={newTrade.date || ''} onChange={e => setNewTrade({...newTrade, date: e.target.value})} /></div>
             </div>
-            {/* Row 2 */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Row 2: Type + Side */}
+            <div className="grid grid-cols-4 gap-3">
+              <div><Label className="text-xs">Instrument</Label>
+                <Select value={newTrade.type || 'CFD'} onValueChange={v => setNewTrade({...newTrade, type: v as 'CFD' | 'STOCK'})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="CFD">CFD</SelectItem><SelectItem value="STOCK">Stock</SelectItem></SelectContent>
+                </Select></div>
               <div><Label className="text-xs">Side</Label>
                 <Select value={newTrade.side} onValueChange={v => setNewTrade({...newTrade, side: v as 'LONG' | 'SHORT'})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -340,8 +345,8 @@ export default function TradingJournalV2() {
                 </Select></div>
               <div><Label className="text-xs">Entry Price *</Label>
                 <Input type="number" value={newTrade.entryPrice || ''} onChange={e => setNewTrade({...newTrade, entryPrice: parseFloat(e.target.value)})} /></div>
-              <div><Label className="text-xs">Quantity</Label>
-                <Input type="number" value={newTrade.quantity || 1} onChange={e => setNewTrade({...newTrade, quantity: parseInt(e.target.value)})} /></div>
+              <div><Label className="text-xs">{newTrade.type === 'CFD' ? 'Lots' : 'Shares'}</Label>
+                <Input type="number" value={newTrade.quantity || 1} onChange={e => setNewTrade({...newTrade, quantity: parseFloat(e.target.value)})} step={newTrade.type === 'CFD' ? '0.01' : '1'} /></div>
             </div>
             {/* Row 3: SL/TP */}
             <div className="grid grid-cols-3 gap-3">
