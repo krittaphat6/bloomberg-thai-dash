@@ -451,11 +451,9 @@ export class ChartRenderer {
         }
         case 'vertical': {
           const x = drawing.points[0].x;
-          ctx.setLineDash([5, 5]);
           ctx.moveTo(x * this.dpr, chartArea.y * this.dpr);
           ctx.lineTo(x * this.dpr, (chartArea.y + chartArea.height) * this.dpr);
           ctx.stroke();
-          ctx.setLineDash([]);
           break;
         }
         case 'trendline': {
