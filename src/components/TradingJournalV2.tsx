@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import JournalTabs from './TradingJournal/JournalTabs';
 import { Trade } from '@/utils/tradingMetrics';
 import { supabase } from '@/integrations/supabase/client';
+import { useRef, useCallback } from 'react';
 
 interface TradingFolder {
   id: string;
