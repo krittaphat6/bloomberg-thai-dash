@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 import { Trade } from '@/utils/tradingMetrics';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, ZoomIn, ZoomOut, Network, Eye, EyeOff } from 'lucide-react';
+import { RotateCcw, ZoomIn, ZoomOut, Network, Eye, EyeOff, Maximize2, Minimize2 } from 'lucide-react';
 
 interface TradeNode extends d3.SimulationNodeDatum {
   id: string;
@@ -25,6 +25,7 @@ export default function TradeGraphTab({ trades }: { trades: Trade[]; initialCapi
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
   const [showClusters, setShowClusters] = useState(true);
   const [groupBy, setGroupBy] = useState<GroupBy>('symbol');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Limit nodes for performance
   const activeTrades = useMemo(() => trades.slice(0, 200), [trades]);
@@ -283,7 +284,7 @@ export default function TradeGraphTab({ trades }: { trades: Trade[]; initialCapi
   }
 
   return (
-    <div className="space-y-3">
+    <div className={isFullscreen ? 'fixed inset-0 z-50 bg-background flex flex-col p-3' : 'space-y-3'}>
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
         <Button variant="outline" size="sm" onClick={() => handleZoom(1)} className="h-7 px-2">
@@ -303,6 +304,9 @@ export default function TradeGraphTab({ trades }: { trades: Trade[]; initialCapi
         >
           {showClusters ? <Eye className="w-3.5 h-3.5 mr-1" /> : <EyeOff className="w-3.5 h-3.5 mr-1" />}
           Clusters
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setIsFullscreen(!isFullscreen)} className="h-7 px-2">
+          {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
         </Button>
 
         <div className="flex items-center gap-1 ml-auto">
@@ -328,7 +332,7 @@ export default function TradeGraphTab({ trades }: { trades: Trade[]; initialCapi
       </div>
 
       {/* Graph */}
-      <div ref={containerRef} className="relative w-full rounded-lg border border-border/50 overflow-hidden bg-background/50" style={{ height: 480 }}>
+      <div ref={containerRef} className={`relative w-full rounded-lg border border-border/50 overflow-hidden bg-background/50 ${isFullscreen ? 'flex-1' : ''}`} style={isFullscreen ? undefined : { height: 480 }}>
         <svg ref={svgRef} className="w-full h-full" />
       </div>
 
