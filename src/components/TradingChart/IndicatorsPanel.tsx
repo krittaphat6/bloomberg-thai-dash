@@ -146,6 +146,28 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
               <p className="text-xs text-muted-foreground mt-1">แสดง Volume bars ด้านล่างกราฟ</p>
             </div>
 
+            {/* DeepCharts Pro Indicator Card */}
+            <div className="p-4 rounded-lg border border-purple-500/30 bg-muted/20">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🐋</span>
+                  <span className="text-lg font-mono font-bold text-purple-400">DeepCharts Pro</span>
+                  <Badge variant="outline" className="text-[10px] border-purple-500/50">V4.1</Badge>
+                </div>
+                <Switch
+                  checked={deepChartsConfig?.enabled ?? false}
+                  onCheckedChange={(v) => onDeepChartsConfigChange?.({ enabled: v })}
+                  className="data-[state=checked]:bg-purple-500"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                Big Trade Detection, Volume Profile, Anomaly Detection & OI Filter
+              </p>
+              {deepChartsConfig?.enabled && deepChartsConfig && onDeepChartsConfigChange && (
+                <DeepChartsSettingsPanel config={deepChartsConfig} onUpdate={onDeepChartsConfigChange} />
+              )}
+            </div>
+
             {/* DOM Indicator Card */}
             <div className="p-4 rounded-lg border border-terminal-cyan/30 bg-muted/20">
               {/* Header */}
