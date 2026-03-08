@@ -540,6 +540,10 @@ export function computeDeepCharts(
   const visibleTotalVols = totalVols.slice(safeStart, safeEnd + 1);
   const avgVol = visibleTotalVols.length > 0 ? visibleTotalVols.reduce((s, v) => s + v, 0) / visibleTotalVols.length : 0;
 
+  // Count visible signals for stats
+  const visibleSignalsBuy = signals.filter(s => s.type === 'buy' && s.barIndex >= safeStart && s.barIndex <= safeEnd).length;
+  const visibleSignalsSell = signals.filter(s => s.type === 'sell' && s.barIndex >= safeStart && s.barIndex <= safeEnd).length;
+
   return {
     signals, anomalies, volumeProfile, sltp, bubbles, dynProfile,
     stats: {
@@ -549,8 +553,8 @@ export function computeDeepCharts(
       avgVolume: avgVol,
       oiImbalance,
       oiDeltaPercent,
-      signalsBuy: signals.filter(s => s.type === 'buy').length,
-      signalsSell: signals.filter(s => s.type === 'sell').length,
+      signalsBuy: visibleSignalsBuy,
+      signalsSell: visibleSignalsSell,
     },
   };
 }
