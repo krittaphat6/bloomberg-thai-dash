@@ -430,7 +430,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[80vh] overflow-hidden">
+      <DialogContent className="max-w-6xl h-[80vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5 text-terminal-green" />
@@ -443,7 +443,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex h-full gap-4">
+        <div className="flex flex-1 gap-4 min-h-0 overflow-hidden">
           {/* Steps Sidebar */}
           <div className="w-64 border-r border-border pr-4">
             <div className="space-y-2">
@@ -469,7 +469,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
           </div>
 
           {/* Main Content */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto flex flex-col">
             {/* Upload Step */}
             {currentStep === 'upload' && (
               <div className="flex items-center justify-center h-full">
@@ -490,15 +490,15 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
 
             {/* Preview Step */}
             {currentStep === 'preview' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="flex flex-col flex-1 min-h-0">
+                <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-semibold">Data Preview</h3>
                   <div className="flex gap-2">
                     <Badge variant="outline">{fullCsvData.length} rows</Badge>
                     <Badge variant="outline">{csvHeaders.length} columns</Badge>
                   </div>
                 </div>
-                <div className="overflow-auto border rounded-lg max-h-[300px]">
+                <div className="overflow-auto border rounded-lg flex-1 min-h-0 max-h-[40vh]">
                   <Table>
                     <TableHeader>
                       <TableRow>{csvHeaders.slice(0, 8).map(h => <TableHead key={h} className="text-xs whitespace-nowrap">{h}</TableHead>)}</TableRow>
@@ -511,16 +511,16 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
                   </Table>
                 </div>
                 {parsedTrades.length > 0 && (
-                  <Alert className="border-terminal-green/30 bg-terminal-green/5">
+                  <Alert className="border-terminal-green/30 bg-terminal-green/5 mt-3">
                     <AlertDescription className="text-xs text-terminal-green">
                       ✓ พบ {parsedTrades.length} เทรดจากข้อมูล ({detectedFormat === 'able_v3' ? 'ABLE v3.1' : detectedFormat === 'thai_oanda' ? 'Thai OANDA' : 'Generic'})
                     </AlertDescription>
                   </Alert>
                 )}
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-border/30">
                   <Button variant="outline" onClick={() => { setCurrentStep('upload'); setCsvData([]); setFullCsvData([]); setParsedTrades([]); }}>Back</Button>
-                  <Button onClick={handleNextStep} className="bg-terminal-green text-black">
-                    {detectedFormat !== 'generic' ? `Import ${parsedTrades.length} Trades →` : 'Continue to Mapping →'}
+                  <Button onClick={handleNextStep} size="lg" className="bg-terminal-green text-black font-bold px-6">
+                    {detectedFormat !== 'generic' ? `🚀 Import ${parsedTrades.length} Trades` : 'Continue to Mapping →'}
                   </Button>
                 </div>
               </div>
