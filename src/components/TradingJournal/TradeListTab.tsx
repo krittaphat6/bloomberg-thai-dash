@@ -331,12 +331,25 @@ export default function TradeListTab({ trades, onDeleteTrade, onCloseTrade }: Tr
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </React.Fragment>
                   ))
                 )}
               </TableBody>
             </Table>
           </ScrollArea>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2 border-t border-border/20">
+              <span className="text-xs text-muted-foreground">
+                Showing {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, filteredAndSortedTrades.length)} of {filteredAndSortedTrades.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>← Prev</Button>
+                <span className="text-xs px-2">{currentPage}/{totalPages}</span>
+                <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>Next →</Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
