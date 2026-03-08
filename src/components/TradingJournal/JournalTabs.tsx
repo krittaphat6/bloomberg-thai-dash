@@ -7,6 +7,7 @@ import RiskRewardTab from './RiskRewardTab';
 import TradeListTab from './TradeListTab';
 import PsychologyTab from './PsychologyTab';
 import ReportsTab from './ReportsTab';
+import TradeGraphTab from './TradeGraphTab';
 import { Trade } from '@/utils/tradingMetrics';
 
 interface JournalTabsProps {
@@ -31,6 +32,7 @@ export default function JournalTabs({
     { id: 'psychology', label: '🧠 จิตวิทยา' },
     { id: 'reports', label: '📊 รายงาน' },
     { id: 'trades', label: 'รายการซื้อขาย' },
+    { id: 'graph', label: '🔗 กราฟ' },
   ];
 
   return (
@@ -77,6 +79,9 @@ export default function JournalTabs({
           onDeleteTrade={onDeleteTrade!}
           onCloseTrade={onCloseTrade!}
         />
+      </TabsContent>
+      <TabsContent value="graph" className="mt-0">
+        <TradeGraphTab trades={trades} initialCapital={initialCapital} />
       </TabsContent>
     </Tabs>
   );
