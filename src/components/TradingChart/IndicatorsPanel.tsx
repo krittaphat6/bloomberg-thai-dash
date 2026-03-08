@@ -56,6 +56,8 @@ const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
   onSelectDOMPanel,
   onDOMClose,
   isDOMFullscreen = false,
+  deepChartsConfig,
+  onDeepChartsConfigChange,
 }) => {
   const [domRows, setDomRows] = useState(25);
   const [showAdvancedMetrics, setShowAdvancedMetrics] = useState(true);
