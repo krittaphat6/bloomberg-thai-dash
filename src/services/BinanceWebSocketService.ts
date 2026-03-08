@@ -128,8 +128,10 @@ class BinanceWebSocketService {
         }
       };
       
-      this.ws.onerror = (error) => {
-        console.error('[Binance WS] Error:', error);
+      this.ws.onerror = () => {
+        if (!this.suppressErrors) {
+          console.warn(`[Binance WS] Connection error (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
+        }
         this.isConnected = false;
         this.notifyStatus(false);
       };
