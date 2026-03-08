@@ -563,6 +563,9 @@ export class ChartInteraction {
   // =========================================================================
 
   private updatePriceRange(viewport: ChartViewport) {
+    // Skip auto-scale if user is manually controlling price axis
+    if (!this.isAutoScalePrice) return;
+    
     let min = Infinity, max = -Infinity;
     
     const startIdx = Math.max(0, Math.floor(viewport.startIndex));
@@ -584,6 +587,27 @@ export class ChartInteraction {
       // Smooth price transitions during panning (like TradingView)
       viewport.priceMin = this.viewport.priceMin + (targetMin - this.viewport.priceMin) * 0.15;
       viewport.priceMax = this.viewport.priceMax + (targetMax - this.viewport.priceMax) * 0.15;
+    }
+  }
+
+  private forceUpdatePriceRange(viewport: ChartViewport) {
+    let min = Infinity, max = -Infinity;
+    
+    const startIdx = Math.max(0, Math.floor(viewport.startIndex));
+    const endIdx = Math.min(this.candles.length - 1, Math.ceil(viewport.endIndex));
+    
+    for (let i = startIdx; i <= endIdx; i++) {
+      const candle = this.candles[i];
+      if (candle) {
+        min = Math.min(min, candle.low);
+        max = Math.max(max, candle.high);
+      }
+    }
+    
+    if (min !== Infinity && max !== -Infinity) {
+      const padding = (max - min) * 0.08;
+      viewport.priceMin = min - padding;
+      viewport.priceMax = max + padding;
     }
   }
 
