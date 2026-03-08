@@ -1,10 +1,10 @@
 // ABLE Chart Engine - Main Canvas Component
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
-import { ChartRenderer, OIBubbleData } from './ChartRenderer';
+import { ChartRenderer } from './ChartRenderer';
 import { ChartInteraction, InteractionCallbacks } from './ChartInteraction';
 import { DOMRenderer } from './DOMRenderer';
 import { FullscreenDOMRenderer, DEFAULT_ENHANCED_DOM_CONFIG } from './FullscreenDOMRenderer';
-import { Candle, ChartViewport, ChartThemeColors, ChartDimensions, CrosshairState, DrawingObject, ChartMode, DrawingType, IndicatorData, DOMConfig, OIBubbleData as OIBubbleType } from './types';
+import { Candle, ChartViewport, ChartThemeColors, ChartDimensions, CrosshairState, DrawingObject, ChartMode, DrawingType, IndicatorData, DOMConfig } from './types';
 import { OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from '../ChartThemes';
 import { binanceWS } from '@/services/BinanceWebSocketService';
