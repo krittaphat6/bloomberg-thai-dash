@@ -89,6 +89,37 @@ export class ChartInteraction {
     this.callbacks.onDrawingUpdate(drawings);
   }
 
+  updateDrawingById(id: string, updates: Partial<DrawingObject>) {
+    this.drawings = this.drawings.map(d => d.id === id ? { ...d, ...updates } : d);
+    this.callbacks.onDrawingUpdate([...this.drawings]);
+  }
+
+  deleteDrawingById(id: string) {
+    this.drawings = this.drawings.filter(d => d.id !== id);
+    this.selectedDrawingId = null;
+    this.callbacks.onDrawingSelect?.(null, null);
+    this.callbacks.onDrawingUpdate([...this.drawings]);
+  }
+
+  duplicateDrawingById(id: string) {
+    const drawing = this.drawings.find(d => d.id === id);
+    if (!drawing) return;
+    const clone: DrawingObject = {
+      ...drawing,
+      id: `drawing_${Date.now()}`,
+      points: drawing.points.map(p => ({ ...p, y: p.y + 20, price: p.price * 0.999 })),
+      selected: false,
+    };
+    this.drawings.push(clone);
+    this.callbacks.onDrawingUpdate([...this.drawings]);
+  }
+
+  deselectAll() {
+    this.selectedDrawingId = null;
+    this.drawings = this.drawings.map(d => ({ ...d, selected: false }));
+    this.callbacks.onDrawingSelect?.(null, null);
+    this.callbacks.onDrawingUpdate([...this.drawings]);
+  }
   clearDrawings() {
     this.drawings = [];
     this.currentDrawing = null;
