@@ -48,7 +48,7 @@ import CVDChart from './CVDChart';
 import TopNews from './TopNews';
 import { BloombergMap } from './BloombergMap';
 import { WorldMonitorDashboard } from './WorldMonitor/WorldMonitorDashboard';
-import MonteCarloSimulator from './MonteCarloSimulator';
+
 import AbleHF40Modules from './AbleHF40Modules';
 import { FaceSearch } from './FaceSearch';
 import { TacticalCommandMap } from './TacticalMap';
