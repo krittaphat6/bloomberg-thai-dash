@@ -349,9 +349,9 @@ export default function TradingJournalV2() {
                   <SelectContent><SelectItem value="none">—</SelectItem>{TIMEFRAMES.map(tf => <SelectItem key={tf} value={tf}>{tf}</SelectItem>)}</SelectContent>
                 </Select></div>
               <div><Label className="text-xs">Session</Label>
-                <Select value={newTrade.session || ''} onValueChange={v => setNewTrade({...newTrade, session: v as Trade['session']})}>
+                <Select value={newTrade.session || 'none'} onValueChange={v => setNewTrade({...newTrade, session: v === 'none' ? undefined : v as Trade['session']})}>
                   <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>{SESSIONS.map(s => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}</SelectContent>
+                  <SelectContent><SelectItem value="none">—</SelectItem>{SESSIONS.map(s => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}</SelectContent>
                 </Select></div>
             </div>
             {/* Strategy & Notes */}
