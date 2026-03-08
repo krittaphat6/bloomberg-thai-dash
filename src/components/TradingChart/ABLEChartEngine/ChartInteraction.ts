@@ -49,6 +49,7 @@ export class ChartInteraction {
   private drawingType: DrawingType = 'trendline';
   private drawings: DrawingObject[] = [];
   private currentDrawing: DrawingObject | null = null;
+  private selectedDrawingId: string | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
