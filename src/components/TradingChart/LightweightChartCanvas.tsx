@@ -58,9 +58,9 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
     extremeThreshold: (oiBubblesIndicator?.settings?.extremeThreshold as number) || 3.0,
   } : undefined;
 
-  // Convert other indicators (SMA/EMA) if any - but DOM is primary
+  // Convert other indicators (SMA/EMA/Volume) - but DOM is primary
   const indicatorData: IndicatorData[] = indicators
-    .filter(ind => ind.visible && ind.type === 'overlay' && ind.name !== 'DOM')
+    .filter(ind => ind.visible && ind.name !== 'DOM' && ind.name !== 'OI Bubbles')
     .map(ind => {
       let values: number[] = [];
       
