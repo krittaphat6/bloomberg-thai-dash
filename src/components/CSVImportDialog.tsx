@@ -430,7 +430,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImport, existing
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[80vh] overflow-hidden">
+      <DialogContent className="max-w-6xl h-[80vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5 text-terminal-green" />
