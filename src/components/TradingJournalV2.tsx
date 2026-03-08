@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Upload, Folder, Settings2, ChevronRight, Image } from 'lucide-react';
+import { Plus, Trash2, Upload, Folder, Settings2, ChevronRight, Image, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import CSVImportDialog from './CSVImportDialog';
