@@ -415,7 +415,7 @@ const MarketData = () => {
     { 
       id: 'journal', 
       title: '📔 TRADING JOURNAL', 
-      component: <TradingJournal />,
+      component: <TradingJournalV2 />,
       category: 'utilities',
       description: 'Track and analyze your trades',
       tags: ['journal', 'trades', 'tracking', 'analytics', 'performance']
