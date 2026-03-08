@@ -492,7 +492,6 @@ export class ChartRenderer {
             const range = y2 - y1;
             const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
             
-            ctx.setLineDash([3, 3]);
             levels.forEach((level, i) => {
               const y = y1 + range * level;
               ctx.beginPath();
@@ -508,7 +507,6 @@ export class ChartRenderer {
                 (y - 3) * this.dpr
               );
             });
-            ctx.setLineDash([]);
           }
           break;
         }
