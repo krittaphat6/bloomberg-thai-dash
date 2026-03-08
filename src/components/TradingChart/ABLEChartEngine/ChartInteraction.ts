@@ -227,6 +227,12 @@ export class ChartInteraction {
   };
 
   private handleMouseUp = (_e: MouseEvent) => {
+    if (this.isPriceAxisDragging) {
+      this.isPriceAxisDragging = false;
+      this.canvas.style.cursor = 'default';
+      return;
+    }
+
     if (this.isPanning) {
       this.isPanning = false;
       this.canvas.style.cursor = this.mode === 'drawing' ? 'crosshair' : 'default';
