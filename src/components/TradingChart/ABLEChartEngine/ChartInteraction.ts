@@ -409,12 +409,8 @@ export class ChartInteraction {
     // TradingView allows scrolling past the right edge (future empty space)
     const maxEndIndex = this.candles.length - 1 + indexRange * this.RIGHT_PADDING_RATIO;
     
-    // Clamp left: don't go before index 0
-    if (newStartIndex < 0) {
-      newStartIndex = 0;
-      newEndIndex = indexRange;
-    }
-    // Clamp right: allow some empty space on the right (like TradingView)
+    // No left clamp - allow scrolling through ALL history (TradingView style)
+    // Only clamp right: allow some empty space on the right
     if (newEndIndex > maxEndIndex) {
       newEndIndex = maxEndIndex;
       newStartIndex = newEndIndex - indexRange;
