@@ -38,8 +38,10 @@ interface IndicatorsPanelProps {
   chartPanels?: ChartPanel[];  // Available chart panels
   selectedDOMPanel?: string;   // Which panel shows DOM
   onSelectDOMPanel?: (panelId: string) => void;  // Callback to change DOM panel
-  onDOMClose?: () => void;  // Close DOM view
-  isDOMFullscreen?: boolean;  // Is DOM currently in fullscreen mode
+  onDOMClose?: () => void;
+  isDOMFullscreen?: boolean;
+  deepChartsConfig?: DeepChartsConfig;
+  onDeepChartsConfigChange?: (updates: Partial<DeepChartsConfig>) => void;
 }
 
 const IndicatorsPanel: React.FC<IndicatorsPanelProps> = ({
