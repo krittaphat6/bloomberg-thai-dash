@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 import { Trade } from '@/utils/tradingMetrics';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, ZoomIn, ZoomOut, Network, Eye, EyeOff } from 'lucide-react';
+import { RotateCcw, ZoomIn, ZoomOut, Network, Eye, EyeOff, Maximize2, Minimize2 } from 'lucide-react';
 
 interface TradeNode extends d3.SimulationNodeDatum {
   id: string;
