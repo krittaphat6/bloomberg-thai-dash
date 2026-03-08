@@ -597,6 +597,8 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
           onSelectDOMPanel={setActivePanelId}
           onDOMClose={() => setPanelDomFullscreen(activePanelId, false)}
           isDOMFullscreen={isDOMFullscreen}
+          deepChartsConfig={deepChartsConfig}
+          onDeepChartsConfigChange={(updates) => setDeepChartsConfig(prev => ({ ...prev, ...updates }))}
         />
 
         <PineScriptEditor
