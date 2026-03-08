@@ -12,11 +12,6 @@ import { binanceOrderBook, OrderBookData } from '@/services/BinanceOrderBookServ
 import { supabase } from '@/integrations/supabase/client';
 import DrawingToolbar from '../DrawingToolbar';
 
-interface OIBubblesConfig {
-  enabled: boolean;
-  threshold: number;
-  extremeThreshold: number;
-}
 
 interface ABLEChartCanvasProps {
   data: OHLCVData[];
