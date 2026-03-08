@@ -430,7 +430,15 @@ export class ChartRenderer {
       if (drawing.points.length === 0) return;
 
       ctx.strokeStyle = drawing.color;
-      ctx.lineWidth = drawing.lineWidth;
+      ctx.lineWidth = drawing.lineWidth * this.dpr;
+      
+      // Apply line style
+      const dashMap: Record<string, number[]> = {
+        solid: [],
+        dashed: [8 * this.dpr, 4 * this.dpr],
+        dotted: [2 * this.dpr, 4 * this.dpr],
+      };
+      ctx.setLineDash(dashMap[drawing.lineStyle || 'solid'] || []);
       ctx.beginPath();
 
       switch (drawing.type) {
