@@ -89,7 +89,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   const [mode, setMode] = useState<ChartMode>('normal');
   const [orderBook, setOrderBook] = useState<OrderBookData | null>(null);
   const [domConnected, setDomConnected] = useState(false);
-  const [oiBubbles, setOiBubbles] = useState<OIBubbleData[]>([]);
+  
   const [selectedDrawing, setSelectedDrawing] = useState<DrawingObject | null>(null);
   const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number } | null>(null);
   const [domFullscreenInternal, setDomFullscreenInternal] = useState(false);
