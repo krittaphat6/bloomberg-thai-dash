@@ -13,6 +13,13 @@ serve(async (req) => {
   }
 
   try {
+    // Rate limit: only allow GET and POST
+    if (req.method !== 'GET' && req.method !== 'POST') {
+      return new Response(JSON.stringify({ error: 'Method not allowed' }), { 
+        status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
     const url = new URL(req.url)
     const connectionId = url.searchParams.get('connection_id')
 

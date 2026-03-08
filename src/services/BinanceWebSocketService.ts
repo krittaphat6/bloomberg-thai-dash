@@ -32,6 +32,9 @@ class BinanceWebSocketService {
   private subscribedKlines: Map<string, string> = new Map(); // symbol -> interval
   private isConnected = false;
   private prices: Map<string, PriceUpdate> = new Map();
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 10;
+  private suppressErrors = false;
   
   // All available crypto symbols from Binance (loaded dynamically)
   private allSymbols: string[] = [];
@@ -111,6 +114,8 @@ class BinanceWebSocketService {
       this.ws.onopen = () => {
         console.log('[Binance WS] Connected');
         this.isConnected = true;
+        this.reconnectAttempts = 0;
+        this.suppressErrors = false;
         this.notifyStatus(true);
       };
       
@@ -123,8 +128,10 @@ class BinanceWebSocketService {
         }
       };
       
-      this.ws.onerror = (error) => {
-        console.error('[Binance WS] Error:', error);
+      this.ws.onerror = () => {
+        if (!this.suppressErrors) {
+          console.warn(`[Binance WS] Connection error (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
+        }
         this.isConnected = false;
         this.notifyStatus(false);
       };
@@ -209,12 +216,23 @@ class BinanceWebSocketService {
   private scheduleReconnect() {
     if (this.reconnectTimer) return;
     
+    this.reconnectAttempts++;
+    
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.warn('[Binance WS] Max reconnect attempts reached. Stopping.');
+      this.suppressErrors = true;
+      return;
+    }
+    
+    // Exponential backoff: 2s, 4s, 8s, 16s... max 60s
+    const delay = Math.min(2000 * Math.pow(2, this.reconnectAttempts - 1), 60000);
+    
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.subscribedSymbols.size > 0 || this.subscribedKlines.size > 0) {
         this.connect();
       }
-    }, 5000);
+    }, delay);
   }
   
   // Subscribe to price updates

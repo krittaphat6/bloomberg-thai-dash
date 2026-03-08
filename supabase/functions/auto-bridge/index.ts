@@ -29,6 +29,14 @@ serve(async (req) => {
   const startTime = Date.now();
   
   try {
+    // Payload size limit (10KB)
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 10240) {
+      return new Response(JSON.stringify({ error: 'Payload too large' }), { 
+        status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -36,7 +44,7 @@ serve(async (req) => {
     // Parse webhook payload
     const payload: WebhookPayload = await req.json();
     const isAutoTriggered = payload.auto_triggered === true;
-    console.log(`📥 ${isAutoTriggered ? '🤖 AUTO-TRIGGERED' : 'Manual'} webhook:`, JSON.stringify(payload));
+    console.log(`📥 ${isAutoTriggered ? '🤖 AUTO-TRIGGERED' : 'Manual'} webhook: ${payload.action} ${payload.symbol}`);
 
     // Validate required fields
     if (!payload.action || !payload.symbol) {
