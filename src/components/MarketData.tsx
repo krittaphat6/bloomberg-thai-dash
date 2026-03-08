@@ -420,15 +420,6 @@ const MarketData = () => {
       description: 'Track and analyze your trades',
       tags: ['journal', 'trades', 'tracking', 'analytics', 'performance']
     },
-    { 
-      id: 'monte-carlo', 
-      title: '🎲 MONTE CARLO SIM', 
-      component: <MonteCarloSimulator />,
-      category: 'utilities',
-      icon: <TrendingUp className="w-5 h-5" />,
-      description: 'Monte Carlo simulation for strategy backtesting and risk analysis',
-      tags: ['monte-carlo', 'simulation', 'risk', 'backtesting', 'probability']
-    },
     {
       id: 'calendar', 
       title: '📅 ECONOMIC CALENDAR', 
