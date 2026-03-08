@@ -512,6 +512,7 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
                   height={dimensions.height}
                   theme={theme}
                   indicators={panelIndicators.main ?? []}
+                  drawingMode={selectedDrawingTool}
                   domFullscreen={domFullscreenByPanel.main ?? false}
                   onDOMFullscreenChange={(next) => setPanelDomFullscreen('main', next)}
                   onCrosshairMove={(data) => setCrosshair({ ...crosshair, ...data, x: 0, y: 0 })}

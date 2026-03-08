@@ -98,6 +98,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
       height={height}
       theme={theme}
       indicators={indicatorData}
+      drawingMode={drawingMode as any}
       domConfig={domConfig}
       oiBubblesConfig={oiBubblesConfig}
       domFullscreen={domFullscreen}
