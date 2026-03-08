@@ -108,6 +108,7 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
     return saved ? JSON.parse(saved) : ['BTCUSDT', 'ETHUSDT', 'AAPL'];
   });
   const [customIndicators, setCustomIndicators] = useState<ActiveCustomIndicator[]>([]);
+  const [deepChartsConfig, setDeepChartsConfig] = useState<DeepChartsConfig>(DEFAULT_DEEPCHARTS_CONFIG);
 
   // When going back to single-chart layout, always focus the main panel
   useEffect(() => {
