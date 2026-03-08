@@ -171,6 +171,26 @@ export class ChartInteraction {
     const { x, y } = this.getCanvasCoords(e);
     const { chartArea } = this.dimensions;
 
+    // Price axis dragging - TradingView vertical scale
+    if (this.isPriceAxisDragging) {
+      const deltaY = y - this.priceAxisDragStartY;
+      const priceRange = this.priceAxisDragStartPriceMax - this.priceAxisDragStartPriceMin;
+      const center = (this.priceAxisDragStartPriceMax + this.priceAxisDragStartPriceMin) / 2;
+      
+      // Drag up = zoom in (shrink range), drag down = zoom out (expand range)
+      // TradingView uses ~0.005 per pixel sensitivity
+      const scaleFactor = Math.exp(deltaY * 0.005);
+      const newHalfRange = (priceRange / 2) * scaleFactor;
+      
+      const newViewport = { ...this.viewport };
+      newViewport.priceMin = center - newHalfRange;
+      newViewport.priceMax = center + newHalfRange;
+      
+      this.viewport = newViewport;
+      this.callbacks.onViewportChange(newViewport);
+      return;
+    }
+
     if (this.isPanning) {
       const deltaX = x - this.lastMouseX;
       
@@ -191,6 +211,11 @@ export class ChartInteraction {
       this.lastMouseY = y;
     } else if (this.mode === 'drawing' && this.currentDrawing) {
       this.updateDrawing(x, y);
+    }
+
+    // Update cursor based on position
+    if (!this.isPanning && !this.isPriceAxisDragging && this.mode !== 'drawing') {
+      this.canvas.style.cursor = this.isOnPriceAxis(x) ? 'ns-resize' : 'default';
     }
 
     // Update crosshair
