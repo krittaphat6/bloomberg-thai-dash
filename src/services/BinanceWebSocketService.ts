@@ -114,6 +114,8 @@ class BinanceWebSocketService {
       this.ws.onopen = () => {
         console.log('[Binance WS] Connected');
         this.isConnected = true;
+        this.reconnectAttempts = 0;
+        this.suppressErrors = false;
         this.notifyStatus(true);
       };
       
