@@ -7,6 +7,11 @@ import { supabase } from '@/integrations/supabase/client';
 export function detectArtifactFromResponse(userQuery: string, aiResponse: string): ArtifactData | null {
   const lower = userQuery.toLowerCase();
 
+  // Trading Journal queries
+  if (hasJournalPattern(lower)) {
+    return parseJournalArtifact(aiResponse, userQuery);
+  }
+
   // Screener / stock results
   if (hasScreenerPattern(lower) && hasTableData(aiResponse)) {
     return parseScreenerArtifact(aiResponse, userQuery);
