@@ -453,7 +453,7 @@ export class ChartInteraction {
   // PANNING - Direct 1:1 mapping (TradingView style)
   // =========================================================================
 
-  private panDirect(deltaIndex: number) {
+  private panDirect(deltaIndex: number, deltaPrice: number = 0) {
     const indexRange = this.viewport.endIndex - this.viewport.startIndex;
     const newViewport = { ...this.viewport };
     
@@ -473,8 +473,15 @@ export class ChartInteraction {
     newViewport.startIndex = newStartIndex;
     newViewport.endIndex = newEndIndex;
     
-    // Auto-scale price range for visible candles
-    this.updatePriceRange(newViewport);
+    // Vertical panning: if user drags vertically, disable auto-scale and shift price
+    if (Math.abs(deltaPrice) > 0.0001) {
+      this.isAutoScalePrice = false;
+      newViewport.priceMin = this.viewport.priceMin + deltaPrice;
+      newViewport.priceMax = this.viewport.priceMax + deltaPrice;
+    } else {
+      // Auto-scale price range for visible candles (only if no vertical drag)
+      this.updatePriceRange(newViewport);
+    }
     
     this.viewport = newViewport;
     this.callbacks.onViewportChange(newViewport);
