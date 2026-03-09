@@ -502,6 +502,33 @@ class ChartDataService {
   private setCache(key: string, data: OHLCVData[]): void {
     this.cache.set(key, { data, timestamp: Date.now() });
   }
+
+  // Fetch older crypto candles before a given timestamp (for infinite scroll-back)
+  async fetchOlderCryptoData(symbol: string, timeframe: Timeframe, beforeTimestamp: number, limit: number = 1000): Promise<OHLCVData[]> {
+    try {
+      const interval = this.binanceInterval(timeframe);
+      const effectiveLimit = Math.min(limit, 1000);
+      const response = await fetch(
+        `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${effectiveLimit}&endTime=${beforeTimestamp - 1}`
+      );
+      if (!response.ok) throw new Error('Binance API error');
+      const data = await response.json();
+      if (data.length === 0) return [];
+      const ohlcv: OHLCVData[] = data.map((k: any[]) => ({
+        timestamp: k[0],
+        open: parseFloat(k[1]),
+        high: parseFloat(k[2]),
+        low: parseFloat(k[3]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[5]),
+      }));
+      console.log(`[ChartData] ✅ Loaded ${ohlcv.length} older candles for ${symbol} before ${new Date(beforeTimestamp).toISOString()}`);
+      return ohlcv;
+    } catch (error) {
+      console.error('Older crypto fetch error:', error);
+      return [];
+    }
+  }
 }
 
 export const chartDataService = new ChartDataService();

@@ -29,6 +29,7 @@ interface ABLEChartCanvasProps {
   deepChartsConfig?: DeepChartsConfig;
   
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
+  onLoadMoreHistory?: () => void;
   domFullscreen?: boolean;
   onDOMFullscreenChange?: (isFullscreen: boolean) => void;
 }
