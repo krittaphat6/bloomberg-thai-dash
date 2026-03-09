@@ -100,7 +100,7 @@ const MultiChartPanel: React.FC<MultiChartPanelProps> = ({
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const limit = symbol.type === 'crypto' ? 1000 : 500;
+      const limit = symbol.type === 'crypto' ? 3000 : 500;
       const chartData = await chartDataService.fetchData(symbol, timeframe, limit);
       setData(chartData);
     } catch (err) {

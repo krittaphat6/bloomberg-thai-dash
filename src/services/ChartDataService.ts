@@ -291,29 +291,53 @@ class ChartDataService {
   }
 
   // Fetch crypto data from Binance (real-time, free, no key)
+  // Supports fetching up to 3000 candles via pagination for deep history
   async fetchCryptoData(symbol: string, timeframe: Timeframe, limit: number = 1000): Promise<OHLCVData[]> {
     const cacheKey = `crypto:${symbol}:${timeframe}:${limit}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) return cached;
     try {
       const interval = this.binanceInterval(timeframe);
-      const effectiveLimit = Math.min(limit, 1000);
-      const response = await fetch(
-        `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${effectiveLimit}`
-      );
-      if (!response.ok) throw new Error('Binance API error');
-      const data = await response.json();
-      const ohlcv: OHLCVData[] = data.map((k: any[]) => ({
-        timestamp: k[0],
-        open: parseFloat(k[1]),
-        high: parseFloat(k[2]),
-        low: parseFloat(k[3]),
-        close: parseFloat(k[4]),
-        volume: parseFloat(k[5]),
-      }));
-      this.setCache(cacheKey, ohlcv);
-      console.log(`[ChartData] ✅ ${ohlcv.length} candles for ${symbol} (${timeframe}) via Binance`);
-      return ohlcv;
+      const totalLimit = Math.min(limit, 3000);
+      const pages = Math.ceil(totalLimit / 1000);
+      let allData: OHLCVData[] = [];
+      let endTime: number | undefined = undefined;
+
+      for (let page = 0; page < pages; page++) {
+        const pageLimit = Math.min(1000, totalLimit - allData.length);
+        let url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${pageLimit}`;
+        if (endTime) url += `&endTime=${endTime - 1}`;
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Binance API error');
+        const data = await response.json();
+        if (data.length === 0) break;
+        
+        const ohlcv: OHLCVData[] = data.map((k: any[]) => ({
+          timestamp: k[0],
+          open: parseFloat(k[1]),
+          high: parseFloat(k[2]),
+          low: parseFloat(k[3]),
+          close: parseFloat(k[4]),
+          volume: parseFloat(k[5]),
+        }));
+        
+        allData = [...ohlcv, ...allData]; // prepend older data
+        endTime = data[0][0]; // earliest timestamp for next page
+        if (data.length < pageLimit) break; // no more data
+      }
+
+      // Deduplicate by timestamp and sort
+      const seen = new Set<number>();
+      allData = allData.filter(d => {
+        if (seen.has(d.timestamp)) return false;
+        seen.add(d.timestamp);
+        return true;
+      }).sort((a, b) => a.timestamp - b.timestamp);
+
+      this.setCache(cacheKey, allData);
+      console.log(`[ChartData] ✅ ${allData.length} candles for ${symbol} (${timeframe}) via Binance`);
+      return allData;
     } catch (error) {
       console.error('Crypto fetch error:', error);
       return this.generateMockData(symbol, timeframe, limit);

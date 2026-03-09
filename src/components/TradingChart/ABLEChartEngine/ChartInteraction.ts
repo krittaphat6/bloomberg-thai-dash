@@ -242,10 +242,15 @@ export class ChartInteraction {
 
     if (this.isPanning) {
       const deltaX = x - this.lastMouseX;
+      const deltaY = y - this.lastMouseY;
       
       // Convert pixel delta to index delta (direct 1:1 mapping like TradingView)
       const indexRange = this.viewport.endIndex - this.viewport.startIndex;
       const deltaIndex = -(deltaX / chartArea.width) * indexRange;
+      
+      // Vertical panning: convert pixel delta to price delta (TradingView omnidirectional)
+      const priceRange = this.viewport.priceMax - this.viewport.priceMin;
+      const deltaPrice = (deltaY / chartArea.height) * priceRange;
       
       // Track velocity for kinetic scroll
       this.velocityTracker.push({ time: performance.now(), deltaIndex });
@@ -254,7 +259,7 @@ export class ChartInteraction {
       this.velocityTracker = this.velocityTracker.filter(v => now - v.time < this.VELOCITY_WINDOW);
       
       // Apply pan directly (no smoothing - this is the TradingView way)
-      this.panDirect(deltaIndex);
+      this.panDirect(deltaIndex, deltaPrice);
       
       this.lastMouseX = x;
       this.lastMouseY = y;
@@ -399,15 +404,19 @@ export class ChartInteraction {
       const { x, y } = this.getCanvasCoords(e.touches[0]);
       const { chartArea } = this.dimensions;
       const deltaX = x - this.lastMouseX;
+      const deltaY = y - this.lastMouseY;
       
       const indexRange = this.viewport.endIndex - this.viewport.startIndex;
       const deltaIndex = -(deltaX / chartArea.width) * indexRange;
+      
+      const priceRange = this.viewport.priceMax - this.viewport.priceMin;
+      const deltaPrice = (deltaY / chartArea.height) * priceRange;
       
       this.velocityTracker.push({ time: performance.now(), deltaIndex });
       const now = performance.now();
       this.velocityTracker = this.velocityTracker.filter(v => now - v.time < this.VELOCITY_WINDOW);
       
-      this.panDirect(deltaIndex);
+      this.panDirect(deltaIndex, deltaPrice);
       this.lastMouseX = x;
       this.lastMouseY = y;
       
@@ -448,7 +457,7 @@ export class ChartInteraction {
   // PANNING - Direct 1:1 mapping (TradingView style)
   // =========================================================================
 
-  private panDirect(deltaIndex: number) {
+  private panDirect(deltaIndex: number, deltaPrice: number = 0) {
     const indexRange = this.viewport.endIndex - this.viewport.startIndex;
     const newViewport = { ...this.viewport };
     
@@ -468,8 +477,15 @@ export class ChartInteraction {
     newViewport.startIndex = newStartIndex;
     newViewport.endIndex = newEndIndex;
     
-    // Auto-scale price range for visible candles
-    this.updatePriceRange(newViewport);
+    // Vertical panning: if user drags vertically, disable auto-scale and shift price
+    if (Math.abs(deltaPrice) > 0.0001) {
+      this.isAutoScalePrice = false;
+      newViewport.priceMin = this.viewport.priceMin + deltaPrice;
+      newViewport.priceMax = this.viewport.priceMax + deltaPrice;
+    } else {
+      // Auto-scale price range for visible candles (only if no vertical drag)
+      this.updatePriceRange(newViewport);
+    }
     
     this.viewport = newViewport;
     this.callbacks.onViewportChange(newViewport);
