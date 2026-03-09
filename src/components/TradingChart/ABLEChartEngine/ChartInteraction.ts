@@ -242,10 +242,15 @@ export class ChartInteraction {
 
     if (this.isPanning) {
       const deltaX = x - this.lastMouseX;
+      const deltaY = y - this.lastMouseY;
       
       // Convert pixel delta to index delta (direct 1:1 mapping like TradingView)
       const indexRange = this.viewport.endIndex - this.viewport.startIndex;
       const deltaIndex = -(deltaX / chartArea.width) * indexRange;
+      
+      // Vertical panning: convert pixel delta to price delta (TradingView omnidirectional)
+      const priceRange = this.viewport.priceMax - this.viewport.priceMin;
+      const deltaPrice = (deltaY / chartArea.height) * priceRange;
       
       // Track velocity for kinetic scroll
       this.velocityTracker.push({ time: performance.now(), deltaIndex });
@@ -254,7 +259,7 @@ export class ChartInteraction {
       this.velocityTracker = this.velocityTracker.filter(v => now - v.time < this.VELOCITY_WINDOW);
       
       // Apply pan directly (no smoothing - this is the TradingView way)
-      this.panDirect(deltaIndex);
+      this.panDirect(deltaIndex, deltaPrice);
       
       this.lastMouseX = x;
       this.lastMouseY = y;
