@@ -125,8 +125,8 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
         </div>
 
         {/* Tabs — TradingView style underline tabs */}
-        <div className="border-b flex" style={{ borderColor: '#333' }}>
-          <div className="flex overflow-x-auto scrollbar-none">
+        <div className="border-b flex overflow-hidden" style={{ borderColor: '#333' }}>
+          <div className="flex overflow-x-auto scrollbar-none w-full">
             {TABS.map(({ key, label }) => {
               const isActive = selectedType === key;
               return (
