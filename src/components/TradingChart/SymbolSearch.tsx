@@ -167,7 +167,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
                   <div
                     key={`${symbol.exchange}:${symbol.symbol}`}
                     onClick={() => handleSelect(symbol)}
-                    className="flex items-center gap-3 px-4 py-[7px] cursor-pointer transition-colors group"
+                    className="flex items-center gap-2 px-3 py-[7px] cursor-pointer transition-colors group"
                     style={{
                       background: isActive ? '#2a3a2a' : 'transparent',
                     }}
