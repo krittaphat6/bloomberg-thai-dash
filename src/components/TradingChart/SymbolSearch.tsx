@@ -155,7 +155,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
         </div>
 
         {/* Results */}
-        <ScrollArea className="h-[420px]">
+        <ScrollArea className="h-[min(420px,50vh)]">
           {filteredSymbols.length > 0 ? (
             <div>
               {filteredSymbols.map((symbol) => {
