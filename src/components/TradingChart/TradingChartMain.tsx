@@ -208,10 +208,10 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
     }
   }, [symbol, timeframe, data]);
 
-  // Auto refresh - 1s for crypto, 60s for others
+  // Auto refresh - crypto uses WebSocket for real-time updates, only do full refresh for non-crypto
   useEffect(() => {
-    const isCrypto = symbol.type === 'crypto';
-    const interval = setInterval(fetchData, isCrypto ? 1000 : 60000);
+    if (symbol.type === 'crypto') return; // Crypto gets real-time via WebSocket in ABLEChartCanvas
+    const interval = setInterval(fetchData, 60000);
     return () => clearInterval(interval);
   }, [fetchData, symbol.type]);
 
