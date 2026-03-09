@@ -196,7 +196,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
                     </div>
 
                     {/* Exchange */}
-                    <span className="text-[10px] font-mono uppercase w-24 text-right shrink-0" style={{ color: '#555' }}>
+                    <span className="text-[10px] font-mono uppercase w-16 text-right shrink-0" style={{ color: '#555' }}>
                       {symbol.exchange}
                     </span>
                   </div>
