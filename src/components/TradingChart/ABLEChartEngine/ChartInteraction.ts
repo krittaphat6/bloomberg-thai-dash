@@ -404,15 +404,19 @@ export class ChartInteraction {
       const { x, y } = this.getCanvasCoords(e.touches[0]);
       const { chartArea } = this.dimensions;
       const deltaX = x - this.lastMouseX;
+      const deltaY = y - this.lastMouseY;
       
       const indexRange = this.viewport.endIndex - this.viewport.startIndex;
       const deltaIndex = -(deltaX / chartArea.width) * indexRange;
+      
+      const priceRange = this.viewport.priceMax - this.viewport.priceMin;
+      const deltaPrice = (deltaY / chartArea.height) * priceRange;
       
       this.velocityTracker.push({ time: performance.now(), deltaIndex });
       const now = performance.now();
       this.velocityTracker = this.velocityTracker.filter(v => now - v.time < this.VELOCITY_WINDOW);
       
-      this.panDirect(deltaIndex);
+      this.panDirect(deltaIndex, deltaPrice);
       this.lastMouseX = x;
       this.lastMouseY = y;
       
