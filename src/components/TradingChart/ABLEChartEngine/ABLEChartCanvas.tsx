@@ -9,6 +9,7 @@ import { OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from '../ChartThemes';
 import { binanceWS } from '@/services/BinanceWebSocketService';
 import { binanceOrderBook, OrderBookData } from '@/services/BinanceOrderBookService';
+import { syntheticDOM } from '@/services/SyntheticDOMService';
 import { DeepChartsConfig, DEFAULT_DEEPCHARTS_CONFIG, computeDeepCharts } from '../indicators/DeepChartsEngine';
 import { DeepChartsRenderer } from '../indicators/DeepChartsRenderer';
 
@@ -220,33 +221,43 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   }, [symbol, symbolType, timeframe, candles.length]);
 
 
+  // DOM connection — crypto uses Binance, other assets use synthetic DOM from volume
   useEffect(() => {
-    if (symbolType !== 'crypto' || !domConfig?.enabled) {
+    if (!domConfig?.enabled) {
       binanceOrderBook.disconnect();
+      syntheticDOM.disconnect();
       setOrderBook(null);
       setDomConnected(false);
-
-      if (domFullscreen) {
-        setDomFullscreen(false);
-      }
+      if (domFullscreen) setDomFullscreen(false);
       return;
     }
 
-    binanceOrderBook.connect(symbol, domConfig.rows || 20);
+    if (symbolType === 'crypto') {
+      // Crypto: use real Binance order book
+      syntheticDOM.disconnect();
+      binanceOrderBook.connect(symbol, domConfig.rows || 20);
 
-    const unsubOrderBook = binanceOrderBook.subscribe((data) => {
-      setOrderBook(data);
-    });
+      const unsubOrderBook = binanceOrderBook.subscribe((data) => setOrderBook(data));
+      const unsubConnection = binanceOrderBook.subscribeToConnection((connected) => setDomConnected(connected));
 
-    const unsubConnection = binanceOrderBook.subscribeToConnection((connected) => {
-      setDomConnected(connected);
-    });
+      return () => { unsubOrderBook(); unsubConnection(); };
+    } else {
+      // Non-crypto: generate synthetic DOM from candle volume data
+      binanceOrderBook.disconnect();
+      syntheticDOM.connect(symbol);
 
-    return () => {
-      unsubOrderBook();
-      unsubConnection();
-    };
+      const unsubSynthetic = syntheticDOM.subscribe((data) => setOrderBook(data));
+      const unsubConnection = syntheticDOM.subscribeToConnection((connected) => setDomConnected(connected));
+
+      return () => { unsubSynthetic(); unsubConnection(); };
+    }
   }, [symbol, symbolType, domConfig?.enabled, domConfig?.rows]);
+
+  // Update synthetic DOM whenever candles change (for non-crypto assets)
+  useEffect(() => {
+    if (symbolType === 'crypto' || !domConfig?.enabled || candles.length < 5) return;
+    syntheticDOM.updateFromCandles(symbol, data, domConfig?.rows || 20);
+  }, [symbol, symbolType, domConfig?.enabled, data, candles.length]);
 
   // Initialize canvas and renderer
   useEffect(() => {

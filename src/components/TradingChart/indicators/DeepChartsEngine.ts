@@ -259,7 +259,7 @@ function sma(values: number[], period: number): number[] {
   return result;
 }
 
-/** ATR(14) - Average True Range */
+/** ATR(14) - Average True Range using SMA (matching PineScript original: ta.sma(mTR, 14)) */
 function calcATR(candles: Candle[], period: number = 14): number[] {
   const tr: number[] = new Array(candles.length).fill(0);
   for (let i = 0; i < candles.length; i++) {
@@ -275,15 +275,8 @@ function calcATR(candles: Candle[], period: number = 14): number[] {
       );
     }
   }
-  // RMA (Wilder's smoothing) for ATR
-  const atr: number[] = new Array(candles.length).fill(0);
-  let sum = 0;
-  for (let i = 0; i < Math.min(period, candles.length); i++) sum += tr[i];
-  if (candles.length >= period) atr[period - 1] = sum / period;
-  for (let i = period; i < candles.length; i++) {
-    atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period;
-  }
-  return atr;
+  // SMA of True Range (PineScript V4.1 uses ta.sma, NOT ta.rma)
+  return sma(tr, period);
 }
 
 function getBubbleSize(z: number): BubbleSizeCategory {

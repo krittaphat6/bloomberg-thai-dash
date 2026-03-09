@@ -1,12 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from '@/components/ui/dialog';
 import { Search, Star, TrendingUp, Bitcoin, DollarSign, Globe, BarChart3, Landmark, Flame, LineChart, Loader2 } from 'lucide-react';
 import { ChartSymbol, chartDataService } from '@/services/ChartDataService';
@@ -31,16 +28,27 @@ const TYPE_ICONS: Record<string, any> = {
   bond: Landmark,
 };
 
+const TYPE_COLORS: Record<string, string> = {
+  crypto: 'text-amber-400',
+  stock: 'text-blue-400',
+  forex: 'text-emerald-400',
+  set: 'text-purple-400',
+  futures: 'text-orange-400',
+  commodity: 'text-yellow-500',
+  index: 'text-cyan-400',
+  bond: 'text-rose-400',
+};
+
 const ASSET_TYPES = [
-  { key: null, label: 'All', icon: Search },
-  { key: 'crypto', label: 'Crypto', icon: Bitcoin },
-  { key: 'stock', label: 'Stocks', icon: TrendingUp },
-  { key: 'forex', label: 'Forex', icon: DollarSign },
-  { key: 'commodity', label: 'Commodities', icon: BarChart3 },
-  { key: 'index', label: 'Indices', icon: LineChart },
-  { key: 'futures', label: 'Futures', icon: Flame },
-  { key: 'bond', label: 'Bonds', icon: Landmark },
-  { key: 'set', label: 'SET', icon: Globe },
+  { key: null, label: 'All', icon: Search, color: 'text-foreground' },
+  { key: 'crypto', label: 'Crypto', icon: Bitcoin, color: 'text-amber-400' },
+  { key: 'stock', label: 'Stocks', icon: TrendingUp, color: 'text-blue-400' },
+  { key: 'forex', label: 'Forex', icon: DollarSign, color: 'text-emerald-400' },
+  { key: 'commodity', label: 'Commodities', icon: BarChart3, color: 'text-yellow-500' },
+  { key: 'index', label: 'Indices', icon: LineChart, color: 'text-cyan-400' },
+  { key: 'futures', label: 'Futures', icon: Flame, color: 'text-orange-400' },
+  { key: 'bond', label: 'Bonds', icon: Landmark, color: 'text-rose-400' },
+  { key: 'set', label: 'SET', icon: Globe, color: 'text-purple-400' },
 ] as const;
 
 const SymbolSearch: React.FC<SymbolSearchProps> = ({
@@ -59,14 +67,12 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
 
   const defaultSymbols = useMemo(() => chartDataService.getSymbolsList(), []);
 
-  // Load all crypto symbols when crypto tab is selected
   useEffect(() => {
     if (selectedType === 'crypto' && cryptoSymbols.length === 0) {
       chartDataService.loadAllCryptoSymbols().then(setCryptoSymbols).catch(() => {});
     }
   }, [selectedType, cryptoSymbols.length]);
 
-  // Reset on close
   useEffect(() => {
     if (!isOpen) {
       setSearchQuery('');
@@ -74,7 +80,6 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
     }
   }, [isOpen]);
 
-  // Debounced screener search
   useEffect(() => {
     if (!searchQuery || searchQuery.length < 2) {
       setScreenerResults([]);
@@ -95,47 +100,25 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
   }, [searchQuery]);
 
   const filteredSymbols = useMemo(() => {
-    // Build full symbol pool
     const seen = new Set<string>();
     const allSymbols: ChartSymbol[] = [];
-
     const addUnique = (s: ChartSymbol) => {
-      if (!seen.has(s.symbol)) {
-        allSymbols.push(s);
-        seen.add(s.symbol);
-      }
+      if (!seen.has(s.symbol)) { allSymbols.push(s); seen.add(s.symbol); }
     };
-
-    // Add defaults first
     defaultSymbols.forEach(addUnique);
-
-    // Add loaded crypto symbols
-    if (selectedType === 'crypto' || !selectedType) {
-      cryptoSymbols.forEach(addUnique);
-    }
-
-    // Add screener results
+    if (selectedType === 'crypto' || !selectedType) cryptoSymbols.forEach(addUnique);
     screenerResults.forEach(addUnique);
 
     let result = allSymbols;
-
-    // Filter by type
-    if (selectedType) {
-      result = result.filter(s => s.type === selectedType);
-    }
-
-    // Filter by search query
+    if (selectedType) result = result.filter(s => s.type === selectedType);
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        s =>
-          s.symbol.toLowerCase().includes(query) ||
-          s.name.toLowerCase().includes(query) ||
-          s.exchange.toLowerCase().includes(query)
+      const q = searchQuery.toLowerCase();
+      result = result.filter(s =>
+        s.symbol.toLowerCase().includes(q) ||
+        s.name.toLowerCase().includes(q) ||
+        s.exchange.toLowerCase().includes(q)
       );
     }
-
-    // Sort: favorites first, then alphabetical
     return result.sort((a, b) => {
       const aFav = favorites.includes(a.symbol) ? 0 : 1;
       const bFav = favorites.includes(b.symbol) ? 0 : 1;
@@ -149,7 +132,6 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
     onClose();
   };
 
-  // Count per type for badges
   const typeCounts = useMemo(() => {
     const base = [...defaultSymbols];
     const seen = new Set(base.map(s => s.symbol));
@@ -162,35 +144,35 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[640px] p-0 gap-0 bg-card border-terminal-green/30 overflow-hidden">
-        <DialogHeader className="px-5 pt-5 pb-3">
-          <DialogTitle className="text-terminal-green font-mono flex items-center gap-2 text-base">
+      <DialogContent className="sm:max-w-[680px] p-0 gap-0 bg-[hsl(var(--card))] border border-[hsl(var(--terminal-green)/0.2)] overflow-hidden rounded-xl shadow-2xl shadow-black/50">
+        
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-[hsl(var(--border)/0.5)]">
+          <h2 className="text-[hsl(var(--terminal-green))] font-mono text-sm font-semibold tracking-wider mb-4 flex items-center gap-2">
             <Search className="w-4 h-4" />
-            Search Any Asset — Global Markets
-          </DialogTitle>
-        </DialogHeader>
+            SEARCH GLOBAL MARKETS
+          </h2>
 
-        {/* Search input */}
-        <div className="px-5 pb-3">
+          {/* Search input */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--muted-foreground)/0.5)]" />
             <Input
               placeholder="Search ticker, name, exchange..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="pl-10 pr-10 h-10 bg-background border-terminal-green/40 focus:border-terminal-green font-mono text-sm"
+              className="pl-11 pr-10 h-11 bg-[hsl(var(--background))] border-[hsl(var(--border)/0.3)] focus:border-[hsl(var(--terminal-green)/0.6)] focus:ring-1 focus:ring-[hsl(var(--terminal-green)/0.2)] font-mono text-sm rounded-lg placeholder:text-[hsl(var(--muted-foreground)/0.4)]"
               autoFocus
             />
             {isSearching && (
-              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-terminal-green" />
+              <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-[hsl(var(--terminal-green))]" />
             )}
           </div>
         </div>
 
         {/* Type filter tabs */}
-        <div className="px-5 pb-2">
+        <div className="px-4 py-2.5 border-b border-[hsl(var(--border)/0.3)] bg-[hsl(var(--background)/0.3)]">
           <div className="flex gap-1 overflow-x-auto scrollbar-none">
-            {ASSET_TYPES.map(({ key, label, icon: Icon }) => {
+            {ASSET_TYPES.map(({ key, label, icon: Icon, color }) => {
               const isActive = selectedType === key;
               const count = key ? typeCounts[key] || 0 : typeCounts['all'] || 0;
               return (
@@ -198,17 +180,17 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
                   key={label}
                   onClick={() => setSelectedType(key)}
                   className={`
-                    flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono whitespace-nowrap transition-all
+                    flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap transition-all duration-200
                     ${isActive
-                      ? 'bg-terminal-green text-black font-semibold shadow-[0_0_8px_hsl(var(--terminal-green)/0.3)]'
-                      : 'bg-muted/30 text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                      ? 'bg-[hsl(var(--terminal-green))] text-black font-bold shadow-lg shadow-[hsl(var(--terminal-green)/0.15)]'
+                      : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted)/0.5)] hover:text-[hsl(var(--foreground))]'
                     }
                   `}
                 >
-                  <Icon className="w-3 h-3" />
-                  {label}
+                  <Icon className={`w-3 h-3 ${isActive ? '' : color}`} />
+                  <span>{label}</span>
                   {count > 0 && (
-                    <span className={`text-[9px] ${isActive ? 'text-black/60' : 'text-muted-foreground/60'}`}>
+                    <span className={`text-[9px] font-normal ml-0.5 ${isActive ? 'text-black/50' : 'text-[hsl(var(--muted-foreground)/0.4)]'}`}>
                       {count}
                     </span>
                   )}
@@ -218,114 +200,92 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="h-px bg-border mx-5" />
-
-        {/* Results count */}
-        <div className="px-5 py-1.5 flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground font-mono">
-            {filteredSymbols.length} results
-            {screenerResults.length > 0 && (
-              <span className="text-terminal-green"> • {screenerResults.length} from global search</span>
-            )}
-          </span>
-          {isSearching && (
-            <span className="text-[10px] text-terminal-green font-mono flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" /> Searching...
-            </span>
-          )}
+        {/* Results header */}
+        <div className="px-6 py-2 flex items-center justify-between text-[10px] text-[hsl(var(--muted-foreground)/0.6)] font-mono border-b border-[hsl(var(--border)/0.2)]">
+          <span>{filteredSymbols.length} results</span>
+          <div className="flex items-center gap-4">
+            <span className="w-20 text-right">EXCHANGE</span>
+            <span className="w-14 text-right">TYPE</span>
+          </div>
         </div>
 
         {/* Symbol list */}
-        <ScrollArea className="h-[420px]">
-          <div className="px-3 pb-3">
-            {filteredSymbols.length > 0 ? (
-              <div className="grid gap-0.5">
-                {filteredSymbols.map(symbol => {
-                  const Icon = TYPE_ICONS[symbol.type] || Globe;
-                  const isFavorite = favorites.includes(symbol.symbol);
-                  const isSelected = currentSymbol?.symbol === symbol.symbol;
+        <ScrollArea className="h-[440px]">
+          {filteredSymbols.length > 0 ? (
+            <div className="py-1">
+              {filteredSymbols.map((symbol, idx) => {
+                const Icon = TYPE_ICONS[symbol.type] || Globe;
+                const iconColor = TYPE_COLORS[symbol.type] || 'text-[hsl(var(--muted-foreground))]';
+                const isFavorite = favorites.includes(symbol.symbol);
+                const isSelected = currentSymbol?.symbol === symbol.symbol;
 
-                  return (
-                    <div
-                      key={`${symbol.exchange}:${symbol.symbol}`}
-                      className={`
-                        flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition-all group
-                        ${isSelected
-                          ? 'bg-terminal-green/15 ring-1 ring-terminal-green/40'
-                          : 'hover:bg-muted/40'
-                        }
-                      `}
-                      onClick={() => handleSelect(symbol)}
+                return (
+                  <div
+                    key={`${symbol.exchange}:${symbol.symbol}`}
+                    className={`
+                      flex items-center gap-3 px-6 py-2 cursor-pointer transition-all duration-100 group
+                      ${isSelected
+                        ? 'bg-[hsl(var(--terminal-green)/0.1)] border-l-2 border-l-[hsl(var(--terminal-green))]'
+                        : 'hover:bg-[hsl(var(--muted)/0.3)] border-l-2 border-l-transparent'
+                      }
+                    `}
+                    onClick={() => handleSelect(symbol)}
+                  >
+                    {/* Favorite */}
+                    <button
+                      onClick={e => { e.stopPropagation(); onToggleFavorite(symbol.symbol); }}
+                      className="shrink-0 opacity-40 group-hover:opacity-100 transition-opacity"
                     >
-                      {/* Favorite star */}
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          onToggleFavorite(symbol.symbol);
-                        }}
-                        className="shrink-0 p-0.5 rounded hover:bg-muted/60 transition-colors"
-                      >
-                        <Star
-                          className={`w-3.5 h-3.5 transition-colors ${
-                            isFavorite
-                              ? 'fill-yellow-500 text-yellow-500'
-                              : 'text-muted-foreground/40 group-hover:text-muted-foreground'
-                          }`}
-                        />
-                      </button>
+                      <Star
+                        className={`w-3.5 h-3.5 ${
+                          isFavorite
+                            ? 'fill-yellow-500 text-yellow-500 opacity-100'
+                            : 'text-[hsl(var(--muted-foreground))]'
+                        }`}
+                      />
+                    </button>
 
-                      {/* Icon */}
-                      <Icon className="w-4 h-4 shrink-0 text-terminal-green/70" />
+                    {/* Icon */}
+                    <Icon className={`w-4 h-4 shrink-0 ${iconColor}`} />
 
-                      {/* Symbol info */}
-                      <div className="flex-1 min-w-0 flex items-center gap-2">
-                        <span className="font-mono font-semibold text-sm text-foreground">
-                          {symbol.symbol}
-                        </span>
-                        <span className="text-xs text-muted-foreground truncate hidden sm:inline">
-                          {symbol.name}
-                        </span>
-                      </div>
-
-                      {/* Badges */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge
-                          variant="outline"
-                          className="text-[9px] px-1.5 py-0 h-4 font-mono border-border/50 text-muted-foreground"
-                        >
-                          {symbol.exchange}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className="text-[9px] px-1.5 py-0 h-4 font-mono border-terminal-green/30 text-terminal-green/70"
-                        >
-                          {symbol.type}
-                        </Badge>
-                      </div>
+                    {/* Symbol + Name */}
+                    <div className="flex-1 min-w-0 flex items-baseline gap-2.5">
+                      <span className="font-mono font-bold text-sm text-[hsl(var(--foreground))] tracking-wide">
+                        {symbol.symbol}
+                      </span>
+                      <span className="text-xs text-[hsl(var(--muted-foreground)/0.5)] truncate">
+                        {symbol.name}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            ) : !isSearching ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <Search className="w-8 h-8 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground font-mono">
-                  No symbols found
-                </p>
-                <p className="text-xs text-muted-foreground/60">
-                  Try searching for any ticker or company name
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <Loader2 className="w-6 h-6 animate-spin text-terminal-green" />
-                <p className="text-sm text-muted-foreground font-mono">
-                  Searching global markets...
-                </p>
-              </div>
-            )}
-          </div>
+
+                    {/* Exchange + Type */}
+                    <div className="flex items-center gap-4 shrink-0">
+                      <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground)/0.4)] w-20 text-right">
+                        {symbol.exchange}
+                      </span>
+                      <span className={`text-[10px] font-mono w-14 text-right uppercase tracking-wider ${iconColor}`}>
+                        {symbol.type}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : !isSearching ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Search className="w-10 h-10 text-[hsl(var(--muted-foreground)/0.15)]" />
+              <p className="text-sm text-[hsl(var(--muted-foreground)/0.4)] font-mono">
+                No symbols found
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Loader2 className="w-6 h-6 animate-spin text-[hsl(var(--terminal-green)/0.5)]" />
+              <p className="text-sm text-[hsl(var(--muted-foreground)/0.4)] font-mono">
+                Searching...
+              </p>
+            </div>
+          )}
         </ScrollArea>
       </DialogContent>
     </Dialog>
