@@ -9,6 +9,7 @@ import { OHLCVData } from '@/services/ChartDataService';
 import { ChartTheme } from '../ChartThemes';
 import { binanceWS } from '@/services/BinanceWebSocketService';
 import { binanceOrderBook, OrderBookData } from '@/services/BinanceOrderBookService';
+import { syntheticDOM } from '@/services/SyntheticDOMService';
 import { DeepChartsConfig, DEFAULT_DEEPCHARTS_CONFIG, computeDeepCharts } from '../indicators/DeepChartsEngine';
 import { DeepChartsRenderer } from '../indicators/DeepChartsRenderer';
 
