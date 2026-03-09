@@ -58,6 +58,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   domConfig,
   deepChartsConfig,
   onCrosshairMove,
+  onLoadMoreHistory,
   domFullscreen: domFullscreenProp,
   onDOMFullscreenChange,
 }) => {
