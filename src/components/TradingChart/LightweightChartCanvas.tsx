@@ -37,6 +37,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   domFullscreen,
   onDOMFullscreenChange,
   onCrosshairMove,
+  onLoadMoreHistory,
   deepChartsConfig,
 }) => {
   // Filter for DOM indicator
