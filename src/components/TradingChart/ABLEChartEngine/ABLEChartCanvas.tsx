@@ -317,6 +317,15 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     interactionRef.current?.updateState(dimensions, viewport, candles);
   }, [dimensions, viewport, candles]);
 
+  // Lazy-load more history when scrolling near the left edge
+  const loadMoreHistoryRef = useRef(onLoadMoreHistory);
+  loadMoreHistoryRef.current = onLoadMoreHistory;
+  useEffect(() => {
+    if (viewport.startIndex <= 10 && candles.length > 0) {
+      loadMoreHistoryRef.current?.();
+    }
+  }, [viewport.startIndex, candles.length]);
+
   // Handle drawing mode change
   useEffect(() => {
     if (drawingMode) {
