@@ -162,8 +162,8 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
     setError(null);
 
     try {
-      // Crypto: fetch maximum 1000 candles from Binance for full historical view
-      const limit = symbol.type === 'crypto' ? 1000 : 500;
+      // Crypto: fetch maximum 3000 candles from Binance for deep historical view
+      const limit = symbol.type === 'crypto' ? 3000 : 500;
       const chartData = await chartDataService.fetchData(symbol, timeframe, limit);
       setData(chartData);
       setVisibleRange({ start: Math.max(0, chartData.length - 200), end: chartData.length });
