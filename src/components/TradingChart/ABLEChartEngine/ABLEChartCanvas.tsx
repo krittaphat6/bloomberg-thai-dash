@@ -188,16 +188,29 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   }, [data]);
 
   // Real-time updates for crypto
+  const candlesReadyRef = useRef(false);
+  useEffect(() => { candlesReadyRef.current = candles.length > 0; }, [candles.length]);
+
   useEffect(() => {
-    if (symbolType !== 'crypto' || candles.length === 0) return;
+    if (symbolType !== 'crypto') return;
 
     const interval = timeframe === '1D' ? '1d' : timeframe === '1W' ? '1w' : timeframe === '1M' ? '1M' : timeframe.toLowerCase();
-    
+
+    // Determine the candle period in ms for proper bucketing
+    const periodMs: Record<string, number> = {
+      '1m': 60_000, '3m': 180_000, '5m': 300_000, '15m': 900_000,
+      '30m': 1_800_000, '1h': 3_600_000, '4h': 14_400_000,
+      '1d': 86_400_000, '1w': 604_800_000, '1M': 2_592_000_000,
+    };
+    const bucket = periodMs[interval] || 60_000;
+
     const unsubscribe = binanceWS.subscribeToKline(symbol, interval, (update) => {
+      if (!candlesReadyRef.current) return;
+
       setCandles(prev => {
         const newCandles = [...prev];
         const lastCandle = newCandles[newCandles.length - 1];
-        
+
         const updateCandle: Candle = {
           timestamp: update.kline.timestamp,
           open: update.kline.open,
@@ -206,19 +219,20 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
           close: update.kline.close,
           volume: update.kline.volume,
         };
-        
-        if (lastCandle && Math.floor(lastCandle.timestamp / 60000) === Math.floor(update.kline.timestamp / 60000)) {
+
+        // Same candle period → update in place; new period → append
+        if (lastCandle && Math.floor(lastCandle.timestamp / bucket) === Math.floor(update.kline.timestamp / bucket)) {
           newCandles[newCandles.length - 1] = updateCandle;
         } else {
           newCandles.push(updateCandle);
         }
-        
+
         return newCandles;
       });
     });
 
     return unsubscribe;
-  }, [symbol, symbolType, timeframe, candles.length]);
+  }, [symbol, symbolType, timeframe]);
 
 
   // DOM connection — crypto uses Binance, other assets use synthetic DOM from volume
