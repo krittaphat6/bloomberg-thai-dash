@@ -5,7 +5,7 @@ import {
   Dialog,
   DialogContent,
 } from '@/components/ui/dialog';
-import { Search, Star, TrendingUp, Bitcoin, DollarSign, Globe, BarChart3, Landmark, Flame, LineChart, Loader2, X, Zap } from 'lucide-react';
+import { Search, Star, TrendingUp, Bitcoin, DollarSign, Globe, BarChart3, Landmark, Flame, LineChart, Loader2, X } from 'lucide-react';
 import { ChartSymbol, chartDataService } from '@/services/ChartDataService';
 
 interface SymbolSearchProps {
@@ -22,33 +22,16 @@ const TYPE_ICONS: Record<string, any> = {
   futures: Flame, commodity: BarChart3, index: LineChart, bond: Landmark,
 };
 
-const TYPE_BG: Record<string, string> = {
-  crypto: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
-  stock: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
-  forex: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-  set: 'bg-purple-500/15 text-purple-400 border-purple-500/20',
-  futures: 'bg-orange-500/15 text-orange-400 border-orange-500/20',
-  commodity: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20',
-  index: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20',
-  bond: 'bg-rose-500/15 text-rose-400 border-rose-500/20',
-};
-
-const TYPE_ICON_COLOR: Record<string, string> = {
-  crypto: 'text-amber-400', stock: 'text-blue-400', forex: 'text-emerald-400',
-  set: 'text-purple-400', futures: 'text-orange-400', commodity: 'text-yellow-400',
-  index: 'text-cyan-400', bond: 'text-rose-400',
-};
-
 const TABS = [
-  { key: null, label: 'All', icon: Zap },
-  { key: 'crypto', label: 'Crypto', icon: Bitcoin },
-  { key: 'stock', label: 'Stocks', icon: TrendingUp },
-  { key: 'forex', label: 'Forex', icon: DollarSign },
-  { key: 'commodity', label: 'Commodities', icon: BarChart3 },
-  { key: 'index', label: 'Indices', icon: LineChart },
-  { key: 'futures', label: 'Futures', icon: Flame },
-  { key: 'bond', label: 'Bonds', icon: Landmark },
-  { key: 'set', label: 'SET', icon: Globe },
+  { key: null, label: 'All' },
+  { key: 'crypto', label: 'Crypto' },
+  { key: 'stock', label: 'Stocks' },
+  { key: 'forex', label: 'Forex' },
+  { key: 'index', label: 'Indices' },
+  { key: 'commodity', label: 'Cmdty' },
+  { key: 'futures', label: 'Futures' },
+  { key: 'bond', label: 'Bonds' },
+  { key: 'set', label: 'SET' },
 ] as const;
 
 const SymbolSearch: React.FC<SymbolSearchProps> = ({
@@ -109,16 +92,6 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
     });
   }, [defaultSymbols, cryptoSymbols, screenerResults, searchQuery, selectedType, favorites]);
 
-  const typeCounts = useMemo(() => {
-    const base = [...defaultSymbols];
-    const seen = new Set(base.map(s => s.symbol));
-    cryptoSymbols.forEach(s => { if (!seen.has(s.symbol)) { base.push(s); seen.add(s.symbol); } });
-    const c: Record<string, number> = {};
-    base.forEach(s => { c[s.type] = (c[s.type] || 0) + 1; });
-    c['all'] = base.length;
-    return c;
-  }, [defaultSymbols, cryptoSymbols]);
-
   const handleSelect = useCallback((symbol: ChartSymbol) => {
     onSelectSymbol(symbol);
     onClose();
@@ -126,53 +99,48 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[560px] p-0 gap-0 bg-[hsl(var(--card))] border border-[hsl(var(--border)/0.4)] overflow-hidden rounded-2xl shadow-2xl shadow-black/60 backdrop-blur-xl">
-
-        {/* Search bar */}
-        <div className="p-4 pb-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--muted-foreground)/0.4)]" />
+      <DialogContent className="sm:max-w-[520px] p-0 gap-0 border-0 overflow-hidden rounded-none shadow-2xl shadow-black/80"
+        style={{ background: '#1e1e1e' }}
+      >
+        {/* Search */}
+        <div className="border-b" style={{ borderColor: '#333' }}>
+          <div className="flex items-center px-3 gap-2">
+            <Search className="w-4 h-4 shrink-0" style={{ color: '#666' }} />
             <Input
-              placeholder="Search symbol or name..."
+              placeholder="Search"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="pl-10 pr-10 h-10 bg-[hsl(var(--muted)/0.3)] border-0 focus-visible:ring-1 focus-visible:ring-[hsl(var(--terminal-green)/0.5)] font-mono text-sm rounded-xl placeholder:text-[hsl(var(--muted-foreground)/0.35)]"
+              className="border-0 shadow-none h-11 bg-transparent focus-visible:ring-0 font-mono text-sm px-0"
+              style={{ color: '#d4d4d4' }}
               autoFocus
             />
             {isSearching ? (
-              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-[hsl(var(--terminal-green))]" />
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" style={{ color: '#4ade80' }} />
             ) : searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
-                <X className="w-3.5 h-3.5 text-[hsl(var(--muted-foreground)/0.4)] hover:text-[hsl(var(--foreground))]" />
+              <button onClick={() => setSearchQuery('')} className="shrink-0">
+                <X className="w-3.5 h-3.5" style={{ color: '#666' }} />
               </button>
             )}
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="px-4 pb-3">
-          <div className="flex gap-1 overflow-x-auto scrollbar-none">
-            {TABS.map(({ key, label, icon: Icon }) => {
+        {/* Tabs — TradingView style underline tabs */}
+        <div className="border-b flex" style={{ borderColor: '#333' }}>
+          <div className="flex overflow-x-auto scrollbar-none">
+            {TABS.map(({ key, label }) => {
               const isActive = selectedType === key;
-              const count = key ? typeCounts[key] || 0 : typeCounts['all'] || 0;
               return (
                 <button
                   key={label}
                   onClick={() => setSelectedType(key)}
-                  className={`
-                    flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono whitespace-nowrap transition-all
-                    ${isActive
-                      ? 'bg-[hsl(var(--terminal-green)/0.15)] text-[hsl(var(--terminal-green))] ring-1 ring-[hsl(var(--terminal-green)/0.3)]'
-                      : 'text-[hsl(var(--muted-foreground)/0.6)] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted)/0.3)]'
-                    }
-                  `}
+                  className="relative px-3 py-2 text-xs font-mono whitespace-nowrap transition-colors"
+                  style={{
+                    color: isActive ? '#4ade80' : '#888',
+                  }}
                 >
-                  <Icon className="w-3 h-3" />
-                  <span>{label}</span>
-                  {count > 0 && (
-                    <span className={`text-[9px] ml-0.5 ${isActive ? 'text-[hsl(var(--terminal-green)/0.6)]' : 'text-[hsl(var(--muted-foreground)/0.3)]'}`}>
-                      {count}
-                    </span>
+                  {label}
+                  {isActive && (
+                    <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{ background: '#4ade80' }} />
                   )}
                 </button>
               );
@@ -180,26 +148,18 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
           </div>
         </div>
 
-        {/* Divider + count */}
-        <div className="h-px bg-[hsl(var(--border)/0.3)]" />
-        <div className="px-4 py-1.5 flex items-center justify-between">
-          <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground)/0.4)]">
-            {filteredSymbols.length} instruments
-          </span>
-          <div className="flex gap-6 text-[10px] font-mono text-[hsl(var(--muted-foreground)/0.3)] uppercase tracking-widest">
-            <span>Symbol</span>
-            <span>Exchange</span>
-          </div>
+        {/* Column headers */}
+        <div className="flex items-center px-4 py-1.5 border-b" style={{ borderColor: '#2a2a2a' }}>
+          <span className="text-[10px] font-mono uppercase tracking-wider flex-1" style={{ color: '#555' }}>Symbol</span>
+          <span className="text-[10px] font-mono uppercase tracking-wider w-24 text-right" style={{ color: '#555' }}>Source</span>
         </div>
 
-        {/* List */}
-        <ScrollArea className="h-[400px]">
+        {/* Results */}
+        <ScrollArea className="h-[420px]">
           {filteredSymbols.length > 0 ? (
-            <div className="px-2 pb-2">
+            <div>
               {filteredSymbols.map((symbol) => {
                 const Icon = TYPE_ICONS[symbol.type] || Globe;
-                const iconColor = TYPE_ICON_COLOR[symbol.type] || 'text-[hsl(var(--muted-foreground))]';
-                const badgeCls = TYPE_BG[symbol.type] || 'bg-[hsl(var(--muted)/0.3)] text-[hsl(var(--muted-foreground))]';
                 const isFav = favorites.includes(symbol.symbol);
                 const isActive = currentSymbol?.symbol === symbol.symbol;
 
@@ -207,39 +167,36 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
                   <div
                     key={`${symbol.exchange}:${symbol.symbol}`}
                     onClick={() => handleSelect(symbol)}
-                    className={`
-                      flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-all group
-                      ${isActive
-                        ? 'bg-[hsl(var(--terminal-green)/0.08)] ring-1 ring-[hsl(var(--terminal-green)/0.2)]'
-                        : 'hover:bg-[hsl(var(--muted)/0.2)]'
-                      }
-                    `}
+                    className="flex items-center gap-3 px-4 py-[7px] cursor-pointer transition-colors group"
+                    style={{
+                      background: isActive ? '#2a3a2a' : 'transparent',
+                    }}
+                    onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = '#262626'; }}
+                    onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
                   >
-                    {/* Fav */}
+                    {/* Fav star */}
                     <button
                       onClick={e => { e.stopPropagation(); onToggleFavorite(symbol.symbol); }}
-                      className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="shrink-0"
                     >
-                      <Star className={`w-3 h-3 ${isFav ? 'fill-amber-400 text-amber-400 !opacity-100' : 'text-[hsl(var(--muted-foreground)/0.4)]'}`} />
+                      <Star className="w-3 h-3 transition-colors" style={{
+                        color: isFav ? '#facc15' : '#444',
+                        fill: isFav ? '#facc15' : 'none',
+                      }} />
                     </button>
 
-                    {/* Type icon */}
-                    <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${badgeCls} border`}>
-                      <Icon className="w-3 h-3" />
-                    </div>
-
-                    {/* Info */}
+                    {/* Symbol + name */}
                     <div className="flex-1 min-w-0 flex items-center gap-2">
-                      <span className="font-mono font-semibold text-[13px] text-[hsl(var(--foreground))]">
+                      <span className="font-mono font-bold text-[13px]" style={{ color: '#e0e0e0' }}>
                         {symbol.symbol}
                       </span>
-                      <span className="text-[11px] text-[hsl(var(--muted-foreground)/0.45)] truncate">
+                      <span className="text-[11px] truncate" style={{ color: '#666' }}>
                         {symbol.name}
                       </span>
                     </div>
 
-                    {/* Exchange badge */}
-                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[hsl(var(--muted)/0.3)] text-[hsl(var(--muted-foreground)/0.5)] uppercase tracking-wider shrink-0">
+                    {/* Exchange */}
+                    <span className="text-[10px] font-mono uppercase w-24 text-right shrink-0" style={{ color: '#555' }}>
                       {symbol.exchange}
                     </span>
                   </div>
@@ -248,16 +205,26 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
             </div>
           ) : !isSearching ? (
             <div className="flex flex-col items-center justify-center py-20 gap-2">
-              <Search className="w-8 h-8 text-[hsl(var(--muted-foreground)/0.1)]" />
-              <p className="text-xs text-[hsl(var(--muted-foreground)/0.3)] font-mono">No results</p>
+              <Search className="w-6 h-6" style={{ color: '#333' }} />
+              <p className="text-xs font-mono" style={{ color: '#444' }}>No results found</p>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-20 gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-[hsl(var(--terminal-green)/0.4)]" />
-              <p className="text-xs text-[hsl(var(--muted-foreground)/0.3)] font-mono">Searching...</p>
+              <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#4ade80' }} />
+              <p className="text-xs font-mono" style={{ color: '#444' }}>Searching...</p>
             </div>
           )}
         </ScrollArea>
+
+        {/* Footer */}
+        <div className="border-t px-4 py-1.5 flex items-center justify-between" style={{ borderColor: '#333' }}>
+          <span className="text-[10px] font-mono" style={{ color: '#555' }}>
+            {filteredSymbols.length} results
+          </span>
+          <span className="text-[10px] font-mono" style={{ color: '#444' }}>
+            ↵ Select · ESC Close
+          </span>
+        </div>
       </DialogContent>
     </Dialog>
   );
