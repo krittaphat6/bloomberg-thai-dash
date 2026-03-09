@@ -217,7 +217,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
         </ScrollArea>
 
         {/* Footer */}
-        <div className="border-t px-4 py-1.5 flex items-center justify-between" style={{ borderColor: '#333' }}>
+        <div className="border-t px-3 py-1.5 flex items-center justify-between" style={{ borderColor: '#333' }}>
           <span className="text-[10px] font-mono" style={{ color: '#555' }}>
             {filteredSymbols.length} results
           </span>
