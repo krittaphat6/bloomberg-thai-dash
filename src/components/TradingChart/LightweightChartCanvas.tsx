@@ -93,6 +93,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
       domFullscreen={domFullscreen}
       onDOMFullscreenChange={onDOMFullscreenChange}
       onCrosshairMove={onCrosshairMove}
+      onLoadMoreHistory={onLoadMoreHistory}
     />
   );
 };
