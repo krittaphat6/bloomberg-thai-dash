@@ -99,7 +99,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-       <DialogContent className="w-[calc(100vw-2rem)] max-w-[480px] p-0 gap-0 border-0 overflow-hidden rounded-lg shadow-2xl shadow-black/80"
+       <DialogContent className="w-[90vw] max-w-[460px] p-0 gap-0 border border-[#333] overflow-hidden rounded-lg shadow-2xl shadow-black/80 [&>button]:hidden"
         style={{ background: '#1e1e1e' }}
       >
         {/* Search */}
