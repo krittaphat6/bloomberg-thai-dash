@@ -29,6 +29,7 @@ interface ABLEChartCanvasProps {
   deepChartsConfig?: DeepChartsConfig;
   
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
+  onLoadMoreHistory?: () => void;
   domFullscreen?: boolean;
   onDOMFullscreenChange?: (isFullscreen: boolean) => void;
 }
@@ -57,6 +58,7 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   domConfig,
   deepChartsConfig,
   onCrosshairMove,
+  onLoadMoreHistory,
   domFullscreen: domFullscreenProp,
   onDOMFullscreenChange,
 }) => {
@@ -133,30 +135,54 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     };
   }, [width, height, isVolumeActive]);
 
-  // Convert data to candles
+  // Convert data to candles — preserve viewport position when history is prepended
+  const prevCandleCountRef = useRef(0);
+  const isInitialLoadRef = useRef(true);
+
+  // Reset refs when symbol/timeframe changes
+  useEffect(() => {
+    prevCandleCountRef.current = 0;
+    isInitialLoadRef.current = true;
+  }, [symbol, timeframe]);
+
   useEffect(() => {
     if (data.length > 0) {
       const newCandles = convertToCandles(data);
+      const prevCount = prevCandleCountRef.current;
+      const prepended = prevCount > 0 ? newCandles.length - prevCount : 0;
+      
       setCandles(newCandles);
+      prevCandleCountRef.current = newCandles.length;
       
-      const visibleCount = Math.min(100, newCandles.length);
-      const startIdx = Math.max(0, newCandles.length - visibleCount);
-      
-      let min = Infinity, max = -Infinity;
-      for (let i = startIdx; i < newCandles.length; i++) {
-        min = Math.min(min, newCandles[i].low);
-        max = Math.max(max, newCandles[i].high);
+      if (isInitialLoadRef.current || prepended <= 0) {
+        // Initial load or new data appended: show last 100 candles
+        isInitialLoadRef.current = false;
+        const visibleCount = Math.min(100, newCandles.length);
+        const startIdx = Math.max(0, newCandles.length - visibleCount);
+        
+        let min = Infinity, max = -Infinity;
+        for (let i = startIdx; i < newCandles.length; i++) {
+          min = Math.min(min, newCandles[i].low);
+          max = Math.max(max, newCandles[i].high);
+        }
+        
+        const padding = (max - min) * 0.05;
+        
+        setViewport(prev => ({
+          ...prev,
+          startIndex: startIdx,
+          endIndex: newCandles.length - 1,
+          priceMin: min - padding,
+          priceMax: max + padding,
+        }));
+      } else {
+        // History prepended: shift viewport indices so user stays at same position
+        setViewport(prev => ({
+          ...prev,
+          startIndex: prev.startIndex + prepended,
+          endIndex: prev.endIndex + prepended,
+        }));
       }
-      
-      const padding = (max - min) * 0.05;
-      
-      setViewport(prev => ({
-        ...prev,
-        startIndex: startIdx,
-        endIndex: newCandles.length - 1,
-        priceMin: min - padding,
-        priceMax: max + padding,
-      }));
     }
   }, [data]);
 
@@ -314,6 +340,15 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   useEffect(() => {
     interactionRef.current?.updateState(dimensions, viewport, candles);
   }, [dimensions, viewport, candles]);
+
+  // Lazy-load more history when scrolling near the left edge
+  const loadMoreHistoryRef = useRef(onLoadMoreHistory);
+  loadMoreHistoryRef.current = onLoadMoreHistory;
+  useEffect(() => {
+    if (viewport.startIndex <= 10 && candles.length > 0) {
+      loadMoreHistoryRef.current?.();
+    }
+  }, [viewport.startIndex, candles.length]);
 
   // Handle drawing mode change
   useEffect(() => {

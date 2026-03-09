@@ -20,6 +20,7 @@ interface LightweightChartCanvasProps {
   domFullscreen?: boolean;
   onDOMFullscreenChange?: (isFullscreen: boolean) => void;
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
+  onLoadMoreHistory?: () => void;
   deepChartsConfig?: DeepChartsConfig;
 }
 
@@ -36,6 +37,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
   domFullscreen,
   onDOMFullscreenChange,
   onCrosshairMove,
+  onLoadMoreHistory,
   deepChartsConfig,
 }) => {
   // Filter for DOM indicator
@@ -91,6 +93,7 @@ export const LightweightChartCanvas: React.FC<LightweightChartCanvasProps> = ({
       domFullscreen={domFullscreen}
       onDOMFullscreenChange={onDOMFullscreenChange}
       onCrosshairMove={onCrosshairMove}
+      onLoadMoreHistory={onLoadMoreHistory}
     />
   );
 };
