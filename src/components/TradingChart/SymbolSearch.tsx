@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
@@ -31,27 +31,16 @@ const TYPE_ICONS: Record<string, any> = {
   bond: Landmark,
 };
 
-const TYPE_COLORS: Record<string, string> = {
-  crypto: 'text-orange-500',
-  stock: 'text-green-500',
-  forex: 'text-blue-500',
-  set: 'text-purple-500',
-  futures: 'text-red-500',
-  commodity: 'text-yellow-500',
-  index: 'text-cyan-500',
-  bond: 'text-emerald-500',
-};
-
 const ASSET_TYPES = [
-  { key: null, label: 'All' },
-  { key: 'crypto', label: 'Crypto' },
-  { key: 'stock', label: 'Stocks' },
-  { key: 'forex', label: 'Forex' },
-  { key: 'commodity', label: 'Commodities' },
-  { key: 'index', label: 'Indices' },
-  { key: 'futures', label: 'Futures' },
-  { key: 'bond', label: 'Bonds' },
-  { key: 'set', label: 'SET' },
+  { key: null, label: 'All', icon: Search },
+  { key: 'crypto', label: 'Crypto', icon: Bitcoin },
+  { key: 'stock', label: 'Stocks', icon: TrendingUp },
+  { key: 'forex', label: 'Forex', icon: DollarSign },
+  { key: 'commodity', label: 'Commodities', icon: BarChart3 },
+  { key: 'index', label: 'Indices', icon: LineChart },
+  { key: 'futures', label: 'Futures', icon: Flame },
+  { key: 'bond', label: 'Bonds', icon: Landmark },
+  { key: 'set', label: 'SET', icon: Globe },
 ] as const;
 
 const SymbolSearch: React.FC<SymbolSearchProps> = ({
@@ -65,9 +54,25 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [screenerResults, setScreenerResults] = useState<ChartSymbol[]>([]);
+  const [cryptoSymbols, setCryptoSymbols] = useState<ChartSymbol[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   const defaultSymbols = useMemo(() => chartDataService.getSymbolsList(), []);
+
+  // Load all crypto symbols when crypto tab is selected
+  useEffect(() => {
+    if (selectedType === 'crypto' && cryptoSymbols.length === 0) {
+      chartDataService.loadAllCryptoSymbols().then(setCryptoSymbols).catch(() => {});
+    }
+  }, [selectedType, cryptoSymbols.length]);
+
+  // Reset on close
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery('');
+      setScreenerResults([]);
+    }
+  }, [isOpen]);
 
   // Debounced screener search
   useEffect(() => {
@@ -90,22 +95,36 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
   }, [searchQuery]);
 
   const filteredSymbols = useMemo(() => {
-    // Merge default + screener results
-    const allSymbols = [...defaultSymbols];
-    const seen = new Set(allSymbols.map(s => s.symbol));
-    screenerResults.forEach(s => {
+    // Build full symbol pool
+    const seen = new Set<string>();
+    const allSymbols: ChartSymbol[] = [];
+
+    const addUnique = (s: ChartSymbol) => {
       if (!seen.has(s.symbol)) {
         allSymbols.push(s);
         seen.add(s.symbol);
       }
-    });
+    };
+
+    // Add defaults first
+    defaultSymbols.forEach(addUnique);
+
+    // Add loaded crypto symbols
+    if (selectedType === 'crypto' || !selectedType) {
+      cryptoSymbols.forEach(addUnique);
+    }
+
+    // Add screener results
+    screenerResults.forEach(addUnique);
 
     let result = allSymbols;
 
+    // Filter by type
     if (selectedType) {
       result = result.filter(s => s.type === selectedType);
     }
 
+    // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
@@ -116,138 +135,198 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
       );
     }
 
-    // Sort: favorites first, then by name
+    // Sort: favorites first, then alphabetical
     return result.sort((a, b) => {
-      const aFav = favorites.includes(a.symbol);
-      const bFav = favorites.includes(b.symbol);
-      if (aFav && !bFav) return -1;
-      if (!aFav && bFav) return 1;
-      return 0;
+      const aFav = favorites.includes(a.symbol) ? 0 : 1;
+      const bFav = favorites.includes(b.symbol) ? 0 : 1;
+      if (aFav !== bFav) return aFav - bFav;
+      return a.symbol.localeCompare(b.symbol);
     });
-  }, [defaultSymbols, screenerResults, searchQuery, selectedType, favorites]);
+  }, [defaultSymbols, cryptoSymbols, screenerResults, searchQuery, selectedType, favorites]);
 
   const handleSelect = (symbol: ChartSymbol) => {
     onSelectSymbol(symbol);
     onClose();
-    setSearchQuery('');
   };
+
+  // Count per type for badges
+  const typeCounts = useMemo(() => {
+    const base = [...defaultSymbols];
+    const seen = new Set(base.map(s => s.symbol));
+    cryptoSymbols.forEach(s => { if (!seen.has(s.symbol)) { base.push(s); seen.add(s.symbol); } });
+    const counts: Record<string, number> = {};
+    base.forEach(s => { counts[s.type] = (counts[s.type] || 0) + 1; });
+    counts['all'] = base.length;
+    return counts;
+  }, [defaultSymbols, cryptoSymbols]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[560px] bg-card border-border">
-        <DialogHeader>
-          <DialogTitle className="text-terminal-green font-mono flex items-center gap-2">
+      <DialogContent className="sm:max-w-[640px] p-0 gap-0 bg-card border-terminal-green/30 overflow-hidden">
+        <DialogHeader className="px-5 pt-5 pb-3">
+          <DialogTitle className="text-terminal-green font-mono flex items-center gap-2 text-base">
             <Search className="w-4 h-4" />
             Search Any Asset — Global Markets
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
-          {/* Search input */}
+        {/* Search input */}
+        <div className="px-5 pb-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search stocks, crypto, forex, commodities, indices..."
+              placeholder="Search ticker, name, exchange..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="pl-10 pr-10 bg-background border-border focus:border-terminal-green"
+              className="pl-10 pr-10 h-10 bg-background border-terminal-green/40 focus:border-terminal-green font-mono text-sm"
               autoFocus
             />
             {isSearching && (
               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-terminal-green" />
             )}
           </div>
+        </div>
 
-          {/* Type filters — scrollable */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {ASSET_TYPES.map(({ key, label }) => {
-              const Icon = key ? TYPE_ICONS[key] : Search;
+        {/* Type filter tabs */}
+        <div className="px-5 pb-2">
+          <div className="flex gap-1 overflow-x-auto scrollbar-none">
+            {ASSET_TYPES.map(({ key, label, icon: Icon }) => {
               const isActive = selectedType === key;
+              const count = key ? typeCounts[key] || 0 : typeCounts['all'] || 0;
               return (
-                <Button
+                <button
                   key={label}
-                  variant={isActive ? 'default' : 'outline'}
-                  size="sm"
                   onClick={() => setSelectedType(key)}
-                  className={`gap-1 shrink-0 text-xs ${isActive ? 'bg-terminal-green text-black' : 'border-border'}`}
+                  className={`
+                    flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono whitespace-nowrap transition-all
+                    ${isActive
+                      ? 'bg-terminal-green text-black font-semibold shadow-[0_0_8px_hsl(var(--terminal-green)/0.3)]'
+                      : 'bg-muted/30 text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                    }
+                  `}
                 >
-                  {Icon && <Icon className="w-3 h-3" />}
+                  <Icon className="w-3 h-3" />
                   {label}
-                </Button>
+                  {count > 0 && (
+                    <span className={`text-[9px] ${isActive ? 'text-black/60' : 'text-muted-foreground/60'}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
               );
             })}
-          </div>
-
-          {/* Results count */}
-          <div className="text-[10px] text-muted-foreground px-1">
-            {filteredSymbols.length} results
-            {screenerResults.length > 0 && ` • ${screenerResults.length} from global search`}
-          </div>
-
-          {/* Symbol list */}
-          <div className="max-h-[400px] overflow-y-auto space-y-0.5">
-            {filteredSymbols.map(symbol => {
-              const Icon = TYPE_ICONS[symbol.type] || Globe;
-              const isFavorite = favorites.includes(symbol.symbol);
-              const isSelected = currentSymbol?.symbol === symbol.symbol;
-
-              return (
-                <div
-                  key={`${symbol.exchange}:${symbol.symbol}`}
-                  className={`flex items-center gap-3 px-2 py-1.5 rounded cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-terminal-green/20 border border-terminal-green/50'
-                      : 'hover:bg-muted/50'
-                  }`}
-                  onClick={() => handleSelect(symbol)}
-                >
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      onToggleFavorite(symbol.symbol);
-                    }}
-                    className="p-0.5 hover:bg-muted rounded"
-                  >
-                    <Star
-                      className={`w-3.5 h-3.5 ${
-                        isFavorite ? 'fill-yellow-500 text-yellow-500' : 'text-muted-foreground'
-                      }`}
-                    />
-                  </button>
-
-                  <Icon className={`w-4 h-4 ${TYPE_COLORS[symbol.type] || 'text-muted-foreground'}`} />
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-medium text-sm text-foreground">
-                        {symbol.symbol}
-                      </span>
-                      <Badge variant="outline" className="text-[9px] px-1 py-0">
-                        {symbol.exchange}
-                      </Badge>
-                      <Badge variant="outline" className={`text-[9px] px-1 py-0 ${TYPE_COLORS[symbol.type] || ''}`}>
-                        {symbol.type}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{symbol.name}</p>
-                  </div>
-                </div>
-              );
-            })}
-
-            {filteredSymbols.length === 0 && !isSearching && (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                No symbols found — try searching for any ticker
-              </div>
-            )}
-            {isSearching && filteredSymbols.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground text-sm flex items-center justify-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Searching global markets...
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Divider */}
+        <div className="h-px bg-border mx-5" />
+
+        {/* Results count */}
+        <div className="px-5 py-1.5 flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground font-mono">
+            {filteredSymbols.length} results
+            {screenerResults.length > 0 && (
+              <span className="text-terminal-green"> • {screenerResults.length} from global search</span>
+            )}
+          </span>
+          {isSearching && (
+            <span className="text-[10px] text-terminal-green font-mono flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" /> Searching...
+            </span>
+          )}
+        </div>
+
+        {/* Symbol list */}
+        <ScrollArea className="h-[420px]">
+          <div className="px-3 pb-3">
+            {filteredSymbols.length > 0 ? (
+              <div className="grid gap-0.5">
+                {filteredSymbols.map(symbol => {
+                  const Icon = TYPE_ICONS[symbol.type] || Globe;
+                  const isFavorite = favorites.includes(symbol.symbol);
+                  const isSelected = currentSymbol?.symbol === symbol.symbol;
+
+                  return (
+                    <div
+                      key={`${symbol.exchange}:${symbol.symbol}`}
+                      className={`
+                        flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition-all group
+                        ${isSelected
+                          ? 'bg-terminal-green/15 ring-1 ring-terminal-green/40'
+                          : 'hover:bg-muted/40'
+                        }
+                      `}
+                      onClick={() => handleSelect(symbol)}
+                    >
+                      {/* Favorite star */}
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          onToggleFavorite(symbol.symbol);
+                        }}
+                        className="shrink-0 p-0.5 rounded hover:bg-muted/60 transition-colors"
+                      >
+                        <Star
+                          className={`w-3.5 h-3.5 transition-colors ${
+                            isFavorite
+                              ? 'fill-yellow-500 text-yellow-500'
+                              : 'text-muted-foreground/40 group-hover:text-muted-foreground'
+                          }`}
+                        />
+                      </button>
+
+                      {/* Icon */}
+                      <Icon className="w-4 h-4 shrink-0 text-terminal-green/70" />
+
+                      {/* Symbol info */}
+                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                        <span className="font-mono font-semibold text-sm text-foreground">
+                          {symbol.symbol}
+                        </span>
+                        <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+                          {symbol.name}
+                        </span>
+                      </div>
+
+                      {/* Badges */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1.5 py-0 h-4 font-mono border-border/50 text-muted-foreground"
+                        >
+                          {symbol.exchange}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1.5 py-0 h-4 font-mono border-terminal-green/30 text-terminal-green/70"
+                        >
+                          {symbol.type}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : !isSearching ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <Search className="w-8 h-8 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground font-mono">
+                  No symbols found
+                </p>
+                <p className="text-xs text-muted-foreground/60">
+                  Try searching for any ticker or company name
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-terminal-green" />
+                <p className="text-sm text-muted-foreground font-mono">
+                  Searching global markets...
+                </p>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );
