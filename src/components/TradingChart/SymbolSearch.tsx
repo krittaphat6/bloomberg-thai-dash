@@ -133,7 +133,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
                 <button
                   key={label}
                   onClick={() => setSelectedType(key)}
-                  className="relative px-3 py-2 text-xs font-mono whitespace-nowrap transition-colors"
+                  className="relative px-2.5 py-2 text-[11px] font-mono whitespace-nowrap transition-colors flex-1 min-w-0"
                   style={{
                     color: isActive ? '#4ade80' : '#888',
                   }}
