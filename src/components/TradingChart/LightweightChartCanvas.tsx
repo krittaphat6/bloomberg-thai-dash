@@ -20,6 +20,7 @@ interface LightweightChartCanvasProps {
   domFullscreen?: boolean;
   onDOMFullscreenChange?: (isFullscreen: boolean) => void;
   onCrosshairMove?: (data: { price: number; time: number; visible: boolean }) => void;
+  onLoadMoreHistory?: () => void;
   deepChartsConfig?: DeepChartsConfig;
 }
 
