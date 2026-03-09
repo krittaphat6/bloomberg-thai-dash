@@ -149,9 +149,9 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
         </div>
 
         {/* Column headers */}
-        <div className="flex items-center px-4 py-1.5 border-b" style={{ borderColor: '#2a2a2a' }}>
+        <div className="flex items-center px-3 py-1.5 border-b" style={{ borderColor: '#2a2a2a' }}>
           <span className="text-[10px] font-mono uppercase tracking-wider flex-1" style={{ color: '#555' }}>Symbol</span>
-          <span className="text-[10px] font-mono uppercase tracking-wider w-24 text-right" style={{ color: '#555' }}>Source</span>
+          <span className="text-[10px] font-mono uppercase tracking-wider w-16 text-right" style={{ color: '#555' }}>Source</span>
         </div>
 
         {/* Results */}
