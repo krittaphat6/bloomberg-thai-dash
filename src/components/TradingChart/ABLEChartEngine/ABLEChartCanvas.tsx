@@ -138,6 +138,13 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
   // Convert data to candles — preserve viewport position when history is prepended
   const prevCandleCountRef = useRef(0);
   const isInitialLoadRef = useRef(true);
+
+  // Reset refs when symbol/timeframe changes
+  useEffect(() => {
+    prevCandleCountRef.current = 0;
+    isInitialLoadRef.current = true;
+  }, [symbol, timeframe]);
+
   useEffect(() => {
     if (data.length > 0) {
       const newCandles = convertToCandles(data);
