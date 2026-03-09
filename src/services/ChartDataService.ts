@@ -417,7 +417,7 @@ class ChartDataService {
   async fetchData(symbol: ChartSymbol, timeframe: Timeframe, limit: number = 500): Promise<OHLCVData[]> {
     switch (symbol.type) {
       case 'crypto':
-        return this.fetchCryptoData(symbol.symbol, timeframe, Math.min(limit, 1000));
+        return this.fetchCryptoData(symbol.symbol, timeframe, limit);
       case 'stock':
       case 'set':
       case 'forex':
