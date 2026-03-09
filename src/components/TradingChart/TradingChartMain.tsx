@@ -183,6 +183,31 @@ const DesktopTradingChart: React.FC<TradingChartMainProps> = ({
     fetchData();
   }, [fetchData]);
 
+  // Infinite history lazy-load: fetch older candles when scrolling to left edge
+  const isLoadingMoreRef = useRef(false);
+  const handleLoadMoreHistory = useCallback(async () => {
+    if (isLoadingMoreRef.current || symbol.type !== 'crypto' || data.length === 0) return;
+    isLoadingMoreRef.current = true;
+    try {
+      const oldestTimestamp = data[0].timestamp;
+      const olderData = await chartDataService.fetchOlderCryptoData(symbol.symbol, timeframe, oldestTimestamp, 1000);
+      if (olderData.length > 0) {
+        setData(prev => {
+          // Deduplicate
+          const existingTimestamps = new Set(prev.map(d => d.timestamp));
+          const newCandles = olderData.filter(d => !existingTimestamps.has(d.timestamp));
+          if (newCandles.length === 0) return prev;
+          return [...newCandles, ...prev];
+        });
+      }
+    } catch (err) {
+      console.warn('[ChartData] Failed to load more history:', err);
+    } finally {
+      // Cooldown to prevent rapid re-fetches
+      setTimeout(() => { isLoadingMoreRef.current = false; }, 2000);
+    }
+  }, [symbol, timeframe, data]);
+
   // Auto refresh - 1s for crypto, 60s for others
   useEffect(() => {
     const isCrypto = symbol.type === 'crypto';
