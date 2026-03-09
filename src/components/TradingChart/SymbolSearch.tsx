@@ -99,7 +99,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-       <DialogContent className="w-[calc(100vw-2rem)] max-w-[480px] p-0 gap-0 border-0 overflow-hidden rounded-lg shadow-2xl shadow-black/80"
+       <DialogContent className="w-[90vw] max-w-[460px] p-0 gap-0 border border-[#333] overflow-hidden rounded-lg shadow-2xl shadow-black/80 [&>button]:hidden"
         style={{ background: '#1e1e1e' }}
       >
         {/* Search */}
@@ -133,7 +133,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
                 <button
                   key={label}
                   onClick={() => setSelectedType(key)}
-                  className="relative px-3 py-2 text-xs font-mono whitespace-nowrap transition-colors"
+                  className="relative px-2.5 py-2 text-[11px] font-mono whitespace-nowrap transition-colors flex-1 min-w-0"
                   style={{
                     color: isActive ? '#4ade80' : '#888',
                   }}
@@ -149,9 +149,9 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
         </div>
 
         {/* Column headers */}
-        <div className="flex items-center px-4 py-1.5 border-b" style={{ borderColor: '#2a2a2a' }}>
+        <div className="flex items-center px-3 py-1.5 border-b" style={{ borderColor: '#2a2a2a' }}>
           <span className="text-[10px] font-mono uppercase tracking-wider flex-1" style={{ color: '#555' }}>Symbol</span>
-          <span className="text-[10px] font-mono uppercase tracking-wider w-24 text-right" style={{ color: '#555' }}>Source</span>
+          <span className="text-[10px] font-mono uppercase tracking-wider w-16 text-right" style={{ color: '#555' }}>Source</span>
         </div>
 
         {/* Results */}
@@ -167,7 +167,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
                   <div
                     key={`${symbol.exchange}:${symbol.symbol}`}
                     onClick={() => handleSelect(symbol)}
-                    className="flex items-center gap-3 px-4 py-[7px] cursor-pointer transition-colors group"
+                    className="flex items-center gap-2 px-3 py-[7px] cursor-pointer transition-colors group"
                     style={{
                       background: isActive ? '#2a3a2a' : 'transparent',
                     }}
@@ -196,7 +196,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
                     </div>
 
                     {/* Exchange */}
-                    <span className="text-[10px] font-mono uppercase w-24 text-right shrink-0" style={{ color: '#555' }}>
+                    <span className="text-[10px] font-mono uppercase w-16 text-right shrink-0" style={{ color: '#555' }}>
                       {symbol.exchange}
                     </span>
                   </div>
@@ -217,7 +217,7 @@ const SymbolSearch: React.FC<SymbolSearchProps> = ({
         </ScrollArea>
 
         {/* Footer */}
-        <div className="border-t px-4 py-1.5 flex items-center justify-between" style={{ borderColor: '#333' }}>
+        <div className="border-t px-3 py-1.5 flex items-center justify-between" style={{ borderColor: '#333' }}>
           <span className="text-[10px] font-mono" style={{ color: '#555' }}>
             {filteredSymbols.length} results
           </span>
