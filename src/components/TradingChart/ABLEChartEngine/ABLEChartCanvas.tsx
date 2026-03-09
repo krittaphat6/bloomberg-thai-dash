@@ -135,30 +135,47 @@ export const ABLEChartCanvas: React.FC<ABLEChartCanvasProps> = ({
     };
   }, [width, height, isVolumeActive]);
 
-  // Convert data to candles
+  // Convert data to candles — preserve viewport position when history is prepended
+  const prevCandleCountRef = useRef(0);
+  const isInitialLoadRef = useRef(true);
   useEffect(() => {
     if (data.length > 0) {
       const newCandles = convertToCandles(data);
+      const prevCount = prevCandleCountRef.current;
+      const prepended = prevCount > 0 ? newCandles.length - prevCount : 0;
+      
       setCandles(newCandles);
+      prevCandleCountRef.current = newCandles.length;
       
-      const visibleCount = Math.min(100, newCandles.length);
-      const startIdx = Math.max(0, newCandles.length - visibleCount);
-      
-      let min = Infinity, max = -Infinity;
-      for (let i = startIdx; i < newCandles.length; i++) {
-        min = Math.min(min, newCandles[i].low);
-        max = Math.max(max, newCandles[i].high);
+      if (isInitialLoadRef.current || prepended <= 0) {
+        // Initial load or new data appended: show last 100 candles
+        isInitialLoadRef.current = false;
+        const visibleCount = Math.min(100, newCandles.length);
+        const startIdx = Math.max(0, newCandles.length - visibleCount);
+        
+        let min = Infinity, max = -Infinity;
+        for (let i = startIdx; i < newCandles.length; i++) {
+          min = Math.min(min, newCandles[i].low);
+          max = Math.max(max, newCandles[i].high);
+        }
+        
+        const padding = (max - min) * 0.05;
+        
+        setViewport(prev => ({
+          ...prev,
+          startIndex: startIdx,
+          endIndex: newCandles.length - 1,
+          priceMin: min - padding,
+          priceMax: max + padding,
+        }));
+      } else {
+        // History prepended: shift viewport indices so user stays at same position
+        setViewport(prev => ({
+          ...prev,
+          startIndex: prev.startIndex + prepended,
+          endIndex: prev.endIndex + prepended,
+        }));
       }
-      
-      const padding = (max - min) * 0.05;
-      
-      setViewport(prev => ({
-        ...prev,
-        startIndex: startIdx,
-        endIndex: newCandles.length - 1,
-        priceMin: min - padding,
-        priceMax: max + padding,
-      }));
     }
   }, [data]);
 
