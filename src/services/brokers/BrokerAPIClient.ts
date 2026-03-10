@@ -260,6 +260,6 @@ export const BrokerAPI = {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return (data || []) as BrokerConnection[];
+    return (data || []) as unknown as BrokerConnection[];
   }
 };

@@ -13,7 +13,6 @@ serve(async (req) => {
   }
 
   try {
-    // Rate limit: only allow GET and POST
     if (req.method !== 'GET' && req.method !== 'POST') {
       return new Response(JSON.stringify({ error: 'Method not allowed' }), { 
         status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -35,11 +34,39 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
+    // SECURITY: Verify connection secret
+    const connectionSecret = req.headers.get('X-Connection-Secret')
+    if (!connectionSecret) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Missing connection secret' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const { data: connCheck, error: connError } = await supabase
+      .from('broker_connections')
+      .select('connection_secret')
+      .eq('id', connectionId)
+      .single()
+
+    if (connError || !connCheck) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Connection not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (connCheck.connection_secret !== connectionSecret) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid connection secret' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // GET: EA polls for pending commands
     if (req.method === 'GET') {
       console.log(`📡 MT5 Poll: Connection ${connectionId} polling...`)
 
-      // Update connection status
       await supabase
         .from('broker_connections')
         .update({
@@ -49,16 +76,13 @@ serve(async (req) => {
         })
         .eq('id', connectionId)
 
-      // CRITICAL FIX: Use atomic update to claim pending commands
-      // This prevents duplicate execution by marking commands as 'sent' immediately
-      // Only get commands that are 'pending' (not 'sent', 'processing', 'completed', or 'failed')
       const { data: commands, error } = await supabase
         .from('mt5_commands')
         .select('*')
         .eq('connection_id', connectionId)
         .eq('status', 'pending')
         .order('created_at', { ascending: true })
-        .limit(5) // Limit to 5 commands per poll to avoid overload
+        .limit(5)
 
       if (error) {
         console.error('❌ Error fetching commands:', error)
@@ -68,7 +92,6 @@ serve(async (req) => {
         )
       }
 
-      // If no commands, return empty array
       if (!commands || commands.length === 0) {
         return new Response(
           JSON.stringify({ success: true, commands: [] }),
@@ -76,26 +99,22 @@ serve(async (req) => {
         )
       }
 
-      // CRITICAL: Mark these specific commands as 'sent' BEFORE returning to EA
-      // This prevents them from being picked up by the next poll
       const commandIds = commands.map(cmd => cmd.id)
       
       const { error: updateError } = await supabase
         .from('mt5_commands')
         .update({ 
           status: 'sent',
-          executed_at: new Date().toISOString() // Track when sent to EA
+          executed_at: new Date().toISOString()
         })
         .in('id', commandIds)
 
       if (updateError) {
         console.error('❌ Error marking commands as sent:', updateError)
-        // Still continue - better to potentially duplicate than to lose commands
       } else {
         console.log(`✅ Marked ${commands.length} commands as 'sent' to EA`)
       }
 
-      // Transform to EA format
       const eaCommands = commands.map(cmd => ({
         id: cmd.id,
         command_type: cmd.command_type || 'buy',
@@ -142,10 +161,8 @@ serve(async (req) => {
         )
       }
 
-      // Success codes: 0 = success, 10009 = TRADE_RETCODE_DONE, 10008 = TRADE_RETCODE_PLACED
       const isSuccess = code === 0 || code === 10009 || code === 10008
       
-      // Update command status in mt5_commands table
       const { error: cmdError } = await supabase
         .from('mt5_commands')
         .update({
@@ -165,7 +182,6 @@ serve(async (req) => {
         console.log(`✅ Command ${command_id} marked as ${isSuccess ? 'completed' : 'failed'}`)
       }
 
-      // Update connection stats
       const { data: conn } = await supabase
         .from('broker_connections')
         .select('successful_orders, failed_orders, total_orders_sent')
