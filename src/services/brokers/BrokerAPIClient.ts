@@ -203,7 +203,7 @@ export const BrokerAPI = {
       .maybeSingle();
 
     if (error) throw error;
-    return data as BrokerConnection | null;
+    return data as unknown as BrokerConnection | null;
   },
 
   /**
