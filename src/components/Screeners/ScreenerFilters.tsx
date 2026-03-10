@@ -73,8 +73,8 @@ const ScreenerFilters = ({ type, onSearch }: ScreenerFiltersProps) => {
   const [selectedPreset, setSelectedPreset] = useState<string>('');
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
-  const [timeframe, setTimeframe] = useState('');
-  const [sortField, setSortField] = useState('');
+  const [timeframe, setTimeframe] = useState('default');
+  const [sortField, setSortField] = useState('none');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [limit, setLimit] = useState(150);
 
