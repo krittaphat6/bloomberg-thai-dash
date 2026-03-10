@@ -1,4 +1,4 @@
-// supabase/functions/news-aggregator/index.ts
+// supabase/functions/news-aggregator/index.ts 
 // ✅ ENHANCED VERSION 2.0 - 50+ News Sources + AI Deep Analysis + Full Context Reading
 // ABLE-HF 4.0 Full Analysis via Direct Gemini API with Financial Intelligence
 
