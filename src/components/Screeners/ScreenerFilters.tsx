@@ -101,8 +101,9 @@ const ScreenerFilters = ({ type, onSearch }: ScreenerFiltersProps) => {
 
     let filterValue: any;
     let display: string;
-    const actualFieldName = isTechnicalField && timeframe ? `${field.name}|${timeframe}` : field.name;
-    const tfLabel = timeframe ? TF_OPTIONS.find(t => t.code === timeframe)?.label : '';
+    const tfCode = timeframe === 'default' ? '' : timeframe;
+    const actualFieldName = isTechnicalField && tfCode ? `${field.name}|${tfCode}` : field.name;
+    const tfLabel = tfCode ? TF_OPTIONS.find(t => t.code === tfCode)?.label : '';
 
     if (operator === 'between') {
       const v1 = parseFloat(value);
