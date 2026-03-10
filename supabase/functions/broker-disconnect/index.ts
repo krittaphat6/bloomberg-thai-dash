@@ -13,6 +13,21 @@ serve(async (req) => {
   }
 
   try {
+    // SECURITY: Verify user authentication
+    const authHeader = req.headers.get('Authorization')
+    let authenticatedUserId: string | null = null
+    
+    if (authHeader?.startsWith('Bearer ')) {
+      const supabaseAuth = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        { global: { headers: { Authorization: authHeader } } }
+      )
+      const token = authHeader.replace('Bearer ', '')
+      const { data: claimsData } = await supabaseAuth.auth.getClaims(token)
+      authenticatedUserId = (claimsData?.claims?.sub as string) || null
+    }
+
     const { connectionId } = await req.json()
 
     if (!connectionId) {
@@ -27,7 +42,22 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Clear session and mark as disconnected
+    // SECURITY: Verify user owns this connection before disconnecting
+    if (authenticatedUserId) {
+      const { data: connCheck } = await supabase
+        .from('broker_connections')
+        .select('user_id')
+        .eq('id', connectionId)
+        .single()
+      
+      if (connCheck && connCheck.user_id !== authenticatedUserId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     const { error } = await supabase
       .from('broker_connections')
       .update({

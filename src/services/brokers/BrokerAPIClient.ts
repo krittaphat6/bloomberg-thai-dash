@@ -157,7 +157,7 @@ export const BrokerAPI = {
       .limit(1);
 
     if (connectedList && connectedList.length > 0) {
-      return connectedList[0] as BrokerConnection;
+      return connectedList[0] as unknown as BrokerConnection;
     }
 
     // Check for any existing connection (even if not connected)
@@ -171,7 +171,7 @@ export const BrokerAPI = {
       .limit(1);
 
     if (existingList && existingList.length > 0) {
-      return existingList[0] as BrokerConnection;
+      return existingList[0] as unknown as BrokerConnection;
     }
 
     // Create new
@@ -189,7 +189,7 @@ export const BrokerAPI = {
       .single();
 
     if (error) throw error;
-    return newConn as BrokerConnection;
+    return newConn as unknown as BrokerConnection;
   },
 
   /**
@@ -203,7 +203,7 @@ export const BrokerAPI = {
       .maybeSingle();
 
     if (error) throw error;
-    return data as BrokerConnection | null;
+    return data as unknown as BrokerConnection | null;
   },
 
   /**
@@ -260,6 +260,6 @@ export const BrokerAPI = {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return (data || []) as BrokerConnection[];
+    return (data || []) as unknown as BrokerConnection[];
   }
 };

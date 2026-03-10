@@ -1,24 +1,26 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface WebhookPayload {
-  action: string;
-  symbol: string;
-  price?: number;
-  quantity?: number;
-  sl?: number;
-  tp?: number;
-  comment?: string;
-  room_id?: string;
-  user_id?: string;
-  message_id?: string;
-  auto_triggered?: boolean;
-}
+// Input validation schema
+const WebhookPayloadSchema = z.object({
+  action: z.string().max(20),
+  symbol: z.string().max(30),
+  price: z.number().nonnegative().finite().optional(),
+  quantity: z.number().positive().max(10000).finite().optional(),
+  sl: z.number().nonnegative().finite().optional(),
+  tp: z.number().nonnegative().finite().optional(),
+  comment: z.string().max(200).optional(),
+  room_id: z.string().uuid().optional(),
+  user_id: z.string().uuid().optional(),
+  message_id: z.string().uuid().optional(),
+  auto_triggered: z.boolean().optional(),
+});
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -41,18 +43,20 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Parse webhook payload
-    const payload: WebhookPayload = await req.json();
-    const isAutoTriggered = payload.auto_triggered === true;
-    console.log(`📥 ${isAutoTriggered ? '🤖 AUTO-TRIGGERED' : 'Manual'} webhook: ${payload.action} ${payload.symbol}`);
-
-    // Validate required fields
-    if (!payload.action || !payload.symbol) {
+    // Parse and validate webhook payload
+    const rawBody = await req.json();
+    const parseResult = WebhookPayloadSchema.safeParse(rawBody);
+    
+    if (!parseResult.success) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: action, symbol' }),
+        JSON.stringify({ error: 'Invalid payload', details: parseResult.error.issues }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const payload = parseResult.data;
+    const isAutoTriggered = payload.auto_triggered === true;
+    console.log(`📥 ${isAutoTriggered ? '🤖 AUTO-TRIGGERED' : 'Manual'} webhook: ${payload.action} ${payload.symbol}`);
 
     // Get room_id and user_id from payload
     const roomId = payload.room_id;

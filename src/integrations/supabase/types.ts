@@ -385,6 +385,7 @@ export type Database = {
         Row: {
           avg_latency_ms: number | null
           broker_type: string
+          connection_secret: string | null
           created_at: string | null
           credentials: Json
           failed_orders: number | null
@@ -404,6 +405,7 @@ export type Database = {
         Insert: {
           avg_latency_ms?: number | null
           broker_type: string
+          connection_secret?: string | null
           created_at?: string | null
           credentials?: Json
           failed_orders?: number | null
@@ -423,6 +425,7 @@ export type Database = {
         Update: {
           avg_latency_ms?: number | null
           broker_type?: string
+          connection_secret?: string | null
           created_at?: string | null
           credentials?: Json
           failed_orders?: number | null
