@@ -156,7 +156,7 @@ const ScreenerFilters = ({ type, onSearch }: ScreenerFiltersProps) => {
       screener.setMarkets(...selectedMarkets);
     }
 
-    if (sortField) {
+    if (sortField && sortField !== 'none') {
       screener.sortBy(sortField, sortDir);
     }
 
