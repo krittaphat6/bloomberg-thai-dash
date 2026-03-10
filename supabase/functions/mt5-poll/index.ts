@@ -34,33 +34,30 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // SECURITY: Verify connection secret
+    // SECURITY: Verify connection secret (optional for backwards compatibility with existing EAs)
     const connectionSecret = req.headers.get('X-Connection-Secret')
-    if (!connectionSecret) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Missing connection secret' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    if (connectionSecret) {
+      const { data: connCheck, error: connError } = await supabase
+        .from('broker_connections')
+        .select('connection_secret')
+        .eq('id', connectionId)
+        .single()
 
-    const { data: connCheck, error: connError } = await supabase
-      .from('broker_connections')
-      .select('connection_secret')
-      .eq('id', connectionId)
-      .single()
+      if (connError || !connCheck) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Connection not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
 
-    if (connError || !connCheck) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Connection not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    if (connCheck.connection_secret !== connectionSecret) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Invalid connection secret' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      if (connCheck.connection_secret && connCheck.connection_secret !== connectionSecret) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid connection secret' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    } else {
+      console.log('⚠️ No X-Connection-Secret header - allowing for backwards compatibility')
     }
 
     // GET: EA polls for pending commands
