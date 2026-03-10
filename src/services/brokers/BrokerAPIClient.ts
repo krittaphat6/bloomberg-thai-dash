@@ -189,7 +189,7 @@ export const BrokerAPI = {
       .single();
 
     if (error) throw error;
-    return newConn as BrokerConnection;
+    return newConn as unknown as BrokerConnection;
   },
 
   /**
