@@ -157,7 +157,7 @@ export const BrokerAPI = {
       .limit(1);
 
     if (connectedList && connectedList.length > 0) {
-      return connectedList[0] as BrokerConnection;
+      return connectedList[0] as unknown as BrokerConnection;
     }
 
     // Check for any existing connection (even if not connected)
