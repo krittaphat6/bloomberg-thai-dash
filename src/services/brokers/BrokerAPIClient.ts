@@ -171,7 +171,7 @@ export const BrokerAPI = {
       .limit(1);
 
     if (existingList && existingList.length > 0) {
-      return existingList[0] as BrokerConnection;
+      return existingList[0] as unknown as BrokerConnection;
     }
 
     // Create new
