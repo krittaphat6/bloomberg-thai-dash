@@ -13,21 +13,6 @@ serve(async (req) => {
   }
 
   try {
-    // SECURITY: Verify user authentication
-    const authHeader = req.headers.get('Authorization')
-    let authenticatedUserId: string | null = null
-    
-    if (authHeader?.startsWith('Bearer ')) {
-      const supabaseAuth = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-        { global: { headers: { Authorization: authHeader } } }
-      )
-      const token = authHeader.replace('Bearer ', '')
-      const { data: claimsData } = await supabaseAuth.auth.getClaims(token)
-      authenticatedUserId = (claimsData?.claims?.sub as string) || null
-    }
-
     const { connectionId } = await req.json()
 
     if (!connectionId) {
@@ -42,6 +27,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
+    // Get connection from database
     const { data: connection, error: dbError } = await supabase
       .from('broker_connections')
       .select('*')
@@ -52,14 +38,6 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'Connection not found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // SECURITY: Verify user owns this connection
-    if (authenticatedUserId && connection.user_id !== authenticatedUserId) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -74,6 +52,7 @@ serve(async (req) => {
       )
     }
 
+    // Check token validity
     const session = connection.session_data as any
     if (Date.now() >= session.token_expiry) {
       return new Response(
@@ -86,6 +65,7 @@ serve(async (req) => {
       )
     }
 
+    // Get status based on broker type
     let status: any
 
     if (connection.broker_type === 'tradovate') {
@@ -118,6 +98,7 @@ async function getTradovateStatus(credentials: any, session: any) {
   const start = Date.now()
 
   try {
+    // Get account details
     const accResponse = await fetch(`${baseUrl}/account/list`, {
       headers: { 'Authorization': `Bearer ${session.access_token}` }
     })
@@ -131,6 +112,7 @@ async function getTradovateStatus(credentials: any, session: any) {
     const accounts = await accResponse.json()
     const account = accounts[0]
 
+    // Get positions
     let positionsCount = 0
     try {
       const posResponse = await fetch(`${baseUrl}/position/list`, {

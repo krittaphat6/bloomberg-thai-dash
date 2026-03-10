@@ -1,6 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,25 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, DELETE',
 }
 
-// Input validation schema
-const OrderSchema = z.object({
-  connectionId: z.string().uuid(),
-  roomId: z.string().uuid().optional(),
-  messageId: z.string().uuid().optional(),
-  action: z.enum(['buy', 'sell', 'close', 'cancel', 'Buy', 'Sell', 'Close', 'Cancel', 'BUY', 'SELL', 'CLOSE', 'CANCEL']),
-  symbol: z.string().max(20).optional(),
-  quantity: z.number().positive().max(10000).finite().optional(),
-  price: z.number().nonnegative().finite().optional(),
-  orderType: z.string().max(20).optional(),
-  orderId: z.string().max(50).optional(),
-})
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // Payload size limit (10KB)
     const contentLength = req.headers.get('content-length');
     if (contentLength && parseInt(contentLength) > 10240) {
       return new Response(JSON.stringify({ error: 'Payload too large' }), { 
@@ -34,33 +21,24 @@ serve(async (req) => {
       });
     }
 
-    // SECURITY: Verify user authentication
-    const authHeader = req.headers.get('Authorization')
-    let authenticatedUserId: string | null = null
-    
-    if (authHeader?.startsWith('Bearer ')) {
-      const supabaseAuth = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-        { global: { headers: { Authorization: authHeader } } }
-      )
-      const token = authHeader.replace('Bearer ', '')
-      const { data: claimsData } = await supabaseAuth.auth.getClaims(token)
-      authenticatedUserId = (claimsData?.claims?.sub as string) || null
-    }
+    const {
+      connectionId,
+      roomId,
+      messageId,
+      action,
+      symbol,
+      quantity,
+      price,
+      orderType,
+      orderId
+    } = await req.json()
 
-    // Validate input
-    const rawBody = await req.json()
-    const parseResult = OrderSchema.safeParse(rawBody)
-    
-    if (!parseResult.success) {
+    if (!connectionId || !action) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Invalid input', details: parseResult.error.issues }),
+        JSON.stringify({ success: false, error: 'Missing required fields' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
-
-    const { connectionId, roomId, messageId, action, symbol, quantity, price, orderType, orderId } = parseResult.data
 
     console.log(`📤 Broker order: ${action} ${symbol || ''}`)
 
@@ -83,14 +61,6 @@ serve(async (req) => {
       )
     }
 
-    // SECURITY: Verify user owns this connection
-    if (authenticatedUserId && connection.user_id !== authenticatedUserId) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
     if (!connection.is_active || !connection.session_data) {
       return new Response(
         JSON.stringify({ success: false, error: 'Not connected to broker' }),
@@ -98,6 +68,7 @@ serve(async (req) => {
       )
     }
 
+    // Check position size limit
     if (quantity && quantity > (connection.max_position_size || 100)) {
       return new Response(
         JSON.stringify({
@@ -110,7 +81,9 @@ serve(async (req) => {
 
     const session = connection.session_data as any
 
+    // Check if token is valid
     if (Date.now() >= session.token_expiry) {
+      // Mark as disconnected
       await supabase
         .from('broker_connections')
         .update({
@@ -126,6 +99,7 @@ serve(async (req) => {
       )
     }
 
+    // Create forward log (pending)
     const { data: forwardLog } = await supabase
       .from('api_forward_logs')
       .insert({
@@ -145,6 +119,7 @@ serve(async (req) => {
 
     let result: any
 
+    // Execute order based on broker type and action
     if (connection.broker_type === 'tradovate') {
       result = await executeTradovateOrder({
         credentials: connection.credentials,
@@ -170,6 +145,7 @@ serve(async (req) => {
       result = { success: false, latency: 0, error: 'Unknown broker type' }
     }
 
+    // Update forward log
     if (forwardLog) {
       await supabase
         .from('api_forward_logs')
@@ -184,6 +160,7 @@ serve(async (req) => {
         .eq('id', forwardLog.id)
     }
 
+    // Update connection stats
     await supabase
       .from('broker_connections')
       .update({
@@ -241,6 +218,8 @@ async function executeTradovateOrder(params: {
     switch (action.toLowerCase()) {
       case 'buy':
       case 'sell': {
+        console.log('📤 Tradovate: Placing order...', { action, symbol, quantity })
+
         const orderPayload: any = {
           accountSpec: session.account_spec,
           accountId: session.account_id,
@@ -251,8 +230,14 @@ async function executeTradovateOrder(params: {
           isAutomated: true
         }
 
-        if (orderType === 'Limit' && price) orderPayload.price = price
-        if (orderType === 'Stop' && price) orderPayload.stopPrice = price
+        if (orderType === 'Limit' && price) {
+          orderPayload.price = price
+        }
+        if (orderType === 'Stop' && price) {
+          orderPayload.stopPrice = price
+        }
+
+        console.log('📦 Order payload:', JSON.stringify(orderPayload))
 
         const response = await fetch(`${baseUrl}/order/placeorder`, {
           method: 'POST',
@@ -267,57 +252,94 @@ async function executeTradovateOrder(params: {
         const data = await response.json()
 
         if (!response.ok) {
-          return { success: false, latency, error: data.errorText || data.message || `HTTP ${response.status}`, rawResponse: data }
+          console.error('❌ Tradovate order failed:', data)
+          return {
+            success: false,
+            latency,
+            error: data.errorText || data.message || `HTTP ${response.status}`,
+            rawResponse: data
+          }
         }
 
-        return { success: true, orderId: data.orderId?.toString(), orderStatus: data.orderStatus || 'Submitted', latency, rawResponse: data }
+        console.log('✅ Tradovate order success:', data)
+        return {
+          success: true,
+          orderId: data.orderId?.toString(),
+          orderStatus: data.orderStatus || 'Submitted',
+          latency,
+          rawResponse: data
+        }
       }
 
       case 'close': {
+        // Get current position first
         const posResponse = await fetch(`${baseUrl}/position/list`, {
           headers: { 'Authorization': `Bearer ${session.access_token}` }
         })
 
-        if (!posResponse.ok) return { success: false, latency: Date.now() - start, error: 'Failed to get positions' }
+        if (!posResponse.ok) {
+          return { success: false, latency: Date.now() - start, error: 'Failed to get positions' }
+        }
 
         const positions = await posResponse.json()
-        const position = positions.find((p: any) => p.netPos !== 0 && (p.contract?.name === symbol || p.symbol === symbol))
+        const position = positions.find((p: any) =>
+          p.netPos !== 0 && (p.contract?.name === symbol || p.symbol === symbol)
+        )
 
-        if (!position) return { success: false, latency: Date.now() - start, error: 'No position found' }
+        if (!position) {
+          return { success: false, latency: Date.now() - start, error: 'No position found' }
+        }
+
+        // Place opposite order to close
+        const closeAction = position.netPos > 0 ? 'Sell' : 'Buy'
+        const closeQty = Math.abs(position.netPos)
 
         const closePayload = {
           accountSpec: session.account_spec,
           accountId: session.account_id,
-          action: position.netPos > 0 ? 'Sell' : 'Buy',
+          action: closeAction,
           symbol,
-          orderQty: Math.abs(position.netPos),
+          orderQty: closeQty,
           orderType: 'Market',
           isAutomated: true
         }
 
         const response = await fetch(`${baseUrl}/order/placeorder`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify(closePayload)
         })
 
         const latency = Date.now() - start
         const data = await response.json()
-        if (!response.ok) return { success: false, latency, error: data.errorText || 'Close failed', rawResponse: data }
+
+        if (!response.ok) {
+          return { success: false, latency, error: data.errorText || 'Close failed', rawResponse: data }
+        }
+
         return { success: true, orderId: data.orderId?.toString(), latency, rawResponse: data }
       }
 
       case 'cancel': {
         const response = await fetch(`${baseUrl}/order/cancelorder`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({ orderId: parseInt(orderId || '0') })
         })
+
         const latency = Date.now() - start
+
         if (!response.ok) {
           const data = await response.json()
           return { success: false, latency, error: data.errorText || 'Cancel failed' }
         }
+
         return { success: true, latency }
       }
 
@@ -325,6 +347,7 @@ async function executeTradovateOrder(params: {
         return { success: false, latency: 0, error: 'Invalid action' }
     }
   } catch (err: any) {
+    console.error('❌ Tradovate order error:', err)
     return { success: false, latency: Date.now() - start, error: err.message }
   }
 }
@@ -351,6 +374,8 @@ async function executeSettradeOrder(params: {
     switch (action.toLowerCase()) {
       case 'buy':
       case 'sell': {
+        console.log('📤 Settrade: Placing order...', { action, symbol, quantity })
+
         const orderPayload: any = {
           symbol: symbol?.toUpperCase(),
           side: action.toLowerCase() === 'buy' ? 'B' : 'S',
@@ -358,31 +383,67 @@ async function executeSettradeOrder(params: {
           priceType: price ? 'LMT' : 'MP',
           validity: 'DAY'
         }
-        if (price) orderPayload.price = price
-        if (pin) orderPayload.pin = pin
 
-        const response = await fetch(`${baseUrl}/equity/${brokerId}/accounts/${accountNo}/orders`, {
-          method: 'POST',
-          headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
-          body: JSON.stringify(orderPayload)
-        })
+        if (price) {
+          orderPayload.price = price
+        }
+        if (pin) {
+          orderPayload.pin = pin
+        }
+
+        console.log('📦 Order payload:', JSON.stringify(orderPayload))
+
+        const response = await fetch(
+          `${baseUrl}/equity/${brokerId}/accounts/${accountNo}/orders`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(orderPayload)
+          }
+        )
 
         const latency = Date.now() - start
         const data = await response.json()
-        if (!response.ok) return { success: false, latency, error: data.message || data.error_description || `HTTP ${response.status}`, rawResponse: data }
-        return { success: true, orderId: data.orderNo || data.orderId, orderStatus: data.status || 'Submitted', latency, rawResponse: data }
+
+        if (!response.ok) {
+          console.error('❌ Settrade order failed:', data)
+          return {
+            success: false,
+            latency,
+            error: data.message || data.error_description || `HTTP ${response.status}`,
+            rawResponse: data
+          }
+        }
+
+        console.log('✅ Settrade order success:', data)
+        return {
+          success: true,
+          orderId: data.orderNo || data.orderId,
+          orderStatus: data.status || 'Submitted',
+          latency,
+          rawResponse: data
+        }
       }
 
       case 'cancel': {
-        const response = await fetch(`${baseUrl}/equity/${brokerId}/accounts/${accountNo}/orders/${orderId}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': authHeader }
-        })
+        const response = await fetch(
+          `${baseUrl}/equity/${brokerId}/accounts/${accountNo}/orders/${orderId}`,
+          {
+            method: 'DELETE',
+            headers: { 'Authorization': authHeader }
+          }
+        )
+
         const latency = Date.now() - start
+
         if (!response.ok) {
           const data = await response.json()
           return { success: false, latency, error: data.message || 'Cancel failed' }
         }
+
         return { success: true, latency }
       }
 
@@ -390,6 +451,7 @@ async function executeSettradeOrder(params: {
         return { success: false, latency: 0, error: 'Invalid action for Settrade' }
     }
   } catch (err: any) {
+    console.error('❌ Settrade order error:', err)
     return { success: false, latency: Date.now() - start, error: err.message }
   }
 }

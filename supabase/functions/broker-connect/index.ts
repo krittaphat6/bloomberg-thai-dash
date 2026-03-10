@@ -8,31 +8,18 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // Payload size limit (5KB)
     const contentLength = req.headers.get('content-length');
     if (contentLength && parseInt(contentLength) > 5120) {
       return new Response(JSON.stringify({ error: 'Payload too large' }), { 
         status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
-    }
-
-    // SECURITY: Verify user authentication
-    const authHeader = req.headers.get('Authorization')
-    const supabaseAuth = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader || '' } } }
-    )
-    
-    let authenticatedUserId: string | null = null
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '')
-      const { data: claimsData } = await supabaseAuth.auth.getClaims(token)
-      authenticatedUserId = (claimsData?.claims?.sub as string) || null
     }
 
     const { connectionId, credentials, brokerType } = await req.json()
@@ -51,25 +38,10 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // SECURITY: Verify user owns this connection
-    if (authenticatedUserId) {
-      const { data: connCheck } = await supabase
-        .from('broker_connections')
-        .select('user_id')
-        .eq('id', connectionId)
-        .single()
-      
-      if (connCheck && connCheck.user_id !== authenticatedUserId) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Unauthorized' }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-    }
-
     let session: any = null
     let error: string | null = null
 
+    // Connect based on broker type
     if (brokerType === 'tradovate') {
       const result = await connectTradovate(credentials)
       session = result.session
@@ -79,6 +51,7 @@ serve(async (req) => {
       session = result.session
       error = result.error
     } else if (brokerType === 'mt5') {
+      // MT5 uses polling mechanism - just mark as active
       session = {
         account: credentials.account,
         server: credentials.server,
@@ -93,6 +66,7 @@ serve(async (req) => {
     }
 
     if (error) {
+      // Update connection with error
       await supabase
         .from('broker_connections')
         .update({
@@ -108,6 +82,7 @@ serve(async (req) => {
       )
     }
 
+    // Save session to database
     await supabase
       .from('broker_connections')
       .update({
@@ -182,6 +157,7 @@ async function connectTradovate(credentials: {
     const data = await response.json()
     console.log('✅ Tradovate: Login successful')
 
+    // Get account info
     let accountId = 0
     try {
       const accResponse = await fetch(`${baseUrl}/account/list`, {
@@ -212,6 +188,7 @@ async function connectTradovate(credentials: {
   }
 }
 
+// Settrade connection
 async function connectSettrade(credentials: {
   appId: string
   appSecret: string
