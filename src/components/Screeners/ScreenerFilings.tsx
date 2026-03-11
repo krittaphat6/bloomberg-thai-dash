@@ -320,7 +320,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
 
             <SectionHeader title="การลงทุน" icon={<BarChart3 className="w-3.5 h-3.5" />} />
             <StatementRow label="ค่าใช้จ่ายลงทุน (TTM)" value={financials['capital_expenditures_ttm']} format="number" />
-            <StatementRow label="ค่าใช้จ่ายลงทุน (FY)" value={financials['capital_expenditures_fy']} format="number" />
+            <StatementRow label="ค่าใช้จ่ายลงทุน (FY)" value={financials['capital_expenditures']} format="number" />
             <StatementRow label="กระแสเงินสดจากการลงทุน (TTM)" value={financials['cash_f_investing_activities_ttm']} format="number" />
 
             <SectionHeader title="กระแสเงินสดอิสระ" icon={<TrendingUp className="w-3.5 h-3.5" />} />
