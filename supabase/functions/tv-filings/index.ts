@@ -9,8 +9,8 @@ const corsHeaders = {
 const SUMMARY_COLUMNS = [
   "name", "description", "close", "change", "market_cap_basic",
   "price_earnings_ttm", "earnings_per_share_basic_ttm",
-  "revenue_ttm", "net_income_ttm", "total_assets_mrq",
-  "total_debt_mrq", "total_revenue_mrq",
+  "total_revenue", "net_income", "total_assets",
+  "total_debt",
   "earnings_per_share_diluted_ttm",
   "dividends_yield", "dividend_yield_recent",
   "earnings_release_date", "earnings_release_next_date",
