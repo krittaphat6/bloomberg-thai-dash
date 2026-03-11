@@ -1,82 +1,166 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Bell, BellOff, ExternalLink, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, ExternalLink, Loader2, ChevronDown, ChevronRight, Building2, X, FileText, Presentation, FileCheck } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
-type FilingType = 'all' | 'annual' | 'quarterly' | 'interim' | 'slides';
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type FilingTypeFilter = 'all' | 'annual' | 'quarterly' | 'interim' | 'slides';
+
+interface SymbolSuggestion {
+  symbol: string;
+  description: string;
+  type: string;
+  exchange: string;
+  country: string;
+  logo_id: string;
+}
+
+interface FilingDocument {
+  type: string;
+  label: string;
+  icon: string;
+}
 
 interface FilingItem {
   id: string;
   symbol: string;
   title: string;
+  titleTh?: string;
   type: string;
+  form?: string;
   date: string;
   quarter?: string;
   year: number;
-  format: 'PDF' | 'SLIDES' | 'HTML';
+  documents: FilingDocument[];
   url?: string;
 }
 
-const MOCK_FILINGS: FilingItem[] = [
-  { id: '1', symbol: 'SET:GULF', title: 'รายงานระหว่างกาล Q4 2025', type: 'interim', date: '17 ก.พ. 2026', quarter: 'Q4 2025', year: 2025, format: 'PDF' },
-  { id: '2', symbol: 'SET:GULF', title: 'สไลด์นักลงทุน Q4 2025', type: 'slides', date: '17 ก.พ. 2026', quarter: 'Q4 2025', year: 2025, format: 'SLIDES' },
-  { id: '3', symbol: 'SET:GULF', title: 'รายงานระหว่างกาล Q3 2025', type: 'interim', date: '19 พ.ย. 2025', quarter: 'Q3 2025', year: 2025, format: 'PDF' },
-  { id: '4', symbol: 'SET:GULF', title: 'สไลด์นักลงทุน Q3 2025', type: 'slides', date: '19 พ.ย. 2025', quarter: 'Q3 2025', year: 2025, format: 'SLIDES' },
-  { id: '5', symbol: 'SET:GULF', title: 'รายงานระหว่างกาล Q2 2025', type: 'interim', date: '27 ส.ค. 2025', quarter: 'Q2 2025', year: 2025, format: 'PDF' },
-  { id: '6', symbol: 'SET:GULF', title: 'รายงานระหว่างกาล Q1 2025', type: 'interim', date: '13 พ.ค. 2025', quarter: 'Q1 2025', year: 2025, format: 'PDF' },
-  { id: '7', symbol: 'SET:GULF', title: 'รายงานประจำปี 2024', type: 'annual', date: '30 เม.ย. 2025', quarter: 'FY 2024', year: 2024, format: 'PDF' },
-  { id: '8', symbol: 'SET:PTT', title: 'รายงานระหว่างกาล Q4 2025', type: 'interim', date: '14 ก.พ. 2026', quarter: 'Q4 2025', year: 2025, format: 'PDF' },
-  { id: '9', symbol: 'SET:PTT', title: 'รายงานประจำปี 2024', type: 'annual', date: '28 มี.ค. 2025', quarter: 'FY 2024', year: 2024, format: 'PDF' },
-  { id: '10', symbol: 'NASDAQ:AAPL', title: '10-Q Q1 FY2025', type: 'quarterly', date: '2 Feb 2025', quarter: 'Q1 FY2025', year: 2025, format: 'PDF' },
-  { id: '11', symbol: 'NASDAQ:AAPL', title: '10-K FY2024', type: 'annual', date: '1 Nov 2024', quarter: 'FY2024', year: 2024, format: 'PDF' },
-];
+interface Financials {
+  [key: string]: any;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 const ScreenerFilings = () => {
+  // Search & autocomplete state
   const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [filingType, setFilingType] = useState<FilingType>('all');
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<FilingItem[]>([]);
-  const [notified, setNotified] = useState(() => localStorage.getItem('filings_notify') === 'true');
-  const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set([2025, 2026]));
+  const [suggestions, setSuggestions] = useState<SymbolSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Selected company state
+  const [selectedSymbol, setSelectedSymbol] = useState<SymbolSuggestion | null>(null);
+  const [filingType, setFilingType] = useState<FilingTypeFilter>('all');
+  const [filings, setFilings] = useState<FilingItem[]>([]);
+  const [financials, setFinancials] = useState<Financials | null>(null);
+  const [loadingFilings, setLoadingFilings] = useState(false);
+  const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
+
+  // ─── Symbol Search with Debounce ──────────────────────────────────────────
 
   useEffect(() => {
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setDebouncedQuery(searchQuery.trim().toUpperCase());
-    }, 300);
-    return () => clearTimeout(debounceRef.current);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    if (!debouncedQuery) {
-      setResults([]);
+    if (!searchQuery.trim() || selectedSymbol) {
+      setSuggestions([]);
+      setShowSuggestions(false);
       return;
     }
-    setLoading(true);
-    const timer = setTimeout(() => {
-      const filtered = MOCK_FILINGS.filter(f => {
-        const matchSymbol = f.symbol.toUpperCase().includes(debouncedQuery) ||
-          (f.symbol.split(':').pop()?.toUpperCase().includes(debouncedQuery) ?? false);
-        const matchType = filingType === 'all' || f.type === filingType;
-        return matchSymbol && matchType;
-      });
-      setResults(filtered);
-      setLoading(false);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [debouncedQuery, filingType]);
 
-  const grouped = results.reduce<Record<number, FilingItem[]>>((acc, item) => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoadingSuggestions(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('tv-symbol-search', {
+          body: { text: searchQuery.trim(), lang: 'en' },
+        });
+        if (!error && data?.symbols) {
+          setSuggestions(data.symbols);
+          setShowSuggestions(true);
+        }
+      } catch (err) {
+        console.error('Symbol search error:', err);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(debounceRef.current);
+  }, [searchQuery, selectedSymbol]);
+
+  // ─── Click outside to close suggestions ───────────────────────────────────
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
+          inputRef.current && !inputRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  // ─── Select a symbol ─────────────────────────────────────────────────────
+
+  const handleSelectSymbol = useCallback(async (sym: SymbolSuggestion) => {
+    setSelectedSymbol(sym);
+    setSearchQuery(`${sym.exchange}:${sym.symbol}`);
+    setShowSuggestions(false);
+    setSuggestions([]);
+
+    // Fetch filings
+    setLoadingFilings(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('tv-filings', {
+        body: { symbol: sym.symbol, exchange: sym.exchange, type: filingType },
+      });
+      if (!error && data) {
+        setFilings(data.filings || []);
+        setFinancials(data.financials || null);
+        // Auto-expand latest 2 years
+        const years: number[] = [...new Set((data.filings || []).map((f: FilingItem) => f.year))] as number[];
+        years.sort((a: number, b: number) => b - a);
+        setExpandedYears(new Set(years.slice(0, 2)));
+      }
+    } catch (err) {
+      console.error('Filings fetch error:', err);
+    } finally {
+      setLoadingFilings(false);
+    }
+  }, [filingType]);
+
+  // ─── Refetch when filter type changes ─────────────────────────────────────
+
+  useEffect(() => {
+    if (selectedSymbol) {
+      handleSelectSymbol(selectedSymbol);
+    }
+  }, [filingType]);
+
+  // ─── Clear selection ──────────────────────────────────────────────────────
+
+  const handleClear = () => {
+    setSelectedSymbol(null);
+    setSearchQuery('');
+    setFilings([]);
+    setFinancials(null);
+    setSuggestions([]);
+    inputRef.current?.focus();
+  };
+
+  // ─── Group filings by year ────────────────────────────────────────────────
+
+  const grouped = filings.reduce<Record<number, FilingItem[]>>((acc, item) => {
     if (!acc[item.year]) acc[item.year] = [];
     acc[item.year].push(item);
     return acc;
   }, {});
-
   const sortedYears = Object.keys(grouped).map(Number).sort((a, b) => b - a);
 
   const toggleYear = (year: number) => {
@@ -87,176 +171,291 @@ const ScreenerFilings = () => {
     });
   };
 
-  const handleNotify = () => {
-    const next = !notified;
-    setNotified(next);
-    localStorage.setItem('filings_notify', String(next));
+  // ─── Get type icon ────────────────────────────────────────────────────────
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'annual': return <FileCheck className="w-3.5 h-3.5 text-terminal-green" />;
+      case 'interim': case 'quarterly': return <FileText className="w-3.5 h-3.5 text-terminal-cyan" />;
+      case 'slides': return <Presentation className="w-3.5 h-3.5 text-terminal-amber" />;
+      default: return <FileText className="w-3.5 h-3.5 text-muted-foreground" />;
+    }
   };
 
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'annual': return 'รายงานประจำปี';
+      case 'interim': return 'รายงานระหว่างกาล';
+      case 'quarterly': return 'รายงานรายไตรมาส';
+      case 'slides': return 'สไลด์';
+      default: return type;
+    }
+  };
+
+  const getExchangeFlag = (exchange: string) => {
+    const flags: Record<string, string> = {
+      SET: '🇹🇭', BKK: '🇹🇭', TFEX: '🇹🇭',
+      NASDAQ: '🇺🇸', NYSE: '🇺🇸', AMEX: '🇺🇸',
+      TSE: '🇯🇵', HKEX: '🇭🇰', LSE: '🇬🇧',
+      XETR: '🇩🇪', FRA: '🇩🇪', FWB: '🇩🇪', SWB: '🇩🇪', GETTEX: '🇩🇪',
+      SSE: '🇨🇳', SZSE: '🇨🇳',
+      BSE: '🇮🇳', NSE: '🇮🇳',
+      ASX: '🇦🇺', SGX: '🇸🇬',
+      BURSA: '🇲🇾', MYX: '🇲🇾',
+      KRX: '🇰🇷', TWSE: '🇹🇼',
+      IDX: '🇮🇩', PSE: '🇵🇭',
+      UPCOM: '🇻🇳',
+    };
+    return flags[exchange] || '🏳️';
+  };
+
+  // ─── Filter type tabs ────────────────────────────────────────────────────
+
+  const FILTER_TABS: { value: FilingTypeFilter; label: string }[] = [
+    { value: 'all', label: 'ทั้งหมด' },
+    { value: 'annual', label: 'รายงานประจำปี' },
+    { value: 'quarterly', label: 'รายงานรายไตรมาส' },
+    { value: 'interim', label: 'รายงานระหว่างกาล' },
+    { value: 'slides', label: 'กิจกรรมของบริษัท' },
+  ];
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
   return (
-    <div className="h-full flex flex-col">
-      {/* Search Bar */}
-      <div className="p-3 border-b border-border shrink-0 flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-          {loading && (
-            <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin" />
+    <div className="h-full flex flex-col bg-background">
+      {/* Search Bar with Autocomplete */}
+      <div className="p-3 border-b border-border shrink-0">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground z-10" />
+          {(loadingSuggestions || loadingFilings) && (
+            <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin z-10" />
+          )}
+          {selectedSymbol && (
+            <button
+              onClick={handleClear}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 z-10 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           )}
           <Input
-            placeholder="Search symbol... e.g. GULF, PTT, AAPL"
+            ref={inputRef}
+            placeholder="ค้นหาตัวย่อ... เช่น PTT, GULF, AAPL"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="pl-8 pr-8 h-8 border-border font-mono text-[11px] bg-background focus-visible:ring-terminal-green/30"
+            onChange={e => {
+              setSearchQuery(e.target.value);
+              if (selectedSymbol) {
+                setSelectedSymbol(null);
+                setFilings([]);
+                setFinancials(null);
+              }
+            }}
+            onFocus={() => {
+              if (suggestions.length > 0 && !selectedSymbol) setShowSuggestions(true);
+            }}
+            className="pl-8 pr-8 h-9 border-border font-mono text-[12px] bg-background focus-visible:ring-terminal-green/30"
             autoFocus
           />
-        </div>
 
-        <Select value={filingType} onValueChange={v => setFilingType(v as FilingType)}>
-          <SelectTrigger className="w-28 h-8 text-[10px] font-mono border-border">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" className="text-[10px] font-mono">All Types</SelectItem>
-            <SelectItem value="annual" className="text-[10px] font-mono">📋 Annual</SelectItem>
-            <SelectItem value="quarterly" className="text-[10px] font-mono">📊 Quarterly</SelectItem>
-            <SelectItem value="interim" className="text-[10px] font-mono">📄 Interim</SelectItem>
-            <SelectItem value="slides" className="text-[10px] font-mono">📊 Slides</SelectItem>
-          </SelectContent>
-        </Select>
+          {/* Autocomplete Dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div
+              ref={dropdownRef}
+              className="absolute top-full left-0 right-0 z-50 mt-1 bg-background border border-border rounded-md shadow-lg max-h-[400px] overflow-y-auto"
+            >
+              {suggestions.map((sym, i) => (
+                <button
+                  key={`${sym.exchange}-${sym.symbol}-${i}`}
+                  onClick={() => handleSelectSymbol(sym)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40 text-left border-b border-border/30 last:border-b-0 transition-colors"
+                >
+                  {/* Logo placeholder */}
+                  <div className="w-7 h-7 rounded-full bg-muted/50 flex items-center justify-center shrink-0 text-[10px]">
+                    {getExchangeFlag(sym.exchange)}
+                  </div>
+
+                  {/* Symbol & Description */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[12px] font-mono font-bold text-terminal-cyan">{sym.symbol}</span>
+                      <span className="text-[11px] font-mono text-foreground truncate">{sym.description}</span>
+                    </div>
+                  </div>
+
+                  {/* Type & Exchange */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-mono text-muted-foreground">{sym.type}</span>
+                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0">
+                      {sym.exchange}
+                    </Badge>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Results Area */}
-      <ScrollArea className="flex-1">
-        {/* Initial empty state */}
-        {!searchQuery && (
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="text-center space-y-4 max-w-xs">
-              <div className="w-12 h-12 rounded-full bg-terminal-amber/10 border border-terminal-amber/30 flex items-center justify-center mx-auto text-xl">
-                🚧
+      {/* Selected Company Header */}
+      {selectedSymbol && (
+        <div className="px-3 py-2 border-b border-border shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-terminal-green/10 border border-terminal-green/30 flex items-center justify-center text-[11px]">
+              {getExchangeFlag(selectedSymbol.exchange)}
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[12px] font-mono font-bold text-foreground">
+                  {selectedSymbol.symbol}
+                </span>
+                <span className="text-[11px] font-mono text-muted-foreground">
+                  {selectedSymbol.description}
+                </span>
               </div>
+              <span className="text-[9px] font-mono text-muted-foreground">
+                • เอกสาร
+              </span>
+            </div>
+          </div>
+
+          {/* Filter Tabs */}
+          <div className="flex items-center gap-1 mt-2 flex-wrap">
+            {FILTER_TABS.map(tab => (
+              <button
+                key={tab.value}
+                onClick={() => setFilingType(tab.value)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-mono border transition-colors ${
+                  filingType === tab.value
+                    ? 'bg-muted/60 border-border text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Content Area */}
+      <ScrollArea className="flex-1">
+        {/* Initial empty state — no symbol selected */}
+        {!selectedSymbol && !showSuggestions && (
+          <div className="flex items-center justify-center p-12">
+            <div className="text-center space-y-3 max-w-xs">
+              <Building2 className="w-10 h-10 mx-auto text-muted-foreground/50" />
               <div>
                 <h3 className="text-sm font-mono font-bold text-foreground mb-1">
-                  Filing Data Coming Soon
+                  ค้นหาเอกสารบริษัท
                 </h3>
                 <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
-                  We're building the TradingView filings connector to bring you annual reports, quarterly statements, and presentation slides.
+                  พิมพ์ชื่อหรือตัวย่อหุ้นเพื่อดูรายงานประจำปี รายงานไตรมาส และสไลด์นักลงทุน
                 </p>
               </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNotify}
-                className="border-terminal-amber/30 text-terminal-amber hover:bg-terminal-amber/10 text-[10px] font-mono h-7 gap-1"
-              >
-                {notified
-                  ? <><BellOff className="w-3 h-3" /> You'll be notified</>
-                  : <><Bell className="w-3 h-3" /> Notify me</>
-                }
-              </Button>
-
-              <p className="text-[9px] font-mono text-muted-foreground">
-                Try searching:{' '}
-                <button onClick={() => setSearchQuery('GULF')} className="text-terminal-cyan hover:underline">GULF</button> ·{' '}
-                <button onClick={() => setSearchQuery('PTT')} className="text-terminal-cyan hover:underline">PTT</button> ·{' '}
-                <button onClick={() => setSearchQuery('AAPL')} className="text-terminal-cyan hover:underline">AAPL</button>
-              </p>
+              <div className="flex items-center gap-1.5 justify-center flex-wrap">
+                {['PTT', 'GULF', 'AAPL', 'ADVANC', 'NVDA'].map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setSearchQuery(s)}
+                    className="px-2 py-0.5 rounded border border-border/50 text-[10px] font-mono text-terminal-cyan hover:bg-muted/30 transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* Loading */}
-        {searchQuery && loading && (
+        {/* Loading filings */}
+        {loadingFilings && (
           <div className="flex items-center justify-center p-12">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-[11px] font-mono">Searching filings for "{searchQuery}"...</span>
+              <span className="text-[11px] font-mono">กำลังโหลดเอกสาร...</span>
             </div>
           </div>
         )}
 
-        {/* No Results */}
-        {searchQuery && !loading && results.length === 0 && (
+        {/* Filings Table — TradingView Style */}
+        {selectedSymbol && !loadingFilings && filings.length > 0 && (
+          <div className="w-full">
+            {/* Table Header */}
+            <div className="grid grid-cols-[1fr_auto_auto] px-4 py-2 border-b border-border/50 sticky top-0 bg-background z-10">
+              <span className="text-[10px] font-mono text-muted-foreground">เหตุการณ์/รายงาน</span>
+              <span className="text-[10px] font-mono text-muted-foreground text-center w-32">วันที่เผยแพร่</span>
+              <span className="text-[10px] font-mono text-muted-foreground text-right w-48">เอกสารและเอกสารอื่น</span>
+            </div>
+
+            {sortedYears.map(year => {
+              const isExpanded = expandedYears.has(year);
+              const items = grouped[year];
+
+              return (
+                <div key={year}>
+                  {/* Year Header */}
+                  <button
+                    onClick={() => toggleYear(year)}
+                    className="w-full flex items-center gap-2 px-4 py-2 bg-muted/20 hover:bg-muted/30 text-left border-b border-border/30 transition-colors"
+                  >
+                    {isExpanded
+                      ? <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                      : <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                    }
+                    <span className="text-[12px] font-mono font-bold text-foreground">{year}</span>
+                  </button>
+
+                  {/* Filing Rows */}
+                  {isExpanded && items.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className={`grid grid-cols-[1fr_auto_auto] px-4 py-2.5 border-b border-border/20 hover:bg-muted/20 transition-colors ${
+                        idx % 2 === 0 ? '' : 'bg-muted/5'
+                      }`}
+                    >
+                      {/* Description */}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[11px] font-mono text-foreground">
+                          {item.quarter || item.titleTh || item.title}
+                        </span>
+                      </div>
+
+                      {/* Date */}
+                      <div className="w-32 text-center">
+                        <span className="text-[11px] font-mono text-muted-foreground">{item.date}</span>
+                      </div>
+
+                      {/* Documents */}
+                      <div className="w-48 flex items-center justify-end gap-1.5 flex-wrap">
+                        {item.documents.map((doc, di) => (
+                          <button
+                            key={di}
+                            onClick={() => item.url && window.open(item.url, '_blank')}
+                            className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted/40 transition-colors group"
+                            title={doc.label}
+                          >
+                            {getTypeIcon(doc.type === 'slides' ? 'slides' : doc.type === 'annual_report' ? 'annual' : 'interim')}
+                            <span className="text-[10px] font-mono text-terminal-cyan group-hover:underline">
+                              {doc.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* No filings found */}
+        {selectedSymbol && !loadingFilings && filings.length === 0 && (
           <div className="flex items-center justify-center p-12">
             <div className="text-center">
               <p className="text-[11px] font-mono text-muted-foreground">
-                No filings found for "{searchQuery}"
+                ไม่พบเอกสารสำหรับ {selectedSymbol.exchange}:{selectedSymbol.symbol}
               </p>
-              <p className="text-[9px] font-mono text-muted-foreground mt-1">
-                Try: GULF · PTT · ADVANC · AAPL
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Results grouped by year */}
-        {!loading && results.length > 0 && (
-          <div className="p-2">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between px-3 py-1">
-                <Badge variant="outline" className="text-[9px] font-mono border-terminal-green/30 text-terminal-green">
-                  {results.length} documents · {searchQuery}
-                </Badge>
-                <Badge variant="outline" className="text-[9px] font-mono border-terminal-amber/30 text-terminal-amber">
-                  MOCK DATA
-                </Badge>
-              </div>
-
-              {sortedYears.map(year => {
-                const isExpanded = expandedYears.has(year);
-                const items = grouped[year];
-                return (
-                  <div key={year}>
-                    <button
-                      onClick={() => toggleYear(year)}
-                      className="w-full flex items-center gap-2 px-3 py-1.5 bg-muted/20 hover:bg-muted/40 text-left rounded-sm"
-                    >
-                      {isExpanded
-                        ? <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                        : <ChevronRight className="w-3 h-3 text-muted-foreground" />
-                      }
-                      <span className="text-[11px] font-mono font-bold text-foreground">{year}</span>
-                      <Badge variant="secondary" className="text-[9px] font-mono ml-auto">
-                        {items.length} docs
-                      </Badge>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="ml-2 border-l border-border/50 pl-2 space-y-0.5 py-1">
-                        {items.map(item => (
-                          <div
-                            key={item.id}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-muted/30 group"
-                          >
-                            <span className="text-sm shrink-0">
-                              {item.format === 'SLIDES' ? '📊' : '📄'}
-                            </span>
-
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[11px] font-mono text-foreground truncate">{item.title}</p>
-                              <p className="text-[9px] font-mono text-muted-foreground">{item.date} · {item.quarter}</p>
-                            </div>
-
-                            <Badge variant="outline" className="text-[8px] font-mono shrink-0">
-                              {item.type}
-                            </Badge>
-
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="w-6 h-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={() => item.url ? window.open(item.url, '_blank') : null}
-                              title="Open document"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
             </div>
           </div>
         )}
