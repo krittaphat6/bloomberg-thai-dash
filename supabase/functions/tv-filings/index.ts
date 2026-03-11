@@ -134,7 +134,7 @@ serve(async (req) => {
 
     let financials: any = null;
     let currentCols = [...allCols];
-    let maxRetries = 5;
+    let maxRetries = 30;
 
     // Retry loop: if a field is unknown, remove it and retry
     while (maxRetries-- > 0) {
