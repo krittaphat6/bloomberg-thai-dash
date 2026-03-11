@@ -244,24 +244,24 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
             <StatementRow label="รายได้รวม (FY)" value={financials['total_revenue']} format="number" />
             <StatementRow label="รายได้ปีที่แล้ว (FY)" value={financials['last_annual_revenue']} format="number" />
             <StatementRow label="รายได้รวม (TTM)" value={financials['revenue_ttm']} format="number" />
-            <StatementRow label="ต้นทุนขาย (COGS)" value={financials['cost_of_revenue']} format="number" />
+            <StatementRow label="ต้นทุนขาย (COGS)" value={financials['cost_of_goods']} format="number" />
             <StatementRow label="รายได้ต่อพนักงาน" value={financials['revenue_per_employee']} format="number" />
 
             <SectionHeader title="กำไร" icon={<TrendingUp className="w-3.5 h-3.5" />} />
             <StatementRow label="กำไรขั้นต้น (FY)" value={financials['gross_profit']} format="number" />
             <StatementRow label="กำไรขั้นต้น (MRQ)" value={financials['gross_profit_fq']} format="number" />
-            <StatementRow label="ค่าใช้จ่ายดำเนินงาน" value={financials['operating_expenses_total']} format="number" />
-            <StatementRow label="รายได้จากการดำเนินงาน (FY)" value={financials['oper_income_fy']} format="number" />
-            <StatementRow label="รายได้จากการดำเนินงาน (TTM)" value={financials['oper_income_ttm']} format="number" />
+            <StatementRow label="ค่าใช้จ่ายดำเนินงาน" value={financials['operating_expenses']} format="number" />
+            <StatementRow label="รายได้จากการดำเนินงาน (FY)" value={financials['oper_income']} format="number" />
+            <StatementRow label="รายได้จากการดำเนินงาน (MRQ)" value={financials['oper_income_fq']} format="number" />
             <StatementRow label="EBITDA (TTM)" value={financials['ebitda']} format="number" />
             <StatementRow label="กำไรสุทธิ (FY)" value={financials['net_income']} format="number" />
             <StatementRow label="กำไรสุทธิ (TTM)" value={financials['net_income_ttm']} format="number" />
 
             <SectionHeader title="ค่าใช้จ่าย" icon={<LayoutList className="w-3.5 h-3.5" />} />
-            <StatementRow label="ดอกเบี้ยจ่าย" value={financials['interest_expense']} format="number" />
-            <StatementRow label="ภาษีเงินได้" value={financials['tax_provision']} format="number" />
-            <StatementRow label="R&D (FY)" value={financials['research_and_dev_fy']} format="number" />
-            <StatementRow label="SG&A" value={financials['selling_general_n_admin']} format="number" />
+            <StatementRow label="ดอกเบี้ยจ่าย" value={financials['interest_expense_fq']} format="number" />
+            <StatementRow label="ภาษีเงินได้" value={financials['tax_expense_fq']} format="number" />
+            <StatementRow label="R&D" value={financials['research_and_dev']} format="number" />
+            <StatementRow label="SG&A" value={financials['sell_gen_admin']} format="number" />
 
             <SectionHeader title="กำไรต่อหุ้น" icon={<DollarSign className="w-3.5 h-3.5" />} />
             <StatementRow label="EPS Basic (FY)" value={financials['basic_eps_net_income']} format="currency" />
