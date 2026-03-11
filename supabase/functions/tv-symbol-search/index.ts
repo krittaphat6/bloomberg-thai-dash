@@ -22,134 +22,130 @@ serve(async (req) => {
     const query = text.trim();
     console.log(`[tv-symbol-search] Searching: "${query}"`);
 
-    // Use TradingView's scanner with search parameter
-    const markets = ["america", "thailand", "hongkong", "japan", "germany", "uk", "india", "singapore", "australia", "korea"];
-    
-    const fetchMarket = async (market: string): Promise<any[]> => {
-      try {
-        const url = `https://scanner.tradingview.com/${market}/scan`;
-        const body = {
-          columns: ["name", "description", "type", "exchange", "sector", "market_cap_basic", "close", "change"],
-          sort: { sortBy: "market_cap_basic", sortOrder: "desc" },
-          range: [0, 10],
-          markets: [market],
-          options: { lang },
-          symbols: { query: { types: [] } },
-          filter2: {
-            operator: "and",
-            operands: [
-              {
-                operation: {
-                  operator: "match",
-                  operand: query.toUpperCase(),
-                },
-              },
-            ],
-          },
-        };
+    // Try TradingView symbol search API (GET request with query params)
+    const searchUrl = `https://symbol-search.tradingview.com/symbol_search/v3/?text=${encodeURIComponent(query)}&hl=1&exchange=&lang=${lang}&search_type=&domain=production&sort_by_country=US`;
 
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Origin": "https://www.tradingview.com",
-            "Referer": "https://www.tradingview.com/",
-          },
-          body: JSON.stringify(body),
-        });
+    let symbols: any[] = [];
 
-        if (!res.ok) {
-          // Try without filter2, just use symbols.tickers approach
-          const body2 = {
-            columns: ["name", "description", "type", "exchange", "sector", "market_cap_basic", "close", "change"],
+    try {
+      const res = await fetch(searchUrl, {
+        method: "GET",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const items = data.symbols || data || [];
+        symbols = items.slice(0, 25).map((item: any) => ({
+          symbol: item.symbol || "",
+          description: item.description || "",
+          type: item.type || "stock",
+          exchange: item.exchange || "",
+          country: item.country || "",
+          provider_id: item.provider_id || "",
+          currency_code: item.currency_code || "",
+          logo_id: item.logoid || "",
+        }));
+        console.log(`[tv-symbol-search] v3 API returned ${symbols.length} results`);
+      } else {
+        const errBody = await res.text();
+        console.log(`[tv-symbol-search] v3 API returned ${res.status}, falling back to scanner. Body: ${errBody.substring(0, 200)}`);
+      }
+    } catch (e) {
+      console.log(`[tv-symbol-search] v3 API fetch error: ${e.message}, falling back to scanner`);
+    }
+
+    // Fallback: use scanner API to find symbols across multiple markets
+    if (symbols.length === 0) {
+      console.log(`[tv-symbol-search] Using scanner fallback for "${query}"`);
+
+      const markets = ["america", "thailand", "hongkong", "japan", "germany", "uk", "india", "singapore", "australia", "korea"];
+
+      const fetchMarket = async (market: string): Promise<any[]> => {
+        try {
+          const url = `https://scanner.tradingview.com/${market}/scan`;
+          // Use symbols.tickers to find exact + prefix matches
+          const body = {
+            columns: ["name", "description", "type", "exchange", "sector", "market_cap_basic"],
             sort: { sortBy: "market_cap_basic", sortOrder: "desc" },
             range: [0, 10],
             markets: [market],
             options: { lang },
-            symbols: {
-              query: {
-                types: [],
-              },
-              tickers: [],
-            },
-            filter: [
-              {
-                left: "name",
-                operation: "match",
-                right: query.toUpperCase(),
-              },
-            ],
+            symbols: { query: { types: [] } },
           };
-          
-          const res2 = await fetch(url, {
+
+          const res = await fetch(url, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
               "Origin": "https://www.tradingview.com",
               "Referer": "https://www.tradingview.com/",
             },
-            body: JSON.stringify(body2),
+            body: JSON.stringify(body),
           });
-          
-          if (!res2.ok) {
-            const errText = await res2.text();
-            console.error(`[tv-symbol-search] ${market} fallback error ${res2.status}: ${errText.substring(0, 200)}`);
+
+          if (!res.ok) {
+            await res.text();
             return [];
           }
-          
-          const data2 = await res2.json();
-          return parseResults(data2);
+
+          const data = await res.json();
+          const results: any[] = [];
+          for (const item of data.data || []) {
+            const name = item.d?.[0] || "";
+            const upperName = name.toUpperCase();
+            const upperQuery = query.toUpperCase();
+            // Client-side filter: name starts with or contains query
+            if (upperName.startsWith(upperQuery) || upperName.includes(upperQuery)) {
+              const parts = (item.s || "").split(":");
+              results.push({
+                symbol: parts.length > 1 ? parts[1] : parts[0],
+                description: item.d?.[1] || "",
+                type: item.d?.[2] || "stock",
+                exchange: parts.length > 1 ? parts[0] : "",
+                country: "",
+                market_cap: item.d?.[5] || 0,
+              });
+            }
+          }
+          return results;
+        } catch {
+          return [];
         }
+      };
 
-        const data = await res.json();
-        return parseResults(data);
-      } catch (e) {
-        console.error(`[tv-symbol-search] ${market} error:`, e.message);
-        return [];
-      }
-    };
+      const allResults = await Promise.all(markets.map(fetchMarket));
+      const merged = allResults.flat();
 
-    const parseResults = (data: any): any[] => {
-      return (data.data || []).map((item: any) => {
-        const parts = (item.s || "").split(":");
-        const exchange = parts.length > 1 ? parts[0] : "";
-        const symbol = parts.length > 1 ? parts[1] : parts[0];
-        return {
-          symbol,
-          description: item.d?.[1] || "",
-          type: item.d?.[2] || "stock",
-          exchange,
-          country: item.d?.[4] || "",
-          market_cap: item.d?.[5] || 0,
-          close: item.d?.[6] || 0,
-          change: item.d?.[7] || 0,
-        };
+      // Sort: exact matches first, then starts-with, then contains
+      const upperQuery = query.toUpperCase();
+      merged.sort((a, b) => {
+        const aExact = a.symbol.toUpperCase() === upperQuery ? 0 : 1;
+        const bExact = b.symbol.toUpperCase() === upperQuery ? 0 : 1;
+        if (aExact !== bExact) return aExact - bExact;
+
+        const aStarts = a.symbol.toUpperCase().startsWith(upperQuery) ? 0 : 1;
+        const bStarts = b.symbol.toUpperCase().startsWith(upperQuery) ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+
+        return (b.market_cap || 0) - (a.market_cap || 0);
       });
-    };
 
-    // Fetch from priority markets first, then others
-    const priorityMarkets = ["america", "thailand"];
-    const otherMarkets = markets.filter(m => !priorityMarkets.includes(m));
-    
-    const [priorityResults, otherResults] = await Promise.all([
-      Promise.all(priorityMarkets.map(fetchMarket)),
-      Promise.all(otherMarkets.map(fetchMarket)),
-    ]);
+      const seen = new Set<string>();
+      symbols = merged.filter(s => {
+        const key = `${s.exchange}:${s.symbol}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 25);
+    }
 
-    const merged = [...priorityResults.flat(), ...otherResults.flat()];
-
-    // Deduplicate
-    const seen = new Set<string>();
-    const symbols = merged.filter(s => {
-      const key = `${s.exchange}:${s.symbol}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, 25);
-
-    console.log(`[tv-symbol-search] Found ${symbols.length} results for "${query}"`);
+    console.log(`[tv-symbol-search] Final: ${symbols.length} results for "${query}"`);
 
     return new Response(JSON.stringify({ symbols }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
