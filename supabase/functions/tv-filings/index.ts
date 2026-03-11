@@ -155,7 +155,7 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
             { type: "annual_report", label: "รายงานประจำปี", icon: "📋" },
             { type: "slides", label: "สไลด์", icon: "📊" },
           ],
-          url: `https://www.tradingview.com/symbols/${symbol.replace(":", "-")}/documents/`,
+            url: `https://www.tradingview.com/symbols/${symbol.replace(":", "-")}/financials-income-statement/`,
         });
       }
     }
@@ -192,7 +192,7 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
           quarter: `${qm.q} ${year}`,
           year,
           documents: docs,
-          url: `https://www.tradingview.com/symbols/${symbol.replace(":", "-")}/documents/`,
+            url: `https://www.tradingview.com/symbols/${symbol.replace(":", "-")}/financials-income-statement/`,
         });
       }
     }
@@ -215,7 +215,7 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
             documents: [
               { type: "slides", label: "สไลด์", icon: "📊" },
             ],
-            url: `https://www.tradingview.com/symbols/${symbol.replace(":", "-")}/documents/`,
+            url: `https://www.tradingview.com/symbols/${symbol.replace(":", "-")}/financials-income-statement/`,
           });
         }
       }
