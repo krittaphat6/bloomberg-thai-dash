@@ -339,13 +339,13 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
           <>
             <SectionHeader title="อัตรากำไร (Margins)" icon={<PieChart className="w-3.5 h-3.5" />} />
             <StatementRow label="Gross Margin (TTM)" value={financials['gross_margin']} format="percent" />
-            <StatementRow label="Gross Margin (FY)" value={financials['gross_profit_margin_fy']} format="percent" />
+            <StatementRow label="Gross Margin (MRQ)" value={financials['gross_margin_fq']} format="percent" />
             <StatementRow label="Operating Margin (TTM)" value={financials['operating_margin']} format="percent" />
-            <StatementRow label="Operating Margin (FY)" value={financials['oper_income_margin_fy']} format="percent" />
-            <StatementRow label="Net Margin (TTM)" value={financials['after_tax_margin']} format="percent" />
-            <StatementRow label="EBITDA Margin (TTM)" value={financials['ebitda_margin_ttm']} format="percent" />
-            <StatementRow label="FCF Margin (TTM)" value={financials['free_cash_flow_margin_ttm']} format="percent" />
-            <StatementRow label="Pre-tax Margin (TTM)" value={financials['pre_tax_margin']} format="percent" />
+            <StatementRow label="Operating Margin (MRQ)" value={financials['operating_margin_fq']} format="percent" />
+            <StatementRow label="Net Margin (TTM)" value={financials['net_margin']} format="percent" />
+            <StatementRow label="EBITDA Margin (TTM)" value={financials['ebitda_margin']} format="percent" />
+            <StatementRow label="FCF Margin" value={financials['free_cash_flow_margin']} format="percent" />
+            <StatementRow label="Pre-tax Margin" value={financials['pre_tax_margin']} format="percent" />
 
             <SectionHeader title="ผลตอบแทน (Returns)" icon={<TrendingUp className="w-3.5 h-3.5" />} />
             <StatementRow label="ROE (TTM)" value={financials['return_on_equity']} format="percent" />
@@ -360,10 +360,10 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
             <SectionHeader title="การประเมินมูลค่า" icon={<Calculator className="w-3.5 h-3.5" />} />
             <StatementRow label="P/E (TTM)" value={financials['price_earnings_ttm']} format="ratio" />
             <StatementRow label="P/Revenue (TTM)" value={financials['price_revenue_ttm']} format="ratio" />
-            <StatementRow label="P/Cash Flow (TTM)" value={financials['price_to_cash_f_operating_activities_ttm']} format="ratio" />
-            <StatementRow label="EV/EBIT (TTM)" value={financials['enterprise_value_to_ebit_ttm']} format="ratio" />
-            <StatementRow label="EV/Revenue (TTM)" value={financials['enterprise_value_to_revenue_ttm']} format="ratio" />
-            <StatementRow label="PEG (TTM)" value={financials['price_earnings_growth_ttm']} format="ratio" />
+            <StatementRow label="P/Cash Flow" value={financials['price_to_operating_cash_flow']} format="ratio" />
+            <StatementRow label="EV/EBIT" value={financials['enterprise_value_to_ebit']} format="ratio" />
+            <StatementRow label="EV/Revenue" value={financials['enterprise_value_to_revenue']} format="ratio" />
+            <StatementRow label="PEG Ratio" value={financials['peg_ratio']} format="ratio" />
           </>
         )}
       </div>
