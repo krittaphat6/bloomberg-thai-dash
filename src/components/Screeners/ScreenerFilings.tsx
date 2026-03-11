@@ -201,11 +201,11 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
             <SectionHeader title="ข้อมูลพื้นฐาน" icon={<Building2 className="w-3.5 h-3.5" />} />
             <StatementRow label="ราคาปิด" value={financials['close']} format="currency" />
             <StatementRow label="Market Cap" value={financials['market_cap_basic']} format="number" />
-            <StatementRow label="Enterprise Value" value={financials['enterprise_value_fq']} format="number" />
-            <StatementRow label="52W High" value={financials['52w_high']} format="currency" />
-            <StatementRow label="52W Low" value={financials['52w_low']} format="currency" />
-            <StatementRow label="Sector" value={financials['sector']} format="currency" />
-            <StatementRow label="Industry" value={financials['industry']} format="currency" />
+            <StatementRow label="Enterprise Value" value={financials['enterprise_value']} format="number" />
+            <StatementRow label="52W High" value={financials['price_52_week_high']} format="currency" />
+            <StatementRow label="52W Low" value={financials['price_52_week_low']} format="currency" />
+            {financials['sector'] && <div className="flex items-center justify-between py-1.5 px-3"><span className="text-[11px] font-mono text-muted-foreground">Sector</span><span className="text-[11px] font-mono font-medium text-foreground">{financials['sector']}</span></div>}
+            {financials['industry'] && <div className="flex items-center justify-between py-1.5 px-3"><span className="text-[11px] font-mono text-muted-foreground">Industry</span><span className="text-[11px] font-mono font-medium text-foreground">{financials['industry']}</span></div>}
             <StatementRow label="จำนวนพนักงาน" value={financials['number_of_employees']} format="number" />
 
             <SectionHeader title="การประเมินมูลค่า" icon={<Calculator className="w-3.5 h-3.5" />} />
@@ -213,10 +213,9 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
             <StatementRow label="P/B" value={financials['price_book_ratio']} format="ratio" />
             <StatementRow label="P/S" value={financials['price_sales_ratio']} format="ratio" />
             <StatementRow label="P/Revenue (TTM)" value={financials['price_revenue_ttm']} format="ratio" />
-            <StatementRow label="EV/EBIT (TTM)" value={financials['enterprise_value_to_ebit_ttm']} format="ratio" />
-            <StatementRow label="EV/Revenue (TTM)" value={financials['enterprise_value_to_revenue_ttm']} format="ratio" />
-            <StatementRow label="PEG (TTM)" value={financials['price_earnings_growth_ttm']} format="ratio" />
-            <StatementRow label="Earnings Yield" value={financials['earnings_yield']} format="percent" />
+            <StatementRow label="EV/EBIT" value={financials['enterprise_value_to_ebit']} format="ratio" />
+            <StatementRow label="EV/Revenue" value={financials['enterprise_value_to_revenue']} format="ratio" />
+            <StatementRow label="PEG Ratio" value={financials['peg_ratio']} format="ratio" />
 
             <SectionHeader title="ผลตอบแทนราคา" icon={<TrendingUp className="w-3.5 h-3.5" />} />
             <StatementRow label="สัปดาห์" value={financials['Perf.W']} format="growth" />
@@ -245,24 +244,24 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
             <StatementRow label="รายได้รวม (FY)" value={financials['total_revenue']} format="number" />
             <StatementRow label="รายได้ปีที่แล้ว (FY)" value={financials['last_annual_revenue']} format="number" />
             <StatementRow label="รายได้รวม (TTM)" value={financials['revenue_ttm']} format="number" />
-            <StatementRow label="ต้นทุนขาย (COGS)" value={financials['cost_of_revenue']} format="number" />
+            <StatementRow label="ต้นทุนขาย (COGS)" value={financials['cost_of_goods']} format="number" />
             <StatementRow label="รายได้ต่อพนักงาน" value={financials['revenue_per_employee']} format="number" />
 
             <SectionHeader title="กำไร" icon={<TrendingUp className="w-3.5 h-3.5" />} />
             <StatementRow label="กำไรขั้นต้น (FY)" value={financials['gross_profit']} format="number" />
             <StatementRow label="กำไรขั้นต้น (MRQ)" value={financials['gross_profit_fq']} format="number" />
-            <StatementRow label="ค่าใช้จ่ายดำเนินงาน" value={financials['operating_expenses_total']} format="number" />
-            <StatementRow label="รายได้จากการดำเนินงาน (FY)" value={financials['oper_income_fy']} format="number" />
-            <StatementRow label="รายได้จากการดำเนินงาน (TTM)" value={financials['oper_income_ttm']} format="number" />
+            <StatementRow label="ค่าใช้จ่ายดำเนินงาน" value={financials['operating_expenses']} format="number" />
+            <StatementRow label="รายได้จากการดำเนินงาน (FY)" value={financials['oper_income']} format="number" />
+            <StatementRow label="รายได้จากการดำเนินงาน (MRQ)" value={financials['oper_income_fq']} format="number" />
             <StatementRow label="EBITDA (TTM)" value={financials['ebitda']} format="number" />
             <StatementRow label="กำไรสุทธิ (FY)" value={financials['net_income']} format="number" />
             <StatementRow label="กำไรสุทธิ (TTM)" value={financials['net_income_ttm']} format="number" />
 
             <SectionHeader title="ค่าใช้จ่าย" icon={<LayoutList className="w-3.5 h-3.5" />} />
-            <StatementRow label="ดอกเบี้ยจ่าย" value={financials['interest_expense']} format="number" />
-            <StatementRow label="ภาษีเงินได้" value={financials['tax_provision']} format="number" />
-            <StatementRow label="R&D (FY)" value={financials['research_and_dev_fy']} format="number" />
-            <StatementRow label="SG&A" value={financials['selling_general_n_admin']} format="number" />
+            <StatementRow label="ดอกเบี้ยจ่าย" value={financials['interest_expense_fq']} format="number" />
+            <StatementRow label="ภาษีเงินได้" value={financials['tax_expense_fq']} format="number" />
+            <StatementRow label="R&D" value={financials['research_and_dev']} format="number" />
+            <StatementRow label="SG&A" value={financials['sell_gen_admin']} format="number" />
 
             <SectionHeader title="กำไรต่อหุ้น" icon={<DollarSign className="w-3.5 h-3.5" />} />
             <StatementRow label="EPS Basic (FY)" value={financials['basic_eps_net_income']} format="currency" />
@@ -289,27 +288,27 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
             <StatementRow label="สินทรัพย์หมุนเวียน" value={financials['total_current_assets']} format="number" />
             <StatementRow label="เงินสดและรายการเทียบเท่า" value={financials['cash_n_equivalents_fq']} format="number" indent />
             <StatementRow label="เงินสด + เงินลงทุนระยะสั้น" value={financials['cash_n_short_term_invest_fq']} format="number" indent />
-            <StatementRow label="ลูกหนี้การค้า" value={financials['accounts_receivables_gross']} format="number" indent />
-            <StatementRow label="สินค้าคงเหลือ" value={financials['inventories']} format="number" indent />
-            <StatementRow label="ที่ดิน อาคาร อุปกรณ์ (สุทธิ)" value={financials['property_plant_equipment_net']} format="number" />
+            <StatementRow label="ลูกหนี้การค้า" value={financials['accounts_receivable']} format="number" indent />
+            <StatementRow label="สินค้าคงเหลือ" value={financials['inventories_total']} format="number" indent />
+            <StatementRow label="ที่ดิน อาคาร อุปกรณ์ (สุทธิ)" value={financials['net_ppe']} format="number" />
             <StatementRow label="ค่าความนิยม" value={financials['goodwill']} format="number" />
-            <StatementRow label="สินทรัพย์ไม่มีตัวตน" value={financials['intangibles']} format="number" />
+            <StatementRow label="สินทรัพย์ไม่มีตัวตน" value={financials['intangibles_total']} format="number" />
 
             <SectionHeader title="หนี้สิน" icon={<TrendingDown className="w-3.5 h-3.5" />} />
             <StatementRow label="หนี้สินรวม" value={financials['total_liabilities_fq']} format="number" />
-            <StatementRow label="หนี้สินหมุนเวียน" value={financials['total_current_liabilities_fq']} format="number" />
+            <StatementRow label="หนี้สินหมุนเวียน" value={financials['total_current_liabilities']} format="number" />
             <StatementRow label="เจ้าหนี้การค้า" value={financials['accounts_payable']} format="number" indent />
-            <StatementRow label="หนี้สินระยะยาว" value={financials['long_term_debt_fq']} format="number" />
-            <StatementRow label="หนี้สินระยะสั้น" value={financials['short_term_debt_fq']} format="number" />
+            <StatementRow label="หนี้สินระยะยาว" value={financials['long_term_debt']} format="number" />
+            <StatementRow label="หนี้สินระยะสั้น" value={financials['short_term_debt']} format="number" />
             <StatementRow label="หนี้สินรวมทั้งหมด" value={financials['total_debt']} format="number" />
             <StatementRow label="หนี้สินสุทธิ" value={financials['net_debt']} format="number" />
 
             <SectionHeader title="ส่วนของผู้ถือหุ้น" icon={<PieChart className="w-3.5 h-3.5" />} />
-            <StatementRow label="ส่วนของผู้ถือหุ้นรวม" value={financials['total_equity_fq']} format="number" />
+            <StatementRow label="ส่วนของผู้ถือหุ้นรวม" value={financials['total_equity']} format="number" />
             <StatementRow label="กำไรสะสม" value={financials['retained_earnings']} format="number" />
-            <StatementRow label="ส่วนของผู้ถือหุ้นสามัญ" value={financials['total_common_equity']} format="number" />
-            <StatementRow label="มูลค่าตามบัญชี/หุ้น" value={financials['book_value_per_share_fq']} format="currency" />
-            <StatementRow label="มูลค่าตามบัญชีจับต้องได้/หุ้น" value={financials['tangible_book_value_per_share_fq']} format="currency" />
+            <StatementRow label="ส่วนของผู้ถือหุ้นสามัญ" value={financials['common_equity_total']} format="number" />
+            <StatementRow label="มูลค่าตามบัญชี/หุ้น" value={financials['book_value_per_share']} format="currency" />
+            <StatementRow label="มูลค่าตามบัญชีจับต้องได้/หุ้น" value={financials['tangible_book_value_per_share']} format="currency" />
           </>
         )}
 
@@ -317,11 +316,11 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
           <>
             <SectionHeader title="กระแสเงินสดจากการดำเนินงาน" icon={<DollarSign className="w-3.5 h-3.5" />} />
             <StatementRow label="กระแสเงินสดจากดำเนินงาน (TTM)" value={financials['cash_f_operating_activities_ttm']} format="number" />
-            <StatementRow label="กระแสเงินสดจากดำเนินงาน (FY)" value={financials['cash_f_operating_activities_fy']} format="number" />
+            <StatementRow label="กระแสเงินสดจากดำเนินงาน (FY)" value={financials['cash_f_operating_activities']} format="number" />
 
             <SectionHeader title="การลงทุน" icon={<BarChart3 className="w-3.5 h-3.5" />} />
             <StatementRow label="ค่าใช้จ่ายลงทุน (TTM)" value={financials['capital_expenditures_ttm']} format="number" />
-            <StatementRow label="ค่าใช้จ่ายลงทุน (FY)" value={financials['capital_expenditures_fy']} format="number" />
+            <StatementRow label="ค่าใช้จ่ายลงทุน (FY)" value={financials['capital_expenditures']} format="number" />
             <StatementRow label="กระแสเงินสดจากการลงทุน (TTM)" value={financials['cash_f_investing_activities_ttm']} format="number" />
 
             <SectionHeader title="กระแสเงินสดอิสระ" icon={<TrendingUp className="w-3.5 h-3.5" />} />
@@ -340,13 +339,13 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
           <>
             <SectionHeader title="อัตรากำไร (Margins)" icon={<PieChart className="w-3.5 h-3.5" />} />
             <StatementRow label="Gross Margin (TTM)" value={financials['gross_margin']} format="percent" />
-            <StatementRow label="Gross Margin (FY)" value={financials['gross_profit_margin_fy']} format="percent" />
+            <StatementRow label="Gross Margin (MRQ)" value={financials['gross_margin_fq']} format="percent" />
             <StatementRow label="Operating Margin (TTM)" value={financials['operating_margin']} format="percent" />
-            <StatementRow label="Operating Margin (FY)" value={financials['oper_income_margin_fy']} format="percent" />
-            <StatementRow label="Net Margin (TTM)" value={financials['after_tax_margin']} format="percent" />
-            <StatementRow label="EBITDA Margin (TTM)" value={financials['ebitda_margin_ttm']} format="percent" />
-            <StatementRow label="FCF Margin (TTM)" value={financials['free_cash_flow_margin_ttm']} format="percent" />
-            <StatementRow label="Pre-tax Margin (TTM)" value={financials['pre_tax_margin']} format="percent" />
+            <StatementRow label="Operating Margin (MRQ)" value={financials['operating_margin_fq']} format="percent" />
+            <StatementRow label="Net Margin (TTM)" value={financials['net_margin']} format="percent" />
+            <StatementRow label="EBITDA Margin (TTM)" value={financials['ebitda_margin']} format="percent" />
+            <StatementRow label="FCF Margin" value={financials['free_cash_flow_margin']} format="percent" />
+            <StatementRow label="Pre-tax Margin" value={financials['pre_tax_margin']} format="percent" />
 
             <SectionHeader title="ผลตอบแทน (Returns)" icon={<TrendingUp className="w-3.5 h-3.5" />} />
             <StatementRow label="ROE (TTM)" value={financials['return_on_equity']} format="percent" />
@@ -361,10 +360,10 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
             <SectionHeader title="การประเมินมูลค่า" icon={<Calculator className="w-3.5 h-3.5" />} />
             <StatementRow label="P/E (TTM)" value={financials['price_earnings_ttm']} format="ratio" />
             <StatementRow label="P/Revenue (TTM)" value={financials['price_revenue_ttm']} format="ratio" />
-            <StatementRow label="P/Cash Flow (TTM)" value={financials['price_to_cash_f_operating_activities_ttm']} format="ratio" />
-            <StatementRow label="EV/EBIT (TTM)" value={financials['enterprise_value_to_ebit_ttm']} format="ratio" />
-            <StatementRow label="EV/Revenue (TTM)" value={financials['enterprise_value_to_revenue_ttm']} format="ratio" />
-            <StatementRow label="PEG (TTM)" value={financials['price_earnings_growth_ttm']} format="ratio" />
+            <StatementRow label="P/Cash Flow" value={financials['price_to_operating_cash_flow']} format="ratio" />
+            <StatementRow label="EV/EBIT" value={financials['enterprise_value_to_ebit']} format="ratio" />
+            <StatementRow label="EV/Revenue" value={financials['enterprise_value_to_revenue']} format="ratio" />
+            <StatementRow label="PEG Ratio" value={financials['peg_ratio']} format="ratio" />
           </>
         )}
       </div>
