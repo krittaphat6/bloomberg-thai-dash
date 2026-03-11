@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Basic financial columns for summary
+// Summary columns
 const SUMMARY_COLUMNS = [
   "name", "description", "close", "change", "market_cap_basic",
   "price_earnings_ttm", "earnings_per_share_basic_ttm",
@@ -17,17 +17,18 @@ const SUMMARY_COLUMNS = [
   "sector", "industry", "exchange",
   "Recommend.All", "RSI", "MACD.macd",
   "Perf.W", "Perf.1M", "Perf.3M", "Perf.6M", "Perf.YTD", "Perf.Y",
-  "SMA50", "SMA200", "52w_high", "52w_low",
+  "SMA50", "SMA200", "price_52_week_high", "price_52_week_low",
+  "number_of_employees",
 ];
 
 // Full financial statement columns
 const FINANCIAL_STATEMENT_COLUMNS = [
   // Income Statement
-  "total_revenue", "last_annual_revenue", "cost_of_revenue",
-  "gross_profit", "gross_profit_fq", "operating_expenses_total",
-  "oper_income_fy", "oper_income_ttm", "ebitda",
-  "net_income", "interest_expense", "tax_provision",
-  "research_and_dev_fy", "selling_general_n_admin",
+  "total_revenue", "last_annual_revenue", "cost_of_goods",
+  "gross_profit", "gross_profit_fq", "operating_expenses",
+  "oper_income", "oper_income_fq", "ebitda",
+  "net_income", "interest_expense_fq", "tax_expense_fq",
+  "research_and_dev", "sell_gen_admin",
   "basic_eps_net_income", "earnings_per_share_basic_ttm",
   "last_annual_eps", "earnings_per_share_diluted_ttm",
   "earnings_per_share_fq", "revenue_per_employee",
@@ -45,26 +46,27 @@ const FINANCIAL_STATEMENT_COLUMNS = [
   // Balance Sheet
   "total_assets", "total_current_assets",
   "cash_n_equivalents_fq", "cash_n_short_term_invest_fq",
-  "accounts_receivables_gross", "inventories",
-  "property_plant_equipment_net", "goodwill", "intangibles",
-  "total_liabilities_fq", "total_current_liabilities_fq",
-  "accounts_payable", "long_term_debt_fq", "short_term_debt_fq",
+  "accounts_receivable", "inventories_total",
+  "net_ppe", "goodwill", "intangibles_total",
+  "total_liabilities_fq", "total_current_liabilities",
+  "accounts_payable", "long_term_debt", "short_term_debt",
   "total_debt", "net_debt",
-  "total_equity_fq", "retained_earnings", "total_common_equity",
-  "book_value_per_share_fq", "tangible_book_value_per_share_fq",
+  "total_equity", "retained_earnings", "common_equity_total",
+  "book_value_per_share", "tangible_book_value_per_share",
 
   // Cash Flow
-  "cash_f_operating_activities_ttm", "cash_f_operating_activities_fy",
-  "capital_expenditures_ttm", "capital_expenditures_fy",
-  "free_cash_flow", "free_cash_flow_ttm", "free_cash_flow_fy",
+  "cash_f_operating_activities_ttm", "cash_f_operating_activities",
+  "capital_expenditures_ttm", "capital_expenditures",
+  "free_cash_flow_ttm", "free_cash_flow",
   "cash_f_investing_activities_ttm", "cash_f_financing_activities_ttm",
   "dividends_paid", "total_cash_dividends_paid_ttm",
 
   // Margins
-  "gross_margin", "gross_profit_margin_fy",
-  "operating_margin", "oper_income_margin_fy",
-  "after_tax_margin", "ebitda_margin_ttm",
-  "pre_tax_margin", "free_cash_flow_margin_ttm",
+  "gross_margin", "gross_margin_fq",
+  "operating_margin", "operating_margin_fq",
+  "net_margin", "net_margin_fq",
+  "ebitda_margin", "ebitda_margin_fq",
+  "pre_tax_margin", "free_cash_flow_margin",
 
   // Returns
   "return_on_equity", "return_on_assets",
@@ -72,23 +74,19 @@ const FINANCIAL_STATEMENT_COLUMNS = [
 
   // Ratios
   "debt_to_equity", "current_ratio", "quick_ratio",
-  "price_revenue_ttm", "enterprise_value_to_ebit_ttm",
-  "enterprise_value_to_revenue_ttm",
-  "price_to_cash_f_operating_activities_ttm",
-  "price_earnings_growth_ttm",
+  "price_revenue_ttm", "enterprise_value_to_ebit",
+  "enterprise_value_to_revenue",
+  "price_to_operating_cash_flow",
+  "peg_ratio",
+  "enterprise_value", "price_book_ratio", "price_sales_ratio",
 
   // Dividends
   "dividends_yield", "dividends_yield_current",
   "continuous_dividend_growth", "continuous_dividend_payout",
-
-  // Valuation
-  "market_cap_basic", "enterprise_value_fq",
-  "price_book_ratio", "price_sales_ratio",
-  "number_of_employees",
 ];
 
 const EXCHANGE_TO_MARKET: Record<string, string> = {
-  SET: "thailand", BKK: "thailand",
+  SET: "thailand", BKK: "thailand", TFEX: "thailand",
   NASDAQ: "america", NYSE: "america", AMEX: "america",
   TSE: "japan", TYO: "japan",
   HKEX: "hongkong", HKG: "hongkong",
@@ -98,8 +96,8 @@ const EXCHANGE_TO_MARKET: Record<string, string> = {
   BSE: "india", NSE: "india",
   ASX: "australia", SGX: "singapore",
   BURSA: "malaysia", MYX: "malaysia",
-  TFEX: "thailand", KRX: "korea",
-  TWSE: "taiwan", IDX: "indonesia", PSE: "philippines",
+  KRX: "korea", TWSE: "taiwan",
+  IDX: "indonesia", PSE: "philippines",
 };
 
 serve(async (req) => {
@@ -121,23 +119,22 @@ serve(async (req) => {
     const fullSymbol = exchange ? `${exchange}:${symbol}` : symbol;
 
     // Choose columns based on mode
-    const columns = mode === "statements"
+    const allCols = mode === "statements"
       ? [...new Set([...SUMMARY_COLUMNS, ...FINANCIAL_STATEMENT_COLUMNS])]
       : SUMMARY_COLUMNS;
 
-    console.log(`[tv-filings] mode=${mode} symbol=${fullSymbol} market=${market} cols=${columns.length}`);
+    console.log(`[tv-filings] mode=${mode} symbol=${fullSymbol} market=${market} cols=${allCols.length}`);
 
-    const tvBody = {
-      columns,
-      filter2: {
-        operator: "and",
-        operands: [{
-          operation: { operator: "match", operand: symbol.toUpperCase() }
-        }]
+    // Use tvscreener's approach: symbols.tickers to fetch specific symbol directly
+    const tvBody: any = {
+      columns: allCols,
+      filter: [],
+      symbols: {
+        tickers: [fullSymbol],
+        query: { types: [] },
       },
       sort: { sortBy: "name", sortOrder: "asc" },
-      range: [0, 5],
-      markets: [market],
+      range: [0, 1],
       options: { lang: "en" },
     };
 
@@ -145,7 +142,7 @@ serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Origin": "https://www.tradingview.com",
         "Referer": "https://www.tradingview.com/",
       },
@@ -156,18 +153,19 @@ serve(async (req) => {
 
     if (tvResponse.ok) {
       const tvData = await tvResponse.json();
-      const match = (tvData.data || []).find((item: any) => {
-        const s = item.s || "";
-        return s.toUpperCase().includes(symbol.toUpperCase());
-      });
+      console.log(`[tv-filings] Got ${tvData.data?.length || 0} results for ${fullSymbol}`);
 
-      if (match && match.d) {
+      if (tvData.data && tvData.data.length > 0) {
+        const match = tvData.data[0];
         const row: any = { symbol: match.s };
-        columns.forEach((col, i) => {
-          row[col] = match.d[i];
+        allCols.forEach((col: string, i: number) => {
+          row[col] = match.d?.[i] ?? null;
         });
         financials = row;
       }
+    } else {
+      const errorText = await tvResponse.text();
+      console.error(`[tv-filings] TV API error ${tvResponse.status}: ${errorText}`);
     }
 
     const filings = mode === "filings"
@@ -202,8 +200,8 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
       const reportDate = new Date(year + 1, 2, 15);
       if (reportDate <= now) {
         filings.push({
-          id: `${symbol}-annual-${year}`,
-          symbol, title: `Annual Report ${year}`,
+          id: `${symbol}-annual-${year}`, symbol,
+          title: `Annual Report ${year}`,
           titleTh: `รายงานประจำปี ${year}`,
           type: "annual", form: "56-1",
           date: formatDate(reportDate),
@@ -222,16 +220,12 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
       const reportYear = qm.q === "Q4" ? year + 1 : year;
       const reportDate = new Date(reportYear, reportMonth - 1, 15);
       if (reportDate <= now) {
-        const docs: any[] = [
-          { type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄" },
-        ];
-        if (qm.q === "Q2" || qm.q === "Q4") {
-          docs.push({ type: "slides", label: "สไลด์", icon: "📊" });
-        }
+        const docs: any[] = [{ type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄" }];
+        if (qm.q === "Q2" || qm.q === "Q4") docs.push({ type: "slides", label: "สไลด์", icon: "📊" });
         docs.push({ type: "earnings", label: "หนังสือรับรอง", icon: "📃" });
         filings.push({
-          id: `${symbol}-${qm.q}-${year}`,
-          symbol, title: `${qm.q} ${year}`,
+          id: `${symbol}-${qm.q}-${year}`, symbol,
+          title: `${qm.q} ${year}`,
           titleTh: `รายงานระหว่างกาล ${qm.q} ${year}`,
           type: "interim", form: "10-Q",
           date: formatDate(reportDate),
@@ -246,8 +240,8 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
         const presDate = new Date(year, m + 1, 10);
         if (presDate <= now && presDate > new Date(currentYear - 2, 0, 1)) {
           filings.push({
-            id: `${symbol}-pres-${year}-${m}`,
-            symbol, title: "Investor Presentation",
+            id: `${symbol}-pres-${year}-${m}`, symbol,
+            title: "Investor Presentation",
             titleTh: "สไลด์นักลงทุน", type: "slides",
             form: "", date: formatDate(presDate),
             quarter: "", year,
