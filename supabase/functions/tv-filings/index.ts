@@ -170,14 +170,18 @@ serve(async (req) => {
         const errorText = await tvResponse.text();
         console.error(`[tv-filings] TV API error ${tvResponse.status}: ${errorText}`);
 
-        // Try to extract unknown field name and remove it
-        const unknownMatch = errorText.match(/Unknown field "([^"]+)"/);
-        if (unknownMatch && maxRetries > 0) {
-          const badField = unknownMatch[1];
-          console.log(`[tv-filings] Removing unknown field: ${badField}, retrying...`);
-          currentCols = currentCols.filter(c => c !== badField);
-          continue;
-        }
+        // Parse JSON error to extract unknown field name
+        try {
+          const errJson = JSON.parse(errorText);
+          const errMsg = errJson.error || '';
+          const unknownMatch = errMsg.match(/Unknown field "([^"]+)"/);
+          if (unknownMatch && maxRetries > 0) {
+            const badField = unknownMatch[1];
+            console.log(`[tv-filings] Removing unknown field: ${badField}, retrying... (${currentCols.length - 1} cols left)`);
+            currentCols = currentCols.filter(c => c !== badField);
+            continue;
+          }
+        } catch {}
         break; // give up
       }
     }
