@@ -125,47 +125,61 @@ serve(async (req) => {
 
     console.log(`[tv-filings] mode=${mode} symbol=${fullSymbol} market=${market} cols=${allCols.length}`);
 
-    // Use tvscreener's approach: symbols.tickers to fetch specific symbol directly
-    const tvBody: any = {
-      columns: allCols,
-      filter: [],
-      symbols: {
-        tickers: [fullSymbol],
-        query: { types: [] },
-      },
-      sort: { sortBy: "name", sortOrder: "asc" },
-      range: [0, 1],
-      options: { lang: "en" },
+    const tvHeaders = {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Origin": "https://www.tradingview.com",
+      "Referer": "https://www.tradingview.com/",
     };
 
-    const tvResponse = await fetch(scanUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Origin": "https://www.tradingview.com",
-        "Referer": "https://www.tradingview.com/",
-      },
-      body: JSON.stringify(tvBody),
-    });
-
     let financials: any = null;
+    let currentCols = [...allCols];
+    let maxRetries = 5;
 
-    if (tvResponse.ok) {
-      const tvData = await tvResponse.json();
-      console.log(`[tv-filings] Got ${tvData.data?.length || 0} results for ${fullSymbol}`);
+    // Retry loop: if a field is unknown, remove it and retry
+    while (maxRetries-- > 0) {
+      const tvBody = {
+        columns: currentCols,
+        filter: [],
+        symbols: { tickers: [fullSymbol], query: { types: [] } },
+        sort: { sortBy: "name", sortOrder: "asc" },
+        range: [0, 1],
+        options: { lang: "en" },
+      };
 
-      if (tvData.data && tvData.data.length > 0) {
-        const match = tvData.data[0];
-        const row: any = { symbol: match.s };
-        allCols.forEach((col: string, i: number) => {
-          row[col] = match.d?.[i] ?? null;
-        });
-        financials = row;
+      const tvResponse = await fetch(scanUrl, {
+        method: "POST",
+        headers: tvHeaders,
+        body: JSON.stringify(tvBody),
+      });
+
+      if (tvResponse.ok) {
+        const tvData = await tvResponse.json();
+        console.log(`[tv-filings] Got ${tvData.data?.length || 0} results for ${fullSymbol}`);
+
+        if (tvData.data && tvData.data.length > 0) {
+          const match = tvData.data[0];
+          const row: any = { symbol: match.s };
+          currentCols.forEach((col: string, i: number) => {
+            row[col] = match.d?.[i] ?? null;
+          });
+          financials = row;
+        }
+        break; // success
+      } else {
+        const errorText = await tvResponse.text();
+        console.error(`[tv-filings] TV API error ${tvResponse.status}: ${errorText}`);
+
+        // Try to extract unknown field name and remove it
+        const unknownMatch = errorText.match(/Unknown field "([^"]+)"/);
+        if (unknownMatch && maxRetries > 0) {
+          const badField = unknownMatch[1];
+          console.log(`[tv-filings] Removing unknown field: ${badField}, retrying...`);
+          currentCols = currentCols.filter(c => c !== badField);
+          continue;
+        }
+        break; // give up
       }
-    } else {
-      const errorText = await tvResponse.text();
-      console.error(`[tv-filings] TV API error ${tvResponse.status}: ${errorText}`);
     }
 
     const filings = mode === "filings"
