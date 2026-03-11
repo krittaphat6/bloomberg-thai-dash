@@ -288,27 +288,27 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
             <StatementRow label="สินทรัพย์หมุนเวียน" value={financials['total_current_assets']} format="number" />
             <StatementRow label="เงินสดและรายการเทียบเท่า" value={financials['cash_n_equivalents_fq']} format="number" indent />
             <StatementRow label="เงินสด + เงินลงทุนระยะสั้น" value={financials['cash_n_short_term_invest_fq']} format="number" indent />
-            <StatementRow label="ลูกหนี้การค้า" value={financials['accounts_receivables_gross']} format="number" indent />
-            <StatementRow label="สินค้าคงเหลือ" value={financials['inventories']} format="number" indent />
-            <StatementRow label="ที่ดิน อาคาร อุปกรณ์ (สุทธิ)" value={financials['property_plant_equipment_net']} format="number" />
+            <StatementRow label="ลูกหนี้การค้า" value={financials['accounts_receivable']} format="number" indent />
+            <StatementRow label="สินค้าคงเหลือ" value={financials['inventories_total']} format="number" indent />
+            <StatementRow label="ที่ดิน อาคาร อุปกรณ์ (สุทธิ)" value={financials['net_ppe']} format="number" />
             <StatementRow label="ค่าความนิยม" value={financials['goodwill']} format="number" />
-            <StatementRow label="สินทรัพย์ไม่มีตัวตน" value={financials['intangibles']} format="number" />
+            <StatementRow label="สินทรัพย์ไม่มีตัวตน" value={financials['intangibles_total']} format="number" />
 
             <SectionHeader title="หนี้สิน" icon={<TrendingDown className="w-3.5 h-3.5" />} />
             <StatementRow label="หนี้สินรวม" value={financials['total_liabilities_fq']} format="number" />
-            <StatementRow label="หนี้สินหมุนเวียน" value={financials['total_current_liabilities_fq']} format="number" />
+            <StatementRow label="หนี้สินหมุนเวียน" value={financials['total_current_liabilities']} format="number" />
             <StatementRow label="เจ้าหนี้การค้า" value={financials['accounts_payable']} format="number" indent />
-            <StatementRow label="หนี้สินระยะยาว" value={financials['long_term_debt_fq']} format="number" />
-            <StatementRow label="หนี้สินระยะสั้น" value={financials['short_term_debt_fq']} format="number" />
+            <StatementRow label="หนี้สินระยะยาว" value={financials['long_term_debt']} format="number" />
+            <StatementRow label="หนี้สินระยะสั้น" value={financials['short_term_debt']} format="number" />
             <StatementRow label="หนี้สินรวมทั้งหมด" value={financials['total_debt']} format="number" />
             <StatementRow label="หนี้สินสุทธิ" value={financials['net_debt']} format="number" />
 
             <SectionHeader title="ส่วนของผู้ถือหุ้น" icon={<PieChart className="w-3.5 h-3.5" />} />
-            <StatementRow label="ส่วนของผู้ถือหุ้นรวม" value={financials['total_equity_fq']} format="number" />
+            <StatementRow label="ส่วนของผู้ถือหุ้นรวม" value={financials['total_equity']} format="number" />
             <StatementRow label="กำไรสะสม" value={financials['retained_earnings']} format="number" />
-            <StatementRow label="ส่วนของผู้ถือหุ้นสามัญ" value={financials['total_common_equity']} format="number" />
-            <StatementRow label="มูลค่าตามบัญชี/หุ้น" value={financials['book_value_per_share_fq']} format="currency" />
-            <StatementRow label="มูลค่าตามบัญชีจับต้องได้/หุ้น" value={financials['tangible_book_value_per_share_fq']} format="currency" />
+            <StatementRow label="ส่วนของผู้ถือหุ้นสามัญ" value={financials['common_equity_total']} format="number" />
+            <StatementRow label="มูลค่าตามบัญชี/หุ้น" value={financials['book_value_per_share']} format="currency" />
+            <StatementRow label="มูลค่าตามบัญชีจับต้องได้/หุ้น" value={financials['tangible_book_value_per_share']} format="currency" />
           </>
         )}
 
