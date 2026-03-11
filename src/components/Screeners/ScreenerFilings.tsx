@@ -201,11 +201,11 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
             <SectionHeader title="ข้อมูลพื้นฐาน" icon={<Building2 className="w-3.5 h-3.5" />} />
             <StatementRow label="ราคาปิด" value={financials['close']} format="currency" />
             <StatementRow label="Market Cap" value={financials['market_cap_basic']} format="number" />
-            <StatementRow label="Enterprise Value" value={financials['enterprise_value_fq']} format="number" />
-            <StatementRow label="52W High" value={financials['52w_high']} format="currency" />
-            <StatementRow label="52W Low" value={financials['52w_low']} format="currency" />
-            <StatementRow label="Sector" value={financials['sector']} format="currency" />
-            <StatementRow label="Industry" value={financials['industry']} format="currency" />
+            <StatementRow label="Enterprise Value" value={financials['enterprise_value']} format="number" />
+            <StatementRow label="52W High" value={financials['price_52_week_high']} format="currency" />
+            <StatementRow label="52W Low" value={financials['price_52_week_low']} format="currency" />
+            {financials['sector'] && <div className="flex items-center justify-between py-1.5 px-3"><span className="text-[11px] font-mono text-muted-foreground">Sector</span><span className="text-[11px] font-mono font-medium text-foreground">{financials['sector']}</span></div>}
+            {financials['industry'] && <div className="flex items-center justify-between py-1.5 px-3"><span className="text-[11px] font-mono text-muted-foreground">Industry</span><span className="text-[11px] font-mono font-medium text-foreground">{financials['industry']}</span></div>}
             <StatementRow label="จำนวนพนักงาน" value={financials['number_of_employees']} format="number" />
 
             <SectionHeader title="การประเมินมูลค่า" icon={<Calculator className="w-3.5 h-3.5" />} />
@@ -213,10 +213,9 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
             <StatementRow label="P/B" value={financials['price_book_ratio']} format="ratio" />
             <StatementRow label="P/S" value={financials['price_sales_ratio']} format="ratio" />
             <StatementRow label="P/Revenue (TTM)" value={financials['price_revenue_ttm']} format="ratio" />
-            <StatementRow label="EV/EBIT (TTM)" value={financials['enterprise_value_to_ebit_ttm']} format="ratio" />
-            <StatementRow label="EV/Revenue (TTM)" value={financials['enterprise_value_to_revenue_ttm']} format="ratio" />
-            <StatementRow label="PEG (TTM)" value={financials['price_earnings_growth_ttm']} format="ratio" />
-            <StatementRow label="Earnings Yield" value={financials['earnings_yield']} format="percent" />
+            <StatementRow label="EV/EBIT" value={financials['enterprise_value_to_ebit']} format="ratio" />
+            <StatementRow label="EV/Revenue" value={financials['enterprise_value_to_revenue']} format="ratio" />
+            <StatementRow label="PEG Ratio" value={financials['peg_ratio']} format="ratio" />
 
             <SectionHeader title="ผลตอบแทนราคา" icon={<TrendingUp className="w-3.5 h-3.5" />} />
             <StatementRow label="สัปดาห์" value={financials['Perf.W']} format="growth" />
