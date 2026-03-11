@@ -5,100 +5,127 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Summary columns
-const SUMMARY_COLUMNS = [
-  "name", "description", "close", "change", "market_cap_basic",
-  "price_earnings_ttm", "earnings_per_share_basic_ttm",
-  "revenue_ttm", "net_income_ttm", "total_assets_mrq",
-  "total_debt_mrq", "total_revenue_mrq",
-  "earnings_per_share_diluted_ttm",
-  "dividends_yield", "dividend_yield_recent",
-  "earnings_release_date", "earnings_release_next_date",
+// Universal safe columns (work across ALL markets including Thailand)
+const SAFE_COLUMNS = [
+  "name", "description", "close", "change", "change_abs",
+  "volume", "market_cap_basic", "price_earnings_ttm",
+  "earnings_per_share_basic_ttm", "earnings_per_share_diluted_ttm",
   "sector", "industry", "exchange",
-  "Recommend.All", "RSI", "MACD.macd",
+  "RSI", "MACD.macd", "Recommend.All",
   "Perf.W", "Perf.1M", "Perf.3M", "Perf.6M", "Perf.YTD", "Perf.Y",
-  "SMA50", "SMA200", "price_52_week_high", "price_52_week_low",
+  "dividend_yield_recent", "dividends_yield",
+  "SMA50", "SMA200",
+  "price_52_week_high", "price_52_week_low",
   "number_of_employees",
+  "average_volume_10d_calc", "Volatility.D",
+  "total_revenue", "net_income", "total_assets", "total_debt",
+  "gross_profit", "ebitda", "oper_income",
+  "gross_margin", "operating_margin", "net_margin",
+  "return_on_equity", "return_on_assets",
+  "debt_to_equity", "current_ratio", "quick_ratio",
+  "price_book_ratio", "price_sales_ratio",
+  "enterprise_value",
+  "free_cash_flow",
 ];
 
-// Full financial statement columns
-const FINANCIAL_STATEMENT_COLUMNS = [
-  // Income Statement
-  "total_revenue", "last_annual_revenue", "cost_of_goods",
-  "gross_profit", "gross_profit_fq", "operating_expenses",
-  "oper_income", "oper_income_fq", "ebitda",
-  "net_income", "interest_expense_fq", "tax_expense_fq",
-  "research_and_dev", "sell_gen_admin",
-  "basic_eps_net_income", "earnings_per_share_basic_ttm",
-  "last_annual_eps", "earnings_per_share_diluted_ttm",
+// Extended columns (only for markets that support them, e.g. America)
+const EXTENDED_COLUMNS = [
+  "last_annual_revenue", "last_annual_eps",
   "earnings_per_share_fq", "revenue_per_employee",
-  // Revenue Growth
-  "total_revenue_yoy_growth_fy", "total_revenue_qoq_growth_fq",
-  "total_revenue_yoy_growth_fq", "total_revenue_yoy_growth_ttm",
-  // EPS Growth
+  "total_revenue_yoy_growth_fy", "total_revenue_yoy_growth_ttm",
   "earnings_per_share_diluted_yoy_growth_fy",
-  "earnings_per_share_diluted_yoy_growth_ttm",
-  // EBITDA Growth
-  "ebitda_yoy_growth_fy", "ebitda_yoy_growth_ttm",
-  // Net Income Growth
-  "net_income_yoy_growth_fy", "net_income_yoy_growth_ttm",
-
-  // Balance Sheet
-  "total_assets", "total_current_assets",
-  "cash_n_equivalents_fq", "cash_n_short_term_invest_fq",
-  "accounts_receivable", "inventories_total",
-  "net_ppe", "goodwill", "intangibles_total",
-  "total_liabilities_fq", "total_current_liabilities",
-  "accounts_payable", "long_term_debt", "short_term_debt",
-  "total_debt", "net_debt",
-  "total_equity", "retained_earnings", "common_equity_total",
-  "book_value_per_share", "tangible_book_value_per_share",
-
-  // Cash Flow
-  "cash_f_operating_activities_ttm", "cash_f_operating_activities",
-  "capital_expenditures_ttm", "capital_expenditures",
-  "free_cash_flow_ttm", "free_cash_flow",
-  "cash_f_investing_activities_ttm", "cash_f_financing_activities_ttm",
-  "dividends_paid", "total_cash_dividends_paid_ttm",
-
-  // Margins
-  "gross_margin", "gross_margin_fq",
-  "operating_margin", "operating_margin_fq",
-  "net_margin", "net_margin_fq",
-  "ebitda_margin", "ebitda_margin_fq",
-  "pre_tax_margin", "free_cash_flow_margin",
-
-  // Returns
-  "return_on_equity", "return_on_assets",
+  "ebitda_yoy_growth_fy", "net_income_yoy_growth_fy",
+  "total_current_assets", "cash_n_equivalents_fq",
+  "accounts_receivable", "inventories_total", "net_ppe", "goodwill",
+  "total_liabilities_fq", "net_debt",
+  "cash_f_operating_activities_ttm", "capital_expenditures_ttm",
+  "free_cash_flow_ttm", "cash_f_investing_activities_ttm",
+  "cash_f_financing_activities_ttm", "dividends_paid",
   "return_on_invested_capital",
-
-  // Ratios
-  "debt_to_equity", "current_ratio", "quick_ratio",
-  "price_revenue_ttm", "enterprise_value_to_ebit",
-  "enterprise_value_to_revenue",
-  "price_to_operating_cash_flow",
-  "peg_ratio",
-  "enterprise_value", "price_book_ratio", "price_sales_ratio",
-
-  // Dividends
-  "dividends_yield", "dividends_yield_current",
+  "price_revenue_ttm", "peg_ratio",
+  "enterprise_value_to_ebit", "enterprise_value_to_revenue",
+  "pre_tax_margin",
   "continuous_dividend_growth", "continuous_dividend_payout",
+  "dividends_yield_current",
+  "earnings_release_date", "earnings_release_next_date",
 ];
 
 const EXCHANGE_TO_MARKET: Record<string, string> = {
   SET: "thailand", BKK: "thailand", TFEX: "thailand",
-  NASDAQ: "america", NYSE: "america", AMEX: "america",
+  NASDAQ: "america", NYSE: "america", AMEX: "america", OTC: "america",
   TSE: "japan", TYO: "japan",
   HKEX: "hongkong", HKG: "hongkong",
   LSE: "uk", LON: "uk",
-  XETR: "germany", FRA: "germany", FWB: "germany",
+  XETR: "germany", FRA: "germany", FWB: "germany", GETTEX: "germany",
   SSE: "china", SZSE: "china",
   BSE: "india", NSE: "india",
   ASX: "australia", SGX: "singapore",
   BURSA: "malaysia", MYX: "malaysia",
   KRX: "korea", TWSE: "taiwan",
   IDX: "indonesia", PSE: "philippines",
+  EURONEXT: "france", NEO: "canada",
+  BMFBOVESPA: "brazil", LSX: "uk",
 };
+
+const TV_HEADERS = {
+  "Content-Type": "application/json",
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Origin": "https://www.tradingview.com",
+  "Referer": "https://www.tradingview.com/",
+};
+
+async function fetchWithAutoFix(scanUrl: string, fullSymbol: string, columns: string[]): Promise<any> {
+  let currentCols = [...columns];
+  let maxRetries = 40;
+
+  while (maxRetries-- > 0) {
+    const body = {
+      columns: currentCols,
+      filter: [],
+      symbols: { tickers: [fullSymbol], query: { types: [] } },
+      sort: { sortBy: "name", sortOrder: "asc" },
+      range: [0, 1],
+      options: { lang: "en" },
+    };
+
+    const res = await fetch(scanUrl, {
+      method: "POST",
+      headers: TV_HEADERS,
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.data && data.data.length > 0) {
+        const match = data.data[0];
+        const row: any = { symbol: match.s };
+        currentCols.forEach((col, i) => {
+          row[col] = match.d?.[i] ?? null;
+        });
+        return row;
+      }
+      return null;
+    }
+
+    // Handle unknown field errors
+    const errorText = await res.text();
+    try {
+      const errJson = JSON.parse(errorText);
+      const errMsg = errJson.error || '';
+      const unknownMatch = errMsg.match(/Unknown field "([^"]+)"/);
+      if (unknownMatch) {
+        const badField = unknownMatch[1];
+        console.log(`[tv-filings] Removing: ${badField} (${currentCols.length - 1} left)`);
+        currentCols = currentCols.filter(c => c !== badField);
+        continue;
+      }
+    } catch {}
+    
+    console.error(`[tv-filings] API error: ${errorText.substring(0, 200)}`);
+    return null;
+  }
+  return null;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -118,54 +145,20 @@ serve(async (req) => {
     const scanUrl = `https://scanner.tradingview.com/${market}/scan`;
     const fullSymbol = exchange ? `${exchange}:${symbol}` : symbol;
 
-    // Choose columns based on mode
-    const allCols = mode === "statements"
-      ? [...new Set([...SUMMARY_COLUMNS, ...FINANCIAL_STATEMENT_COLUMNS])]
-      : SUMMARY_COLUMNS;
+    // Choose columns: safe set for all, extended for statements mode
+    let columns = [...SAFE_COLUMNS];
+    if (mode === "statements") {
+      columns = [...new Set([...SAFE_COLUMNS, ...EXTENDED_COLUMNS])];
+    }
 
-    console.log(`[tv-filings] mode=${mode} symbol=${fullSymbol} market=${market} cols=${allCols.length}`);
+    console.log(`[tv-filings] mode=${mode} symbol=${fullSymbol} market=${market} cols=${columns.length}`);
 
-    // Use tvscreener's approach: symbols.tickers to fetch specific symbol directly
-    const tvBody: any = {
-      columns: allCols,
-      filter: [],
-      symbols: {
-        tickers: [fullSymbol],
-        query: { types: [] },
-      },
-      sort: { sortBy: "name", sortOrder: "asc" },
-      range: [0, 1],
-      options: { lang: "en" },
-    };
+    const financials = await fetchWithAutoFix(scanUrl, fullSymbol, columns);
 
-    const tvResponse = await fetch(scanUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Origin": "https://www.tradingview.com",
-        "Referer": "https://www.tradingview.com/",
-      },
-      body: JSON.stringify(tvBody),
-    });
-
-    let financials: any = null;
-
-    if (tvResponse.ok) {
-      const tvData = await tvResponse.json();
-      console.log(`[tv-filings] Got ${tvData.data?.length || 0} results for ${fullSymbol}`);
-
-      if (tvData.data && tvData.data.length > 0) {
-        const match = tvData.data[0];
-        const row: any = { symbol: match.s };
-        allCols.forEach((col: string, i: number) => {
-          row[col] = match.d?.[i] ?? null;
-        });
-        financials = row;
-      }
+    if (financials) {
+      console.log(`[tv-filings] Success: ${Object.keys(financials).filter(k => financials[k] != null).length} fields with data`);
     } else {
-      const errorText = await tvResponse.text();
-      console.error(`[tv-filings] TV API error ${tvResponse.status}: ${errorText}`);
+      console.log(`[tv-filings] No data returned for ${fullSymbol}`);
     }
 
     const filings = mode === "filings"

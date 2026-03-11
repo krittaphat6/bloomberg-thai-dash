@@ -58,7 +58,7 @@ const fmt = (val: any, d = 2): string => {
 
 const fmtPct = (val: any): string => {
   if (val == null || isNaN(val)) return '—';
-  return (Number(val) * 100).toFixed(2) + '%';
+  return Number(val).toFixed(2) + '%';
 };
 
 const fmtPrice = (val: any): string => {
