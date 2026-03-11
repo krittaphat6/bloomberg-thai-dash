@@ -124,7 +124,7 @@ const ScreenerFilings = () => {
         setFilings(data.filings || []);
         setFinancials(data.financials || null);
         // Auto-expand latest 2 years
-        const years = [...new Set((data.filings || []).map((f: FilingItem) => f.year))];
+        const years: number[] = [...new Set((data.filings || []).map((f: FilingItem) => f.year))] as number[];
         years.sort((a: number, b: number) => b - a);
         setExpandedYears(new Set(years.slice(0, 2)));
       }
