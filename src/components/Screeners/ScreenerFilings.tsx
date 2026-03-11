@@ -2,12 +2,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Loader2, ChevronDown, ChevronRight, Building2, X, FileText, Presentation, FileCheck, TrendingUp, TrendingDown, BarChart3, DollarSign, PieChart } from 'lucide-react';
+import { Search, Loader2, ChevronDown, ChevronRight, Building2, X, FileText, Presentation, FileCheck, TrendingUp, TrendingDown, BarChart3, DollarSign, PieChart, LayoutList, Calculator } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type FilingTypeFilter = 'all' | 'annual' | 'quarterly' | 'interim' | 'slides';
+type ViewMode = 'choose' | 'statements' | 'filings';
 
 interface SymbolSuggestion {
   symbol: string;
@@ -37,7 +38,6 @@ interface FilingItem {
   quarter?: string;
   year: number;
   documents: FilingDocument[];
-  url?: string;
 }
 
 interface Financials {
@@ -46,24 +46,34 @@ interface Financials {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const formatNumber = (val: any, decimals = 2): string => {
+const fmt = (val: any, d = 2): string => {
   if (val == null || isNaN(val)) return '—';
   const n = Number(val);
-  if (Math.abs(n) >= 1e12) return (n / 1e12).toFixed(decimals) + 'T';
-  if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(decimals) + 'B';
-  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(decimals) + 'M';
-  if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(decimals) + 'K';
-  return n.toFixed(decimals);
+  if (Math.abs(n) >= 1e12) return (n / 1e12).toFixed(d) + 'T';
+  if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(d) + 'B';
+  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(d) + 'M';
+  if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(d) + 'K';
+  return n.toFixed(d);
 };
 
-const formatPercent = (val: any): string => {
+const fmtPct = (val: any): string => {
   if (val == null || isNaN(val)) return '—';
   return (Number(val) * 100).toFixed(2) + '%';
 };
 
-const formatPrice = (val: any): string => {
+const fmtPrice = (val: any): string => {
   if (val == null || isNaN(val)) return '—';
   return Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const fmtRatio = (val: any): string => {
+  if (val == null || isNaN(val)) return '—';
+  return Number(val).toFixed(2);
+};
+
+const colorVal = (val: any) => {
+  if (val == null || isNaN(val)) return '';
+  return Number(val) > 0 ? 'text-green-400' : Number(val) < 0 ? 'text-red-400' : '';
 };
 
 const getExchangeFlag = (exchange: string) => {
@@ -71,80 +81,70 @@ const getExchangeFlag = (exchange: string) => {
     SET: '🇹🇭', BKK: '🇹🇭', TFEX: '🇹🇭',
     NASDAQ: '🇺🇸', NYSE: '🇺🇸', AMEX: '🇺🇸', OTC: '🇺🇸',
     TSE: '🇯🇵', HKEX: '🇭🇰', LSE: '🇬🇧',
-    XETR: '🇩🇪', FRA: '🇩🇪', FWB: '🇩🇪', SWB: '🇩🇪', GETTEX: '🇩🇪',
+    XETR: '🇩🇪', FRA: '🇩🇪',
     SSE: '🇨🇳', SZSE: '🇨🇳',
     BSE: '🇮🇳', NSE: '🇮🇳',
     ASX: '🇦🇺', SGX: '🇸🇬',
     BURSA: '🇲🇾', MYX: '🇲🇾',
     KRX: '🇰🇷', TWSE: '🇹🇼',
     IDX: '🇮🇩', PSE: '🇵🇭',
-    EURONEXT: '🇪🇺', NEO: '🇨🇦', TSX: '🇨🇦',
-    BMFBOVESPA: '🇧🇷',
   };
   return flags[exchange] || '🏳️';
 };
 
-// ─── Financial Summary Card ──────────────────────────────────────────────────
+// ─── Financial Statements View ───────────────────────────────────────────────
 
-const FinancialSummary = ({ financials, symbol }: { financials: Financials; symbol: SymbolSuggestion }) => {
-  if (!financials) return null;
+type StatementTab = 'overview' | 'income' | 'balance' | 'cashflow' | 'ratios';
+
+const StatementRow = ({ label, value, format = 'number', indent = false }: { label: string; value: any; format?: string; indent?: boolean }) => {
+  let display = '—';
+  let color = 'text-foreground';
+
+  if (value != null && !isNaN(value)) {
+    switch (format) {
+      case 'number': display = fmt(value); break;
+      case 'currency': display = fmtPrice(value); break;
+      case 'percent': display = fmtPct(value); color = colorVal(value) || 'text-foreground'; break;
+      case 'ratio': display = fmtRatio(value); break;
+      case 'growth':
+        display = fmtPct(value);
+        color = Number(value) > 0 ? 'text-green-400' : Number(value) < 0 ? 'text-red-400' : 'text-foreground';
+        break;
+    }
+  }
+
+  return (
+    <div className={`flex items-center justify-between py-1.5 px-3 hover:bg-muted/20 ${indent ? 'pl-6' : ''}`}>
+      <span className="text-[11px] font-mono text-muted-foreground">{label}</span>
+      <span className={`text-[11px] font-mono font-medium ${color}`}>{display}</span>
+    </div>
+  );
+};
+
+const SectionHeader = ({ title, icon }: { title: string; icon: React.ReactNode }) => (
+  <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-y border-border/30">
+    <span className="text-muted-foreground">{icon}</span>
+    <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">{title}</span>
+  </div>
+);
+
+const FinancialStatementsView = ({ financials, symbol }: { financials: Financials; symbol: SymbolSuggestion }) => {
+  const [tab, setTab] = useState<StatementTab>('overview');
+
+  if (!financials) return <div className="p-8 text-center text-muted-foreground text-[11px] font-mono">ไม่มีข้อมูล</div>;
+
+  const tabs: { value: StatementTab; label: string; icon: React.ReactNode }[] = [
+    { value: 'overview', label: 'ภาพรวม', icon: <PieChart className="w-3 h-3" /> },
+    { value: 'income', label: 'งบกำไรขาดทุน', icon: <BarChart3 className="w-3 h-3" /> },
+    { value: 'balance', label: 'งบดุล', icon: <LayoutList className="w-3 h-3" /> },
+    { value: 'cashflow', label: 'กระแสเงินสด', icon: <DollarSign className="w-3 h-3" /> },
+    { value: 'ratios', label: 'อัตราส่วน', icon: <Calculator className="w-3 h-3" /> },
+  ];
 
   const change = financials['change'];
   const isUp = change != null && change > 0;
-  const isDown = change != null && change < 0;
-
-  const sections = [
-    {
-      title: 'ราคาและมูลค่า',
-      icon: <DollarSign className="w-3.5 h-3.5" />,
-      items: [
-        { label: 'ราคาปิด', value: formatPrice(financials['close']) },
-        { label: 'เปลี่ยนแปลง', value: change != null ? `${change > 0 ? '+' : ''}${Number(change).toFixed(2)}%` : '—', color: isUp ? 'text-green-400' : isDown ? 'text-red-400' : '' },
-        { label: 'Market Cap', value: formatNumber(financials['market_cap_basic']) },
-        { label: '52W High', value: formatPrice(financials['52w_high']) },
-        { label: '52W Low', value: formatPrice(financials['52w_low']) },
-      ]
-    },
-    {
-      title: 'อัตราส่วนทางการเงิน',
-      icon: <PieChart className="w-3.5 h-3.5" />,
-      items: [
-        { label: 'P/E (TTM)', value: financials['price_earnings_ttm'] != null ? Number(financials['price_earnings_ttm']).toFixed(2) : '—' },
-        { label: 'EPS (TTM)', value: financials['earnings_per_share_basic_ttm'] != null ? Number(financials['earnings_per_share_basic_ttm']).toFixed(2) : '—' },
-        { label: 'EPS Diluted', value: financials['earnings_per_share_diluted_ttm'] != null ? Number(financials['earnings_per_share_diluted_ttm']).toFixed(2) : '—' },
-        { label: 'Dividend Yield', value: financials['dividends_yield'] != null ? Number(financials['dividends_yield']).toFixed(2) + '%' : '—' },
-      ]
-    },
-    {
-      title: 'รายได้และกำไร',
-      icon: <BarChart3 className="w-3.5 h-3.5" />,
-      items: [
-        { label: 'Revenue (TTM)', value: formatNumber(financials['revenue_ttm']) },
-        { label: 'Net Income (TTM)', value: formatNumber(financials['net_income_ttm']) },
-        { label: 'Total Assets', value: formatNumber(financials['total_assets_mrq']) },
-        { label: 'Total Debt', value: formatNumber(financials['total_debt_mrq']) },
-      ]
-    },
-    {
-      title: 'เทคนิค & ผลตอบแทน',
-      icon: <TrendingUp className="w-3.5 h-3.5" />,
-      items: [
-        { label: 'RSI', value: financials['RSI'] != null ? Number(financials['RSI']).toFixed(1) : '—' },
-        { label: 'SMA 50', value: formatPrice(financials['SMA50']) },
-        { label: 'SMA 200', value: formatPrice(financials['SMA200']) },
-        { label: 'สัปดาห์', value: financials['Perf.W'] != null ? formatPercent(financials['Perf.W']) : '—', color: financials['Perf.W'] > 0 ? 'text-green-400' : financials['Perf.W'] < 0 ? 'text-red-400' : '' },
-        { label: '1 เดือน', value: financials['Perf.1M'] != null ? formatPercent(financials['Perf.1M']) : '—', color: financials['Perf.1M'] > 0 ? 'text-green-400' : financials['Perf.1M'] < 0 ? 'text-red-400' : '' },
-        { label: '3 เดือน', value: financials['Perf.3M'] != null ? formatPercent(financials['Perf.3M']) : '—', color: financials['Perf.3M'] > 0 ? 'text-green-400' : financials['Perf.3M'] < 0 ? 'text-red-400' : '' },
-        { label: 'YTD', value: financials['Perf.YTD'] != null ? formatPercent(financials['Perf.YTD']) : '—', color: financials['Perf.YTD'] > 0 ? 'text-green-400' : financials['Perf.YTD'] < 0 ? 'text-red-400' : '' },
-        { label: '1 ปี', value: financials['Perf.Y'] != null ? formatPercent(financials['Perf.Y']) : '—', color: financials['Perf.Y'] > 0 ? 'text-green-400' : financials['Perf.Y'] < 0 ? 'text-red-400' : '' },
-      ]
-    },
-  ];
-
-  // AI Recommendation
   const rec = financials['Recommend.All'];
-  let recLabel = 'Neutral';
-  let recColor = 'text-muted-foreground';
+  let recLabel = 'Neutral'; let recColor = 'text-muted-foreground';
   if (rec != null) {
     if (rec >= 0.5) { recLabel = 'Strong Buy'; recColor = 'text-green-400'; }
     else if (rec >= 0.1) { recLabel = 'Buy'; recColor = 'text-green-400'; }
@@ -153,58 +153,226 @@ const FinancialSummary = ({ financials, symbol }: { financials: Financials; symb
   }
 
   return (
-    <div className="border-b border-border">
+    <div>
       {/* Price Header */}
       <div className="px-4 py-3 flex items-center justify-between border-b border-border/30">
         <div className="flex items-center gap-3">
-          <span className="text-lg font-mono font-bold text-foreground">{formatPrice(financials['close'])}</span>
+          <span className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['close'])}</span>
           {change != null && (
-            <span className={`text-sm font-mono font-medium ${isUp ? 'text-green-400' : isDown ? 'text-red-400' : 'text-muted-foreground'}`}>
-              {isUp ? '▲' : isDown ? '▼' : '—'} {Math.abs(change).toFixed(2)}%
+            <span className={`text-sm font-mono font-medium ${isUp ? 'text-green-400' : 'text-red-400'}`}>
+              {isUp ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%
             </span>
           )}
         </div>
-        <Badge variant="outline" className={`text-[10px] font-mono ${recColor} border-current`}>
-          {recLabel}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className={`text-[10px] font-mono ${recColor} border-current`}>
+            {recLabel}
+          </Badge>
+          {financials['market_cap_basic'] && (
+            <Badge variant="outline" className="text-[10px] font-mono">
+              MCap {fmt(financials['market_cap_basic'])}
+            </Badge>
+          )}
+        </div>
       </div>
 
-      {/* Sections Grid */}
-      <div className="grid grid-cols-2 gap-0">
-        {sections.map((section, si) => (
-          <div key={si} className={`p-3 ${si < 2 ? 'border-b border-border/30' : ''} ${si % 2 === 0 ? 'border-r border-border/30' : ''}`}>
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-muted-foreground">{section.icon}</span>
-              <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">{section.title}</span>
-            </div>
-            <div className="space-y-1">
-              {section.items.map((item, ii) => (
-                <div key={ii} className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-muted-foreground">{item.label}</span>
-                  <span className={`text-[11px] font-mono font-medium ${(item as any).color || 'text-foreground'}`}>{item.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* Statement Tabs */}
+      <div className="flex items-center gap-0.5 px-3 py-2 border-b border-border overflow-x-auto">
+        {tabs.map(t => (
+          <button
+            key={t.value}
+            onClick={() => setTab(t.value)}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[10px] font-mono border transition-colors whitespace-nowrap ${
+              tab === t.value
+                ? 'bg-primary/10 border-primary/30 text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
+            }`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
         ))}
       </div>
 
-      {/* Sector & Industry */}
-      {(financials['sector'] || financials['industry']) && (
-        <div className="px-4 py-2 border-t border-border/30 flex items-center gap-3">
-          {financials['sector'] && (
-            <Badge variant="outline" className="text-[9px] font-mono">{financials['sector']}</Badge>
-          )}
-          {financials['industry'] && (
-            <span className="text-[10px] font-mono text-muted-foreground">{financials['industry']}</span>
-          )}
-        </div>
-      )}
+      {/* Content */}
+      <div className="divide-y divide-border/20">
+        {tab === 'overview' && (
+          <>
+            <SectionHeader title="ข้อมูลพื้นฐาน" icon={<Building2 className="w-3.5 h-3.5" />} />
+            <StatementRow label="ราคาปิด" value={financials['close']} format="currency" />
+            <StatementRow label="Market Cap" value={financials['market_cap_basic']} format="number" />
+            <StatementRow label="Enterprise Value" value={financials['enterprise_value_fq']} format="number" />
+            <StatementRow label="52W High" value={financials['52w_high']} format="currency" />
+            <StatementRow label="52W Low" value={financials['52w_low']} format="currency" />
+            <StatementRow label="Sector" value={financials['sector']} format="currency" />
+            <StatementRow label="Industry" value={financials['industry']} format="currency" />
+            <StatementRow label="จำนวนพนักงาน" value={financials['number_of_employees']} format="number" />
+
+            <SectionHeader title="การประเมินมูลค่า" icon={<Calculator className="w-3.5 h-3.5" />} />
+            <StatementRow label="P/E (TTM)" value={financials['price_earnings_ttm']} format="ratio" />
+            <StatementRow label="P/B" value={financials['price_book_ratio']} format="ratio" />
+            <StatementRow label="P/S" value={financials['price_sales_ratio']} format="ratio" />
+            <StatementRow label="P/Revenue (TTM)" value={financials['price_revenue_ttm']} format="ratio" />
+            <StatementRow label="EV/EBIT (TTM)" value={financials['enterprise_value_to_ebit_ttm']} format="ratio" />
+            <StatementRow label="EV/Revenue (TTM)" value={financials['enterprise_value_to_revenue_ttm']} format="ratio" />
+            <StatementRow label="PEG (TTM)" value={financials['price_earnings_growth_ttm']} format="ratio" />
+            <StatementRow label="Earnings Yield" value={financials['earnings_yield']} format="percent" />
+
+            <SectionHeader title="ผลตอบแทนราคา" icon={<TrendingUp className="w-3.5 h-3.5" />} />
+            <StatementRow label="สัปดาห์" value={financials['Perf.W']} format="growth" />
+            <StatementRow label="1 เดือน" value={financials['Perf.1M']} format="growth" />
+            <StatementRow label="3 เดือน" value={financials['Perf.3M']} format="growth" />
+            <StatementRow label="6 เดือน" value={financials['Perf.6M']} format="growth" />
+            <StatementRow label="YTD" value={financials['Perf.YTD']} format="growth" />
+            <StatementRow label="1 ปี" value={financials['Perf.Y']} format="growth" />
+
+            <SectionHeader title="เงินปันผล" icon={<DollarSign className="w-3.5 h-3.5" />} />
+            <StatementRow label="Dividend Yield %" value={financials['dividends_yield']} format="percent" />
+            <StatementRow label="Dividend Yield Current %" value={financials['dividends_yield_current']} format="percent" />
+            <StatementRow label="จ่ายปันผลต่อเนื่อง (ปี)" value={financials['continuous_dividend_payout']} format="ratio" />
+            <StatementRow label="เติบโตปันผลต่อเนื่อง (ปี)" value={financials['continuous_dividend_growth']} format="ratio" />
+
+            <SectionHeader title="เทคนิคอล" icon={<BarChart3 className="w-3.5 h-3.5" />} />
+            <StatementRow label="RSI (14)" value={financials['RSI']} format="ratio" />
+            <StatementRow label="SMA 50" value={financials['SMA50']} format="currency" />
+            <StatementRow label="SMA 200" value={financials['SMA200']} format="currency" />
+          </>
+        )}
+
+        {tab === 'income' && (
+          <>
+            <SectionHeader title="รายได้" icon={<BarChart3 className="w-3.5 h-3.5" />} />
+            <StatementRow label="รายได้รวม (FY)" value={financials['total_revenue']} format="number" />
+            <StatementRow label="รายได้ปีที่แล้ว (FY)" value={financials['last_annual_revenue']} format="number" />
+            <StatementRow label="รายได้รวม (TTM)" value={financials['revenue_ttm']} format="number" />
+            <StatementRow label="ต้นทุนขาย (COGS)" value={financials['cost_of_revenue']} format="number" />
+            <StatementRow label="รายได้ต่อพนักงาน" value={financials['revenue_per_employee']} format="number" />
+
+            <SectionHeader title="กำไร" icon={<TrendingUp className="w-3.5 h-3.5" />} />
+            <StatementRow label="กำไรขั้นต้น (FY)" value={financials['gross_profit']} format="number" />
+            <StatementRow label="กำไรขั้นต้น (MRQ)" value={financials['gross_profit_fq']} format="number" />
+            <StatementRow label="ค่าใช้จ่ายดำเนินงาน" value={financials['operating_expenses_total']} format="number" />
+            <StatementRow label="รายได้จากการดำเนินงาน (FY)" value={financials['oper_income_fy']} format="number" />
+            <StatementRow label="รายได้จากการดำเนินงาน (TTM)" value={financials['oper_income_ttm']} format="number" />
+            <StatementRow label="EBITDA (TTM)" value={financials['ebitda']} format="number" />
+            <StatementRow label="กำไรสุทธิ (FY)" value={financials['net_income']} format="number" />
+            <StatementRow label="กำไรสุทธิ (TTM)" value={financials['net_income_ttm']} format="number" />
+
+            <SectionHeader title="ค่าใช้จ่าย" icon={<LayoutList className="w-3.5 h-3.5" />} />
+            <StatementRow label="ดอกเบี้ยจ่าย" value={financials['interest_expense']} format="number" />
+            <StatementRow label="ภาษีเงินได้" value={financials['tax_provision']} format="number" />
+            <StatementRow label="R&D (FY)" value={financials['research_and_dev_fy']} format="number" />
+            <StatementRow label="SG&A" value={financials['selling_general_n_admin']} format="number" />
+
+            <SectionHeader title="กำไรต่อหุ้น" icon={<DollarSign className="w-3.5 h-3.5" />} />
+            <StatementRow label="EPS Basic (FY)" value={financials['basic_eps_net_income']} format="currency" />
+            <StatementRow label="EPS Basic (TTM)" value={financials['earnings_per_share_basic_ttm']} format="currency" />
+            <StatementRow label="EPS Diluted (FY)" value={financials['last_annual_eps']} format="currency" />
+            <StatementRow label="EPS Diluted (TTM)" value={financials['earnings_per_share_diluted_ttm']} format="currency" />
+            <StatementRow label="EPS Diluted (MRQ)" value={financials['earnings_per_share_fq']} format="currency" />
+
+            <SectionHeader title="การเติบโต" icon={<TrendingUp className="w-3.5 h-3.5" />} />
+            <StatementRow label="Revenue Growth YoY (FY)" value={financials['total_revenue_yoy_growth_fy']} format="growth" />
+            <StatementRow label="Revenue Growth QoQ" value={financials['total_revenue_qoq_growth_fq']} format="growth" />
+            <StatementRow label="Revenue Growth YoY (TTM)" value={financials['total_revenue_yoy_growth_ttm']} format="growth" />
+            <StatementRow label="EPS Growth YoY (FY)" value={financials['earnings_per_share_diluted_yoy_growth_fy']} format="growth" />
+            <StatementRow label="EPS Growth YoY (TTM)" value={financials['earnings_per_share_diluted_yoy_growth_ttm']} format="growth" />
+            <StatementRow label="EBITDA Growth YoY (FY)" value={financials['ebitda_yoy_growth_fy']} format="growth" />
+            <StatementRow label="Net Income Growth YoY (FY)" value={financials['net_income_yoy_growth_fy']} format="growth" />
+          </>
+        )}
+
+        {tab === 'balance' && (
+          <>
+            <SectionHeader title="สินทรัพย์" icon={<BarChart3 className="w-3.5 h-3.5" />} />
+            <StatementRow label="สินทรัพย์รวม" value={financials['total_assets']} format="number" />
+            <StatementRow label="สินทรัพย์หมุนเวียน" value={financials['total_current_assets']} format="number" />
+            <StatementRow label="เงินสดและรายการเทียบเท่า" value={financials['cash_n_equivalents_fq']} format="number" indent />
+            <StatementRow label="เงินสด + เงินลงทุนระยะสั้น" value={financials['cash_n_short_term_invest_fq']} format="number" indent />
+            <StatementRow label="ลูกหนี้การค้า" value={financials['accounts_receivables_gross']} format="number" indent />
+            <StatementRow label="สินค้าคงเหลือ" value={financials['inventories']} format="number" indent />
+            <StatementRow label="ที่ดิน อาคาร อุปกรณ์ (สุทธิ)" value={financials['property_plant_equipment_net']} format="number" />
+            <StatementRow label="ค่าความนิยม" value={financials['goodwill']} format="number" />
+            <StatementRow label="สินทรัพย์ไม่มีตัวตน" value={financials['intangibles']} format="number" />
+
+            <SectionHeader title="หนี้สิน" icon={<TrendingDown className="w-3.5 h-3.5" />} />
+            <StatementRow label="หนี้สินรวม" value={financials['total_liabilities_fq']} format="number" />
+            <StatementRow label="หนี้สินหมุนเวียน" value={financials['total_current_liabilities_fq']} format="number" />
+            <StatementRow label="เจ้าหนี้การค้า" value={financials['accounts_payable']} format="number" indent />
+            <StatementRow label="หนี้สินระยะยาว" value={financials['long_term_debt_fq']} format="number" />
+            <StatementRow label="หนี้สินระยะสั้น" value={financials['short_term_debt_fq']} format="number" />
+            <StatementRow label="หนี้สินรวมทั้งหมด" value={financials['total_debt']} format="number" />
+            <StatementRow label="หนี้สินสุทธิ" value={financials['net_debt']} format="number" />
+
+            <SectionHeader title="ส่วนของผู้ถือหุ้น" icon={<PieChart className="w-3.5 h-3.5" />} />
+            <StatementRow label="ส่วนของผู้ถือหุ้นรวม" value={financials['total_equity_fq']} format="number" />
+            <StatementRow label="กำไรสะสม" value={financials['retained_earnings']} format="number" />
+            <StatementRow label="ส่วนของผู้ถือหุ้นสามัญ" value={financials['total_common_equity']} format="number" />
+            <StatementRow label="มูลค่าตามบัญชี/หุ้น" value={financials['book_value_per_share_fq']} format="currency" />
+            <StatementRow label="มูลค่าตามบัญชีจับต้องได้/หุ้น" value={financials['tangible_book_value_per_share_fq']} format="currency" />
+          </>
+        )}
+
+        {tab === 'cashflow' && (
+          <>
+            <SectionHeader title="กระแสเงินสดจากการดำเนินงาน" icon={<DollarSign className="w-3.5 h-3.5" />} />
+            <StatementRow label="กระแสเงินสดจากดำเนินงาน (TTM)" value={financials['cash_f_operating_activities_ttm']} format="number" />
+            <StatementRow label="กระแสเงินสดจากดำเนินงาน (FY)" value={financials['cash_f_operating_activities_fy']} format="number" />
+
+            <SectionHeader title="การลงทุน" icon={<BarChart3 className="w-3.5 h-3.5" />} />
+            <StatementRow label="ค่าใช้จ่ายลงทุน (TTM)" value={financials['capital_expenditures_ttm']} format="number" />
+            <StatementRow label="ค่าใช้จ่ายลงทุน (FY)" value={financials['capital_expenditures_fy']} format="number" />
+            <StatementRow label="กระแสเงินสดจากการลงทุน (TTM)" value={financials['cash_f_investing_activities_ttm']} format="number" />
+
+            <SectionHeader title="กระแสเงินสดอิสระ" icon={<TrendingUp className="w-3.5 h-3.5" />} />
+            <StatementRow label="Free Cash Flow" value={financials['free_cash_flow']} format="number" />
+            <StatementRow label="Free Cash Flow (TTM)" value={financials['free_cash_flow_ttm']} format="number" />
+            <StatementRow label="Free Cash Flow (FY)" value={financials['free_cash_flow_fy']} format="number" />
+
+            <SectionHeader title="จัดหาเงินทุน" icon={<LayoutList className="w-3.5 h-3.5" />} />
+            <StatementRow label="กระแสเงินสดจากจัดหาเงินทุน (TTM)" value={financials['cash_f_financing_activities_ttm']} format="number" />
+            <StatementRow label="เงินปันผลจ่าย (FY)" value={financials['dividends_paid']} format="number" />
+            <StatementRow label="เงินปันผลจ่าย (TTM)" value={financials['total_cash_dividends_paid_ttm']} format="number" />
+          </>
+        )}
+
+        {tab === 'ratios' && (
+          <>
+            <SectionHeader title="อัตรากำไร (Margins)" icon={<PieChart className="w-3.5 h-3.5" />} />
+            <StatementRow label="Gross Margin (TTM)" value={financials['gross_margin']} format="percent" />
+            <StatementRow label="Gross Margin (FY)" value={financials['gross_profit_margin_fy']} format="percent" />
+            <StatementRow label="Operating Margin (TTM)" value={financials['operating_margin']} format="percent" />
+            <StatementRow label="Operating Margin (FY)" value={financials['oper_income_margin_fy']} format="percent" />
+            <StatementRow label="Net Margin (TTM)" value={financials['after_tax_margin']} format="percent" />
+            <StatementRow label="EBITDA Margin (TTM)" value={financials['ebitda_margin_ttm']} format="percent" />
+            <StatementRow label="FCF Margin (TTM)" value={financials['free_cash_flow_margin_ttm']} format="percent" />
+            <StatementRow label="Pre-tax Margin (TTM)" value={financials['pre_tax_margin']} format="percent" />
+
+            <SectionHeader title="ผลตอบแทน (Returns)" icon={<TrendingUp className="w-3.5 h-3.5" />} />
+            <StatementRow label="ROE (TTM)" value={financials['return_on_equity']} format="percent" />
+            <StatementRow label="ROA (TTM)" value={financials['return_on_assets']} format="percent" />
+            <StatementRow label="ROIC (TTM)" value={financials['return_on_invested_capital']} format="percent" />
+
+            <SectionHeader title="อัตราส่วนหนี้สิน" icon={<LayoutList className="w-3.5 h-3.5" />} />
+            <StatementRow label="Debt/Equity" value={financials['debt_to_equity']} format="ratio" />
+            <StatementRow label="Current Ratio" value={financials['current_ratio']} format="ratio" />
+            <StatementRow label="Quick Ratio" value={financials['quick_ratio']} format="ratio" />
+
+            <SectionHeader title="การประเมินมูลค่า" icon={<Calculator className="w-3.5 h-3.5" />} />
+            <StatementRow label="P/E (TTM)" value={financials['price_earnings_ttm']} format="ratio" />
+            <StatementRow label="P/Revenue (TTM)" value={financials['price_revenue_ttm']} format="ratio" />
+            <StatementRow label="P/Cash Flow (TTM)" value={financials['price_to_cash_f_operating_activities_ttm']} format="ratio" />
+            <StatementRow label="EV/EBIT (TTM)" value={financials['enterprise_value_to_ebit_ttm']} format="ratio" />
+            <StatementRow label="EV/Revenue (TTM)" value={financials['enterprise_value_to_revenue_ttm']} format="ratio" />
+            <StatementRow label="PEG (TTM)" value={financials['price_earnings_growth_ttm']} format="ratio" />
+          </>
+        )}
+      </div>
     </div>
   );
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 const ScreenerFilings = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -216,14 +384,15 @@ const ScreenerFilings = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [selectedSymbol, setSelectedSymbol] = useState<SymbolSuggestion | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('choose');
   const [filingType, setFilingType] = useState<FilingTypeFilter>('all');
   const [filings, setFilings] = useState<FilingItem[]>([]);
   const [financials, setFinancials] = useState<Financials | null>(null);
-  const [loadingFilings, setLoadingFilings] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [expandedFiling, setExpandedFiling] = useState<string | null>(null);
 
-  // ─── Symbol Search ────────────────────────────────────────────────────────
+  // ─── Symbol Search ──────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!searchQuery.trim() || selectedSymbol) {
@@ -262,34 +431,66 @@ const ScreenerFilings = () => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // ─── Select symbol ────────────────────────────────────────────────────────
+  // ─── Select symbol → show chooser ───────────────────────────────────────
 
-  const handleSelectSymbol = useCallback(async (sym: SymbolSuggestion) => {
+  const handleSelectSymbol = useCallback((sym: SymbolSuggestion) => {
     setSelectedSymbol(sym);
     setSearchQuery(`${sym.exchange}:${sym.symbol}`);
     setShowSuggestions(false);
     setSuggestions([]);
-    setLoadingFilings(true);
+    setViewMode('choose');
+    setFilings([]);
+    setFinancials(null);
+  }, []);
+
+  // ─── Load data based on mode ────────────────────────────────────────────
+
+  const loadStatements = useCallback(async () => {
+    if (!selectedSymbol) return;
+    setLoadingData(true);
     try {
       const { data, error } = await supabase.functions.invoke('tv-filings', {
-        body: { symbol: sym.symbol, exchange: sym.exchange, type: filingType },
+        body: { symbol: selectedSymbol.symbol, exchange: selectedSymbol.exchange, mode: 'statements' },
+      });
+      if (!error && data) {
+        setFinancials(data.financials || null);
+      }
+    } catch (err) {
+      console.error('Statements fetch error:', err);
+    } finally {
+      setLoadingData(false);
+    }
+  }, [selectedSymbol]);
+
+  const loadFilings = useCallback(async () => {
+    if (!selectedSymbol) return;
+    setLoadingData(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('tv-filings', {
+        body: { symbol: selectedSymbol.symbol, exchange: selectedSymbol.exchange, type: filingType, mode: 'filings' },
       });
       if (!error && data) {
         setFilings(data.filings || []);
         setFinancials(data.financials || null);
         const years: number[] = [...new Set((data.filings || []).map((f: FilingItem) => f.year))] as number[];
-        years.sort((a: number, b: number) => b - a);
+        years.sort((a, b) => b - a);
         setExpandedYears(new Set(years.slice(0, 2)));
       }
     } catch (err) {
       console.error('Filings fetch error:', err);
     } finally {
-      setLoadingFilings(false);
+      setLoadingData(false);
     }
-  }, [filingType]);
+  }, [selectedSymbol, filingType]);
+
+  const handleChooseMode = (mode: 'statements' | 'filings') => {
+    setViewMode(mode);
+    if (mode === 'statements') loadStatements();
+    else loadFilings();
+  };
 
   useEffect(() => {
-    if (selectedSymbol) handleSelectSymbol(selectedSymbol);
+    if (viewMode === 'filings' && selectedSymbol) loadFilings();
   }, [filingType]);
 
   const handleClear = () => {
@@ -299,10 +500,11 @@ const ScreenerFilings = () => {
     setFinancials(null);
     setSuggestions([]);
     setExpandedFiling(null);
+    setViewMode('choose');
     inputRef.current?.focus();
   };
 
-  // ─── Group filings ────────────────────────────────────────────────────────
+  // ─── Filings grouping ──────────────────────────────────────────────────
 
   const grouped = filings.reduce<Record<number, FilingItem[]>>((acc, item) => {
     if (!acc[item.year]) acc[item.year] = [];
@@ -336,7 +538,7 @@ const ScreenerFilings = () => {
     { value: 'slides', label: 'กิจกรรมของบริษัท' },
   ];
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // ─── Render ─────────────────────────────────────────────────────────────
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -344,8 +546,8 @@ const ScreenerFilings = () => {
       <div className="p-3 border-b border-border shrink-0">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground z-10" />
-          {(loadingSuggestions || loadingFilings) && (
-            <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin z-10" />
+          {(loadingSuggestions || loadingData) && (
+            <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin z-10" />
           )}
           {selectedSymbol && (
             <button onClick={handleClear} className="absolute right-2.5 top-1/2 -translate-y-1/2 z-10 text-muted-foreground hover:text-foreground">
@@ -362,10 +564,11 @@ const ScreenerFilings = () => {
                 setSelectedSymbol(null);
                 setFilings([]);
                 setFinancials(null);
+                setViewMode('choose');
               }
             }}
             onFocus={() => { if (suggestions.length > 0 && !selectedSymbol) setShowSuggestions(true); }}
-            className="pl-8 pr-8 h-9 border-border font-mono text-[12px] bg-background focus-visible:ring-1 focus-visible:ring-green-500/30"
+            className="pl-8 pr-8 h-9 border-border font-mono text-[12px] bg-background focus-visible:ring-1 focus-visible:ring-primary/30"
             autoFocus
           />
 
@@ -398,35 +601,28 @@ const ScreenerFilings = () => {
         </div>
       </div>
 
-      {/* Selected Company Header + Filter */}
+      {/* Selected Company Header */}
       {selectedSymbol && (
         <div className="px-3 py-2 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center text-[11px]">
+            <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-[11px]">
               {getExchangeFlag(selectedSymbol.exchange)}
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="text-[12px] font-mono font-bold text-foreground">{selectedSymbol.symbol}</span>
-                <span className="text-[11px] font-mono text-muted-foreground">{selectedSymbol.description}</span>
+                <span className="text-[11px] font-mono text-muted-foreground truncate">{selectedSymbol.description}</span>
               </div>
-              <span className="text-[9px] font-mono text-muted-foreground">• {selectedSymbol.exchange} • เอกสารและข้อมูลการเงิน</span>
+              <span className="text-[9px] font-mono text-muted-foreground">• {selectedSymbol.exchange}</span>
             </div>
-          </div>
-          <div className="flex items-center gap-1 mt-2 flex-wrap">
-            {FILTER_TABS.map(tab => (
+            {viewMode !== 'choose' && (
               <button
-                key={tab.value}
-                onClick={() => setFilingType(tab.value)}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-mono border transition-colors ${
-                  filingType === tab.value
-                    ? 'bg-muted/60 border-border text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
-                }`}
+                onClick={() => { setViewMode('choose'); setFilings([]); setFinancials(null); }}
+                className="text-[10px] font-mono text-primary hover:text-primary/80 transition-colors px-2 py-1 rounded border border-primary/30 hover:bg-primary/5"
               >
-                {tab.label}
+                ← เลือกใหม่
               </button>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -439,15 +635,15 @@ const ScreenerFilings = () => {
             <div className="text-center space-y-3 max-w-xs">
               <Building2 className="w-10 h-10 mx-auto text-muted-foreground/50" />
               <div>
-                <h3 className="text-sm font-mono font-bold text-foreground mb-1">ค้นหาเอกสารบริษัท</h3>
+                <h3 className="text-sm font-mono font-bold text-foreground mb-1">ค้นหาข้อมูลบริษัท</h3>
                 <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
-                  พิมพ์ชื่อหรือตัวย่อหุ้นเพื่อดูข้อมูลการเงิน รายงานประจำปี รายงานไตรมาส และสไลด์นักลงทุน
+                  พิมพ์ชื่อหรือตัวย่อหุ้นเพื่อดูงบการเงินขั้นต้น หรือเอกสารการเงินของบริษัท
                 </p>
               </div>
               <div className="flex items-center gap-1.5 justify-center flex-wrap">
                 {['PTT', 'GULF', 'AAPL', 'ADVANC', 'NVDA'].map(s => (
                   <button key={s} onClick={() => setSearchQuery(s)}
-                    className="px-2 py-0.5 rounded border border-border/50 text-[10px] font-mono text-cyan-400 hover:bg-muted/30 transition-colors">
+                    className="px-2 py-0.5 rounded border border-border/50 text-[10px] font-mono text-primary hover:bg-muted/30 transition-colors">
                     {s}
                   </button>
                 ))}
@@ -456,8 +652,56 @@ const ScreenerFilings = () => {
           </div>
         )}
 
+        {/* Mode Chooser */}
+        {selectedSymbol && viewMode === 'choose' && (
+          <div className="p-6 space-y-4">
+            <p className="text-[11px] font-mono text-muted-foreground text-center">เลือกประเภทข้อมูลที่ต้องการดู</p>
+            <div className="grid grid-cols-1 gap-3 max-w-sm mx-auto">
+              <button
+                onClick={() => handleChooseMode('statements')}
+                className="flex items-center gap-4 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
+              >
+                <div className="w-12 h-12 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+                  <Calculator className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h4 className="text-[13px] font-mono font-bold text-foreground">📊 งบการเงินขั้นต้น</h4>
+                  <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                    งบกำไรขาดทุน, งบดุล, กระแสเงินสด, อัตราส่วนทางการเงิน
+                  </p>
+                  <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                    {['ภาพรวม', 'งบกำไรขาดทุน', 'งบดุล', 'กระแสเงินสด', 'อัตราส่วน'].map(t => (
+                      <Badge key={t} variant="outline" className="text-[8px] font-mono px-1 py-0">{t}</Badge>
+                    ))}
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleChooseMode('filings')}
+                className="flex items-center gap-4 p-4 rounded-lg border border-border hover:border-amber-500/50 hover:bg-amber-500/5 transition-all text-left group"
+              >
+                <div className="w-12 h-12 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 group-hover:bg-amber-500/20 transition-colors">
+                  <FileText className="w-6 h-6 text-amber-400" />
+                </div>
+                <div>
+                  <h4 className="text-[13px] font-mono font-bold text-foreground">📋 เอกสารการเงินบริษัท</h4>
+                  <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                    รายงานประจำปี, รายงานไตรมาส, สไลด์นักลงทุน, หนังสือรับรอง
+                  </p>
+                  <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                    {['Annual', 'Quarterly', 'Interim', 'Slides'].map(t => (
+                      <Badge key={t} variant="outline" className="text-[8px] font-mono px-1 py-0">{t}</Badge>
+                    ))}
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Loading */}
-        {loadingFilings && (
+        {loadingData && (
           <div className="flex items-center justify-center p-12">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -466,13 +710,56 @@ const ScreenerFilings = () => {
           </div>
         )}
 
-        {/* Financial Summary + Filings */}
-        {selectedSymbol && !loadingFilings && (
-          <>
-            {/* Financial Data Panel — shown inline instead of linking to TradingView */}
-            {financials && <FinancialSummary financials={financials} symbol={selectedSymbol} />}
+        {/* Financial Statements View */}
+        {viewMode === 'statements' && !loadingData && selectedSymbol && (
+          <FinancialStatementsView financials={financials!} symbol={selectedSymbol} />
+        )}
 
-            {/* Filings Table */}
+        {/* Filings View */}
+        {viewMode === 'filings' && !loadingData && selectedSymbol && (
+          <>
+            {/* Filter Tabs */}
+            <div className="px-3 py-2 border-b border-border flex items-center gap-1 flex-wrap">
+              {FILTER_TABS.map(tab => (
+                <button
+                  key={tab.value}
+                  onClick={() => setFilingType(tab.value)}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-mono border transition-colors ${
+                    filingType === tab.value
+                      ? 'bg-muted/60 border-border text-foreground'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Financial Summary */}
+            {financials && (
+              <div className="border-b border-border">
+                <div className="px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['close'])}</span>
+                    {financials['change'] != null && (
+                      <span className={`text-sm font-mono font-medium ${financials['change'] > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {financials['change'] > 0 ? '▲' : '▼'} {Math.abs(financials['change']).toFixed(2)}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {financials['market_cap_basic'] && (
+                      <Badge variant="outline" className="text-[10px] font-mono">MCap {fmt(financials['market_cap_basic'])}</Badge>
+                    )}
+                    {financials['price_earnings_ttm'] && (
+                      <Badge variant="outline" className="text-[10px] font-mono">P/E {fmtRatio(financials['price_earnings_ttm'])}</Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Filings List */}
             {filings.length > 0 ? (
               <div className="w-full">
                 <div className="grid grid-cols-[1fr_auto_auto] px-4 py-2 border-b border-border/50 sticky top-0 bg-background z-10">
@@ -517,7 +804,6 @@ const ScreenerFilings = () => {
                             </div>
                           </div>
 
-                          {/* Expanded detail — shows inline info instead of linking out */}
                           {expandedFiling === item.id && (
                             <div className="px-6 py-3 bg-muted/10 border-b border-border/20 space-y-2">
                               <div className="text-[10px] font-mono text-muted-foreground">

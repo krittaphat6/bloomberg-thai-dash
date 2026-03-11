@@ -5,8 +5,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Financial columns to fetch from TradingView scanner for a specific symbol
-const FINANCIAL_COLUMNS = [
+// Basic financial columns for summary
+const SUMMARY_COLUMNS = [
   "name", "description", "close", "change", "market_cap_basic",
   "price_earnings_ttm", "earnings_per_share_basic_ttm",
   "revenue_ttm", "net_income_ttm", "total_assets_mrq",
@@ -20,7 +20,73 @@ const FINANCIAL_COLUMNS = [
   "SMA50", "SMA200", "52w_high", "52w_low",
 ];
 
-// Map exchange codes to TradingView scanner market
+// Full financial statement columns
+const FINANCIAL_STATEMENT_COLUMNS = [
+  // Income Statement
+  "total_revenue", "last_annual_revenue", "cost_of_revenue",
+  "gross_profit", "gross_profit_fq", "operating_expenses_total",
+  "oper_income_fy", "oper_income_ttm", "ebitda",
+  "net_income", "interest_expense", "tax_provision",
+  "research_and_dev_fy", "selling_general_n_admin",
+  "basic_eps_net_income", "earnings_per_share_basic_ttm",
+  "last_annual_eps", "earnings_per_share_diluted_ttm",
+  "earnings_per_share_fq", "revenue_per_employee",
+  // Revenue Growth
+  "total_revenue_yoy_growth_fy", "total_revenue_qoq_growth_fq",
+  "total_revenue_yoy_growth_fq", "total_revenue_yoy_growth_ttm",
+  // EPS Growth
+  "earnings_per_share_diluted_yoy_growth_fy",
+  "earnings_per_share_diluted_yoy_growth_ttm",
+  // EBITDA Growth
+  "ebitda_yoy_growth_fy", "ebitda_yoy_growth_ttm",
+  // Net Income Growth
+  "net_income_yoy_growth_fy", "net_income_yoy_growth_ttm",
+
+  // Balance Sheet
+  "total_assets", "total_current_assets",
+  "cash_n_equivalents_fq", "cash_n_short_term_invest_fq",
+  "accounts_receivables_gross", "inventories",
+  "property_plant_equipment_net", "goodwill", "intangibles",
+  "total_liabilities_fq", "total_current_liabilities_fq",
+  "accounts_payable", "long_term_debt_fq", "short_term_debt_fq",
+  "total_debt", "net_debt",
+  "total_equity_fq", "retained_earnings", "total_common_equity",
+  "book_value_per_share_fq", "tangible_book_value_per_share_fq",
+
+  // Cash Flow
+  "cash_f_operating_activities_ttm", "cash_f_operating_activities_fy",
+  "capital_expenditures_ttm", "capital_expenditures_fy",
+  "free_cash_flow", "free_cash_flow_ttm", "free_cash_flow_fy",
+  "cash_f_investing_activities_ttm", "cash_f_financing_activities_ttm",
+  "dividends_paid", "total_cash_dividends_paid_ttm",
+
+  // Margins
+  "gross_margin", "gross_profit_margin_fy",
+  "operating_margin", "oper_income_margin_fy",
+  "after_tax_margin", "ebitda_margin_ttm",
+  "pre_tax_margin", "free_cash_flow_margin_ttm",
+
+  // Returns
+  "return_on_equity", "return_on_assets",
+  "return_on_invested_capital",
+
+  // Ratios
+  "debt_to_equity", "current_ratio", "quick_ratio",
+  "price_revenue_ttm", "enterprise_value_to_ebit_ttm",
+  "enterprise_value_to_revenue_ttm",
+  "price_to_cash_f_operating_activities_ttm",
+  "price_earnings_growth_ttm",
+
+  // Dividends
+  "dividends_yield", "dividends_yield_current",
+  "continuous_dividend_growth", "continuous_dividend_payout",
+
+  // Valuation
+  "market_cap_basic", "enterprise_value_fq",
+  "price_book_ratio", "price_sales_ratio",
+  "number_of_employees",
+];
+
 const EXCHANGE_TO_MARKET: Record<string, string> = {
   SET: "thailand", BKK: "thailand",
   NASDAQ: "america", NYSE: "america", AMEX: "america",
@@ -30,14 +96,10 @@ const EXCHANGE_TO_MARKET: Record<string, string> = {
   XETR: "germany", FRA: "germany", FWB: "germany",
   SSE: "china", SZSE: "china",
   BSE: "india", NSE: "india",
-  ASX: "australia",
-  SGX: "singapore",
+  ASX: "australia", SGX: "singapore",
   BURSA: "malaysia", MYX: "malaysia",
-  TFEX: "thailand",
-  KRX: "korea",
-  TWSE: "taiwan",
-  IDX: "indonesia",
-  PSE: "philippines",
+  TFEX: "thailand", KRX: "korea",
+  TWSE: "taiwan", IDX: "indonesia", PSE: "philippines",
 };
 
 serve(async (req) => {
@@ -46,7 +108,7 @@ serve(async (req) => {
   }
 
   try {
-    const { symbol, exchange, type = "all" } = await req.json();
+    const { symbol, exchange, type = "all", mode = "filings" } = await req.json();
 
     if (!symbol) {
       return new Response(JSON.stringify({ filings: [], financials: null, error: "Symbol required" }), {
@@ -54,16 +116,19 @@ serve(async (req) => {
       });
     }
 
-    // Determine market from exchange
     const market = EXCHANGE_TO_MARKET[exchange?.toUpperCase()] || "america";
     const scanUrl = `https://scanner.tradingview.com/${market}/scan`;
     const fullSymbol = exchange ? `${exchange}:${symbol}` : symbol;
 
-    console.log(`[tv-filings] Fetching financials for ${fullSymbol} (market: ${market})`);
+    // Choose columns based on mode
+    const columns = mode === "statements"
+      ? [...new Set([...SUMMARY_COLUMNS, ...FINANCIAL_STATEMENT_COLUMNS])]
+      : SUMMARY_COLUMNS;
 
-    // Fetch financial data from TradingView scanner
+    console.log(`[tv-filings] mode=${mode} symbol=${fullSymbol} market=${market} cols=${columns.length}`);
+
     const tvBody = {
-      columns: FINANCIAL_COLUMNS,
+      columns,
       filter2: {
         operator: "and",
         operands: [{
@@ -98,17 +163,16 @@ serve(async (req) => {
 
       if (match && match.d) {
         const row: any = { symbol: match.s };
-        FINANCIAL_COLUMNS.forEach((col, i) => {
+        columns.forEach((col, i) => {
           row[col] = match.d[i];
         });
         financials = row;
       }
     }
 
-    // Generate filing entries from earnings dates and financial data
-    const filings = generateFilingsFromFinancials(financials, fullSymbol, type);
-
-    console.log(`[tv-filings] Got ${filings.length} filings for ${fullSymbol}`);
+    const filings = mode === "filings"
+      ? generateFilingsFromFinancials(financials, fullSymbol, type)
+      : [];
 
     return new Response(JSON.stringify({ filings, financials }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -126,109 +190,75 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
   const filings: any[] = [];
   const now = new Date();
   const currentYear = now.getFullYear();
-
-  // Generate quarterly filing entries based on financial data availability
-  const quarters = ["Q1", "Q2", "Q3", "Q4"];
   const quarterMonths = [
-    { q: "Q1", months: [3, 5] },  // Jan-Mar, reported ~May
-    { q: "Q2", months: [6, 8] },  // Apr-Jun, reported ~Aug
-    { q: "Q3", months: [9, 11] }, // Jul-Sep, reported ~Nov
-    { q: "Q4", months: [12, 2] }, // Oct-Dec, reported ~Feb next year
+    { q: "Q1", months: [3, 5] },
+    { q: "Q2", months: [6, 8] },
+    { q: "Q3", months: [9, 11] },
+    { q: "Q4", months: [12, 2] },
   ];
 
   for (let year = currentYear; year >= currentYear - 2; year--) {
-    // Annual report
     if (typeFilter === "all" || typeFilter === "annual") {
-      const reportDate = new Date(year + 1, 2, 15); // ~March next year
+      const reportDate = new Date(year + 1, 2, 15);
       if (reportDate <= now) {
         filings.push({
           id: `${symbol}-annual-${year}`,
-          symbol,
-          title: `Annual Report ${year}`,
+          symbol, title: `Annual Report ${year}`,
           titleTh: `รายงานประจำปี ${year}`,
-          type: "annual",
-          form: "10-K",
+          type: "annual", form: "56-1",
           date: formatDate(reportDate),
-          quarter: `FY ${year}`,
-          year,
+          quarter: `FY ${year}`, year,
           documents: [
             { type: "annual_report", label: "รายงานประจำปี", icon: "📋" },
-            { type: "slides", label: "สไลด์", icon: "📊" },
+            { type: "financial_statements", label: "งบการเงิน", icon: "📊" },
           ],
-            url: `https://www.tradingview.com/symbols/${symbol.replace(":", "-")}/financials-income-statement/`,
         });
       }
     }
 
-    // Quarterly/interim reports
     for (const qm of quarterMonths) {
       if (typeFilter !== "all" && typeFilter !== "quarterly" && typeFilter !== "interim") continue;
-
       const reportMonth = qm.q === "Q4" ? qm.months[1] : qm.months[1];
       const reportYear = qm.q === "Q4" ? year + 1 : year;
       const reportDate = new Date(reportYear, reportMonth - 1, 15);
-
       if (reportDate <= now) {
         const docs: any[] = [
           { type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄" },
         ];
-
-        // Add slides for Q2 and Q4 typically
         if (qm.q === "Q2" || qm.q === "Q4") {
           docs.push({ type: "slides", label: "สไลด์", icon: "📊" });
         }
-
-        // Add earnings release
         docs.push({ type: "earnings", label: "หนังสือรับรอง", icon: "📃" });
-
         filings.push({
           id: `${symbol}-${qm.q}-${year}`,
-          symbol,
-          title: `${qm.q} ${year}`,
+          symbol, title: `${qm.q} ${year}`,
           titleTh: `รายงานระหว่างกาล ${qm.q} ${year}`,
-          type: "interim",
-          form: "10-Q",
+          type: "interim", form: "10-Q",
           date: formatDate(reportDate),
-          quarter: `${qm.q} ${year}`,
-          year,
+          quarter: `${qm.q} ${year}`, year,
           documents: docs,
-            url: `https://www.tradingview.com/symbols/${symbol.replace(":", "-")}/financials-income-statement/`,
         });
       }
     }
 
-    // Investor presentations
     if (typeFilter === "all" || typeFilter === "slides") {
       for (let m = 0; m < 12; m += 3) {
         const presDate = new Date(year, m + 1, 10);
         if (presDate <= now && presDate > new Date(currentYear - 2, 0, 1)) {
           filings.push({
             id: `${symbol}-pres-${year}-${m}`,
-            symbol,
-            title: "Investor Presentation",
-            titleTh: "สไลด์นักลงทุน",
-            type: "slides",
-            form: "",
-            date: formatDate(presDate),
-            quarter: "",
-            year,
-            documents: [
-              { type: "slides", label: "สไลด์", icon: "📊" },
-            ],
-            url: `https://www.tradingview.com/symbols/${symbol.replace(":", "-")}/financials-income-statement/`,
+            symbol, title: "Investor Presentation",
+            titleTh: "สไลด์นักลงทุน", type: "slides",
+            form: "", date: formatDate(presDate),
+            quarter: "", year,
+            documents: [{ type: "slides", label: "สไลด์", icon: "📊" }],
           });
         }
       }
     }
   }
 
-  // Sort by date descending
-  filings.sort((a, b) => {
-    const da = parseDate(a.date);
-    const db = parseDate(b.date);
-    return db.getTime() - da.getTime();
-  });
-
+  filings.sort((a, b) => parseDate(b.date).getTime() - parseDate(a.date).getTime());
   return filings;
 }
 
@@ -238,10 +268,5 @@ function formatDate(d: Date): string {
 }
 
 function parseDate(s: string): Date {
-  // Fallback: just return a date from the string
-  try {
-    return new Date(s);
-  } catch {
-    return new Date();
-  }
+  try { return new Date(s); } catch { return new Date(); }
 }
