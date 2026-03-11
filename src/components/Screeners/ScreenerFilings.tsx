@@ -427,19 +427,24 @@ const ScreenerFilings = () => {
 
                       {/* Documents */}
                       <div className="w-48 flex items-center justify-end gap-1.5 flex-wrap">
-                        {item.documents.map((doc, di) => (
-                          <button
-                            key={di}
-                            onClick={() => item.url && window.open(item.url, '_blank')}
-                            className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted/40 transition-colors group"
-                            title={doc.label}
-                          >
-                            {getTypeIcon(doc.type === 'slides' ? 'slides' : doc.type === 'annual_report' ? 'annual' : 'interim')}
-                            <span className="text-[10px] font-mono text-terminal-cyan group-hover:underline">
-                              {doc.label}
-                            </span>
-                          </button>
-                        ))}
+                         {item.documents.map((doc, di) => {
+                          // Use the main symbol page (not /documents/ which is blocked)
+                          const symbolSlug = item.symbol.replace(':', '-');
+                          const tvUrl = `https://www.tradingview.com/symbols/${symbolSlug}/financials-income-statement/`;
+                          return (
+                            <button
+                              key={di}
+                              onClick={() => window.open(tvUrl, '_blank')}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted/40 transition-colors group"
+                              title={doc.label}
+                            >
+                              {getTypeIcon(doc.type === 'slides' ? 'slides' : doc.type === 'annual_report' ? 'annual' : 'interim')}
+                              <span className="text-[10px] font-mono text-terminal-cyan group-hover:underline">
+                                {doc.label}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
