@@ -718,12 +718,11 @@ const ScreenerFilings = () => {
         )}
 
         {/* Financial Statements View */}
-        {viewMode === 'statements' && !loadingData && selectedSymbol && (
-          <FinancialStatementsTerminal
-            financials={financials}
-            symbol={selectedSymbol}
-            statementSeries={statementSeries}
-          />
+        {viewMode === 'statements' && !loadingData && selectedSymbol && financials && (
+          <FinancialStatementsView financials={financials} symbol={selectedSymbol} />
+        )}
+        {viewMode === 'statements' && !loadingData && selectedSymbol && !financials && (
+          <div className="p-8 text-center text-muted-foreground text-[11px] font-mono">ไม่มีข้อมูลงบการเงิน</div>
         )}
 
         {/* Filings View */}
