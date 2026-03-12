@@ -458,9 +458,9 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                 { label: 'Div Yield', value: fmtPct(financials['dividends_yield']), clr: colorVal(financials['dividends_yield']) },
                 { label: 'RSI (14)', value: fmtRatio(financials['RSI']) },
               ].map((item) => (
-              <div key={item.label} className="rounded-md border border-border/30 bg-card/20 px-3 py-2 hover:border-terminal-amber/30 transition-colors">
-                  <div className="text-[9px] font-mono text-muted-foreground/70">{item.label}</div>
-                  <div className={`text-[13px] font-mono font-bold ${item.clr || 'text-terminal-cyan'}`}>{item.value}</div>
+              <div key={item.label} className="rounded-md border border-border/30 bg-card/20 px-3 py-2 hover:border-border/50 transition-colors">
+                  <div className="text-[9px] font-mono text-muted-foreground/60">{item.label}</div>
+                  <div className={`text-[13px] font-mono font-bold ${item.clr || 'text-foreground'}`}>{item.value}</div>
                 </div>
               ))}
             </div>
