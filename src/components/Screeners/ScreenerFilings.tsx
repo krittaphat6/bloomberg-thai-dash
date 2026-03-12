@@ -325,7 +325,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
           <div>
             <SectionTitle title="การประเมินมูลค่า ›" subtitle="ตัวชี้วัดทางพื้นฐานเพื่อกำหนดมูลค่ายุติธรรมของหุ้น" />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+              <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
                 <div className="text-[10px] font-mono text-muted-foreground mb-2 flex items-center gap-1">สรุป <Info className="w-3 h-3" /></div>
                 <div className="flex items-center gap-6">
                   <div className="w-28 h-28">
