@@ -335,7 +335,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                           cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
                           <Cell fill="#f59e0b" />
                           <Cell fill="#22c55e" />
-                          <Cell fill="hsl(var(--accent))" />
+                          <Cell fill="#06b6d4" />
                         </Pie>
                       </RechartPie>
                     </ResponsiveContainer>
