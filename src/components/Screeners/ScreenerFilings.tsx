@@ -234,7 +234,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
         {tabDefs.map((t) => (
           <button key={t.value} onClick={() => setTab(t.value)}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border transition-colors whitespace-nowrap ${
-              tab === t.value ? 'bg-primary/15 border-primary/40 text-primary font-medium' : 'border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/30'
+              tab === t.value ? 'bg-terminal-amber/15 border-terminal-amber/40 text-terminal-amber font-medium' : 'border-border/50 text-muted-foreground hover:text-terminal-amber/70 hover:bg-muted/30'
             }`}
           >
             {t.icon} {t.label}
