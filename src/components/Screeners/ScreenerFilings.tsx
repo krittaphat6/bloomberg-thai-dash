@@ -824,20 +824,23 @@ const ScreenerFilings = () => {
                                 📅 วันที่เผยแพร่: <span className="text-foreground">{item.date}</span>
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
-                                {item.documents.map((doc, di) => (
-                                  <button
-                                    key={di}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
-                                      window.open(doc.url || fallbackUrl, '_blank', 'noopener,noreferrer');
-                                    }}
-                                    className="flex items-center gap-1 px-2 py-1 rounded bg-muted/30 border border-border/30 hover:bg-muted/50 transition-colors"
-                                  >
-                                    <span className="text-[11px]">{doc.icon}</span>
-                                    <span className="text-[10px] font-mono text-foreground">{doc.label}</span>
-                                  </button>
-                                ))}
+                                {item.documents.map((doc, di) => {
+                                  const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
+                                  const href = doc.url || fallbackUrl;
+                                  return (
+                                    <a
+                                      key={di}
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="flex items-center gap-1 px-2 py-1 rounded bg-muted/30 border border-border/30 hover:bg-muted/50 hover:border-primary/30 transition-colors"
+                                    >
+                                      <span className="text-[11px]">{doc.icon}</span>
+                                      <span className="text-[10px] font-mono text-foreground">{doc.label}</span>
+                                    </a>
+                                  );
+                                })}
                               </div>
                               <p className="text-[9px] font-mono text-muted-foreground/70 mt-1">
                                 ℹ️ ข้อมูลการเงินแสดงด้านบน — ดึงจาก TradingView Scanner API โดยตรง
