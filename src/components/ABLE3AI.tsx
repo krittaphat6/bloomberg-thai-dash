@@ -509,6 +509,7 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
               }
             } catch (e) { console.error('Filings context error:', e); }
           }
+        }
 
         // Trading Journal context for journal-related queries
         let journalContext = '';
