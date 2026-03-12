@@ -333,8 +333,8 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <RechartPie>
                         <Pie data={[{ name: 'MCap', value: marketCap }, { name: 'Revenue', value: totalRevenue || 1 }, { name: 'Net Inc', value: Math.abs(netIncome || 1) }]}
                           cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
-                          <Cell fill="hsl(var(--muted-foreground))" />
-                          <Cell fill="hsl(var(--primary))" />
+                          <Cell fill="#f59e0b" />
+                          <Cell fill="#22c55e" />
                           <Cell fill="hsl(var(--accent))" />
                         </Pie>
                       </RechartPie>
