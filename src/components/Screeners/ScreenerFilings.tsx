@@ -568,7 +568,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                   <XAxis dataKey="period" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
                   <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="eps" name="EPS" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="eps" name="EPS" fill="#f59e0b" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
