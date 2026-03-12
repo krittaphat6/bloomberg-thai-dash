@@ -222,11 +222,11 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
     <div className="space-y-4 p-4">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-          <Building2 className="w-3.5 h-3.5 text-primary" />
+        <div className="w-6 h-6 rounded-full bg-terminal-amber/20 border border-terminal-amber/30 flex items-center justify-center">
+          <Building2 className="w-3.5 h-3.5 text-terminal-amber" />
         </div>
-        <span className="text-sm font-mono font-bold text-foreground">{symbol.description || symbol.symbol}</span>
-        <span className="text-[10px] font-mono text-muted-foreground">• การเงิน</span>
+        <span className="text-sm font-mono font-bold text-terminal-amber">{symbol.description || symbol.symbol}</span>
+        <span className="text-[10px] font-mono text-terminal-cyan/70">• การเงิน</span>
       </div>
 
       {/* Tabs */}
