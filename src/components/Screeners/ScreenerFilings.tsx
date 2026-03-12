@@ -957,10 +957,10 @@ const ScreenerFilings = () => {
 
               <button
                 onClick={() => handleChooseMode('filings')}
-                className="flex items-center gap-4 p-4 rounded-lg border border-border hover:border-amber-500/50 hover:bg-amber-500/5 transition-all text-left group"
-              >
-                <div className="w-12 h-12 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 group-hover:bg-amber-500/20 transition-colors">
-                  <FileText className="w-6 h-6 text-amber-400" />
+                 className="flex items-center gap-4 p-4 rounded-lg border border-border hover:border-terminal-amber/50 hover:bg-terminal-amber/5 transition-all text-left group"
+               >
+                 <div className="w-12 h-12 rounded-lg bg-terminal-amber/10 border border-terminal-amber/20 flex items-center justify-center shrink-0 group-hover:bg-terminal-amber/20 transition-colors">
+                   <FileText className="w-6 h-6 text-terminal-amber" />
                 </div>
                 <div>
                   <h4 className="text-[13px] font-mono font-bold text-foreground">📋 เอกสารการเงินบริษัท</h4>
