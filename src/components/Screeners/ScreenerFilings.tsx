@@ -719,7 +719,11 @@ const ScreenerFilings = () => {
 
         {/* Financial Statements View */}
         {viewMode === 'statements' && !loadingData && selectedSymbol && (
-          <FinancialStatementsView financials={financials!} symbol={selectedSymbol} />
+          <FinancialStatementsTerminal
+            financials={financials}
+            symbol={selectedSymbol}
+            statementSeries={statementSeries}
+          />
         )}
 
         {/* Filings View */}
