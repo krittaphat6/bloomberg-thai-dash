@@ -50,6 +50,29 @@ const EXTENDED_COLUMNS = [
   "earnings_release_date", "earnings_release_next_date",
 ];
 
+// Core fields that usually support historical lookback in TV scanner ([1]..[N])
+const HISTORY_BASE_COLUMNS = [
+  "total_revenue",
+  "gross_profit",
+  "ebitda",
+  "net_income",
+  "earnings_per_share_diluted_ttm",
+  "price_earnings_ttm",
+  "price_sales_ratio",
+  "dividends_yield",
+  "return_on_equity",
+  "debt_to_equity",
+  "current_ratio",
+  "quick_ratio",
+  "total_assets",
+  "total_liabilities_fq",
+  "total_debt",
+  "free_cash_flow",
+  "cash_f_operating_activities_ttm",
+];
+
+const DEFAULT_HISTORY_PERIODS = 11;
+
 const EXCHANGE_TO_MARKET: Record<string, string> = {
   SET: "thailand", BKK: "thailand", TFEX: "thailand",
   NASDAQ: "america", NYSE: "america", AMEX: "america", OTC: "america",
