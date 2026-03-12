@@ -99,26 +99,26 @@ const getExchangeFlag = (exchange: string) => {
 type StatementTab = 'overview' | 'income' | 'balance' | 'cashflow' | 'ratios';
 
 const StatementRow = ({ label, value, format = 'number', indent = false }: { label: string; value: any; format?: string; indent?: boolean }) => {
+  if (value == null || isNaN(value)) return null;
+
   let display = '—';
   let color = 'text-foreground';
 
-  if (value != null && !isNaN(value)) {
-    switch (format) {
-      case 'number': display = fmt(value); break;
-      case 'currency': display = fmtPrice(value); break;
-      case 'percent': display = fmtPct(value); color = colorVal(value) || 'text-foreground'; break;
-      case 'ratio': display = fmtRatio(value); break;
-      case 'growth':
-        display = fmtPct(value);
-        color = Number(value) > 0 ? 'text-green-400' : Number(value) < 0 ? 'text-red-400' : 'text-foreground';
-        break;
-    }
+  switch (format) {
+    case 'number': display = fmt(value); break;
+    case 'currency': display = fmtPrice(value); break;
+    case 'percent': display = fmtPct(value); color = colorVal(value); break;
+    case 'ratio': display = fmtRatio(value); break;
+    case 'growth':
+      display = fmtPct(value);
+      color = colorVal(value);
+      break;
   }
 
   return (
-    <div className={`flex items-center justify-between py-1.5 px-3 hover:bg-muted/20 ${indent ? 'pl-6' : ''}`}>
-      <span className="text-[11px] font-mono text-muted-foreground">{label}</span>
-      <span className={`text-[11px] font-mono font-medium ${color}`}>{display}</span>
+    <div className={`grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)] items-center gap-3 py-1.5 px-3 border-b border-border/20 last:border-b-0 ${indent ? 'pl-6' : ''}`}>
+      <span className="text-[11px] font-mono text-muted-foreground truncate">{label}</span>
+      <span className={`text-[11px] font-mono font-medium text-right tabular-nums ${color}`}>{display}</span>
     </div>
   );
 };
