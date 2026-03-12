@@ -272,7 +272,12 @@ serve(async (req) => {
   }
 });
 
-function generateFilingsFromFinancials(financials: any, symbol: string, typeFilter: string): any[] {
+function getTradingViewSymbolUrl(symbol: string, exchange?: string): string {
+  const normalized = symbol.includes(":") ? symbol.replace(":", "-") : `${exchange || ""}-${symbol}`.replace(/^-/, "");
+  return `https://www.tradingview.com/symbols/${normalized}`;
+}
+
+function generateFilingsFromFinancials(financials: any, symbol: string, typeFilter: string, exchange?: string): any[] {
   const filings: any[] = [];
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -283,20 +288,25 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
     { q: "Q4", months: [12, 2] },
   ];
 
+  const tvBaseUrl = getTradingViewSymbolUrl(symbol, exchange);
+
   for (let year = currentYear; year >= currentYear - 2; year--) {
     if (typeFilter === "all" || typeFilter === "annual") {
       const reportDate = new Date(year + 1, 2, 15);
       if (reportDate <= now) {
         filings.push({
-          id: `${symbol}-annual-${year}`, symbol,
+          id: `${symbol}-annual-${year}`,
+          symbol,
           title: `Annual Report ${year}`,
           titleTh: `รายงานประจำปี ${year}`,
-          type: "annual", form: "56-1",
+          type: "annual",
+          form: "56-1",
           date: formatDate(reportDate),
-          quarter: `FY ${year}`, year,
+          quarter: `FY ${year}`,
+          year,
           documents: [
-            { type: "annual_report", label: "รายงานประจำปี", icon: "📋" },
-            { type: "financial_statements", label: "งบการเงิน", icon: "📊" },
+            { type: "annual_report", label: "รายงานประจำปี", icon: "📋", url: `${tvBaseUrl}/financials-overview/` },
+            { type: "financial_statements", label: "งบการเงิน", icon: "📊", url: `${tvBaseUrl}/financials-income-statement/` },
           ],
         });
       }
@@ -308,16 +318,24 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
       const reportYear = qm.q === "Q4" ? year + 1 : year;
       const reportDate = new Date(reportYear, reportMonth - 1, 15);
       if (reportDate <= now) {
-        const docs: any[] = [{ type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄" }];
-        if (qm.q === "Q2" || qm.q === "Q4") docs.push({ type: "slides", label: "สไลด์", icon: "📊" });
-        docs.push({ type: "earnings", label: "หนังสือรับรอง", icon: "📃" });
+        const docs: any[] = [
+          { type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄", url: `${tvBaseUrl}/financials-income-statement/` },
+        ];
+        if (qm.q === "Q2" || qm.q === "Q4") {
+          docs.push({ type: "slides", label: "สไลด์", icon: "📊", url: `${tvBaseUrl}/financials-overview/` });
+        }
+        docs.push({ type: "earnings", label: "หนังสือรับรอง", icon: "📃", url: `${tvBaseUrl}/financials-statistics-and-ratios/` });
+
         filings.push({
-          id: `${symbol}-${qm.q}-${year}`, symbol,
+          id: `${symbol}-${qm.q}-${year}`,
+          symbol,
           title: `${qm.q} ${year}`,
           titleTh: `รายงานระหว่างกาล ${qm.q} ${year}`,
-          type: "interim", form: "10-Q",
+          type: "interim",
+          form: "10-Q",
           date: formatDate(reportDate),
-          quarter: `${qm.q} ${year}`, year,
+          quarter: `${qm.q} ${year}`,
+          year,
           documents: docs,
         });
       }
@@ -328,12 +346,18 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
         const presDate = new Date(year, m + 1, 10);
         if (presDate <= now && presDate > new Date(currentYear - 2, 0, 1)) {
           filings.push({
-            id: `${symbol}-pres-${year}-${m}`, symbol,
+            id: `${symbol}-pres-${year}-${m}`,
+            symbol,
             title: "Investor Presentation",
-            titleTh: "สไลด์นักลงทุน", type: "slides",
-            form: "", date: formatDate(presDate),
-            quarter: "", year,
-            documents: [{ type: "slides", label: "สไลด์", icon: "📊" }],
+            titleTh: "สไลด์นักลงทุน",
+            type: "slides",
+            form: "",
+            date: formatDate(presDate),
+            quarter: "",
+            year,
+            documents: [
+              { type: "slides", label: "สไลด์", icon: "📊", url: `${tvBaseUrl}/financials-overview/` },
+            ],
           });
         }
       }
