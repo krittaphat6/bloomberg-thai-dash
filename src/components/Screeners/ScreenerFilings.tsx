@@ -401,7 +401,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
           <div>
             <SectionTitle title="ความเติบโตและการทำกำไร ›" subtitle="ประสิทธิภาพและมาร์จิ้นล่าสุดของบริษัท" />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+              <div className="rounded-lg border border-border/30 bg-card/30 p-4">
                 <div className="text-[10px] font-mono text-muted-foreground mb-2">ประสิทธิภาพ</div>
                 <div className="h-52">
                   <ResponsiveContainer width="100%" height="100%">
@@ -412,14 +412,14 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <YAxis yAxisId="right" orientation="right" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ fontSize: '10px' }} />
-                      <Bar yAxisId="left" dataKey="revenue" name="รายได้" fill="#f59e0b" radius={[3, 3, 0, 0]} />
-                      <Bar yAxisId="left" dataKey="netIncome" name="รายได้สุทธิ" fill="#22c55e" radius={[3, 3, 0, 0]} />
-                      <Line yAxisId="right" dataKey="netMargin" name="อัตรากำไรสุทธิ %" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} />
+                      <Bar yAxisId="left" dataKey="revenue" name="รายได้" fill="#d4a843" radius={[3, 3, 0, 0]} />
+                      <Bar yAxisId="left" dataKey="netIncome" name="รายได้สุทธิ" fill="#4ade80" radius={[3, 3, 0, 0]} />
+                      <Line yAxisId="right" dataKey="netMargin" name="อัตรากำไรสุทธิ %" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </div>
-              <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+              <div className="rounded-lg border border-border/30 bg-card/30 p-4">
                 <div className="text-[10px] font-mono text-muted-foreground mb-2">อัตรารายได้ต่อกำไร</div>
                 <div className="h-52">
                   <ResponsiveContainer width="100%" height="100%">
@@ -430,7 +430,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <Tooltip content={<CustomTooltip />} />
                       <Bar dataKey="value" name="Value" radius={[3, 3, 0, 0]}>
                         {waterfallData.map((entry, index) => (
-                          <Cell key={index} fill={entry.value >= 0 ? '#22c55e' : '#ef4444'} />
+                          <Cell key={index} fill={entry.value >= 0 ? '#4ade80' : '#f87171'} />
                         ))}
                       </Bar>
                     </BarChart>
