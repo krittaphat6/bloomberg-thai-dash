@@ -356,7 +356,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
           <div>
             <SectionTitle title="การประเมินมูลค่า ›" subtitle="ตัวชี้วัดทางพื้นฐานเพื่อกำหนดมูลค่ายุติธรรมของหุ้น" />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+              <div className="rounded-lg border border-border/30 bg-card/30 p-4">
                 <div className="text-[10px] font-mono text-muted-foreground mb-2 flex items-center gap-1">สรุป <Info className="w-3 h-3" /></div>
                 <div className="flex items-center gap-6">
                   <div className="w-28 h-28">
@@ -364,20 +364,20 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <RechartPie>
                         <Pie data={[{ name: 'MCap', value: marketCap }, { name: 'Revenue', value: totalRevenue || 1 }, { name: 'Net Inc', value: Math.abs(netIncome || 1) }]}
                           cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
-                          <Cell fill="#f59e0b" />
-                          <Cell fill="#22c55e" />
-                          <Cell fill="#06b6d4" />
+                          <Cell fill="#d4a843" />
+                          <Cell fill="#4ade80" />
+                          <Cell fill="#38bdf8" />
                         </Pie>
                       </RechartPie>
                     </ResponsiveContainer>
                   </div>
                   <div className="space-y-2 text-[11px] font-mono">
-                    <div><span className="text-muted-foreground">P/E</span> <span className="text-terminal-amber font-bold ml-3">{fmtRatio(financials['price_earnings_ttm'])}x</span></div>
-                    <div><span className="text-muted-foreground">P/S</span> <span className="text-terminal-cyan font-bold ml-3">{fmtRatio(financials['price_sales_ratio'])}x</span></div>
+                    <div><span className="text-muted-foreground">P/E</span> <span className="text-foreground font-bold ml-3">{fmtRatio(financials['price_earnings_ttm'])}x</span></div>
+                    <div><span className="text-muted-foreground">P/S</span> <span className="text-foreground font-bold ml-3">{fmtRatio(financials['price_sales_ratio'])}x</span></div>
                   </div>
                 </div>
               </div>
-              <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+              <div className="rounded-lg border border-border/30 bg-card/30 p-4">
                 <div className="text-[10px] font-mono text-muted-foreground mb-2">อัตราส่วนการประเมินมูลค่า</div>
                 <div className="h-48">
                   <ResponsiveContainer width="100%" height="100%">
@@ -388,8 +388,8 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <YAxis yAxisId="right" orientation="right" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ fontSize: '10px' }} />
-                      <Line yAxisId="left" dataKey="ps" name="P/S" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} />
-                      <Line yAxisId="right" dataKey="pe" name="P/E" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line yAxisId="left" dataKey="ps" name="P/S" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line yAxisId="right" dataKey="pe" name="P/E" stroke="#d4a843" strokeWidth={2} dot={{ r: 3 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
