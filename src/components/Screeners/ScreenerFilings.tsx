@@ -381,9 +381,9 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <YAxis yAxisId="right" orientation="right" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ fontSize: '10px' }} />
-                      <Bar yAxisId="left" dataKey="revenue" name="รายได้" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-                      <Bar yAxisId="left" dataKey="netIncome" name="รายได้สุทธิ" fill="hsl(var(--accent))" radius={[3, 3, 0, 0]} />
-                      <Line yAxisId="right" dataKey="netMargin" name="อัตรากำไรสุทธิ %" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 3 }} />
+                      <Bar yAxisId="left" dataKey="revenue" name="รายได้" fill="#f59e0b" radius={[3, 3, 0, 0]} />
+                      <Bar yAxisId="left" dataKey="netIncome" name="รายได้สุทธิ" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                      <Line yAxisId="right" dataKey="netMargin" name="อัตรากำไรสุทธิ %" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
