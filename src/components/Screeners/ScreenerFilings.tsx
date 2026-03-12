@@ -937,10 +937,10 @@ const ScreenerFilings = () => {
             <div className="grid grid-cols-1 gap-3 max-w-sm mx-auto">
               <button
                 onClick={() => handleChooseMode('statements')}
-                className="flex items-center gap-4 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
-              >
-                <div className="w-12 h-12 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-                  <Calculator className="w-6 h-6 text-primary" />
+                 className="flex items-center gap-4 p-4 rounded-lg border border-border hover:border-terminal-cyan/50 hover:bg-terminal-cyan/5 transition-all text-left group"
+               >
+                 <div className="w-12 h-12 rounded-lg bg-terminal-cyan/10 border border-terminal-cyan/20 flex items-center justify-center shrink-0 group-hover:bg-terminal-cyan/20 transition-colors">
+                   <Calculator className="w-6 h-6 text-terminal-cyan" />
                 </div>
                 <div>
                   <h4 className="text-[13px] font-mono font-bold text-foreground">📊 งบการเงินขั้นต้น</h4>
