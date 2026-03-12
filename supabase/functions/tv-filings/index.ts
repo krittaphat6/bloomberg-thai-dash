@@ -386,7 +386,7 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
             quarter: "",
             year,
             documents: [
-              { type: "slides", label: "สไลด์", icon: "📊", url: `${tvBaseUrl}/financials-overview/` },
+                { type: "slides", label: "สไลด์", icon: "📊", url: docLinks.presentation },
             ],
           });
         }
