@@ -286,7 +286,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-terminal-cyan" />
                     <span className="text-muted-foreground">หุ้นที่ถูกกระจายสู่รายย่อย</span>
-                    <span className="text-foreground font-medium ml-auto">{fmt(marketCap * 0.444)} (44.4%)</span>
+                    <span className="text-terminal-cyan font-medium ml-auto">{fmt(marketCap * 0.444)} (44.4%)</span>
                   </div>
                 </div>
               </div>
