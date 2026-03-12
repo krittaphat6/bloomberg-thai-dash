@@ -389,7 +389,7 @@ const ScreenerFilings = () => {
   const [filingType, setFilingType] = useState<FilingTypeFilter>('all');
   const [filings, setFilings] = useState<FilingItem[]>([]);
   const [financials, setFinancials] = useState<Financials | null>(null);
-  const [statementSeries, setStatementSeries] = useState<StatementSeriesPayload | null>(null);
+  const [statementSeries, setStatementSeries] = useState<any>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [expandedFiling, setExpandedFiling] = useState<string | null>(null);
