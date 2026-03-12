@@ -509,6 +509,8 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
               }
             } catch (e) { console.error('Filings context error:', e); }
           }
+
+        // Trading Journal context for journal-related queries
         let journalContext = '';
         if (/journal|เทรด|trade|win.*rate|p&l|pnl|กำไร|ขาดทุน|สถิติ|performance|ประสิทธิภาพ|able.*score|psychology|จิตวิทยา|monte.*carlo|risk|drawdown|setup|สรุป.*ผล|วิเคราะห์.*เทรด/i.test(lowerInput)) {
           addThinkingStep('📔 ดึงข้อมูลจาก Trading Journal...');
