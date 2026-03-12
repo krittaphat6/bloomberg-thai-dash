@@ -341,8 +341,8 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                     </ResponsiveContainer>
                   </div>
                   <div className="space-y-2 text-[11px] font-mono">
-                    <div><span className="text-muted-foreground">P/E</span> <span className="text-foreground font-bold ml-3">{fmtRatio(financials['price_earnings_ttm'])}x</span></div>
-                    <div><span className="text-muted-foreground">P/S</span> <span className="text-foreground font-bold ml-3">{fmtRatio(financials['price_sales_ratio'])}x</span></div>
+                    <div><span className="text-muted-foreground">P/E</span> <span className="text-terminal-amber font-bold ml-3">{fmtRatio(financials['price_earnings_ttm'])}x</span></div>
+                    <div><span className="text-muted-foreground">P/S</span> <span className="text-terminal-cyan font-bold ml-3">{fmtRatio(financials['price_sales_ratio'])}x</span></div>
                   </div>
                 </div>
               </div>
