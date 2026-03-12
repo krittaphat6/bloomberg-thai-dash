@@ -927,7 +927,7 @@ const ScreenerFilings = () => {
             {viewMode !== 'choose' && (
               <button
                 onClick={() => { setViewMode('choose'); setFilings([]); setFinancials(null); }}
-                className="text-[10px] font-mono text-terminal-amber hover:text-terminal-amber/80 transition-colors px-2 py-1 rounded border border-terminal-amber/30 hover:bg-terminal-amber/5"
+                className="text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded border border-border/40 hover:bg-muted/20"
               >
                 ← เลือกใหม่
               </button>
