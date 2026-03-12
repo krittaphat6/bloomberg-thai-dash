@@ -318,7 +318,7 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
     { q: "Q4", months: [12, 2] },
   ];
 
-  const tvBaseUrl = getTradingViewSymbolUrl(symbol, exchange);
+  const docLinks = getDocumentLinks(symbol, exchange);
 
   for (let year = currentYear; year >= currentYear - 2; year--) {
     if (typeFilter === "all" || typeFilter === "annual") {
@@ -335,8 +335,8 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
           quarter: `FY ${year}`,
           year,
           documents: [
-            { type: "annual_report", label: "รายงานประจำปี", icon: "📋", url: `${tvBaseUrl}/financials-overview/` },
-            { type: "financial_statements", label: "งบการเงิน", icon: "📊", url: `${tvBaseUrl}/financials-income-statement/` },
+            { type: "annual_report", label: "รายงานประจำปี", icon: "📋", url: docLinks.annual },
+            { type: "financial_statements", label: "งบการเงิน", icon: "📊", url: docLinks.financial },
           ],
         });
       }
@@ -349,12 +349,12 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
       const reportDate = new Date(reportYear, reportMonth - 1, 15);
       if (reportDate <= now) {
         const docs: any[] = [
-          { type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄", url: `${tvBaseUrl}/financials-income-statement/` },
+          { type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄", url: docLinks.income },
         ];
         if (qm.q === "Q2" || qm.q === "Q4") {
-          docs.push({ type: "slides", label: "สไลด์", icon: "📊", url: `${tvBaseUrl}/financials-overview/` });
+          docs.push({ type: "slides", label: "สไลด์", icon: "📊", url: docLinks.presentation });
         }
-        docs.push({ type: "earnings", label: "หนังสือรับรอง", icon: "📃", url: `${tvBaseUrl}/financials-statistics-and-ratios/` });
+        docs.push({ type: "earnings", label: "หนังสือรับรอง", icon: "📃", url: docLinks.ratios });
 
         filings.push({
           id: `${symbol}-${qm.q}-${year}`,
