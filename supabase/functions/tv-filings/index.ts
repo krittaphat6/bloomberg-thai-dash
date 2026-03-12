@@ -374,5 +374,25 @@ function formatDate(d: Date): string {
 }
 
 function parseDate(s: string): Date {
-  try { return new Date(s); } catch { return new Date(); }
+  try {
+    if (!s) return new Date(0);
+    const thaiMonths: Record<string, number> = {
+      "ม.ค.": 0, "ก.พ.": 1, "มี.ค.": 2, "เม.ย.": 3, "พ.ค.": 4, "มิ.ย.": 5,
+      "ก.ค.": 6, "ส.ค.": 7, "ก.ย.": 8, "ต.ค.": 9, "พ.ย.": 10, "ธ.ค.": 11,
+    };
+
+    const parts = s.trim().split(" ");
+    if (parts.length === 3 && thaiMonths[parts[1]] !== undefined) {
+      const day = Number(parts[0]);
+      const month = thaiMonths[parts[1]];
+      const buddhistYear = Number(parts[2]);
+      const year = buddhistYear > 2400 ? buddhistYear - 543 : buddhistYear;
+      return new Date(year, month, day);
+    }
+
+    const parsed = new Date(s);
+    return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
+  } catch {
+    return new Date(0);
+  }
 }
