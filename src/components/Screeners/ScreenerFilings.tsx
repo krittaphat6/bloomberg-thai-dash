@@ -888,7 +888,7 @@ const ScreenerFilings = () => {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-[12px] font-mono font-bold text-foreground">{selectedSymbol.symbol}</span>
+                <span className="text-[12px] font-mono font-bold text-terminal-amber">{selectedSymbol.symbol}</span>
                 <span className="text-[11px] font-mono text-muted-foreground truncate">{selectedSymbol.description}</span>
               </div>
               <span className="text-[9px] font-mono text-muted-foreground">• {selectedSymbol.exchange}</span>
