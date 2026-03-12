@@ -481,9 +481,9 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                   <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{ fontSize: '10px' }} />
-                  <Bar dataKey="revenue" name="Revenue" fill="#f59e0b" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="grossProfit" name="Gross Profit" fill="#22c55e" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="netIncome" name="Net Income" fill="#06b6d4" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="revenue" name="Revenue" fill="#d4a843" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="grossProfit" name="Gross Profit" fill="#4ade80" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="netIncome" name="Net Income" fill="#38bdf8" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
