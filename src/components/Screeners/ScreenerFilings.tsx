@@ -476,6 +476,7 @@ const ScreenerFilings = () => {
       if (!error && data) {
         setFilings(data.filings || []);
         setFinancials(data.financials || null);
+        setStatementSeries(data.statementSeries || null);
         const years: number[] = [...new Set((data.filings || []).map((f: FilingItem) => f.year))] as number[];
         years.sort((a, b) => b - a);
         setExpandedYears(new Set(years.slice(0, 2)));
