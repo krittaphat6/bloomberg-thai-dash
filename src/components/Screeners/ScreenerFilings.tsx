@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Loader2, ChevronDown, ChevronRight, Building2, X, FileText, Presentation, FileCheck, TrendingUp, TrendingDown, BarChart3, DollarSign, PieChart, LayoutList, Calculator } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import FinancialStatementsTerminal, { type StatementSeriesPayload } from './FinancialStatementsTerminal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
