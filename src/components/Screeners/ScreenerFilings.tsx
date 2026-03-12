@@ -357,7 +357,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <YAxis yAxisId="right" orientation="right" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ fontSize: '10px' }} />
-                      <Line yAxisId="left" dataKey="ps" name="P/S" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line yAxisId="left" dataKey="ps" name="P/S" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} />
                       <Line yAxisId="right" dataKey="pe" name="P/E" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
                     </LineChart>
                   </ResponsiveContainer>
