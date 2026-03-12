@@ -153,7 +153,7 @@ function buildStatementSeries(financials: Record<string, any> | null, periods: n
 
 async function fetchWithAutoFix(scanUrl: string, fullSymbol: string, columns: string[]): Promise<any> {
   let currentCols = [...columns];
-  let maxRetries = 40;
+  let maxRetries = Math.max(160, columns.length + 20);
 
   while (maxRetries-- > 0) {
     const body = {
