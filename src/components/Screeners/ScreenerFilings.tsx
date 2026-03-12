@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Loader2, ChevronDown, ChevronRight, Building2, X, FileText, Presentation, FileCheck, TrendingUp, TrendingDown, BarChart3, DollarSign, PieChart, LayoutList, Calculator } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import FinancialStatementsTerminal, { type StatementSeriesPayload } from './FinancialStatementsTerminal';
+// FinancialStatementsView is defined inline below
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -389,7 +389,7 @@ const ScreenerFilings = () => {
   const [filingType, setFilingType] = useState<FilingTypeFilter>('all');
   const [filings, setFilings] = useState<FilingItem[]>([]);
   const [financials, setFinancials] = useState<Financials | null>(null);
-  const [statementSeries, setStatementSeries] = useState<StatementSeriesPayload | null>(null);
+  const [statementSeries, setStatementSeries] = useState<any>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [expandedFiling, setExpandedFiling] = useState<string | null>(null);
@@ -718,12 +718,11 @@ const ScreenerFilings = () => {
         )}
 
         {/* Financial Statements View */}
-        {viewMode === 'statements' && !loadingData && selectedSymbol && (
-          <FinancialStatementsTerminal
-            financials={financials}
-            symbol={selectedSymbol}
-            statementSeries={statementSeries}
-          />
+        {viewMode === 'statements' && !loadingData && selectedSymbol && financials && (
+          <FinancialStatementsView financials={financials} symbol={selectedSymbol} />
+        )}
+        {viewMode === 'statements' && !loadingData && selectedSymbol && !financials && (
+          <div className="p-8 text-center text-muted-foreground text-[11px] font-mono">ไม่มีข้อมูลงบการเงิน</div>
         )}
 
         {/* Filings View */}
@@ -807,11 +806,22 @@ const ScreenerFilings = () => {
                               <span className="text-[11px] font-mono text-muted-foreground">{item.date}</span>
                             </div>
                             <div className="w-32 flex items-center justify-end gap-1.5">
-                              {item.documents.map((doc, di) => (
-                                <Badge key={di} variant="outline" className="text-[9px] font-mono px-1.5 py-0">
-                                  {doc.icon} {doc.label}
-                                </Badge>
-                              ))}
+                              {item.documents.map((doc, di) => {
+                                const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
+                                return (
+                                  <a
+                                    key={di}
+                                    href={doc.url || fallbackUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 hover:bg-primary/10 hover:border-primary/30 cursor-pointer">
+                                      {doc.icon} {doc.label}
+                                    </Badge>
+                                  </a>
+                                );
+                              })}
                             </div>
                           </div>
 
@@ -825,20 +835,23 @@ const ScreenerFilings = () => {
                                 📅 วันที่เผยแพร่: <span className="text-foreground">{item.date}</span>
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
-                                {item.documents.map((doc, di) => (
-                                  <button
-                                    key={di}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
-                                      window.open(doc.url || fallbackUrl, '_blank', 'noopener,noreferrer');
-                                    }}
-                                    className="flex items-center gap-1 px-2 py-1 rounded bg-muted/30 border border-border/30 hover:bg-muted/50 transition-colors"
-                                  >
-                                    <span className="text-[11px]">{doc.icon}</span>
-                                    <span className="text-[10px] font-mono text-foreground">{doc.label}</span>
-                                  </button>
-                                ))}
+                                {item.documents.map((doc, di) => {
+                                  const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
+                                  const href = doc.url || fallbackUrl;
+                                  return (
+                                    <a
+                                      key={di}
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="flex items-center gap-1 px-2 py-1 rounded bg-muted/30 border border-border/30 hover:bg-muted/50 hover:border-primary/30 transition-colors"
+                                    >
+                                      <span className="text-[11px]">{doc.icon}</span>
+                                      <span className="text-[10px] font-mono text-foreground">{doc.label}</span>
+                                    </a>
+                                  );
+                                })}
                               </div>
                               <p className="text-[9px] font-mono text-muted-foreground/70 mt-1">
                                 ℹ️ ข้อมูลการเงินแสดงด้านบน — ดึงจาก TradingView Scanner API โดยตรง
