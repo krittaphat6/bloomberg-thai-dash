@@ -457,6 +457,7 @@ const ScreenerFilings = () => {
       });
       if (!error && data) {
         setFinancials(data.financials || null);
+        setStatementSeries(data.statementSeries || null);
       }
     } catch (err) {
       console.error('Statements fetch error:', err);
