@@ -180,6 +180,22 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
     });
   }, [financials]);
 
+  // Real ownership data from API
+  const ownershipData = useMemo(() => {
+    if (!financials) return null;
+    const totalShares = financials['total_shares_outstanding'] || financials['total_shares_outstanding_fundamental'] || 0;
+    const floatShares = financials['float_shares_outstanding'] || 0;
+    if (totalShares > 0 && floatShares > 0) {
+      const floatPct = floatShares / totalShares * 100;
+      const insiderPct = 100 - floatPct;
+      return [
+        { name: 'หุ้นที่ถูกถือเฉพาะกลุ่ม (Insider)', value: insiderPct, amount: totalShares - floatShares },
+        { name: 'หุ้นหมุนเวียน (Float)', value: floatPct, amount: floatShares },
+      ];
+    }
+    return null;
+  }, [financials]);
+
   if (!financials) return <div className="p-8 text-center text-muted-foreground text-[11px] font-mono">ไม่มีข้อมูล</div>;
 
   const tabDefs: { value: StatementTab; label: string; icon: React.ReactNode }[] = [
@@ -192,34 +208,14 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
   ];
 
   const marketCap = financials['market_cap_basic'] ?? 0;
-  const totalEquity = financials['total_equity'] ?? 0;
   const totalDebt = financials['total_debt'] ?? 0;
   const cashEquiv = financials['cash_n_equivalents_fq'] ?? 0;
-  const ev = financials['enterprise_value'] ?? 0;
   const totalRevenue = financials['total_revenue'] ?? null;
   const grossProfit = financials['gross_profit'] ?? null;
   const operIncome = financials['oper_income'] ?? null;
   const netIncome = financials['net_income'] ?? null;
   const netDebt = financials['net_debt'] ?? null;
-
-  // Real ownership data from API
-  const totalShares = financials['total_shares_outstanding'] || financials['total_shares_outstanding_fundamental'] || 0;
-  const floatShares = financials['float_shares_outstanding'] || 0;
   const fundHoldingPct = financials['fund_holding_percent'] ?? null;
-  
-  // Calculate real ownership percentages
-  const floatPct = totalShares > 0 && floatShares > 0 ? (floatShares / totalShares * 100) : null;
-  const insiderPct = floatPct != null ? (100 - floatPct) : null;
-
-  const ownershipData = useMemo(() => {
-    if (floatPct != null && insiderPct != null) {
-      return [
-        { name: 'หุ้นที่ถูกถือเฉพาะกลุ่ม (Insider)', value: insiderPct, amount: totalShares - floatShares },
-        { name: 'หุ้นหมุนเวียน (Float)', value: floatPct, amount: floatShares },
-      ];
-    }
-    return null;
-  }, [floatPct, insiderPct, totalShares, floatShares]);
 
   // Real capital structure - only real data
   const capitalData = [
