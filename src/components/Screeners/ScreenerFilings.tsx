@@ -121,10 +121,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 const KeyFact = ({ label, value, suffix }: { label: string; value: string; suffix?: string }) => (
   <div className="space-y-0.5">
-    <div className="text-[10px] font-mono text-muted-foreground/70">{label}</div>
-    <div className="text-[14px] font-mono font-bold text-terminal-amber">
+    <div className="text-[10px] font-mono text-muted-foreground/60">{label}</div>
+    <div className="text-[14px] font-mono font-bold text-foreground">
       {value}
-      {suffix && <span className="text-[10px] text-muted-foreground ml-1">{suffix}</span>}
+      {suffix && <span className="text-[10px] text-muted-foreground/50 ml-1">{suffix}</span>}
     </div>
   </div>
 );
