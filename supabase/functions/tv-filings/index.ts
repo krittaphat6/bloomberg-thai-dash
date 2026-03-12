@@ -292,6 +292,19 @@ function getDocumentLinks(symbol: string, exchange?: string): Record<string, str
     };
   }
 
+  if (ex && ["NYSE", "NASDAQ", "AMEX", "OTC"].includes(ex)) {
+    const secUrl = `https://www.sec.gov/edgar/search/#/q=${encodeURIComponent(ticker)}`;
+    const yahooUrl = `https://finance.yahoo.com/quote/${encodeURIComponent(ticker)}/`;
+    return {
+      annual: secUrl,
+      financial: secUrl,
+      income: secUrl,
+      ratios: secUrl,
+      presentation: yahooUrl,
+      news: yahooUrl,
+    };
+  }
+
   const normalized = symbol.includes(":")
     ? symbol.replace(":", "-")
     : `${exchange || ""}-${ticker}`.replace(/^-/, "");

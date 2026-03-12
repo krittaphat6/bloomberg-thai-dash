@@ -124,11 +124,40 @@ const StatementRow = ({ label, value, format = 'number', indent = false }: { lab
 };
 
 const SectionHeader = ({ title, icon }: { title: string; icon: React.ReactNode }) => (
-  <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-y border-border/30">
+  <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border/30">
     <span className="text-muted-foreground">{icon}</span>
     <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">{title}</span>
   </div>
 );
+
+const StatementMetaRow = ({ label, value }: { label: string; value: string | null | undefined }) => {
+  if (!value) return null;
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)] items-center gap-3 py-1.5 px-3 border-b border-border/20 last:border-b-0">
+      <span className="text-[11px] font-mono text-muted-foreground truncate">{label}</span>
+      <span className="text-[11px] font-mono font-medium text-right text-foreground truncate">{value}</span>
+    </div>
+  );
+};
+
+interface StatementMetricDef {
+  label: string;
+  field: string;
+  format?: 'number' | 'currency' | 'percent' | 'ratio' | 'growth';
+  indent?: boolean;
+}
+
+interface StatementMetaDef {
+  label: string;
+  field: string;
+}
+
+interface StatementSectionDef {
+  title: string;
+  icon: React.ReactNode;
+  rows?: StatementMetricDef[];
+  metaRows?: StatementMetaDef[];
+}
 
 const FinancialStatementsView = ({ financials, symbol }: { financials: Financials; symbol: SymbolSuggestion }) => {
   const [tab, setTab] = useState<StatementTab>('overview');
@@ -144,230 +173,285 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
   ];
 
   const change = financials['change'];
-  const isUp = change != null && change > 0;
   const rec = financials['Recommend.All'];
-  let recLabel = 'Neutral'; let recColor = 'text-muted-foreground';
+  let recLabel = 'Neutral';
+  let recColor = 'text-muted-foreground';
   if (rec != null) {
-    if (rec >= 0.5) { recLabel = 'Strong Buy'; recColor = 'text-green-400'; }
-    else if (rec >= 0.1) { recLabel = 'Buy'; recColor = 'text-green-400'; }
-    else if (rec <= -0.5) { recLabel = 'Strong Sell'; recColor = 'text-red-400'; }
-    else if (rec <= -0.1) { recLabel = 'Sell'; recColor = 'text-red-400'; }
+    if (rec >= 0.5) {
+      recLabel = 'Strong Buy';
+      recColor = 'text-primary';
+    } else if (rec >= 0.1) {
+      recLabel = 'Buy';
+      recColor = 'text-primary';
+    } else if (rec <= -0.5) {
+      recLabel = 'Strong Sell';
+      recColor = 'text-destructive';
+    } else if (rec <= -0.1) {
+      recLabel = 'Sell';
+      recColor = 'text-destructive';
+    }
   }
 
+  const sectionsByTab: Record<StatementTab, StatementSectionDef[]> = {
+    overview: [
+      {
+        title: 'ข้อมูลพื้นฐาน',
+        icon: <Building2 className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'ราคาปิด', field: 'close', format: 'currency' },
+          { label: 'Market Cap', field: 'market_cap_basic' },
+          { label: 'Enterprise Value', field: 'enterprise_value' },
+          { label: '52W High', field: 'price_52_week_high', format: 'currency' },
+          { label: '52W Low', field: 'price_52_week_low', format: 'currency' },
+          { label: 'จำนวนพนักงาน', field: 'number_of_employees' },
+        ],
+        metaRows: [
+          { label: 'Sector', field: 'sector' },
+          { label: 'Industry', field: 'industry' },
+        ],
+      },
+      {
+        title: 'การประเมินมูลค่า',
+        icon: <Calculator className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'P/E (TTM)', field: 'price_earnings_ttm', format: 'ratio' },
+          { label: 'P/B', field: 'price_book_ratio', format: 'ratio' },
+          { label: 'P/S', field: 'price_sales_ratio', format: 'ratio' },
+          { label: 'P/Revenue (TTM)', field: 'price_revenue_ttm', format: 'ratio' },
+          { label: 'EV/EBIT', field: 'enterprise_value_to_ebit', format: 'ratio' },
+          { label: 'EV/Revenue', field: 'enterprise_value_to_revenue', format: 'ratio' },
+          { label: 'PEG Ratio', field: 'peg_ratio', format: 'ratio' },
+        ],
+      },
+      {
+        title: 'ผลตอบแทนราคา',
+        icon: <TrendingUp className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'สัปดาห์', field: 'Perf.W', format: 'growth' },
+          { label: '1 เดือน', field: 'Perf.1M', format: 'growth' },
+          { label: '3 เดือน', field: 'Perf.3M', format: 'growth' },
+          { label: '6 เดือน', field: 'Perf.6M', format: 'growth' },
+          { label: 'YTD', field: 'Perf.YTD', format: 'growth' },
+          { label: '1 ปี', field: 'Perf.Y', format: 'growth' },
+        ],
+      },
+      {
+        title: 'เงินปันผล + เทคนิคอล',
+        icon: <DollarSign className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'Dividend Yield %', field: 'dividends_yield', format: 'percent' },
+          { label: 'Dividend Yield Current %', field: 'dividends_yield_current', format: 'percent' },
+          { label: 'จ่ายปันผลต่อเนื่อง (ปี)', field: 'continuous_dividend_payout', format: 'ratio' },
+          { label: 'เติบโตปันผลต่อเนื่อง (ปี)', field: 'continuous_dividend_growth', format: 'ratio' },
+          { label: 'RSI (14)', field: 'RSI', format: 'ratio' },
+          { label: 'SMA 50', field: 'SMA50', format: 'currency' },
+          { label: 'SMA 200', field: 'SMA200', format: 'currency' },
+        ],
+      },
+    ],
+    income: [
+      {
+        title: 'รายได้',
+        icon: <BarChart3 className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'รายได้รวม (FY)', field: 'total_revenue' },
+          { label: 'รายได้ปีที่แล้ว (FY)', field: 'last_annual_revenue' },
+          { label: 'รายได้รวม (TTM)', field: 'revenue_ttm' },
+          { label: 'ต้นทุนขาย (COGS)', field: 'cost_of_goods' },
+          { label: 'รายได้ต่อพนักงาน', field: 'revenue_per_employee' },
+        ],
+      },
+      {
+        title: 'กำไร + EPS',
+        icon: <TrendingUp className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'กำไรขั้นต้น (FY)', field: 'gross_profit' },
+          { label: 'รายได้จากการดำเนินงาน (FY)', field: 'oper_income' },
+          { label: 'EBITDA (TTM)', field: 'ebitda' },
+          { label: 'กำไรสุทธิ (FY)', field: 'net_income' },
+          { label: 'EPS Basic (TTM)', field: 'earnings_per_share_basic_ttm', format: 'currency' },
+          { label: 'EPS Diluted (TTM)', field: 'earnings_per_share_diluted_ttm', format: 'currency' },
+          { label: 'EPS Diluted (MRQ)', field: 'earnings_per_share_fq', format: 'currency' },
+        ],
+      },
+      {
+        title: 'การเติบโต',
+        icon: <TrendingUp className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'Revenue Growth YoY (FY)', field: 'total_revenue_yoy_growth_fy', format: 'growth' },
+          { label: 'Revenue Growth YoY (TTM)', field: 'total_revenue_yoy_growth_ttm', format: 'growth' },
+          { label: 'EPS Growth YoY (FY)', field: 'earnings_per_share_diluted_yoy_growth_fy', format: 'growth' },
+          { label: 'EBITDA Growth YoY (FY)', field: 'ebitda_yoy_growth_fy', format: 'growth' },
+          { label: 'Net Income Growth YoY (FY)', field: 'net_income_yoy_growth_fy', format: 'growth' },
+        ],
+      },
+    ],
+    balance: [
+      {
+        title: 'สินทรัพย์',
+        icon: <BarChart3 className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'สินทรัพย์รวม', field: 'total_assets' },
+          { label: 'สินทรัพย์หมุนเวียน', field: 'total_current_assets' },
+          { label: 'เงินสดและรายการเทียบเท่า', field: 'cash_n_equivalents_fq', indent: true },
+          { label: 'ลูกหนี้การค้า', field: 'accounts_receivable', indent: true },
+          { label: 'สินค้าคงเหลือ', field: 'inventories_total', indent: true },
+          { label: 'ที่ดิน อาคาร อุปกรณ์ (สุทธิ)', field: 'net_ppe' },
+          { label: 'ค่าความนิยม', field: 'goodwill' },
+        ],
+      },
+      {
+        title: 'หนี้สิน + ส่วนผู้ถือหุ้น',
+        icon: <PieChart className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'หนี้สินรวม', field: 'total_liabilities_fq' },
+          { label: 'หนี้สินหมุนเวียน', field: 'total_current_liabilities' },
+          { label: 'หนี้สินรวมทั้งหมด', field: 'total_debt' },
+          { label: 'หนี้สินสุทธิ', field: 'net_debt' },
+          { label: 'ส่วนของผู้ถือหุ้นรวม', field: 'total_equity' },
+          { label: 'มูลค่าตามบัญชี/หุ้น', field: 'book_value_per_share', format: 'currency' },
+        ],
+      },
+    ],
+    cashflow: [
+      {
+        title: 'กระแสเงินสด',
+        icon: <DollarSign className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'กระแสเงินสดจากดำเนินงาน (TTM)', field: 'cash_f_operating_activities_ttm' },
+          { label: 'กระแสเงินสดจากดำเนินงาน (FY)', field: 'cash_f_operating_activities' },
+          { label: 'ค่าใช้จ่ายลงทุน (TTM)', field: 'capital_expenditures_ttm' },
+          { label: 'กระแสเงินสดจากการลงทุน (TTM)', field: 'cash_f_investing_activities_ttm' },
+          { label: 'Free Cash Flow', field: 'free_cash_flow' },
+          { label: 'Free Cash Flow (TTM)', field: 'free_cash_flow_ttm' },
+          { label: 'กระแสเงินสดจากจัดหาเงินทุน (TTM)', field: 'cash_f_financing_activities_ttm' },
+          { label: 'เงินปันผลจ่าย (FY)', field: 'dividends_paid' },
+        ],
+      },
+    ],
+    ratios: [
+      {
+        title: 'Margins',
+        icon: <PieChart className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'Gross Margin (TTM)', field: 'gross_margin', format: 'percent' },
+          { label: 'Operating Margin (TTM)', field: 'operating_margin', format: 'percent' },
+          { label: 'Net Margin (TTM)', field: 'net_margin', format: 'percent' },
+          { label: 'EBITDA Margin (TTM)', field: 'ebitda_margin', format: 'percent' },
+          { label: 'Pre-tax Margin', field: 'pre_tax_margin', format: 'percent' },
+        ],
+      },
+      {
+        title: 'Returns + Solvency',
+        icon: <TrendingUp className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'ROE (TTM)', field: 'return_on_equity', format: 'percent' },
+          { label: 'ROA (TTM)', field: 'return_on_assets', format: 'percent' },
+          { label: 'ROIC (TTM)', field: 'return_on_invested_capital', format: 'percent' },
+          { label: 'Debt/Equity', field: 'debt_to_equity', format: 'ratio' },
+          { label: 'Current Ratio', field: 'current_ratio', format: 'ratio' },
+          { label: 'Quick Ratio', field: 'quick_ratio', format: 'ratio' },
+        ],
+      },
+      {
+        title: 'Valuation',
+        icon: <Calculator className="w-3.5 h-3.5" />,
+        rows: [
+          { label: 'P/E (TTM)', field: 'price_earnings_ttm', format: 'ratio' },
+          { label: 'P/S', field: 'price_sales_ratio', format: 'ratio' },
+          { label: 'P/Revenue (TTM)', field: 'price_revenue_ttm', format: 'ratio' },
+          { label: 'EV/EBIT', field: 'enterprise_value_to_ebit', format: 'ratio' },
+          { label: 'EV/Revenue', field: 'enterprise_value_to_revenue', format: 'ratio' },
+          { label: 'PEG Ratio', field: 'peg_ratio', format: 'ratio' },
+        ],
+      },
+    ],
+  };
+
+  const statCards = [
+    { label: 'MCap', value: fmt(financials['market_cap_basic']) },
+    { label: 'P/E', value: fmtRatio(financials['price_earnings_ttm']) },
+    { label: 'P/B', value: fmtRatio(financials['price_book_ratio']) },
+    { label: 'Div Yield', value: fmtPct(financials['dividends_yield']) },
+  ];
+
   return (
-    <div>
-      {/* Price Header */}
-      <div className="px-4 py-3 flex items-center justify-between border-b border-border/30">
-        <div className="flex items-center gap-3">
-          <span className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['close'])}</span>
-          {change != null && (
-            <span className={`text-sm font-mono font-medium ${isUp ? 'text-green-400' : 'text-red-400'}`}>
-              {isUp ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className={`text-[10px] font-mono ${recColor} border-current`}>
+    <div className="space-y-3 p-3">
+      <div className="rounded-lg border border-border bg-card/30 overflow-hidden">
+        <div className="px-3 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/30">
+          <div>
+            <div className="text-[10px] font-mono text-muted-foreground">{symbol.exchange}:{symbol.symbol}</div>
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-mono font-bold text-foreground">{fmtPrice(financials['close'])}</span>
+              {change != null && !isNaN(change) && (
+                <span className={`text-sm font-mono font-medium ${colorVal(change)}`}>
+                  {Number(change) > 0 ? '▲' : '▼'} {fmtPct(Math.abs(Number(change)))}
+                </span>
+              )}
+            </div>
+          </div>
+          <Badge variant="outline" className={`text-[10px] font-mono border-current ${recColor}`}>
             {recLabel}
           </Badge>
-          {financials['market_cap_basic'] && (
-            <Badge variant="outline" className="text-[10px] font-mono">
-              MCap {fmt(financials['market_cap_basic'])}
-            </Badge>
-          )}
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-3">
+          {statCards.map((stat) => (
+            <div key={stat.label} className="rounded-md border border-border/40 bg-background/40 px-2.5 py-2">
+              <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">{stat.label}</div>
+              <div className="text-[12px] font-mono font-semibold text-foreground truncate">{stat.value}</div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Statement Tabs */}
-      <div className="flex items-center gap-0.5 px-3 py-2 border-b border-border overflow-x-auto">
-        {tabs.map(t => (
-          <button
-            key={t.value}
-            onClick={() => setTab(t.value)}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[10px] font-mono border transition-colors whitespace-nowrap ${
-              tab === t.value
-                ? 'bg-primary/10 border-primary/30 text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
-            }`}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <div className="rounded-lg border border-border bg-card/20 overflow-hidden">
+        <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-border overflow-x-auto">
+          {tabs.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setTab(t.value)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-mono border transition-colors whitespace-nowrap ${
+                tab === t.value
+                  ? 'bg-primary/10 border-primary/30 text-primary'
+                  : 'border-border/30 text-muted-foreground hover:text-foreground hover:bg-muted/40'
+              }`}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-      {/* Content */}
-      <div className="divide-y divide-border/20">
-        {tab === 'overview' && (
-          <>
-            <SectionHeader title="ข้อมูลพื้นฐาน" icon={<Building2 className="w-3.5 h-3.5" />} />
-            <StatementRow label="ราคาปิด" value={financials['close']} format="currency" />
-            <StatementRow label="Market Cap" value={financials['market_cap_basic']} format="number" />
-            <StatementRow label="Enterprise Value" value={financials['enterprise_value']} format="number" />
-            <StatementRow label="52W High" value={financials['price_52_week_high']} format="currency" />
-            <StatementRow label="52W Low" value={financials['price_52_week_low']} format="currency" />
-            {financials['sector'] && <div className="flex items-center justify-between py-1.5 px-3"><span className="text-[11px] font-mono text-muted-foreground">Sector</span><span className="text-[11px] font-mono font-medium text-foreground">{financials['sector']}</span></div>}
-            {financials['industry'] && <div className="flex items-center justify-between py-1.5 px-3"><span className="text-[11px] font-mono text-muted-foreground">Industry</span><span className="text-[11px] font-mono font-medium text-foreground">{financials['industry']}</span></div>}
-            <StatementRow label="จำนวนพนักงาน" value={financials['number_of_employees']} format="number" />
+        <div className="p-3 grid gap-3 xl:grid-cols-2">
+          {sectionsByTab[tab].map((section) => {
+            const metricRows = section.rows || [];
+            const metaRows = section.metaRows || [];
+            const hasAnyMetric = metricRows.some((row) => financials[row.field] != null && !isNaN(financials[row.field]));
+            const hasAnyMeta = metaRows.some((row) => Boolean(financials[row.field]));
+            if (!hasAnyMetric && !hasAnyMeta) return null;
 
-            <SectionHeader title="การประเมินมูลค่า" icon={<Calculator className="w-3.5 h-3.5" />} />
-            <StatementRow label="P/E (TTM)" value={financials['price_earnings_ttm']} format="ratio" />
-            <StatementRow label="P/B" value={financials['price_book_ratio']} format="ratio" />
-            <StatementRow label="P/S" value={financials['price_sales_ratio']} format="ratio" />
-            <StatementRow label="P/Revenue (TTM)" value={financials['price_revenue_ttm']} format="ratio" />
-            <StatementRow label="EV/EBIT" value={financials['enterprise_value_to_ebit']} format="ratio" />
-            <StatementRow label="EV/Revenue" value={financials['enterprise_value_to_revenue']} format="ratio" />
-            <StatementRow label="PEG Ratio" value={financials['peg_ratio']} format="ratio" />
-
-            <SectionHeader title="ผลตอบแทนราคา" icon={<TrendingUp className="w-3.5 h-3.5" />} />
-            <StatementRow label="สัปดาห์" value={financials['Perf.W']} format="growth" />
-            <StatementRow label="1 เดือน" value={financials['Perf.1M']} format="growth" />
-            <StatementRow label="3 เดือน" value={financials['Perf.3M']} format="growth" />
-            <StatementRow label="6 เดือน" value={financials['Perf.6M']} format="growth" />
-            <StatementRow label="YTD" value={financials['Perf.YTD']} format="growth" />
-            <StatementRow label="1 ปี" value={financials['Perf.Y']} format="growth" />
-
-            <SectionHeader title="เงินปันผล" icon={<DollarSign className="w-3.5 h-3.5" />} />
-            <StatementRow label="Dividend Yield %" value={financials['dividends_yield']} format="percent" />
-            <StatementRow label="Dividend Yield Current %" value={financials['dividends_yield_current']} format="percent" />
-            <StatementRow label="จ่ายปันผลต่อเนื่อง (ปี)" value={financials['continuous_dividend_payout']} format="ratio" />
-            <StatementRow label="เติบโตปันผลต่อเนื่อง (ปี)" value={financials['continuous_dividend_growth']} format="ratio" />
-
-            <SectionHeader title="เทคนิคอล" icon={<BarChart3 className="w-3.5 h-3.5" />} />
-            <StatementRow label="RSI (14)" value={financials['RSI']} format="ratio" />
-            <StatementRow label="SMA 50" value={financials['SMA50']} format="currency" />
-            <StatementRow label="SMA 200" value={financials['SMA200']} format="currency" />
-          </>
-        )}
-
-        {tab === 'income' && (
-          <>
-            <SectionHeader title="รายได้" icon={<BarChart3 className="w-3.5 h-3.5" />} />
-            <StatementRow label="รายได้รวม (FY)" value={financials['total_revenue']} format="number" />
-            <StatementRow label="รายได้ปีที่แล้ว (FY)" value={financials['last_annual_revenue']} format="number" />
-            <StatementRow label="รายได้รวม (TTM)" value={financials['revenue_ttm']} format="number" />
-            <StatementRow label="ต้นทุนขาย (COGS)" value={financials['cost_of_goods']} format="number" />
-            <StatementRow label="รายได้ต่อพนักงาน" value={financials['revenue_per_employee']} format="number" />
-
-            <SectionHeader title="กำไร" icon={<TrendingUp className="w-3.5 h-3.5" />} />
-            <StatementRow label="กำไรขั้นต้น (FY)" value={financials['gross_profit']} format="number" />
-            <StatementRow label="กำไรขั้นต้น (MRQ)" value={financials['gross_profit_fq']} format="number" />
-            <StatementRow label="ค่าใช้จ่ายดำเนินงาน" value={financials['operating_expenses']} format="number" />
-            <StatementRow label="รายได้จากการดำเนินงาน (FY)" value={financials['oper_income']} format="number" />
-            <StatementRow label="รายได้จากการดำเนินงาน (MRQ)" value={financials['oper_income_fq']} format="number" />
-            <StatementRow label="EBITDA (TTM)" value={financials['ebitda']} format="number" />
-            <StatementRow label="กำไรสุทธิ (FY)" value={financials['net_income']} format="number" />
-            <StatementRow label="กำไรสุทธิ (TTM)" value={financials['net_income_ttm']} format="number" />
-
-            <SectionHeader title="ค่าใช้จ่าย" icon={<LayoutList className="w-3.5 h-3.5" />} />
-            <StatementRow label="ดอกเบี้ยจ่าย" value={financials['interest_expense_fq']} format="number" />
-            <StatementRow label="ภาษีเงินได้" value={financials['tax_expense_fq']} format="number" />
-            <StatementRow label="R&D" value={financials['research_and_dev']} format="number" />
-            <StatementRow label="SG&A" value={financials['sell_gen_admin']} format="number" />
-
-            <SectionHeader title="กำไรต่อหุ้น" icon={<DollarSign className="w-3.5 h-3.5" />} />
-            <StatementRow label="EPS Basic (FY)" value={financials['basic_eps_net_income']} format="currency" />
-            <StatementRow label="EPS Basic (TTM)" value={financials['earnings_per_share_basic_ttm']} format="currency" />
-            <StatementRow label="EPS Diluted (FY)" value={financials['last_annual_eps']} format="currency" />
-            <StatementRow label="EPS Diluted (TTM)" value={financials['earnings_per_share_diluted_ttm']} format="currency" />
-            <StatementRow label="EPS Diluted (MRQ)" value={financials['earnings_per_share_fq']} format="currency" />
-
-            <SectionHeader title="การเติบโต" icon={<TrendingUp className="w-3.5 h-3.5" />} />
-            <StatementRow label="Revenue Growth YoY (FY)" value={financials['total_revenue_yoy_growth_fy']} format="growth" />
-            <StatementRow label="Revenue Growth QoQ" value={financials['total_revenue_qoq_growth_fq']} format="growth" />
-            <StatementRow label="Revenue Growth YoY (TTM)" value={financials['total_revenue_yoy_growth_ttm']} format="growth" />
-            <StatementRow label="EPS Growth YoY (FY)" value={financials['earnings_per_share_diluted_yoy_growth_fy']} format="growth" />
-            <StatementRow label="EPS Growth YoY (TTM)" value={financials['earnings_per_share_diluted_yoy_growth_ttm']} format="growth" />
-            <StatementRow label="EBITDA Growth YoY (FY)" value={financials['ebitda_yoy_growth_fy']} format="growth" />
-            <StatementRow label="Net Income Growth YoY (FY)" value={financials['net_income_yoy_growth_fy']} format="growth" />
-          </>
-        )}
-
-        {tab === 'balance' && (
-          <>
-            <SectionHeader title="สินทรัพย์" icon={<BarChart3 className="w-3.5 h-3.5" />} />
-            <StatementRow label="สินทรัพย์รวม" value={financials['total_assets']} format="number" />
-            <StatementRow label="สินทรัพย์หมุนเวียน" value={financials['total_current_assets']} format="number" />
-            <StatementRow label="เงินสดและรายการเทียบเท่า" value={financials['cash_n_equivalents_fq']} format="number" indent />
-            <StatementRow label="เงินสด + เงินลงทุนระยะสั้น" value={financials['cash_n_short_term_invest_fq']} format="number" indent />
-            <StatementRow label="ลูกหนี้การค้า" value={financials['accounts_receivable']} format="number" indent />
-            <StatementRow label="สินค้าคงเหลือ" value={financials['inventories_total']} format="number" indent />
-            <StatementRow label="ที่ดิน อาคาร อุปกรณ์ (สุทธิ)" value={financials['net_ppe']} format="number" />
-            <StatementRow label="ค่าความนิยม" value={financials['goodwill']} format="number" />
-            <StatementRow label="สินทรัพย์ไม่มีตัวตน" value={financials['intangibles_total']} format="number" />
-
-            <SectionHeader title="หนี้สิน" icon={<TrendingDown className="w-3.5 h-3.5" />} />
-            <StatementRow label="หนี้สินรวม" value={financials['total_liabilities_fq']} format="number" />
-            <StatementRow label="หนี้สินหมุนเวียน" value={financials['total_current_liabilities']} format="number" />
-            <StatementRow label="เจ้าหนี้การค้า" value={financials['accounts_payable']} format="number" indent />
-            <StatementRow label="หนี้สินระยะยาว" value={financials['long_term_debt']} format="number" />
-            <StatementRow label="หนี้สินระยะสั้น" value={financials['short_term_debt']} format="number" />
-            <StatementRow label="หนี้สินรวมทั้งหมด" value={financials['total_debt']} format="number" />
-            <StatementRow label="หนี้สินสุทธิ" value={financials['net_debt']} format="number" />
-
-            <SectionHeader title="ส่วนของผู้ถือหุ้น" icon={<PieChart className="w-3.5 h-3.5" />} />
-            <StatementRow label="ส่วนของผู้ถือหุ้นรวม" value={financials['total_equity']} format="number" />
-            <StatementRow label="กำไรสะสม" value={financials['retained_earnings']} format="number" />
-            <StatementRow label="ส่วนของผู้ถือหุ้นสามัญ" value={financials['common_equity_total']} format="number" />
-            <StatementRow label="มูลค่าตามบัญชี/หุ้น" value={financials['book_value_per_share']} format="currency" />
-            <StatementRow label="มูลค่าตามบัญชีจับต้องได้/หุ้น" value={financials['tangible_book_value_per_share']} format="currency" />
-          </>
-        )}
-
-        {tab === 'cashflow' && (
-          <>
-            <SectionHeader title="กระแสเงินสดจากการดำเนินงาน" icon={<DollarSign className="w-3.5 h-3.5" />} />
-            <StatementRow label="กระแสเงินสดจากดำเนินงาน (TTM)" value={financials['cash_f_operating_activities_ttm']} format="number" />
-            <StatementRow label="กระแสเงินสดจากดำเนินงาน (FY)" value={financials['cash_f_operating_activities']} format="number" />
-
-            <SectionHeader title="การลงทุน" icon={<BarChart3 className="w-3.5 h-3.5" />} />
-            <StatementRow label="ค่าใช้จ่ายลงทุน (TTM)" value={financials['capital_expenditures_ttm']} format="number" />
-            <StatementRow label="ค่าใช้จ่ายลงทุน (FY)" value={financials['capital_expenditures']} format="number" />
-            <StatementRow label="กระแสเงินสดจากการลงทุน (TTM)" value={financials['cash_f_investing_activities_ttm']} format="number" />
-
-            <SectionHeader title="กระแสเงินสดอิสระ" icon={<TrendingUp className="w-3.5 h-3.5" />} />
-            <StatementRow label="Free Cash Flow" value={financials['free_cash_flow']} format="number" />
-            <StatementRow label="Free Cash Flow (TTM)" value={financials['free_cash_flow_ttm']} format="number" />
-            <StatementRow label="Free Cash Flow (FY)" value={financials['free_cash_flow_fy']} format="number" />
-
-            <SectionHeader title="จัดหาเงินทุน" icon={<LayoutList className="w-3.5 h-3.5" />} />
-            <StatementRow label="กระแสเงินสดจากจัดหาเงินทุน (TTM)" value={financials['cash_f_financing_activities_ttm']} format="number" />
-            <StatementRow label="เงินปันผลจ่าย (FY)" value={financials['dividends_paid']} format="number" />
-            <StatementRow label="เงินปันผลจ่าย (TTM)" value={financials['total_cash_dividends_paid_ttm']} format="number" />
-          </>
-        )}
-
-        {tab === 'ratios' && (
-          <>
-            <SectionHeader title="อัตรากำไร (Margins)" icon={<PieChart className="w-3.5 h-3.5" />} />
-            <StatementRow label="Gross Margin (TTM)" value={financials['gross_margin']} format="percent" />
-            <StatementRow label="Gross Margin (MRQ)" value={financials['gross_margin_fq']} format="percent" />
-            <StatementRow label="Operating Margin (TTM)" value={financials['operating_margin']} format="percent" />
-            <StatementRow label="Operating Margin (MRQ)" value={financials['operating_margin_fq']} format="percent" />
-            <StatementRow label="Net Margin (TTM)" value={financials['net_margin']} format="percent" />
-            <StatementRow label="EBITDA Margin (TTM)" value={financials['ebitda_margin']} format="percent" />
-            <StatementRow label="FCF Margin" value={financials['free_cash_flow_margin']} format="percent" />
-            <StatementRow label="Pre-tax Margin" value={financials['pre_tax_margin']} format="percent" />
-
-            <SectionHeader title="ผลตอบแทน (Returns)" icon={<TrendingUp className="w-3.5 h-3.5" />} />
-            <StatementRow label="ROE (TTM)" value={financials['return_on_equity']} format="percent" />
-            <StatementRow label="ROA (TTM)" value={financials['return_on_assets']} format="percent" />
-            <StatementRow label="ROIC (TTM)" value={financials['return_on_invested_capital']} format="percent" />
-
-            <SectionHeader title="อัตราส่วนหนี้สิน" icon={<LayoutList className="w-3.5 h-3.5" />} />
-            <StatementRow label="Debt/Equity" value={financials['debt_to_equity']} format="ratio" />
-            <StatementRow label="Current Ratio" value={financials['current_ratio']} format="ratio" />
-            <StatementRow label="Quick Ratio" value={financials['quick_ratio']} format="ratio" />
-
-            <SectionHeader title="การประเมินมูลค่า" icon={<Calculator className="w-3.5 h-3.5" />} />
-            <StatementRow label="P/E (TTM)" value={financials['price_earnings_ttm']} format="ratio" />
-            <StatementRow label="P/Revenue (TTM)" value={financials['price_revenue_ttm']} format="ratio" />
-            <StatementRow label="P/Cash Flow" value={financials['price_to_operating_cash_flow']} format="ratio" />
-            <StatementRow label="EV/EBIT" value={financials['enterprise_value_to_ebit']} format="ratio" />
-            <StatementRow label="EV/Revenue" value={financials['enterprise_value_to_revenue']} format="ratio" />
-            <StatementRow label="PEG Ratio" value={financials['peg_ratio']} format="ratio" />
-          </>
-        )}
+            return (
+              <div key={section.title} className="rounded-md border border-border/30 bg-background/30 overflow-hidden">
+                <SectionHeader title={section.title} icon={section.icon} />
+                <div>
+                  {metaRows.map((row) => (
+                    <StatementMetaRow key={row.field} label={row.label} value={financials[row.field]} />
+                  ))}
+                  {metricRows.map((row) => (
+                    <StatementRow
+                      key={row.field}
+                      label={row.label}
+                      value={financials[row.field]}
+                      format={row.format || 'number'}
+                      indent={row.indent}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
