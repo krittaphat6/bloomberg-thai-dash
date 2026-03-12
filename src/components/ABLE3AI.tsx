@@ -562,7 +562,7 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
             }
           } else {
             addThinkingStep('🧠 Gemini 2.5 Flash กำลังประมวลผล...');
-            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}\n${journalContext}`;
+            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}\n${journalContext}\n${filingsContext}`;
             const response = await GeminiService.chat(
               enhancedPrompt,
               conversationHistoryRef.current.slice(0, -1),
