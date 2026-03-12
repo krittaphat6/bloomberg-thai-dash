@@ -272,9 +272,39 @@ serve(async (req) => {
   }
 });
 
-function getTradingViewSymbolUrl(symbol: string, exchange?: string): string {
-  const normalized = symbol.includes(":") ? symbol.replace(":", "-") : `${exchange || ""}-${symbol}`.replace(/^-/, "");
-  return `https://www.tradingview.com/symbols/${normalized}`;
+function extractTicker(symbol: string): string {
+  return symbol.includes(":") ? (symbol.split(":").pop() || symbol) : symbol;
+}
+
+function getDocumentLinks(symbol: string, exchange?: string): Record<string, string> {
+  const ticker = extractTicker(symbol).toUpperCase();
+  const ex = exchange?.toUpperCase();
+
+  if (ex === "SET" || ex === "BKK" || ex === "TFEX") {
+    const base = `https://www.set.or.th/th/market/product/stock/quote/${ticker}`;
+    return {
+      annual: `${base}/financial-statement/latest`,
+      financial: `${base}/financial-statement/company-highlights`,
+      income: `${base}/financial-statement/company-highlights`,
+      ratios: `${base}/financial-statement/company-highlights`,
+      presentation: `${base}/news`,
+      news: `${base}/news`,
+    };
+  }
+
+  const normalized = symbol.includes(":")
+    ? symbol.replace(":", "-")
+    : `${exchange || ""}-${ticker}`.replace(/^-/, "");
+  const tvBase = `https://www.tradingview.com/symbols/${normalized}`;
+
+  return {
+    annual: `${tvBase}/financials-overview/`,
+    financial: `${tvBase}/financials-overview/`,
+    income: `${tvBase}/financials-income-statement/`,
+    ratios: `${tvBase}/financials-statistics-and-ratios/`,
+    presentation: `${tvBase}/news/`,
+    news: `${tvBase}/news/`,
+  };
 }
 
 function generateFilingsFromFinancials(financials: any, symbol: string, typeFilter: string, exchange?: string): any[] {
