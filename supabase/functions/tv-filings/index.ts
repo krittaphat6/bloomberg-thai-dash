@@ -48,6 +48,20 @@ const EXTENDED_COLUMNS = [
   "continuous_dividend_growth", "continuous_dividend_payout",
   "dividends_yield_current",
   "earnings_release_date", "earnings_release_next_date",
+  // Ownership & shares data
+  "total_shares_outstanding", "float_shares_outstanding",
+  "total_shares_outstanding_fundamental",
+  "fund_holding_percent",
+  // Book value
+  "book_value_per_share",
+  "total_equity",
+  // Additional useful fields
+  "beta_1_year", "average_volume_30d_calc",
+  "currency",
+  "country",
+  "type",
+  "logoid",
+  "web_url",
 ];
 
 // Core fields that usually support historical lookback in TV scanner ([1]..[N])
