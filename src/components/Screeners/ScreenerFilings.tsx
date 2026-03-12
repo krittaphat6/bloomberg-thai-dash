@@ -806,11 +806,22 @@ const ScreenerFilings = () => {
                               <span className="text-[11px] font-mono text-muted-foreground">{item.date}</span>
                             </div>
                             <div className="w-32 flex items-center justify-end gap-1.5">
-                              {item.documents.map((doc, di) => (
-                                <Badge key={di} variant="outline" className="text-[9px] font-mono px-1.5 py-0">
-                                  {doc.icon} {doc.label}
-                                </Badge>
-                              ))}
+                              {item.documents.map((doc, di) => {
+                                const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
+                                return (
+                                  <a
+                                    key={di}
+                                    href={doc.url || fallbackUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 hover:bg-primary/10 hover:border-primary/30 cursor-pointer">
+                                      {doc.icon} {doc.label}
+                                    </Badge>
+                                  </a>
+                                );
+                              })}
                             </div>
                           </div>
 
