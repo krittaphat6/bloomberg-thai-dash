@@ -263,7 +263,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
 
           {/* Ownership + Capital Structure */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+            <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
               <SectionTitle title="ความเป็นเจ้าของ" />
               <div className="flex items-center gap-6">
                 <div className="w-28 h-28">
