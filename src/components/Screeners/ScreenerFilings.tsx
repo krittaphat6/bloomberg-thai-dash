@@ -26,6 +26,7 @@ interface FilingDocument {
   type: string;
   label: string;
   icon: string;
+  url?: string;
 }
 
 interface FilingItem {
