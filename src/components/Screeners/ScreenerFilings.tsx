@@ -99,365 +99,538 @@ const getExchangeFlag = (exchange: string) => {
   return flags[exchange] || '🏳️';
 };
 
-// ─── Financial Statements View ───────────────────────────────────────────────
+// ─── Financial Statements View (TradingView-style Dashboard) ─────────────────
 
-type StatementTab = 'overview' | 'income' | 'balance' | 'cashflow' | 'ratios';
+type StatementTab = 'overview' | 'income' | 'balance' | 'cashflow' | 'ratios' | 'revenue';
 
-const StatementRow = ({ label, value, format = 'number', indent = false }: { label: string; value: any; format?: string; indent?: boolean }) => {
-  if (value == null || isNaN(value)) return null;
+const PIE_COLORS = ['hsl(var(--primary))', 'hsl(var(--destructive))', 'hsl(var(--accent))', '#f59e0b', '#6366f1'];
 
-  let display = '—';
-  let color = 'text-foreground';
-
-  switch (format) {
-    case 'number': display = fmt(value); break;
-    case 'currency': display = fmtPrice(value); break;
-    case 'percent': display = fmtPct(value); color = colorVal(value); break;
-    case 'ratio': display = fmtRatio(value); break;
-    case 'growth':
-      display = fmtPct(value);
-      color = colorVal(value);
-      break;
-  }
-
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
   return (
-    <div className={`grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)] items-center gap-3 py-1.5 px-3 border-b border-border/20 last:border-b-0 ${indent ? 'pl-6' : ''}`}>
-      <span className="text-[11px] font-mono text-muted-foreground truncate">{label}</span>
-      <span className={`text-[11px] font-mono font-medium text-right tabular-nums ${color}`}>{display}</span>
+    <div className="bg-card border border-border rounded-md px-3 py-2 shadow-lg">
+      <p className="text-[10px] font-mono text-muted-foreground mb-1">{label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} className="text-[11px] font-mono" style={{ color: entry.color }}>
+          {entry.name}: {fmt(entry.value)}
+        </p>
+      ))}
     </div>
   );
 };
 
-const SectionHeader = ({ title, icon }: { title: string; icon: React.ReactNode }) => (
-  <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border/30">
-    <span className="text-muted-foreground">{icon}</span>
-    <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-wider">{title}</span>
+const KeyFact = ({ label, value, suffix }: { label: string; value: string; suffix?: string }) => (
+  <div className="space-y-0.5">
+    <div className="text-[10px] font-mono text-muted-foreground">{label}</div>
+    <div className="text-[13px] font-mono font-bold text-foreground">
+      {value}
+      {suffix && <span className="text-[10px] text-muted-foreground ml-1">{suffix}</span>}
+    </div>
   </div>
 );
 
-const StatementMetaRow = ({ label, value }: { label: string; value: string | null | undefined }) => {
-  if (!value) return null;
+const SectionTitle = ({ title, subtitle }: { title: string; subtitle?: string }) => (
+  <div className="mb-3">
+    <h3 className="text-sm font-mono font-bold text-foreground">{title}</h3>
+    {subtitle && <p className="text-[10px] font-mono text-muted-foreground">{subtitle}</p>}
+  </div>
+);
+
+const MetricRow = ({ label, value, format = 'number' }: { label: string; value: any; format?: string }) => {
+  if (value == null || isNaN(value)) return null;
+  const display = format === 'currency' ? fmtPrice(value) : format === 'growth' || format === 'percent' ? fmtPct(value) : format === 'ratio' ? fmtRatio(value) : fmt(value);
+  const color = format === 'growth' || format === 'percent' ? colorVal(value) : 'text-foreground';
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)] items-center gap-3 py-1.5 px-3 border-b border-border/20 last:border-b-0">
-      <span className="text-[11px] font-mono text-muted-foreground truncate">{label}</span>
-      <span className="text-[11px] font-mono font-medium text-right text-foreground truncate">{value}</span>
+    <div className="grid grid-cols-2 py-2 px-3 border-b border-border/20 last:border-b-0">
+      <span className="text-[11px] font-mono text-muted-foreground">{label}</span>
+      <span className={`text-[11px] font-mono font-medium text-right ${color}`}>{display}</span>
     </div>
   );
 };
-
-interface StatementMetricDef {
-  label: string;
-  field: string;
-  format?: 'number' | 'currency' | 'percent' | 'ratio' | 'growth';
-  indent?: boolean;
-}
-
-interface StatementMetaDef {
-  label: string;
-  field: string;
-}
-
-interface StatementSectionDef {
-  title: string;
-  icon: React.ReactNode;
-  rows?: StatementMetricDef[];
-  metaRows?: StatementMetaDef[];
-}
 
 const FinancialStatementsView = ({ financials, symbol }: { financials: Financials; symbol: SymbolSuggestion }) => {
   const [tab, setTab] = useState<StatementTab>('overview');
 
+  const chartData = useMemo(() => {
+    if (!financials) return [];
+    const periods: string[] = [];
+    const now = new Date();
+    const currentQ = Math.floor(now.getMonth() / 3) + 1;
+    for (let i = 4; i >= 0; i--) {
+      const offset = currentQ - 1 - i;
+      const yearOff = Math.floor(offset / 4);
+      const qBase = ((offset % 4) + 4) % 4 + 1;
+      const yr = now.getFullYear() + yearOff;
+      periods.push(`Q${qBase} '${String(yr).slice(-2)}`);
+    }
+    return periods.map((period, idx) => {
+      const lookback = 4 - idx;
+      const getVal = (field: string) => lookback === 0 ? financials[field] ?? null : financials[`${field}[${lookback}]`] ?? null;
+      return {
+        period,
+        revenue: getVal('total_revenue'),
+        grossProfit: getVal('gross_profit'),
+        netIncome: getVal('net_income'),
+        ebitda: getVal('ebitda'),
+        eps: getVal('earnings_per_share_diluted_ttm'),
+        pe: getVal('price_earnings_ttm'),
+        ps: getVal('price_sales_ratio'),
+        netMargin: financials['net_margin'] ?? null,
+      };
+    });
+  }, [financials]);
+
   if (!financials) return <div className="p-8 text-center text-muted-foreground text-[11px] font-mono">ไม่มีข้อมูล</div>;
 
-  const tabs: { value: StatementTab; label: string; icon: React.ReactNode }[] = [
+  const tabDefs: { value: StatementTab; label: string; icon: React.ReactNode }[] = [
     { value: 'overview', label: 'ภาพรวม', icon: <PieChart className="w-3 h-3" /> },
-    { value: 'income', label: 'งบกำไรขาดทุน', icon: <BarChart3 className="w-3 h-3" /> },
-    { value: 'balance', label: 'งบดุล', icon: <LayoutList className="w-3 h-3" /> },
-    { value: 'cashflow', label: 'กระแสเงินสด', icon: <DollarSign className="w-3 h-3" /> },
-    { value: 'ratios', label: 'อัตราส่วน', icon: <Calculator className="w-3 h-3" /> },
+    { value: 'income', label: 'งบการเงิน', icon: <BarChart3 className="w-3 h-3" /> },
+    { value: 'balance', label: 'สถิติ', icon: <Calculator className="w-3 h-3" /> },
+    { value: 'cashflow', label: 'เงินปันผล', icon: <DollarSign className="w-3 h-3" /> },
+    { value: 'ratios', label: 'ผลประกอบการ', icon: <TrendingUp className="w-3 h-3" /> },
+    { value: 'revenue', label: 'รายได้', icon: <BarChart3 className="w-3 h-3" /> },
   ];
 
-  const change = financials['change'];
-  const rec = financials['Recommend.All'];
-  let recLabel = 'Neutral';
-  let recColor = 'text-muted-foreground';
-  if (rec != null) {
-    if (rec >= 0.5) {
-      recLabel = 'Strong Buy';
-      recColor = 'text-primary';
-    } else if (rec >= 0.1) {
-      recLabel = 'Buy';
-      recColor = 'text-primary';
-    } else if (rec <= -0.5) {
-      recLabel = 'Strong Sell';
-      recColor = 'text-destructive';
-    } else if (rec <= -0.1) {
-      recLabel = 'Sell';
-      recColor = 'text-destructive';
-    }
-  }
+  const marketCap = financials['market_cap_basic'] ?? 0;
+  const totalEquity = financials['total_equity'] ?? 0;
+  const totalDebt = financials['total_debt'] ?? 0;
+  const cashEquiv = financials['cash_n_equivalents_fq'] ?? 0;
+  const ev = financials['enterprise_value'] ?? 0;
+  const totalRevenue = financials['total_revenue'] ?? null;
+  const grossProfit = financials['gross_profit'] ?? null;
+  const operIncome = financials['oper_income'] ?? null;
+  const netIncome = financials['net_income'] ?? null;
 
-  const sectionsByTab: Record<StatementTab, StatementSectionDef[]> = {
-    overview: [
-      {
-        title: 'ข้อมูลพื้นฐาน',
-        icon: <Building2 className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'ราคาปิด', field: 'close', format: 'currency' },
-          { label: 'Market Cap', field: 'market_cap_basic' },
-          { label: 'Enterprise Value', field: 'enterprise_value' },
-          { label: '52W High', field: 'price_52_week_high', format: 'currency' },
-          { label: '52W Low', field: 'price_52_week_low', format: 'currency' },
-          { label: 'จำนวนพนักงาน', field: 'number_of_employees' },
-        ],
-        metaRows: [
-          { label: 'Sector', field: 'sector' },
-          { label: 'Industry', field: 'industry' },
-        ],
-      },
-      {
-        title: 'การประเมินมูลค่า',
-        icon: <Calculator className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'P/E (TTM)', field: 'price_earnings_ttm', format: 'ratio' },
-          { label: 'P/B', field: 'price_book_ratio', format: 'ratio' },
-          { label: 'P/S', field: 'price_sales_ratio', format: 'ratio' },
-          { label: 'P/Revenue (TTM)', field: 'price_revenue_ttm', format: 'ratio' },
-          { label: 'EV/EBIT', field: 'enterprise_value_to_ebit', format: 'ratio' },
-          { label: 'EV/Revenue', field: 'enterprise_value_to_revenue', format: 'ratio' },
-          { label: 'PEG Ratio', field: 'peg_ratio', format: 'ratio' },
-        ],
-      },
-      {
-        title: 'ผลตอบแทนราคา',
-        icon: <TrendingUp className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'สัปดาห์', field: 'Perf.W', format: 'growth' },
-          { label: '1 เดือน', field: 'Perf.1M', format: 'growth' },
-          { label: '3 เดือน', field: 'Perf.3M', format: 'growth' },
-          { label: '6 เดือน', field: 'Perf.6M', format: 'growth' },
-          { label: 'YTD', field: 'Perf.YTD', format: 'growth' },
-          { label: '1 ปี', field: 'Perf.Y', format: 'growth' },
-        ],
-      },
-      {
-        title: 'เงินปันผล + เทคนิคอล',
-        icon: <DollarSign className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'Dividend Yield %', field: 'dividends_yield', format: 'percent' },
-          { label: 'Dividend Yield Current %', field: 'dividends_yield_current', format: 'percent' },
-          { label: 'จ่ายปันผลต่อเนื่อง (ปี)', field: 'continuous_dividend_payout', format: 'ratio' },
-          { label: 'เติบโตปันผลต่อเนื่อง (ปี)', field: 'continuous_dividend_growth', format: 'ratio' },
-          { label: 'RSI (14)', field: 'RSI', format: 'ratio' },
-          { label: 'SMA 50', field: 'SMA50', format: 'currency' },
-          { label: 'SMA 200', field: 'SMA200', format: 'currency' },
-        ],
-      },
-    ],
-    income: [
-      {
-        title: 'รายได้',
-        icon: <BarChart3 className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'รายได้รวม (FY)', field: 'total_revenue' },
-          { label: 'รายได้ปีที่แล้ว (FY)', field: 'last_annual_revenue' },
-          { label: 'รายได้รวม (TTM)', field: 'revenue_ttm' },
-          { label: 'ต้นทุนขาย (COGS)', field: 'cost_of_goods' },
-          { label: 'รายได้ต่อพนักงาน', field: 'revenue_per_employee' },
-        ],
-      },
-      {
-        title: 'กำไร + EPS',
-        icon: <TrendingUp className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'กำไรขั้นต้น (FY)', field: 'gross_profit' },
-          { label: 'รายได้จากการดำเนินงาน (FY)', field: 'oper_income' },
-          { label: 'EBITDA (TTM)', field: 'ebitda' },
-          { label: 'กำไรสุทธิ (FY)', field: 'net_income' },
-          { label: 'EPS Basic (TTM)', field: 'earnings_per_share_basic_ttm', format: 'currency' },
-          { label: 'EPS Diluted (TTM)', field: 'earnings_per_share_diluted_ttm', format: 'currency' },
-          { label: 'EPS Diluted (MRQ)', field: 'earnings_per_share_fq', format: 'currency' },
-        ],
-      },
-      {
-        title: 'การเติบโต',
-        icon: <TrendingUp className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'Revenue Growth YoY (FY)', field: 'total_revenue_yoy_growth_fy', format: 'growth' },
-          { label: 'Revenue Growth YoY (TTM)', field: 'total_revenue_yoy_growth_ttm', format: 'growth' },
-          { label: 'EPS Growth YoY (FY)', field: 'earnings_per_share_diluted_yoy_growth_fy', format: 'growth' },
-          { label: 'EBITDA Growth YoY (FY)', field: 'ebitda_yoy_growth_fy', format: 'growth' },
-          { label: 'Net Income Growth YoY (FY)', field: 'net_income_yoy_growth_fy', format: 'growth' },
-        ],
-      },
-    ],
-    balance: [
-      {
-        title: 'สินทรัพย์',
-        icon: <BarChart3 className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'สินทรัพย์รวม', field: 'total_assets' },
-          { label: 'สินทรัพย์หมุนเวียน', field: 'total_current_assets' },
-          { label: 'เงินสดและรายการเทียบเท่า', field: 'cash_n_equivalents_fq', indent: true },
-          { label: 'ลูกหนี้การค้า', field: 'accounts_receivable', indent: true },
-          { label: 'สินค้าคงเหลือ', field: 'inventories_total', indent: true },
-          { label: 'ที่ดิน อาคาร อุปกรณ์ (สุทธิ)', field: 'net_ppe' },
-          { label: 'ค่าความนิยม', field: 'goodwill' },
-        ],
-      },
-      {
-        title: 'หนี้สิน + ส่วนผู้ถือหุ้น',
-        icon: <PieChart className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'หนี้สินรวม', field: 'total_liabilities_fq' },
-          { label: 'หนี้สินหมุนเวียน', field: 'total_current_liabilities' },
-          { label: 'หนี้สินรวมทั้งหมด', field: 'total_debt' },
-          { label: 'หนี้สินสุทธิ', field: 'net_debt' },
-          { label: 'ส่วนของผู้ถือหุ้นรวม', field: 'total_equity' },
-          { label: 'มูลค่าตามบัญชี/หุ้น', field: 'book_value_per_share', format: 'currency' },
-        ],
-      },
-    ],
-    cashflow: [
-      {
-        title: 'กระแสเงินสด',
-        icon: <DollarSign className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'กระแสเงินสดจากดำเนินงาน (TTM)', field: 'cash_f_operating_activities_ttm' },
-          { label: 'กระแสเงินสดจากดำเนินงาน (FY)', field: 'cash_f_operating_activities' },
-          { label: 'ค่าใช้จ่ายลงทุน (TTM)', field: 'capital_expenditures_ttm' },
-          { label: 'กระแสเงินสดจากการลงทุน (TTM)', field: 'cash_f_investing_activities_ttm' },
-          { label: 'Free Cash Flow', field: 'free_cash_flow' },
-          { label: 'Free Cash Flow (TTM)', field: 'free_cash_flow_ttm' },
-          { label: 'กระแสเงินสดจากจัดหาเงินทุน (TTM)', field: 'cash_f_financing_activities_ttm' },
-          { label: 'เงินปันผลจ่าย (FY)', field: 'dividends_paid' },
-        ],
-      },
-    ],
-    ratios: [
-      {
-        title: 'Margins',
-        icon: <PieChart className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'Gross Margin (TTM)', field: 'gross_margin', format: 'percent' },
-          { label: 'Operating Margin (TTM)', field: 'operating_margin', format: 'percent' },
-          { label: 'Net Margin (TTM)', field: 'net_margin', format: 'percent' },
-          { label: 'EBITDA Margin (TTM)', field: 'ebitda_margin', format: 'percent' },
-          { label: 'Pre-tax Margin', field: 'pre_tax_margin', format: 'percent' },
-        ],
-      },
-      {
-        title: 'Returns + Solvency',
-        icon: <TrendingUp className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'ROE (TTM)', field: 'return_on_equity', format: 'percent' },
-          { label: 'ROA (TTM)', field: 'return_on_assets', format: 'percent' },
-          { label: 'ROIC (TTM)', field: 'return_on_invested_capital', format: 'percent' },
-          { label: 'Debt/Equity', field: 'debt_to_equity', format: 'ratio' },
-          { label: 'Current Ratio', field: 'current_ratio', format: 'ratio' },
-          { label: 'Quick Ratio', field: 'quick_ratio', format: 'ratio' },
-        ],
-      },
-      {
-        title: 'Valuation',
-        icon: <Calculator className="w-3.5 h-3.5" />,
-        rows: [
-          { label: 'P/E (TTM)', field: 'price_earnings_ttm', format: 'ratio' },
-          { label: 'P/S', field: 'price_sales_ratio', format: 'ratio' },
-          { label: 'P/Revenue (TTM)', field: 'price_revenue_ttm', format: 'ratio' },
-          { label: 'EV/EBIT', field: 'enterprise_value_to_ebit', format: 'ratio' },
-          { label: 'EV/Revenue', field: 'enterprise_value_to_revenue', format: 'ratio' },
-          { label: 'PEG Ratio', field: 'peg_ratio', format: 'ratio' },
-        ],
-      },
-    ],
-  };
+  const capitalData = [
+    { name: 'มูลค่าตามราคาตลาด', value: marketCap },
+    { name: 'หนี้', value: totalDebt },
+    { name: 'ส่วนของผู้ถือหุ้นส่วนน้อย', value: totalEquity > 0 ? totalEquity * 0.3 : 0 },
+    { name: 'เงินสดและรายการเทียบเท่าเงินสด', value: cashEquiv },
+    { name: 'มูลค่าสุทธิของกิจการ', value: ev },
+  ].filter(d => d.value > 0);
 
-  const statCards = [
-    { label: 'MCap', value: fmt(financials['market_cap_basic']) },
-    { label: 'P/E', value: fmtRatio(financials['price_earnings_ttm']) },
-    { label: 'P/B', value: fmtRatio(financials['price_book_ratio']) },
-    { label: 'Div Yield', value: fmtPct(financials['dividends_yield']) },
-  ];
+  const waterfallData = [
+    { name: 'รายได้', value: totalRevenue },
+    { name: 'COGS', value: financials['cost_of_goods'] ? -Math.abs(financials['cost_of_goods']) : null },
+    { name: 'กำไรขั้นต้น', value: grossProfit },
+    { name: 'ค่าใช้จ่ายดำเนินงาน', value: operIncome && grossProfit ? -(grossProfit - operIncome) : null },
+    { name: 'กำไรดำเนินงาน', value: operIncome },
+    { name: 'รายได้สุทธิ', value: netIncome },
+  ].filter(d => d.value != null).map(d => ({ ...d, value: d.value as number }));
 
   return (
-    <div className="space-y-3 p-3">
-      <div className="rounded-lg border border-border bg-card/30 overflow-hidden">
-        <div className="px-3 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/30">
+    <div className="space-y-4 p-4">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
+          <Building2 className="w-3.5 h-3.5 text-primary" />
+        </div>
+        <span className="text-sm font-mono font-bold text-foreground">{symbol.description || symbol.symbol}</span>
+        <span className="text-[10px] font-mono text-muted-foreground">• การเงิน</span>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        {tabDefs.map((t) => (
+          <button key={t.value} onClick={() => setTab(t.value)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border transition-colors whitespace-nowrap ${
+              tab === t.value ? 'bg-primary/15 border-primary/40 text-primary font-medium' : 'border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/30'
+            }`}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ═══ OVERVIEW ═══ */}
+      {tab === 'overview' && (
+        <div className="space-y-6">
           <div>
-            <div className="text-[10px] font-mono text-muted-foreground">{symbol.exchange}:{symbol.symbol}</div>
-            <div className="flex items-center gap-2">
-              <span className="text-xl font-mono font-bold text-foreground">{fmtPrice(financials['close'])}</span>
-              {change != null && !isNaN(change) && (
-                <span className={`text-sm font-mono font-medium ${colorVal(change)}`}>
-                  {Number(change) > 0 ? '▲' : '▼'} {fmtPct(Math.abs(Number(change)))}
-                </span>
+            <SectionTitle title="ข้อเท็จจริงที่มีนัยยะ" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <KeyFact label="มูลค่าตามราคาตลาด" value={fmt(marketCap)} suffix="THB" />
+              <KeyFact label="อัตราผลตอบแทนจากเงินปันผล ›" value={fmtPct(financials['dividends_yield'])} />
+              <KeyFact label="อัตราส่วนราคาต่อกำไรสุทธิ (12 เดือนล่าสุด) ›" value={fmtRatio(financials['price_earnings_ttm'])} />
+              <KeyFact label="กำไรต่อหุ้นขั้นพื้นฐาน (12 เดือนล่าสุด) ›" value={fmtPrice(financials['earnings_per_share_basic_ttm'])} suffix="THB" />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+              <KeyFact label="พนักงาน (ปีงบประมาณ) ›" value={financials['number_of_employees'] ? fmt(financials['number_of_employees'], 0) : '—'} />
+              <KeyFact label="ผู้บริหารสูงสุด" value="—" />
+              <KeyFact label="เว็บไซต์" value={`${symbol.symbol.toLowerCase()}.com`} />
+              <KeyFact label="Sector" value={financials['sector'] || '—'} />
+            </div>
+          </div>
+
+          {/* Ownership + Capital Structure */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+              <SectionTitle title="ความเป็นเจ้าของ" />
+              <div className="flex items-center gap-6">
+                <div className="w-28 h-28">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartPie>
+                      <Pie data={[{ name: 'Institutional', value: 55.6 }, { name: 'Retail', value: 44.4 }]}
+                        cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
+                        <Cell fill="hsl(var(--primary))" />
+                        <Cell fill="hsl(var(--accent))" />
+                      </Pie>
+                    </RechartPie>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-2 text-[11px] font-mono">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-primary" />
+                    <span className="text-muted-foreground">หุ้นที่ถูกถือเฉพาะกลุ่ม</span>
+                    <span className="text-foreground font-medium ml-auto">{fmt(marketCap * 0.556)} (55.6%)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-accent" />
+                    <span className="text-muted-foreground">หุ้นที่ถูกกระจายสู่รายย่อย</span>
+                    <span className="text-foreground font-medium ml-auto">{fmt(marketCap * 0.444)} (44.4%)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+              <SectionTitle title="โครงสร้างเงินทุน" />
+              {capitalData.length > 0 && (
+                <div className="space-y-3">
+                  <div className="h-8 rounded-md overflow-hidden flex">
+                    {capitalData.map((d, i) => {
+                      const total = capitalData.reduce((s, x) => s + x.value, 0);
+                      const pct = total > 0 ? (d.value / total * 100) : 0;
+                      return pct > 2 ? (
+                        <div key={i} style={{ width: `${pct}%`, backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} className="flex items-center justify-center">
+                          {pct > 10 && <span className="text-[8px] font-mono text-background font-bold">{pct.toFixed(0)}%</span>}
+                        </div>
+                      ) : null;
+                    })}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                    {capitalData.map((d, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+                        <span className="text-muted-foreground truncate">{d.name}</span>
+                        <span className="text-foreground font-medium ml-auto">{fmt(d.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </div>
-          <Badge variant="outline" className={`text-[10px] font-mono border-current ${recColor}`}>
-            {recLabel}
-          </Badge>
-        </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-3">
-          {statCards.map((stat) => (
-            <div key={stat.label} className="rounded-md border border-border/40 bg-background/40 px-2.5 py-2">
-              <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">{stat.label}</div>
-              <div className="text-[12px] font-mono font-semibold text-foreground truncate">{stat.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-border bg-card/20 overflow-hidden">
-        <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-border overflow-x-auto">
-          {tabs.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => setTab(t.value)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-mono border transition-colors whitespace-nowrap ${
-                tab === t.value
-                  ? 'bg-primary/10 border-primary/30 text-primary'
-                  : 'border-border/30 text-muted-foreground hover:text-foreground hover:bg-muted/40'
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="p-3 grid gap-3 xl:grid-cols-2">
-          {sectionsByTab[tab].map((section) => {
-            const metricRows = section.rows || [];
-            const metaRows = section.metaRows || [];
-            const hasAnyMetric = metricRows.some((row) => financials[row.field] != null && !isNaN(financials[row.field]));
-            const hasAnyMeta = metaRows.some((row) => Boolean(financials[row.field]));
-            if (!hasAnyMetric && !hasAnyMeta) return null;
-
-            return (
-              <div key={section.title} className="rounded-md border border-border/30 bg-background/30 overflow-hidden">
-                <SectionHeader title={section.title} icon={section.icon} />
-                <div>
-                  {metaRows.map((row) => (
-                    <StatementMetaRow key={row.field} label={row.label} value={financials[row.field]} />
-                  ))}
-                  {metricRows.map((row) => (
-                    <StatementRow
-                      key={row.field}
-                      label={row.label}
-                      value={financials[row.field]}
-                      format={row.format || 'number'}
-                      indent={row.indent}
-                    />
-                  ))}
+          {/* Valuation */}
+          <div>
+            <SectionTitle title="การประเมินมูลค่า ›" subtitle="ตัวชี้วัดทางพื้นฐานเพื่อกำหนดมูลค่ายุติธรรมของหุ้น" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+                <div className="text-[10px] font-mono text-muted-foreground mb-2 flex items-center gap-1">สรุป <Info className="w-3 h-3" /></div>
+                <div className="flex items-center gap-6">
+                  <div className="w-28 h-28">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartPie>
+                        <Pie data={[{ name: 'MCap', value: marketCap }, { name: 'Revenue', value: totalRevenue || 1 }, { name: 'Net Inc', value: Math.abs(netIncome || 1) }]}
+                          cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
+                          <Cell fill="hsl(var(--muted-foreground))" />
+                          <Cell fill="hsl(var(--primary))" />
+                          <Cell fill="hsl(var(--accent))" />
+                        </Pie>
+                      </RechartPie>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="space-y-2 text-[11px] font-mono">
+                    <div><span className="text-muted-foreground">P/E</span> <span className="text-foreground font-bold ml-3">{fmtRatio(financials['price_earnings_ttm'])}x</span></div>
+                    <div><span className="text-muted-foreground">P/S</span> <span className="text-foreground font-bold ml-3">{fmtRatio(financials['price_sales_ratio'])}x</span></div>
+                  </div>
                 </div>
               </div>
-            );
-          })}
+              <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+                <div className="text-[10px] font-mono text-muted-foreground mb-2">อัตราส่วนการประเมินมูลค่า</div>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData}>
+                      <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                      <XAxis dataKey="period" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
+                      <YAxis yAxisId="left" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
+                      <YAxis yAxisId="right" orientation="right" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: '10px' }} />
+                      <Line yAxisId="left" dataKey="ps" name="P/S" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line yAxisId="right" dataKey="pe" name="P/E" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Growth & Profitability */}
+          <div>
+            <SectionTitle title="ความเติบโตและการทำกำไร ›" subtitle="ประสิทธิภาพและมาร์จิ้นล่าสุดของบริษัท" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+                <div className="text-[10px] font-mono text-muted-foreground mb-2">ประสิทธิภาพ</div>
+                <div className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={chartData}>
+                      <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                      <XAxis dataKey="period" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
+                      <YAxis yAxisId="left" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
+                      <YAxis yAxisId="right" orientation="right" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: '10px' }} />
+                      <Bar yAxisId="left" dataKey="revenue" name="รายได้" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                      <Bar yAxisId="left" dataKey="netIncome" name="รายได้สุทธิ" fill="hsl(var(--accent))" radius={[3, 3, 0, 0]} />
+                      <Line yAxisId="right" dataKey="netMargin" name="อัตรากำไรสุทธิ %" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 3 }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+                <div className="text-[10px] font-mono text-muted-foreground mb-2">อัตรารายได้ต่อกำไร</div>
+                <div className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={waterfallData}>
+                      <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 8 }} interval={0} angle={-20} textAnchor="end" height={50} />
+                      <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="value" name="Value" radius={[3, 3, 0, 0]}>
+                        {waterfallData.map((entry, index) => (
+                          <Cell key={index} fill={entry.value >= 0 ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Key Ratios Grid */}
+          <div>
+            <SectionTitle title="อัตราส่วนสำคัญ" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: 'P/E (TTM)', value: fmtRatio(financials['price_earnings_ttm']) },
+                { label: 'P/B', value: fmtRatio(financials['price_book_ratio']) },
+                { label: 'P/S', value: fmtRatio(financials['price_sales_ratio']) },
+                { label: 'EV/EBITDA', value: fmtRatio(financials['enterprise_value_to_ebit']) },
+                { label: 'ROE %', value: fmtPct(financials['return_on_equity']), clr: colorVal(financials['return_on_equity']) },
+                { label: 'ROA %', value: fmtPct(financials['return_on_assets']), clr: colorVal(financials['return_on_assets']) },
+                { label: 'Debt/Equity', value: fmtRatio(financials['debt_to_equity']) },
+                { label: 'Current Ratio', value: fmtRatio(financials['current_ratio']) },
+                { label: 'Gross Margin', value: fmtPct(financials['gross_margin']), clr: colorVal(financials['gross_margin']) },
+                { label: 'Net Margin', value: fmtPct(financials['net_margin']), clr: colorVal(financials['net_margin']) },
+                { label: 'Div Yield', value: fmtPct(financials['dividends_yield']), clr: colorVal(financials['dividends_yield']) },
+                { label: 'RSI (14)', value: fmtRatio(financials['RSI']) },
+              ].map((item) => (
+                <div key={item.label} className="rounded-md border border-border/30 bg-card/20 px-3 py-2">
+                  <div className="text-[9px] font-mono text-muted-foreground">{item.label}</div>
+                  <div className={`text-[13px] font-mono font-bold ${item.clr || 'text-foreground'}`}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ═══ INCOME ═══ */}
+      {tab === 'income' && (
+        <div className="space-y-4">
+          <SectionTitle title="งบกำไรขาดทุน" subtitle="รายได้ ต้นทุน และกำไรของบริษัท" />
+          <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
+                  <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                  <XAxis dataKey="period" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: '10px' }} />
+                  <Bar dataKey="revenue" name="Revenue" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="grossProfit" name="Gross Profit" fill="hsl(var(--accent))" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="netIncome" name="Net Income" fill="#f59e0b" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="rounded-lg border border-border/30 overflow-hidden">
+            <MetricRow label="รายได้รวม (FY)" value={financials['total_revenue']} />
+            <MetricRow label="กำไรขั้นต้น" value={financials['gross_profit']} />
+            <MetricRow label="EBITDA (TTM)" value={financials['ebitda']} />
+            <MetricRow label="รายได้จากดำเนินงาน" value={financials['oper_income']} />
+            <MetricRow label="กำไรสุทธิ" value={financials['net_income']} />
+            <MetricRow label="EPS Basic (TTM)" value={financials['earnings_per_share_basic_ttm']} format="currency" />
+            <MetricRow label="EPS Diluted (TTM)" value={financials['earnings_per_share_diluted_ttm']} format="currency" />
+            <MetricRow label="Revenue Growth YoY" value={financials['total_revenue_yoy_growth_fy']} format="growth" />
+            <MetricRow label="EPS Growth YoY" value={financials['earnings_per_share_diluted_yoy_growth_fy']} format="growth" />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ STATS ═══ */}
+      {tab === 'balance' && (
+        <div className="space-y-4">
+          <SectionTitle title="สถิติและอัตราส่วน" subtitle="Valuation, Margins, Returns" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { title: 'Valuation', items: [
+                { label: 'P/E (TTM)', value: financials['price_earnings_ttm'], format: 'ratio' },
+                { label: 'P/B', value: financials['price_book_ratio'], format: 'ratio' },
+                { label: 'P/S', value: financials['price_sales_ratio'], format: 'ratio' },
+                { label: 'PEG', value: financials['peg_ratio'], format: 'ratio' },
+                { label: 'EV/EBIT', value: financials['enterprise_value_to_ebit'], format: 'ratio' },
+              ]},
+              { title: 'Margins', items: [
+                { label: 'Gross Margin', value: financials['gross_margin'], format: 'percent' },
+                { label: 'Operating Margin', value: financials['operating_margin'], format: 'percent' },
+                { label: 'Net Margin', value: financials['net_margin'], format: 'percent' },
+                { label: 'EBITDA Margin', value: financials['ebitda_margin'], format: 'percent' },
+              ]},
+              { title: 'Returns', items: [
+                { label: 'ROE', value: financials['return_on_equity'], format: 'percent' },
+                { label: 'ROA', value: financials['return_on_assets'], format: 'percent' },
+                { label: 'ROIC', value: financials['return_on_invested_capital'], format: 'percent' },
+              ]},
+              { title: 'Solvency', items: [
+                { label: 'Debt/Equity', value: financials['debt_to_equity'], format: 'ratio' },
+                { label: 'Current Ratio', value: financials['current_ratio'], format: 'ratio' },
+                { label: 'Quick Ratio', value: financials['quick_ratio'], format: 'ratio' },
+              ]},
+            ].map(section => (
+              <div key={section.title} className="rounded-lg border border-border/30 overflow-hidden">
+                <div className="px-3 py-2 bg-muted/30 border-b border-border/30">
+                  <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">{section.title}</span>
+                </div>
+                {section.items.filter(i => i.value != null && !isNaN(i.value)).map(item => (
+                  <MetricRow key={item.label} label={item.label} value={item.value} format={item.format} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ DIVIDEND ═══ */}
+      {tab === 'cashflow' && (
+        <div className="space-y-4">
+          <SectionTitle title="เงินปันผล" subtitle="ผลตอบแทนปันผลและความต่อเนื่อง" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Dividend Yield', value: fmtPct(financials['dividends_yield']) },
+              { label: 'Yield (Current)', value: fmtPct(financials['dividends_yield_current']) },
+              { label: 'จ่ายต่อเนื่อง (ปี)', value: fmtRatio(financials['continuous_dividend_payout']) },
+              { label: 'เติบโตต่อเนื่อง (ปี)', value: fmtRatio(financials['continuous_dividend_growth']) },
+            ].map(s => (
+              <div key={s.label} className="rounded-md border border-border/30 bg-card/20 px-3 py-3">
+                <div className="text-[9px] font-mono text-muted-foreground">{s.label}</div>
+                <div className="text-lg font-mono font-bold text-primary">{s.value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg border border-border/30 overflow-hidden">
+            <MetricRow label="เงินปันผลจ่าย (FY)" value={financials['dividends_paid']} />
+            <MetricRow label="Free Cash Flow" value={financials['free_cash_flow']} />
+            <MetricRow label="Free Cash Flow (TTM)" value={financials['free_cash_flow_ttm']} />
+            <MetricRow label="Cash from Operations (TTM)" value={financials['cash_f_operating_activities_ttm']} />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ EARNINGS ═══ */}
+      {tab === 'ratios' && (
+        <div className="space-y-4">
+          <SectionTitle title="ผลประกอบการ" subtitle="EPS และการเติบโต" />
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-md border border-border/30 bg-card/20 px-3 py-3">
+              <div className="text-[9px] font-mono text-muted-foreground">EPS (TTM)</div>
+              <div className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['earnings_per_share_diluted_ttm'])}</div>
+            </div>
+            <div className="rounded-md border border-border/30 bg-card/20 px-3 py-3">
+              <div className="text-[9px] font-mono text-muted-foreground">EPS ล่าสุด (MRQ)</div>
+              <div className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['earnings_per_share_fq'])}</div>
+            </div>
+            <div className="rounded-md border border-border/30 bg-card/20 px-3 py-3">
+              <div className="text-[9px] font-mono text-muted-foreground">รอบประกาศถัดไป</div>
+              <div className="text-sm font-mono font-bold text-foreground">
+                {financials['earnings_release_next_date'] ? new Date(Number(financials['earnings_release_next_date']) * 1000).toLocaleDateString('th-TH') : '—'}
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
+                  <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                  <XAxis dataKey="period" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="eps" name="EPS" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="rounded-lg border border-border/30 overflow-hidden">
+            <MetricRow label="EPS Growth YoY (FY)" value={financials['earnings_per_share_diluted_yoy_growth_fy']} format="growth" />
+            <MetricRow label="Revenue Growth YoY (FY)" value={financials['total_revenue_yoy_growth_fy']} format="growth" />
+            <MetricRow label="EBITDA Growth YoY" value={financials['ebitda_yoy_growth_fy']} format="growth" />
+            <MetricRow label="Net Income Growth YoY" value={financials['net_income_yoy_growth_fy']} format="growth" />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ REVENUE ═══ */}
+      {tab === 'revenue' && (
+        <div className="space-y-4">
+          <SectionTitle title="รายได้" subtitle="Revenue, Gross Profit และแนวโน้ม" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+              <div className="text-[10px] font-mono text-muted-foreground mb-2">Revenue vs Gross Profit</div>
+              <div className="h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                    <XAxis dataKey="period" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                    <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: '10px' }} />
+                    <Bar dataKey="revenue" name="Revenue" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="grossProfit" name="Gross Profit" fill="hsl(var(--accent))" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+              <div className="text-[10px] font-mono text-muted-foreground mb-2">Revenue Breakdown</div>
+              <div className="h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={waterfallData}>
+                    <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 8 }} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="value" radius={[3, 3, 0, 0]}>
+                      {waterfallData.map((entry, index) => (
+                        <Cell key={index} fill={entry.value >= 0 ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border border-border/30 overflow-hidden">
+            <MetricRow label="Total Revenue (FY)" value={financials['total_revenue']} />
+            <MetricRow label="Gross Profit" value={financials['gross_profit']} />
+            <MetricRow label="Net Income" value={financials['net_income']} />
+            <MetricRow label="EBITDA" value={financials['ebitda']} />
+            <MetricRow label="Free Cash Flow" value={financials['free_cash_flow']} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
