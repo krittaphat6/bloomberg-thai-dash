@@ -503,6 +503,7 @@ const ScreenerFilings = () => {
     setSearchQuery('');
     setFilings([]);
     setFinancials(null);
+    setStatementSeries(null);
     setSuggestions([]);
     setExpandedFiling(null);
     setViewMode('choose');
