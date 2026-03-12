@@ -139,10 +139,10 @@ const SectionTitle = ({ title, subtitle }: { title: string; subtitle?: string })
 const MetricRow = ({ label, value, format = 'number' }: { label: string; value: any; format?: string }) => {
   if (value == null || isNaN(value)) return null;
   const display = format === 'currency' ? fmtPrice(value) : format === 'growth' || format === 'percent' ? fmtPct(value) : format === 'ratio' ? fmtRatio(value) : fmt(value);
-  const color = format === 'growth' || format === 'percent' ? colorVal(value) : 'text-terminal-cyan';
+  const color = format === 'growth' || format === 'percent' ? colorVal(value) : 'text-foreground';
   return (
-    <div className="grid grid-cols-2 py-2 px-3 border-b border-border/20 last:border-b-0 hover:bg-muted/20 transition-colors">
-      <span className="text-[11px] font-mono text-muted-foreground/80">{label}</span>
+    <div className="grid grid-cols-2 py-2 px-3 border-b border-border/20 last:border-b-0 hover:bg-muted/10 transition-colors">
+      <span className="text-[11px] font-mono text-muted-foreground/70">{label}</span>
       <span className={`text-[11px] font-mono font-medium text-right ${color}`}>{display}</span>
     </div>
   );
