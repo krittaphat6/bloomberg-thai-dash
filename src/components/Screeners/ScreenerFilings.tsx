@@ -501,9 +501,9 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                 { label: 'Quick Ratio', value: financials['quick_ratio'], format: 'ratio' },
               ]},
             ].map(section => (
-              <div key={section.title} className="rounded-lg border border-border/30 overflow-hidden">
-                <div className="px-3 py-2 bg-muted/30 border-b border-border/30">
-                  <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">{section.title}</span>
+              <div key={section.title} className="rounded-lg border border-terminal-amber/20 overflow-hidden">
+                <div className="px-3 py-2 bg-terminal-amber/5 border-b border-terminal-amber/20">
+                  <span className="text-[10px] font-mono font-bold text-terminal-amber uppercase">{section.title}</span>
                 </div>
                 {section.items.filter(i => i.value != null && !isNaN(i.value)).map(item => (
                   <MetricRow key={item.label} label={item.label} value={item.value} format={item.format} />
