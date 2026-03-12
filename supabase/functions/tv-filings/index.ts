@@ -265,7 +265,7 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("[tv-filings] Error:", error);
-    return new Response(JSON.stringify({ filings: [], financials: null, error: error.message }), {
+    return new Response(JSON.stringify({ filings: [], financials: null, statementSeries: null, error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
