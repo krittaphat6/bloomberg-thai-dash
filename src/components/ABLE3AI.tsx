@@ -593,7 +593,7 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
             }
           } else {
             const response = await OllamaService.chat(
-              `${currentInput}\n\n--- App Data ---\n${contextSummary}`,
+              `${currentInput}\n\n--- App Data ---\n${contextSummary}\n${filingsContext}`,
               conversationHistoryRef.current.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
               selectedModel
             );
