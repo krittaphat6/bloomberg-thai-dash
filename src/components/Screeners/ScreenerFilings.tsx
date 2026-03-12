@@ -271,8 +271,8 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                     <RechartPie>
                       <Pie data={[{ name: 'Institutional', value: 55.6 }, { name: 'Retail', value: 44.4 }]}
                         cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
-                        <Cell fill="hsl(var(--primary))" />
-                        <Cell fill="hsl(var(--accent))" />
+                        <Cell fill="#f59e0b" />
+                        <Cell fill="#06b6d4" />
                       </Pie>
                     </RechartPie>
                   </ResponsiveContainer>
