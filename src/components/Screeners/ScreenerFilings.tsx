@@ -942,9 +942,9 @@ const ScreenerFilings = () => {
         {!selectedSymbol && !showSuggestions && (
           <div className="flex items-center justify-center p-12">
             <div className="text-center space-y-3 max-w-xs">
-              <Building2 className="w-10 h-10 mx-auto text-terminal-amber/40" />
+               <Building2 className="w-10 h-10 mx-auto text-muted-foreground/40" />
               <div>
-                <h3 className="text-sm font-mono font-bold text-terminal-amber mb-1">ค้นหาข้อมูลบริษัท</h3>
+                 <h3 className="text-sm font-mono font-bold text-foreground mb-1">ค้นหาข้อมูลบริษัท</h3>
                 <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
                   พิมพ์ชื่อหรือตัวย่อหุ้นเพื่อดูงบการเงินขั้นต้น หรือเอกสารการเงินของบริษัท
                 </p>
