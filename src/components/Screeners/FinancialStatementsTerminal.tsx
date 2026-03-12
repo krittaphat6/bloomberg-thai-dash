@@ -48,7 +48,7 @@ interface FinancialStatementsTerminalProps {
 
 type TerminalTab = 'overview' | 'income' | 'stats' | 'dividend' | 'earnings' | 'revenue';
 
-const TABS: { value: TerminalTab; label: string; icon: React.ReactNode }[] = [
+const TABS: { value: TerminalTab; label: string; icon: ReactNode }[] = [
   { value: 'overview', label: 'ภาพรวม', icon: <PieChart className="h-3.5 w-3.5" /> },
   { value: 'income', label: 'งบการเงิน', icon: <FileSpreadsheet className="h-3.5 w-3.5" /> },
   { value: 'stats', label: 'สถิติ', icon: <Calculator className="h-3.5 w-3.5" /> },
