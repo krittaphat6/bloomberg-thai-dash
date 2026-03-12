@@ -826,10 +826,18 @@ const ScreenerFilings = () => {
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
                                 {item.documents.map((doc, di) => (
-                                  <div key={di} className="flex items-center gap-1 px-2 py-1 rounded bg-muted/30 border border-border/30">
+                                  <button
+                                    key={di}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
+                                      window.open(doc.url || fallbackUrl, '_blank', 'noopener,noreferrer');
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-1 rounded bg-muted/30 border border-border/30 hover:bg-muted/50 transition-colors"
+                                  >
                                     <span className="text-[11px]">{doc.icon}</span>
                                     <span className="text-[10px] font-mono text-foreground">{doc.label}</span>
-                                  </div>
+                                  </button>
                                 ))}
                               </div>
                               <p className="text-[9px] font-mono text-muted-foreground/70 mt-1">
