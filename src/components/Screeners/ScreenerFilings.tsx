@@ -399,7 +399,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <Tooltip content={<CustomTooltip />} />
                       <Bar dataKey="value" name="Value" radius={[3, 3, 0, 0]}>
                         {waterfallData.map((entry, index) => (
-                          <Cell key={index} fill={entry.value >= 0 ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'} />
+                          <Cell key={index} fill={entry.value >= 0 ? '#22c55e' : '#ef4444'} />
                         ))}
                       </Bar>
                     </BarChart>
