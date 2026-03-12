@@ -473,6 +473,44 @@ const ABLE3AI = () => {
           topNewsContext = await fetchTopNewsContext(currentInput);
         }
 
+        // Financial filings context
+        let filingsContext = '';
+        if (/งบการเงิน|financial|statement|balance.*sheet|งบดุล|งบกำไร|cash.*flow|กระแสเงินสด|อัตราส่วน|ratio|p\/e|roe|roa|dividend|ปันผล|eps|revenue|รายได้|กำไร.*สุทธิ|net.*income|ebitda|valuation|มูลค่า|filings?|ดูงบ|pull.*financial|วิเคราะห์.*หุ้น|ข้อมูล.*บริษัท/i.test(lowerInput)) {
+          const symbolMatch = currentInput.match(/\b([A-Z]{1,6})\b/);
+          if (symbolMatch) {
+            addThinkingStep(`📋 ดึงข้อมูลงบการเงิน ${symbolMatch[1]} จาก Filings...`);
+            try {
+              const { data: filingsData, error: filingsErr } = await supabase.functions.invoke('tv-filings', {
+                body: { symbol: symbolMatch[1], exchange: 'SET', mode: 'statements' },
+              });
+              if (!filingsErr && filingsData?.financials) {
+                const f = filingsData.financials;
+                const fmtN = (v: any) => v != null && !isNaN(v) ? Number(v).toLocaleString() : 'N/A';
+                const fmtP = (v: any) => v != null && !isNaN(v) ? Number(v).toFixed(2) + '%' : 'N/A';
+                filingsContext = `\n--- Financial Data: ${symbolMatch[1]} ---
+Price: ${fmtN(f.close)} | Change: ${fmtP(f.change)}
+Market Cap: ${fmtN(f.market_cap_basic)} | Enterprise Value: ${fmtN(f.enterprise_value)}
+P/E (TTM): ${fmtN(f.price_earnings_ttm)} | P/B: ${fmtN(f.price_book_ratio)} | P/S: ${fmtN(f.price_sales_ratio)}
+EPS Basic (TTM): ${fmtN(f.earnings_per_share_basic_ttm)} | EPS Diluted (TTM): ${fmtN(f.earnings_per_share_diluted_ttm)}
+Dividend Yield: ${fmtP(f.dividends_yield)} | Continuous Payout: ${fmtN(f.continuous_dividend_payout)} yrs
+Revenue: ${fmtN(f.total_revenue)} | Gross Profit: ${fmtN(f.gross_profit)} | EBITDA: ${fmtN(f.ebitda)} | Net Income: ${fmtN(f.net_income)}
+Gross Margin: ${fmtP(f.gross_margin)} | Operating Margin: ${fmtP(f.operating_margin)} | Net Margin: ${fmtP(f.net_margin)}
+ROE: ${fmtP(f.return_on_equity)} | ROA: ${fmtP(f.return_on_assets)} | ROIC: ${fmtP(f.return_on_invested_capital)}
+Debt/Equity: ${fmtN(f.debt_to_equity)} | Current Ratio: ${fmtN(f.current_ratio)} | Quick Ratio: ${fmtN(f.quick_ratio)}
+Total Assets: ${fmtN(f.total_assets)} | Total Debt: ${fmtN(f.total_debt)} | Free Cash Flow: ${fmtN(f.free_cash_flow)}
+Sector: ${f.sector || 'N/A'} | Industry: ${f.industry || 'N/A'}
+52W High: ${fmtN(f.price_52_week_high)} | 52W Low: ${fmtN(f.price_52_week_low)}
+RSI: ${fmtN(f.RSI)} | SMA50: ${fmtN(f.SMA50)} | SMA200: ${fmtN(f.SMA200)}
+Perf W: ${fmtP(f['Perf.W'])} | 1M: ${fmtP(f['Perf.1M'])} | 3M: ${fmtP(f['Perf.3M'])} | YTD: ${fmtP(f['Perf.YTD'])} | 1Y: ${fmtP(f['Perf.Y'])}
+Signal: ${f['Recommend.All'] != null ? (f['Recommend.All'] >= 0.5 ? 'Strong Buy' : f['Recommend.All'] >= 0.1 ? 'Buy' : f['Recommend.All'] <= -0.5 ? 'Strong Sell' : f['Recommend.All'] <= -0.1 ? 'Sell' : 'Neutral') : 'N/A'}
+Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${fmtP(f.earnings_per_share_diluted_yoy_growth_fy)}
+---\n`;
+                addThinkingStep(`✅ ได้ข้อมูลงบการเงิน ${symbolMatch[1]} แล้ว`, 'done');
+              }
+            } catch (e) { console.error('Filings context error:', e); }
+          }
+        }
+
         // Trading Journal context for journal-related queries
         let journalContext = '';
         if (/journal|เทรด|trade|win.*rate|p&l|pnl|กำไร|ขาดทุน|สถิติ|performance|ประสิทธิภาพ|able.*score|psychology|จิตวิทยา|monte.*carlo|risk|drawdown|setup|สรุป.*ผล|วิเคราะห์.*เทรด/i.test(lowerInput)) {
@@ -525,7 +563,7 @@ const ABLE3AI = () => {
             }
           } else {
             addThinkingStep('🧠 Gemini 2.5 Flash กำลังประมวลผล...');
-            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}\n${journalContext}`;
+            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}\n${journalContext}\n${filingsContext}`;
             const response = await GeminiService.chat(
               enhancedPrompt,
               conversationHistoryRef.current.slice(0, -1),
@@ -555,7 +593,7 @@ const ABLE3AI = () => {
             }
           } else {
             const response = await OllamaService.chat(
-              `${currentInput}\n\n--- App Data ---\n${contextSummary}`,
+              `${currentInput}\n\n--- App Data ---\n${contextSummary}\n${filingsContext}`,
               conversationHistoryRef.current.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
               selectedModel
             );
