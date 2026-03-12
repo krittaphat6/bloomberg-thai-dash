@@ -441,7 +441,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
       {tab === 'income' && (
         <div className="space-y-4">
           <SectionTitle title="งบกำไรขาดทุน" subtitle="รายได้ ต้นทุน และกำไรของบริษัท" />
-          <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+           <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
