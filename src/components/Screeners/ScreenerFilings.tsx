@@ -80,7 +80,7 @@ const fmtRatio = (val: any): string => {
 
 const colorVal = (val: any) => {
   if (val == null || isNaN(val)) return 'text-muted-foreground';
-  return Number(val) > 0 ? 'text-primary' : Number(val) < 0 ? 'text-destructive' : 'text-foreground';
+  return Number(val) > 0 ? 'text-terminal-green' : Number(val) < 0 ? 'text-red-400' : 'text-foreground';
 };
 
 const getExchangeFlag = (exchange: string) => {
