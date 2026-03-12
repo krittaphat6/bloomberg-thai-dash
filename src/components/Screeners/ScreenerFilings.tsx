@@ -103,7 +103,7 @@ const getExchangeFlag = (exchange: string) => {
 
 type StatementTab = 'overview' | 'income' | 'balance' | 'cashflow' | 'ratios' | 'revenue';
 
-const PIE_COLORS = ['hsl(var(--primary))', 'hsl(var(--destructive))', 'hsl(var(--accent))', '#f59e0b', '#6366f1'];
+const PIE_COLORS = ['#f59e0b', '#22c55e', '#06b6d4', '#ef4444', '#8b5cf6'];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
