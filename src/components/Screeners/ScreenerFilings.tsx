@@ -883,7 +883,7 @@ const ScreenerFilings = () => {
       {selectedSymbol && (
         <div className="px-3 py-2 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-[11px]">
+            <div className="w-6 h-6 rounded-full bg-terminal-amber/10 border border-terminal-amber/30 flex items-center justify-center text-[11px]">
               {getExchangeFlag(selectedSymbol.exchange)}
             </div>
             <div className="flex-1 min-w-0">
