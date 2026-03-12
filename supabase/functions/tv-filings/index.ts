@@ -210,10 +210,16 @@ serve(async (req) => {
   }
 
   try {
-    const { symbol, exchange, type = "all", mode = "filings" } = await req.json();
+    const {
+      symbol,
+      exchange,
+      type = "all",
+      mode = "filings",
+      historyPeriods = DEFAULT_HISTORY_PERIODS,
+    } = await req.json();
 
     if (!symbol) {
-      return new Response(JSON.stringify({ filings: [], financials: null, error: "Symbol required" }), {
+      return new Response(JSON.stringify({ filings: [], financials: null, statementSeries: null, error: "Symbol required" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -221,16 +227,28 @@ serve(async (req) => {
     const market = EXCHANGE_TO_MARKET[exchange?.toUpperCase()] || "america";
     const scanUrl = `https://scanner.tradingview.com/${market}/scan`;
     const fullSymbol = exchange ? `${exchange}:${symbol}` : symbol;
+    const safeHistoryPeriods = Number.isFinite(Number(historyPeriods))
+      ? Math.max(0, Math.min(12, Number(historyPeriods)))
+      : DEFAULT_HISTORY_PERIODS;
 
-    // Choose columns: safe set for all, extended for statements mode
+    // Choose columns: safe set for all, extended + historical lookback for statements mode
     let columns = [...SAFE_COLUMNS];
     if (mode === "statements") {
-      columns = [...new Set([...SAFE_COLUMNS, ...EXTENDED_COLUMNS])];
+      columns = [
+        ...new Set([
+          ...SAFE_COLUMNS,
+          ...EXTENDED_COLUMNS,
+          ...buildHistoricalColumns(HISTORY_BASE_COLUMNS, safeHistoryPeriods),
+        ]),
+      ];
     }
 
     console.log(`[tv-filings] mode=${mode} symbol=${fullSymbol} market=${market} cols=${columns.length}`);
 
     const financials = await fetchWithAutoFix(scanUrl, fullSymbol, columns);
+    const statementSeries = mode === "statements"
+      ? buildStatementSeries(financials, safeHistoryPeriods)
+      : null;
 
     if (financials) {
       console.log(`[tv-filings] Success: ${Object.keys(financials).filter(k => financials[k] != null).length} fields with data`);
@@ -239,10 +257,10 @@ serve(async (req) => {
     }
 
     const filings = mode === "filings"
-      ? generateFilingsFromFinancials(financials, fullSymbol, type)
+      ? generateFilingsFromFinancials(financials, fullSymbol, type, exchange)
       : [];
 
-    return new Response(JSON.stringify({ filings, financials }), {
+    return new Response(JSON.stringify({ filings, financials, statementSeries }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
