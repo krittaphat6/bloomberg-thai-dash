@@ -1054,7 +1054,7 @@ const ScreenerFilings = () => {
                   <div className="flex items-center gap-3">
                     <span className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['close'])}</span>
                     {financials['change'] != null && (
-                     <span className={`text-sm font-mono font-medium ${financials['change'] > 0 ? 'text-terminal-green' : 'text-red-400'}`}>
+                     <span className={`text-sm font-mono font-medium ${financials['change'] > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {financials['change'] > 0 ? '▲' : '▼'} {Math.abs(financials['change']).toFixed(2)}%
                       </span>
                     )}
