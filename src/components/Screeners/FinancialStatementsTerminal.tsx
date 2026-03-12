@@ -13,7 +13,6 @@ import {
   Calculator,
   DollarSign,
   FileSpreadsheet,
-  LineChart as LineChartIcon,
   PieChart,
   TrendingUp,
 } from 'lucide-react';
