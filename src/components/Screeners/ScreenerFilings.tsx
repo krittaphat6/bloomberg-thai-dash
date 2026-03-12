@@ -822,9 +822,9 @@ const ScreenerFilings = () => {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'annual': return <FileCheck className="w-3.5 h-3.5 text-terminal-green" />;
-      case 'interim': case 'quarterly': return <FileText className="w-3.5 h-3.5 text-terminal-cyan" />;
-      case 'slides': return <Presentation className="w-3.5 h-3.5 text-terminal-amber" />;
+      case 'annual': return <FileCheck className="w-3.5 h-3.5 text-emerald-400" />;
+      case 'interim': case 'quarterly': return <FileText className="w-3.5 h-3.5 text-sky-400" />;
+      case 'slides': return <Presentation className="w-3.5 h-3.5 text-muted-foreground" />;
       default: return <FileText className="w-3.5 h-3.5 text-muted-foreground" />;
     }
   };
