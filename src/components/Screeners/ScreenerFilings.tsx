@@ -544,6 +544,15 @@ const ScreenerFilings = () => {
     { value: 'slides', label: 'กิจกรรมของบริษัท' },
   ];
 
+  const getFallbackDocumentUrl = (sym: SymbolSuggestion | null) => {
+    if (!sym) return 'https://www.set.or.th';
+    const ex = sym.exchange?.toUpperCase();
+    if (ex === 'SET' || ex === 'BKK' || ex === 'TFEX') {
+      return `https://www.set.or.th/th/market/product/stock/quote/${sym.symbol}/financial-statement/company-highlights`;
+    }
+    return `https://www.tradingview.com/symbols/${sym.exchange}-${sym.symbol}/`;
+  };
+
   // ─── Render ─────────────────────────────────────────────────────────────
 
   return (
