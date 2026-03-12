@@ -131,8 +131,8 @@ const KeyFact = ({ label, value, suffix }: { label: string; value: string; suffi
 
 const SectionTitle = ({ title, subtitle }: { title: string; subtitle?: string }) => (
   <div className="mb-3">
-    <h3 className="text-sm font-mono font-bold text-foreground">{title}</h3>
-    {subtitle && <p className="text-[10px] font-mono text-muted-foreground">{subtitle}</p>}
+    <h3 className="text-sm font-mono font-bold text-terminal-amber">{title}</h3>
+    {subtitle && <p className="text-[10px] font-mono text-muted-foreground/70">{subtitle}</p>}
   </div>
 );
 
