@@ -50,6 +50,29 @@ const EXTENDED_COLUMNS = [
   "earnings_release_date", "earnings_release_next_date",
 ];
 
+// Core fields that usually support historical lookback in TV scanner ([1]..[N])
+const HISTORY_BASE_COLUMNS = [
+  "total_revenue",
+  "gross_profit",
+  "ebitda",
+  "net_income",
+  "earnings_per_share_diluted_ttm",
+  "price_earnings_ttm",
+  "price_sales_ratio",
+  "dividends_yield",
+  "return_on_equity",
+  "debt_to_equity",
+  "current_ratio",
+  "quick_ratio",
+  "total_assets",
+  "total_liabilities_fq",
+  "total_debt",
+  "free_cash_flow",
+  "cash_f_operating_activities_ttm",
+];
+
+const DEFAULT_HISTORY_PERIODS = 11;
+
 const EXCHANGE_TO_MARKET: Record<string, string> = {
   SET: "thailand", BKK: "thailand", TFEX: "thailand",
   NASDAQ: "america", NYSE: "america", AMEX: "america", OTC: "america",
@@ -74,9 +97,63 @@ const TV_HEADERS = {
   "Referer": "https://www.tradingview.com/",
 };
 
+function buildHistoricalColumns(baseColumns: string[], periods: number): string[] {
+  const cols: string[] = [];
+  for (const base of baseColumns) {
+    for (let i = 1; i <= periods; i++) {
+      cols.push(`${base}[${i}]`);
+    }
+  }
+  return cols;
+}
+
+function generateQuarterLabels(periods: number): string[] {
+  const labels: string[] = [];
+  const now = new Date();
+  const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+
+  for (let i = periods; i >= 0; i--) {
+    const offset = currentQuarter - 1 - i;
+    const yearOffset = Math.floor(offset / 4);
+    const quarterBase = ((offset % 4) + 4) % 4;
+    const quarter = quarterBase + 1;
+    const year = now.getFullYear() + yearOffset;
+    labels.push(`Q${quarter} '${String(year).slice(-2)}`);
+  }
+
+  return labels;
+}
+
+function buildStatementSeries(financials: Record<string, any> | null, periods: number) {
+  if (!financials) return null;
+
+  const metrics: Record<string, (number | null)[]> = {};
+
+  for (const baseField of HISTORY_BASE_COLUMNS) {
+    const values: (number | null)[] = [];
+    for (let i = periods; i >= 1; i--) {
+      const prevKey = `${baseField}[${i}]`;
+      const prevValue = financials[prevKey];
+      values.push(prevValue == null || Number.isNaN(Number(prevValue)) ? null : Number(prevValue));
+    }
+
+    const currentValue = financials[baseField];
+    values.push(currentValue == null || Number.isNaN(Number(currentValue)) ? null : Number(currentValue));
+
+    if (values.some((v) => v != null)) {
+      metrics[baseField] = values;
+    }
+  }
+
+  return {
+    periods: generateQuarterLabels(periods),
+    metrics,
+  };
+}
+
 async function fetchWithAutoFix(scanUrl: string, fullSymbol: string, columns: string[]): Promise<any> {
   let currentCols = [...columns];
-  let maxRetries = 40;
+  let maxRetries = Math.max(160, columns.length + 20);
 
   while (maxRetries-- > 0) {
     const body = {
@@ -133,10 +210,16 @@ serve(async (req) => {
   }
 
   try {
-    const { symbol, exchange, type = "all", mode = "filings" } = await req.json();
+    const {
+      symbol,
+      exchange,
+      type = "all",
+      mode = "filings",
+      historyPeriods = DEFAULT_HISTORY_PERIODS,
+    } = await req.json();
 
     if (!symbol) {
-      return new Response(JSON.stringify({ filings: [], financials: null, error: "Symbol required" }), {
+      return new Response(JSON.stringify({ filings: [], financials: null, statementSeries: null, error: "Symbol required" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -144,16 +227,28 @@ serve(async (req) => {
     const market = EXCHANGE_TO_MARKET[exchange?.toUpperCase()] || "america";
     const scanUrl = `https://scanner.tradingview.com/${market}/scan`;
     const fullSymbol = exchange ? `${exchange}:${symbol}` : symbol;
+    const safeHistoryPeriods = Number.isFinite(Number(historyPeriods))
+      ? Math.max(0, Math.min(12, Number(historyPeriods)))
+      : DEFAULT_HISTORY_PERIODS;
 
-    // Choose columns: safe set for all, extended for statements mode
+    // Choose columns: safe set for all, extended + historical lookback for statements mode
     let columns = [...SAFE_COLUMNS];
     if (mode === "statements") {
-      columns = [...new Set([...SAFE_COLUMNS, ...EXTENDED_COLUMNS])];
+      columns = [
+        ...new Set([
+          ...SAFE_COLUMNS,
+          ...EXTENDED_COLUMNS,
+          ...buildHistoricalColumns(HISTORY_BASE_COLUMNS, safeHistoryPeriods),
+        ]),
+      ];
     }
 
     console.log(`[tv-filings] mode=${mode} symbol=${fullSymbol} market=${market} cols=${columns.length}`);
 
     const financials = await fetchWithAutoFix(scanUrl, fullSymbol, columns);
+    const statementSeries = mode === "statements"
+      ? buildStatementSeries(financials, safeHistoryPeriods)
+      : null;
 
     if (financials) {
       console.log(`[tv-filings] Success: ${Object.keys(financials).filter(k => financials[k] != null).length} fields with data`);
@@ -162,22 +257,27 @@ serve(async (req) => {
     }
 
     const filings = mode === "filings"
-      ? generateFilingsFromFinancials(financials, fullSymbol, type)
+      ? generateFilingsFromFinancials(financials, fullSymbol, type, exchange)
       : [];
 
-    return new Response(JSON.stringify({ filings, financials }), {
+    return new Response(JSON.stringify({ filings, financials, statementSeries }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("[tv-filings] Error:", error);
-    return new Response(JSON.stringify({ filings: [], financials: null, error: error.message }), {
+    return new Response(JSON.stringify({ filings: [], financials: null, statementSeries: null, error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
 
-function generateFilingsFromFinancials(financials: any, symbol: string, typeFilter: string): any[] {
+function getTradingViewSymbolUrl(symbol: string, exchange?: string): string {
+  const normalized = symbol.includes(":") ? symbol.replace(":", "-") : `${exchange || ""}-${symbol}`.replace(/^-/, "");
+  return `https://www.tradingview.com/symbols/${normalized}`;
+}
+
+function generateFilingsFromFinancials(financials: any, symbol: string, typeFilter: string, exchange?: string): any[] {
   const filings: any[] = [];
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -188,20 +288,25 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
     { q: "Q4", months: [12, 2] },
   ];
 
+  const tvBaseUrl = getTradingViewSymbolUrl(symbol, exchange);
+
   for (let year = currentYear; year >= currentYear - 2; year--) {
     if (typeFilter === "all" || typeFilter === "annual") {
       const reportDate = new Date(year + 1, 2, 15);
       if (reportDate <= now) {
         filings.push({
-          id: `${symbol}-annual-${year}`, symbol,
+          id: `${symbol}-annual-${year}`,
+          symbol,
           title: `Annual Report ${year}`,
           titleTh: `รายงานประจำปี ${year}`,
-          type: "annual", form: "56-1",
+          type: "annual",
+          form: "56-1",
           date: formatDate(reportDate),
-          quarter: `FY ${year}`, year,
+          quarter: `FY ${year}`,
+          year,
           documents: [
-            { type: "annual_report", label: "รายงานประจำปี", icon: "📋" },
-            { type: "financial_statements", label: "งบการเงิน", icon: "📊" },
+            { type: "annual_report", label: "รายงานประจำปี", icon: "📋", url: `${tvBaseUrl}/financials-overview/` },
+            { type: "financial_statements", label: "งบการเงิน", icon: "📊", url: `${tvBaseUrl}/financials-income-statement/` },
           ],
         });
       }
@@ -213,16 +318,24 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
       const reportYear = qm.q === "Q4" ? year + 1 : year;
       const reportDate = new Date(reportYear, reportMonth - 1, 15);
       if (reportDate <= now) {
-        const docs: any[] = [{ type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄" }];
-        if (qm.q === "Q2" || qm.q === "Q4") docs.push({ type: "slides", label: "สไลด์", icon: "📊" });
-        docs.push({ type: "earnings", label: "หนังสือรับรอง", icon: "📃" });
+        const docs: any[] = [
+          { type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄", url: `${tvBaseUrl}/financials-income-statement/` },
+        ];
+        if (qm.q === "Q2" || qm.q === "Q4") {
+          docs.push({ type: "slides", label: "สไลด์", icon: "📊", url: `${tvBaseUrl}/financials-overview/` });
+        }
+        docs.push({ type: "earnings", label: "หนังสือรับรอง", icon: "📃", url: `${tvBaseUrl}/financials-statistics-and-ratios/` });
+
         filings.push({
-          id: `${symbol}-${qm.q}-${year}`, symbol,
+          id: `${symbol}-${qm.q}-${year}`,
+          symbol,
           title: `${qm.q} ${year}`,
           titleTh: `รายงานระหว่างกาล ${qm.q} ${year}`,
-          type: "interim", form: "10-Q",
+          type: "interim",
+          form: "10-Q",
           date: formatDate(reportDate),
-          quarter: `${qm.q} ${year}`, year,
+          quarter: `${qm.q} ${year}`,
+          year,
           documents: docs,
         });
       }
@@ -233,12 +346,18 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
         const presDate = new Date(year, m + 1, 10);
         if (presDate <= now && presDate > new Date(currentYear - 2, 0, 1)) {
           filings.push({
-            id: `${symbol}-pres-${year}-${m}`, symbol,
+            id: `${symbol}-pres-${year}-${m}`,
+            symbol,
             title: "Investor Presentation",
-            titleTh: "สไลด์นักลงทุน", type: "slides",
-            form: "", date: formatDate(presDate),
-            quarter: "", year,
-            documents: [{ type: "slides", label: "สไลด์", icon: "📊" }],
+            titleTh: "สไลด์นักลงทุน",
+            type: "slides",
+            form: "",
+            date: formatDate(presDate),
+            quarter: "",
+            year,
+            documents: [
+              { type: "slides", label: "สไลด์", icon: "📊", url: `${tvBaseUrl}/financials-overview/` },
+            ],
           });
         }
       }
@@ -255,5 +374,25 @@ function formatDate(d: Date): string {
 }
 
 function parseDate(s: string): Date {
-  try { return new Date(s); } catch { return new Date(); }
+  try {
+    if (!s) return new Date(0);
+    const thaiMonths: Record<string, number> = {
+      "ม.ค.": 0, "ก.พ.": 1, "มี.ค.": 2, "เม.ย.": 3, "พ.ค.": 4, "มิ.ย.": 5,
+      "ก.ค.": 6, "ส.ค.": 7, "ก.ย.": 8, "ต.ค.": 9, "พ.ย.": 10, "ธ.ค.": 11,
+    };
+
+    const parts = s.trim().split(" ");
+    if (parts.length === 3 && thaiMonths[parts[1]] !== undefined) {
+      const day = Number(parts[0]);
+      const month = thaiMonths[parts[1]];
+      const buddhistYear = Number(parts[2]);
+      const year = buddhistYear > 2400 ? buddhistYear - 543 : buddhistYear;
+      return new Date(year, month, day);
+    }
+
+    const parsed = new Date(s);
+    return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
+  } catch {
+    return new Date(0);
+  }
 }

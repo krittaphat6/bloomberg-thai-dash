@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Loader2, ChevronDown, ChevronRight, Building2, X, FileText, Presentation, FileCheck, TrendingUp, TrendingDown, BarChart3, DollarSign, PieChart, LayoutList, Calculator } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import FinancialStatementsTerminal, { type StatementSeriesPayload } from './FinancialStatementsTerminal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ interface FilingDocument {
   type: string;
   label: string;
   icon: string;
+  url?: string;
 }
 
 interface FilingItem {
@@ -387,6 +389,7 @@ const ScreenerFilings = () => {
   const [filingType, setFilingType] = useState<FilingTypeFilter>('all');
   const [filings, setFilings] = useState<FilingItem[]>([]);
   const [financials, setFinancials] = useState<Financials | null>(null);
+  const [statementSeries, setStatementSeries] = useState<StatementSeriesPayload | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [expandedFiling, setExpandedFiling] = useState<string | null>(null);
@@ -440,6 +443,7 @@ const ScreenerFilings = () => {
     setViewMode('choose');
     setFilings([]);
     setFinancials(null);
+    setStatementSeries(null);
   }, []);
 
   // ─── Load data based on mode ────────────────────────────────────────────
@@ -453,6 +457,7 @@ const ScreenerFilings = () => {
       });
       if (!error && data) {
         setFinancials(data.financials || null);
+        setStatementSeries(data.statementSeries || null);
       }
     } catch (err) {
       console.error('Statements fetch error:', err);
@@ -471,6 +476,7 @@ const ScreenerFilings = () => {
       if (!error && data) {
         setFilings(data.filings || []);
         setFinancials(data.financials || null);
+        setStatementSeries(data.statementSeries || null);
         const years: number[] = [...new Set((data.filings || []).map((f: FilingItem) => f.year))] as number[];
         years.sort((a, b) => b - a);
         setExpandedYears(new Set(years.slice(0, 2)));
@@ -497,6 +503,7 @@ const ScreenerFilings = () => {
     setSearchQuery('');
     setFilings([]);
     setFinancials(null);
+    setStatementSeries(null);
     setSuggestions([]);
     setExpandedFiling(null);
     setViewMode('choose');
@@ -563,6 +570,7 @@ const ScreenerFilings = () => {
                 setSelectedSymbol(null);
                 setFilings([]);
                 setFinancials(null);
+                setStatementSeries(null);
                 setViewMode('choose');
               }
             }}
@@ -711,7 +719,11 @@ const ScreenerFilings = () => {
 
         {/* Financial Statements View */}
         {viewMode === 'statements' && !loadingData && selectedSymbol && (
-          <FinancialStatementsView financials={financials!} symbol={selectedSymbol} />
+          <FinancialStatementsTerminal
+            financials={financials}
+            symbol={selectedSymbol}
+            statementSeries={statementSeries}
+          />
         )}
 
         {/* Filings View */}
@@ -814,10 +826,18 @@ const ScreenerFilings = () => {
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
                                 {item.documents.map((doc, di) => (
-                                  <div key={di} className="flex items-center gap-1 px-2 py-1 rounded bg-muted/30 border border-border/30">
+                                  <button
+                                    key={di}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
+                                      window.open(doc.url || fallbackUrl, '_blank', 'noopener,noreferrer');
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-1 rounded bg-muted/30 border border-border/30 hover:bg-muted/50 transition-colors"
+                                  >
                                     <span className="text-[11px]">{doc.icon}</span>
                                     <span className="text-[10px] font-mono text-foreground">{doc.label}</span>
-                                  </div>
+                                  </button>
                                 ))}
                               </div>
                               <p className="text-[9px] font-mono text-muted-foreground/70 mt-1">
