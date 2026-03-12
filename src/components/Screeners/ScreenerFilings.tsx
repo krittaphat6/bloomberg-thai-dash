@@ -603,7 +603,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+            <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
               <div className="text-[10px] font-mono text-muted-foreground mb-2">Revenue Breakdown</div>
               <div className="h-52">
                 <ResponsiveContainer width="100%" height="100%">
