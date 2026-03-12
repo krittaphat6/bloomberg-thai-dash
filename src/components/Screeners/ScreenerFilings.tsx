@@ -200,13 +200,32 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
   const grossProfit = financials['gross_profit'] ?? null;
   const operIncome = financials['oper_income'] ?? null;
   const netIncome = financials['net_income'] ?? null;
+  const netDebt = financials['net_debt'] ?? null;
 
+  // Real ownership data from API
+  const totalShares = financials['total_shares_outstanding'] || financials['total_shares_outstanding_fundamental'] || 0;
+  const floatShares = financials['float_shares_outstanding'] || 0;
+  const fundHoldingPct = financials['fund_holding_percent'] ?? null;
+  
+  // Calculate real ownership percentages
+  const floatPct = totalShares > 0 && floatShares > 0 ? (floatShares / totalShares * 100) : null;
+  const insiderPct = floatPct != null ? (100 - floatPct) : null;
+
+  const ownershipData = useMemo(() => {
+    if (floatPct != null && insiderPct != null) {
+      return [
+        { name: 'หุ้นที่ถูกถือเฉพาะกลุ่ม (Insider)', value: insiderPct, amount: totalShares - floatShares },
+        { name: 'หุ้นหมุนเวียน (Float)', value: floatPct, amount: floatShares },
+      ];
+    }
+    return null;
+  }, [floatPct, insiderPct, totalShares, floatShares]);
+
+  // Real capital structure - only real data
   const capitalData = [
     { name: 'มูลค่าตามราคาตลาด', value: marketCap },
-    { name: 'หนี้', value: totalDebt },
-    { name: 'ส่วนของผู้ถือหุ้นส่วนน้อย', value: totalEquity > 0 ? totalEquity * 0.3 : 0 },
+    { name: 'หนี้สินรวม', value: totalDebt },
     { name: 'เงินสดและรายการเทียบเท่าเงินสด', value: cashEquiv },
-    { name: 'มูลค่าสุทธิของกิจการ', value: ev },
   ].filter(d => d.value > 0);
 
   const waterfallData = [
@@ -218,15 +237,18 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
     { name: 'รายได้สุทธิ', value: netIncome },
   ].filter(d => d.value != null).map(d => ({ ...d, value: d.value as number }));
 
+  // Determine currency from data
+  const currency = financials['currency'] || (symbol.exchange === 'SET' || symbol.exchange === 'BKK' ? 'THB' : 'USD');
+
   return (
     <div className="space-y-4 p-4">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded-full bg-terminal-amber/20 border border-terminal-amber/30 flex items-center justify-center">
-          <Building2 className="w-3.5 h-3.5 text-terminal-amber" />
+        <div className="w-6 h-6 rounded-full bg-muted/40 border border-border/50 flex items-center justify-center">
+          <Building2 className="w-3.5 h-3.5 text-foreground/70" />
         </div>
-        <span className="text-sm font-mono font-bold text-terminal-amber">{symbol.description || symbol.symbol}</span>
-        <span className="text-[10px] font-mono text-terminal-cyan/70">• การเงิน</span>
+        <span className="text-sm font-mono font-bold text-foreground">{symbol.description || symbol.symbol}</span>
+        <span className="text-[10px] font-mono text-muted-foreground/60">• การเงิน</span>
       </div>
 
       {/* Tabs */}
@@ -234,7 +256,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
         {tabDefs.map((t) => (
           <button key={t.value} onClick={() => setTab(t.value)}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border transition-colors whitespace-nowrap ${
-              tab === t.value ? 'bg-terminal-amber/15 border-terminal-amber/40 text-terminal-amber font-medium' : 'border-border/50 text-muted-foreground hover:text-terminal-amber/70 hover:bg-muted/30'
+              tab === t.value ? 'bg-foreground/10 border-foreground/30 text-foreground font-medium' : 'border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/20'
             }`}
           >
             {t.icon} {t.label}
@@ -248,51 +270,58 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
           <div>
             <SectionTitle title="ข้อเท็จจริงที่มีนัยยะ" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <KeyFact label="มูลค่าตามราคาตลาด" value={fmt(marketCap)} suffix="THB" />
+              <KeyFact label="มูลค่าตามราคาตลาด" value={fmt(marketCap)} suffix={currency} />
               <KeyFact label="อัตราผลตอบแทนจากเงินปันผล ›" value={fmtPct(financials['dividends_yield'])} />
               <KeyFact label="อัตราส่วนราคาต่อกำไรสุทธิ (12 เดือนล่าสุด) ›" value={fmtRatio(financials['price_earnings_ttm'])} />
-              <KeyFact label="กำไรต่อหุ้นขั้นพื้นฐาน (12 เดือนล่าสุด) ›" value={fmtPrice(financials['earnings_per_share_basic_ttm'])} suffix="THB" />
+              <KeyFact label="กำไรต่อหุ้นขั้นพื้นฐาน (12 เดือนล่าสุด) ›" value={fmtPrice(financials['earnings_per_share_basic_ttm'])} suffix={currency} />
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
               <KeyFact label="พนักงาน (ปีงบประมาณ) ›" value={financials['number_of_employees'] ? fmt(financials['number_of_employees'], 0) : '—'} />
-              <KeyFact label="ผู้บริหารสูงสุด" value="—" />
-              <KeyFact label="เว็บไซต์" value={`${symbol.symbol.toLowerCase()}.com`} />
+              <KeyFact label="Industry" value={financials['industry'] || '—'} />
+              <KeyFact label="เว็บไซต์" value={financials['web_url'] || '—'} />
               <KeyFact label="Sector" value={financials['sector'] || '—'} />
             </div>
           </div>
 
           {/* Ownership + Capital Structure */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+            <div className="rounded-lg border border-border/30 bg-card/30 p-4">
               <SectionTitle title="ความเป็นเจ้าของ" />
-              <div className="flex items-center gap-6">
-                <div className="w-28 h-28">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartPie>
-                      <Pie data={[{ name: 'Institutional', value: 55.6 }, { name: 'Retail', value: 44.4 }]}
-                        cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
-                        <Cell fill="#f59e0b" />
-                        <Cell fill="#06b6d4" />
-                      </Pie>
-                    </RechartPie>
-                  </ResponsiveContainer>
-                </div>
-                <div className="space-y-2 text-[11px] font-mono">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-terminal-amber" />
-                    <span className="text-muted-foreground">หุ้นที่ถูกถือเฉพาะกลุ่ม</span>
-                    <span className="text-terminal-amber font-medium ml-auto">{fmt(marketCap * 0.556)} (55.6%)</span>
+              {ownershipData ? (
+                <div className="flex items-center gap-6">
+                  <div className="w-28 h-28">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartPie>
+                        <Pie data={ownershipData.map(d => ({ name: d.name, value: d.value }))}
+                          cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
+                          <Cell fill="#d4a843" />
+                          <Cell fill="#38bdf8" />
+                        </Pie>
+                      </RechartPie>
+                    </ResponsiveContainer>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-terminal-cyan" />
-                    <span className="text-muted-foreground">หุ้นที่ถูกกระจายสู่รายย่อย</span>
-                    <span className="text-terminal-cyan font-medium ml-auto">{fmt(marketCap * 0.444)} (44.4%)</span>
+                  <div className="space-y-2 text-[11px] font-mono">
+                    {ownershipData.map((item, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: i === 0 ? '#d4a843' : '#38bdf8' }} />
+                        <span className="text-muted-foreground/70">{item.name}</span>
+                        <span className="text-foreground font-medium ml-auto">{item.value.toFixed(1)}%</span>
+                      </div>
+                    ))}
+                    {fundHoldingPct != null && (
+                      <div className="flex items-center gap-2 pt-1 border-t border-border/20">
+                        <span className="text-muted-foreground/70">กองทุนถือ</span>
+                        <span className="text-foreground font-medium ml-auto">{fmtPct(fundHoldingPct)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="text-[11px] font-mono text-muted-foreground/50 py-4 text-center">ไม่มีข้อมูลสัดส่วนการถือหุ้น</div>
+              )}
             </div>
 
-            <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+            <div className="rounded-lg border border-border/30 bg-card/30 p-4">
               <SectionTitle title="โครงสร้างเงินทุน" />
               {capitalData.length > 0 && (
                 <div className="space-y-3">
@@ -311,10 +340,16 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                     {capitalData.map((d, i) => (
                       <div key={i} className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
-                        <span className="text-muted-foreground truncate">{d.name}</span>
+                        <span className="text-muted-foreground/70 truncate">{d.name}</span>
                         <span className="text-foreground font-medium ml-auto">{fmt(d.value)}</span>
                       </div>
                     ))}
+                    {netDebt != null && !isNaN(netDebt) && (
+                      <div className="flex items-center gap-1.5 col-span-2 pt-1 border-t border-border/20">
+                        <span className="text-muted-foreground/70">หนี้สินสุทธิ</span>
+                        <span className={`font-medium ml-auto ${Number(netDebt) > 0 ? 'text-red-400' : 'text-terminal-green'}`}>{fmt(netDebt)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
