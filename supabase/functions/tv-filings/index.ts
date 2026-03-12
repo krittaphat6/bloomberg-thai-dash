@@ -272,9 +272,39 @@ serve(async (req) => {
   }
 });
 
-function getTradingViewSymbolUrl(symbol: string, exchange?: string): string {
-  const normalized = symbol.includes(":") ? symbol.replace(":", "-") : `${exchange || ""}-${symbol}`.replace(/^-/, "");
-  return `https://www.tradingview.com/symbols/${normalized}`;
+function extractTicker(symbol: string): string {
+  return symbol.includes(":") ? (symbol.split(":").pop() || symbol) : symbol;
+}
+
+function getDocumentLinks(symbol: string, exchange?: string): Record<string, string> {
+  const ticker = extractTicker(symbol).toUpperCase();
+  const ex = exchange?.toUpperCase();
+
+  if (ex === "SET" || ex === "BKK" || ex === "TFEX") {
+    const base = `https://www.set.or.th/th/market/product/stock/quote/${ticker}`;
+    return {
+      annual: `${base}/financial-statement/latest`,
+      financial: `${base}/financial-statement/company-highlights`,
+      income: `${base}/financial-statement/company-highlights`,
+      ratios: `${base}/financial-statement/company-highlights`,
+      presentation: `${base}/news`,
+      news: `${base}/news`,
+    };
+  }
+
+  const normalized = symbol.includes(":")
+    ? symbol.replace(":", "-")
+    : `${exchange || ""}-${ticker}`.replace(/^-/, "");
+  const tvBase = `https://www.tradingview.com/symbols/${normalized}`;
+
+  return {
+    annual: `${tvBase}/financials-overview/`,
+    financial: `${tvBase}/financials-overview/`,
+    income: `${tvBase}/financials-income-statement/`,
+    ratios: `${tvBase}/financials-statistics-and-ratios/`,
+    presentation: `${tvBase}/news/`,
+    news: `${tvBase}/news/`,
+  };
 }
 
 function generateFilingsFromFinancials(financials: any, symbol: string, typeFilter: string, exchange?: string): any[] {
@@ -288,7 +318,7 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
     { q: "Q4", months: [12, 2] },
   ];
 
-  const tvBaseUrl = getTradingViewSymbolUrl(symbol, exchange);
+  const docLinks = getDocumentLinks(symbol, exchange);
 
   for (let year = currentYear; year >= currentYear - 2; year--) {
     if (typeFilter === "all" || typeFilter === "annual") {
@@ -305,8 +335,8 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
           quarter: `FY ${year}`,
           year,
           documents: [
-            { type: "annual_report", label: "รายงานประจำปี", icon: "📋", url: `${tvBaseUrl}/financials-overview/` },
-            { type: "financial_statements", label: "งบการเงิน", icon: "📊", url: `${tvBaseUrl}/financials-income-statement/` },
+            { type: "annual_report", label: "รายงานประจำปี", icon: "📋", url: docLinks.annual },
+            { type: "financial_statements", label: "งบการเงิน", icon: "📊", url: docLinks.financial },
           ],
         });
       }
@@ -319,12 +349,12 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
       const reportDate = new Date(reportYear, reportMonth - 1, 15);
       if (reportDate <= now) {
         const docs: any[] = [
-          { type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄", url: `${tvBaseUrl}/financials-income-statement/` },
+          { type: "interim_report", label: "รายงานระหว่างกาล", icon: "📄", url: docLinks.income },
         ];
         if (qm.q === "Q2" || qm.q === "Q4") {
-          docs.push({ type: "slides", label: "สไลด์", icon: "📊", url: `${tvBaseUrl}/financials-overview/` });
+          docs.push({ type: "slides", label: "สไลด์", icon: "📊", url: docLinks.presentation });
         }
-        docs.push({ type: "earnings", label: "หนังสือรับรอง", icon: "📃", url: `${tvBaseUrl}/financials-statistics-and-ratios/` });
+        docs.push({ type: "earnings", label: "หนังสือรับรอง", icon: "📃", url: docLinks.ratios });
 
         filings.push({
           id: `${symbol}-${qm.q}-${year}`,
@@ -356,7 +386,7 @@ function generateFilingsFromFinancials(financials: any, symbol: string, typeFilt
             quarter: "",
             year,
             documents: [
-              { type: "slides", label: "สไลด์", icon: "📊", url: `${tvBaseUrl}/financials-overview/` },
+                { type: "slides", label: "สไลด์", icon: "📊", url: docLinks.presentation },
             ],
           });
         }

@@ -74,8 +74,8 @@ const fmtRatio = (val: any): string => {
 };
 
 const colorVal = (val: any) => {
-  if (val == null || isNaN(val)) return '';
-  return Number(val) > 0 ? 'text-green-400' : Number(val) < 0 ? 'text-red-400' : '';
+  if (val == null || isNaN(val)) return 'text-muted-foreground';
+  return Number(val) > 0 ? 'text-primary' : Number(val) < 0 ? 'text-destructive' : 'text-foreground';
 };
 
 const getExchangeFlag = (exchange: string) => {
@@ -99,26 +99,26 @@ const getExchangeFlag = (exchange: string) => {
 type StatementTab = 'overview' | 'income' | 'balance' | 'cashflow' | 'ratios';
 
 const StatementRow = ({ label, value, format = 'number', indent = false }: { label: string; value: any; format?: string; indent?: boolean }) => {
+  if (value == null || isNaN(value)) return null;
+
   let display = '—';
   let color = 'text-foreground';
 
-  if (value != null && !isNaN(value)) {
-    switch (format) {
-      case 'number': display = fmt(value); break;
-      case 'currency': display = fmtPrice(value); break;
-      case 'percent': display = fmtPct(value); color = colorVal(value) || 'text-foreground'; break;
-      case 'ratio': display = fmtRatio(value); break;
-      case 'growth':
-        display = fmtPct(value);
-        color = Number(value) > 0 ? 'text-green-400' : Number(value) < 0 ? 'text-red-400' : 'text-foreground';
-        break;
-    }
+  switch (format) {
+    case 'number': display = fmt(value); break;
+    case 'currency': display = fmtPrice(value); break;
+    case 'percent': display = fmtPct(value); color = colorVal(value); break;
+    case 'ratio': display = fmtRatio(value); break;
+    case 'growth':
+      display = fmtPct(value);
+      color = colorVal(value);
+      break;
   }
 
   return (
-    <div className={`flex items-center justify-between py-1.5 px-3 hover:bg-muted/20 ${indent ? 'pl-6' : ''}`}>
-      <span className="text-[11px] font-mono text-muted-foreground">{label}</span>
-      <span className={`text-[11px] font-mono font-medium ${color}`}>{display}</span>
+    <div className={`grid grid-cols-[minmax(0,1fr)_minmax(84px,auto)] items-center gap-3 py-1.5 px-3 border-b border-border/20 last:border-b-0 ${indent ? 'pl-6' : ''}`}>
+      <span className="text-[11px] font-mono text-muted-foreground truncate">{label}</span>
+      <span className={`text-[11px] font-mono font-medium text-right tabular-nums ${color}`}>{display}</span>
     </div>
   );
 };
@@ -529,9 +529,9 @@ const ScreenerFilings = () => {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'annual': return <FileCheck className="w-3.5 h-3.5 text-green-400" />;
-      case 'interim': case 'quarterly': return <FileText className="w-3.5 h-3.5 text-cyan-400" />;
-      case 'slides': return <Presentation className="w-3.5 h-3.5 text-amber-400" />;
+      case 'annual': return <FileCheck className="w-3.5 h-3.5 text-primary" />;
+      case 'interim': case 'quarterly': return <FileText className="w-3.5 h-3.5 text-accent" />;
+      case 'slides': return <Presentation className="w-3.5 h-3.5 text-muted-foreground" />;
       default: return <FileText className="w-3.5 h-3.5 text-muted-foreground" />;
     }
   };
@@ -543,6 +543,15 @@ const ScreenerFilings = () => {
     { value: 'interim', label: 'รายงานระหว่างกาล' },
     { value: 'slides', label: 'กิจกรรมของบริษัท' },
   ];
+
+  const getFallbackDocumentUrl = (sym: SymbolSuggestion | null) => {
+    if (!sym) return 'https://www.set.or.th';
+    const ex = sym.exchange?.toUpperCase();
+    if (ex === 'SET' || ex === 'BKK' || ex === 'TFEX') {
+      return `https://www.set.or.th/th/market/product/stock/quote/${sym.symbol}/financial-statement/company-highlights`;
+    }
+    return `https://www.tradingview.com/symbols/${sym.exchange}-${sym.symbol}/`;
+  };
 
   // ─── Render ─────────────────────────────────────────────────────────────
 
@@ -807,7 +816,7 @@ const ScreenerFilings = () => {
                             </div>
                             <div className="w-32 flex items-center justify-end gap-1.5">
                               {item.documents.map((doc, di) => {
-                                const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
+                                const fallbackUrl = getFallbackDocumentUrl(selectedSymbol);
                                 return (
                                   <a
                                     key={di}
@@ -836,8 +845,7 @@ const ScreenerFilings = () => {
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
                                 {item.documents.map((doc, di) => {
-                                  const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
-                                  const href = doc.url || fallbackUrl;
+                                  const href = doc.url || getFallbackDocumentUrl(selectedSymbol);
                                   return (
                                     <a
                                       key={di}
