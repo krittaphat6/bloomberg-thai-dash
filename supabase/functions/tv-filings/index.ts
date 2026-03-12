@@ -97,6 +97,60 @@ const TV_HEADERS = {
   "Referer": "https://www.tradingview.com/",
 };
 
+function buildHistoricalColumns(baseColumns: string[], periods: number): string[] {
+  const cols: string[] = [];
+  for (const base of baseColumns) {
+    for (let i = 1; i <= periods; i++) {
+      cols.push(`${base}[${i}]`);
+    }
+  }
+  return cols;
+}
+
+function generateQuarterLabels(periods: number): string[] {
+  const labels: string[] = [];
+  const now = new Date();
+  const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+
+  for (let i = periods; i >= 0; i--) {
+    const offset = currentQuarter - 1 - i;
+    const yearOffset = Math.floor(offset / 4);
+    const quarterBase = ((offset % 4) + 4) % 4;
+    const quarter = quarterBase + 1;
+    const year = now.getFullYear() + yearOffset;
+    labels.push(`Q${quarter} '${String(year).slice(-2)}`);
+  }
+
+  return labels;
+}
+
+function buildStatementSeries(financials: Record<string, any> | null, periods: number) {
+  if (!financials) return null;
+
+  const metrics: Record<string, (number | null)[]> = {};
+
+  for (const baseField of HISTORY_BASE_COLUMNS) {
+    const values: (number | null)[] = [];
+    for (let i = periods; i >= 1; i--) {
+      const prevKey = `${baseField}[${i}]`;
+      const prevValue = financials[prevKey];
+      values.push(prevValue == null || Number.isNaN(Number(prevValue)) ? null : Number(prevValue));
+    }
+
+    const currentValue = financials[baseField];
+    values.push(currentValue == null || Number.isNaN(Number(currentValue)) ? null : Number(currentValue));
+
+    if (values.some((v) => v != null)) {
+      metrics[baseField] = values;
+    }
+  }
+
+  return {
+    periods: generateQuarterLabels(periods),
+    metrics,
+  };
+}
+
 async function fetchWithAutoFix(scanUrl: string, fullSymbol: string, columns: string[]): Promise<any> {
   let currentCols = [...columns];
   let maxRetries = 40;
