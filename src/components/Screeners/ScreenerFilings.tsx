@@ -545,20 +545,20 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
         <div className="space-y-4">
           <SectionTitle title="ผลประกอบการ" subtitle="EPS และการเติบโต" />
           <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-md border border-border/30 bg-card/20 px-3 py-3">
-              <div className="text-[9px] font-mono text-muted-foreground">EPS (TTM)</div>
-              <div className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['earnings_per_share_diluted_ttm'])}</div>
-            </div>
-            <div className="rounded-md border border-border/30 bg-card/20 px-3 py-3">
-              <div className="text-[9px] font-mono text-muted-foreground">EPS ล่าสุด (MRQ)</div>
-              <div className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['earnings_per_share_fq'])}</div>
-            </div>
-            <div className="rounded-md border border-border/30 bg-card/20 px-3 py-3">
-              <div className="text-[9px] font-mono text-muted-foreground">รอบประกาศถัดไป</div>
-              <div className="text-sm font-mono font-bold text-foreground">
-                {financials['earnings_release_next_date'] ? new Date(Number(financials['earnings_release_next_date']) * 1000).toLocaleDateString('th-TH') : '—'}
-              </div>
-            </div>
+             <div className="rounded-md border border-terminal-amber/20 bg-card/20 px-3 py-3">
+               <div className="text-[9px] font-mono text-muted-foreground/70">EPS (TTM)</div>
+               <div className="text-lg font-mono font-bold text-terminal-green">{fmtPrice(financials['earnings_per_share_diluted_ttm'])}</div>
+             </div>
+             <div className="rounded-md border border-terminal-amber/20 bg-card/20 px-3 py-3">
+               <div className="text-[9px] font-mono text-muted-foreground/70">EPS ล่าสุด (MRQ)</div>
+               <div className="text-lg font-mono font-bold text-terminal-cyan">{fmtPrice(financials['earnings_per_share_fq'])}</div>
+             </div>
+             <div className="rounded-md border border-terminal-amber/20 bg-card/20 px-3 py-3">
+               <div className="text-[9px] font-mono text-muted-foreground/70">รอบประกาศถัดไป</div>
+               <div className="text-sm font-mono font-bold text-terminal-amber">
+                 {financials['earnings_release_next_date'] ? new Date(Number(financials['earnings_release_next_date']) * 1000).toLocaleDateString('th-TH') : '—'}
+               </div>
+             </div>
           </div>
           <div className="rounded-lg border border-border/40 bg-card/30 p-4">
             <div className="h-48">
