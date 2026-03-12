@@ -570,6 +570,7 @@ const ScreenerFilings = () => {
                 setSelectedSymbol(null);
                 setFilings([]);
                 setFinancials(null);
+                setStatementSeries(null);
                 setViewMode('choose');
               }
             }}
