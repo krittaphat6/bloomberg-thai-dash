@@ -103,7 +103,7 @@ const getExchangeFlag = (exchange: string) => {
 
 type StatementTab = 'overview' | 'income' | 'balance' | 'cashflow' | 'ratios' | 'revenue';
 
-const PIE_COLORS = ['#f59e0b', '#22c55e', '#06b6d4', '#ef4444', '#8b5cf6'];
+const PIE_COLORS = ['#d4a843', '#4ade80', '#38bdf8', '#f87171', '#a78bfa'];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -121,28 +121,28 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 const KeyFact = ({ label, value, suffix }: { label: string; value: string; suffix?: string }) => (
   <div className="space-y-0.5">
-    <div className="text-[10px] font-mono text-muted-foreground/70">{label}</div>
-    <div className="text-[14px] font-mono font-bold text-terminal-amber">
+    <div className="text-[10px] font-mono text-muted-foreground/60">{label}</div>
+    <div className="text-[14px] font-mono font-bold text-foreground">
       {value}
-      {suffix && <span className="text-[10px] text-muted-foreground ml-1">{suffix}</span>}
+      {suffix && <span className="text-[10px] text-muted-foreground/50 ml-1">{suffix}</span>}
     </div>
   </div>
 );
 
 const SectionTitle = ({ title, subtitle }: { title: string; subtitle?: string }) => (
   <div className="mb-3">
-    <h3 className="text-sm font-mono font-bold text-terminal-amber">{title}</h3>
-    {subtitle && <p className="text-[10px] font-mono text-muted-foreground/70">{subtitle}</p>}
+    <h3 className="text-sm font-mono font-bold text-foreground">{title}</h3>
+    {subtitle && <p className="text-[10px] font-mono text-muted-foreground/60">{subtitle}</p>}
   </div>
 );
 
 const MetricRow = ({ label, value, format = 'number' }: { label: string; value: any; format?: string }) => {
   if (value == null || isNaN(value)) return null;
   const display = format === 'currency' ? fmtPrice(value) : format === 'growth' || format === 'percent' ? fmtPct(value) : format === 'ratio' ? fmtRatio(value) : fmt(value);
-  const color = format === 'growth' || format === 'percent' ? colorVal(value) : 'text-terminal-cyan';
+  const color = format === 'growth' || format === 'percent' ? colorVal(value) : 'text-foreground';
   return (
-    <div className="grid grid-cols-2 py-2 px-3 border-b border-border/20 last:border-b-0 hover:bg-muted/20 transition-colors">
-      <span className="text-[11px] font-mono text-muted-foreground/80">{label}</span>
+    <div className="grid grid-cols-2 py-2 px-3 border-b border-border/20 last:border-b-0 hover:bg-muted/10 transition-colors">
+      <span className="text-[11px] font-mono text-muted-foreground/70">{label}</span>
       <span className={`text-[11px] font-mono font-medium text-right ${color}`}>{display}</span>
     </div>
   );
@@ -180,6 +180,22 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
     });
   }, [financials]);
 
+  // Real ownership data from API
+  const ownershipData = useMemo(() => {
+    if (!financials) return null;
+    const totalShares = financials['total_shares_outstanding'] || financials['total_shares_outstanding_fundamental'] || 0;
+    const floatShares = financials['float_shares_outstanding'] || 0;
+    if (totalShares > 0 && floatShares > 0) {
+      const floatPct = floatShares / totalShares * 100;
+      const insiderPct = 100 - floatPct;
+      return [
+        { name: 'หุ้นที่ถูกถือเฉพาะกลุ่ม (Insider)', value: insiderPct, amount: totalShares - floatShares },
+        { name: 'หุ้นหมุนเวียน (Float)', value: floatPct, amount: floatShares },
+      ];
+    }
+    return null;
+  }, [financials]);
+
   if (!financials) return <div className="p-8 text-center text-muted-foreground text-[11px] font-mono">ไม่มีข้อมูล</div>;
 
   const tabDefs: { value: StatementTab; label: string; icon: React.ReactNode }[] = [
@@ -192,21 +208,20 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
   ];
 
   const marketCap = financials['market_cap_basic'] ?? 0;
-  const totalEquity = financials['total_equity'] ?? 0;
   const totalDebt = financials['total_debt'] ?? 0;
   const cashEquiv = financials['cash_n_equivalents_fq'] ?? 0;
-  const ev = financials['enterprise_value'] ?? 0;
   const totalRevenue = financials['total_revenue'] ?? null;
   const grossProfit = financials['gross_profit'] ?? null;
   const operIncome = financials['oper_income'] ?? null;
   const netIncome = financials['net_income'] ?? null;
+  const netDebt = financials['net_debt'] ?? null;
+  const fundHoldingPct = financials['fund_holding_percent'] ?? null;
 
+  // Real capital structure - only real data
   const capitalData = [
     { name: 'มูลค่าตามราคาตลาด', value: marketCap },
-    { name: 'หนี้', value: totalDebt },
-    { name: 'ส่วนของผู้ถือหุ้นส่วนน้อย', value: totalEquity > 0 ? totalEquity * 0.3 : 0 },
+    { name: 'หนี้สินรวม', value: totalDebt },
     { name: 'เงินสดและรายการเทียบเท่าเงินสด', value: cashEquiv },
-    { name: 'มูลค่าสุทธิของกิจการ', value: ev },
   ].filter(d => d.value > 0);
 
   const waterfallData = [
@@ -218,15 +233,18 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
     { name: 'รายได้สุทธิ', value: netIncome },
   ].filter(d => d.value != null).map(d => ({ ...d, value: d.value as number }));
 
+  // Determine currency from data
+  const currency = financials['currency'] || (symbol.exchange === 'SET' || symbol.exchange === 'BKK' ? 'THB' : 'USD');
+
   return (
     <div className="space-y-4 p-4">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded-full bg-terminal-amber/20 border border-terminal-amber/30 flex items-center justify-center">
-          <Building2 className="w-3.5 h-3.5 text-terminal-amber" />
+        <div className="w-6 h-6 rounded-full bg-muted/40 border border-border/50 flex items-center justify-center">
+          <Building2 className="w-3.5 h-3.5 text-foreground/70" />
         </div>
-        <span className="text-sm font-mono font-bold text-terminal-amber">{symbol.description || symbol.symbol}</span>
-        <span className="text-[10px] font-mono text-terminal-cyan/70">• การเงิน</span>
+        <span className="text-sm font-mono font-bold text-foreground">{symbol.description || symbol.symbol}</span>
+        <span className="text-[10px] font-mono text-muted-foreground/60">• การเงิน</span>
       </div>
 
       {/* Tabs */}
@@ -234,7 +252,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
         {tabDefs.map((t) => (
           <button key={t.value} onClick={() => setTab(t.value)}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono border transition-colors whitespace-nowrap ${
-              tab === t.value ? 'bg-terminal-amber/15 border-terminal-amber/40 text-terminal-amber font-medium' : 'border-border/50 text-muted-foreground hover:text-terminal-amber/70 hover:bg-muted/30'
+              tab === t.value ? 'bg-foreground/10 border-foreground/30 text-foreground font-medium' : 'border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/20'
             }`}
           >
             {t.icon} {t.label}
@@ -248,51 +266,58 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
           <div>
             <SectionTitle title="ข้อเท็จจริงที่มีนัยยะ" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <KeyFact label="มูลค่าตามราคาตลาด" value={fmt(marketCap)} suffix="THB" />
+              <KeyFact label="มูลค่าตามราคาตลาด" value={fmt(marketCap)} suffix={currency} />
               <KeyFact label="อัตราผลตอบแทนจากเงินปันผล ›" value={fmtPct(financials['dividends_yield'])} />
               <KeyFact label="อัตราส่วนราคาต่อกำไรสุทธิ (12 เดือนล่าสุด) ›" value={fmtRatio(financials['price_earnings_ttm'])} />
-              <KeyFact label="กำไรต่อหุ้นขั้นพื้นฐาน (12 เดือนล่าสุด) ›" value={fmtPrice(financials['earnings_per_share_basic_ttm'])} suffix="THB" />
+              <KeyFact label="กำไรต่อหุ้นขั้นพื้นฐาน (12 เดือนล่าสุด) ›" value={fmtPrice(financials['earnings_per_share_basic_ttm'])} suffix={currency} />
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
               <KeyFact label="พนักงาน (ปีงบประมาณ) ›" value={financials['number_of_employees'] ? fmt(financials['number_of_employees'], 0) : '—'} />
-              <KeyFact label="ผู้บริหารสูงสุด" value="—" />
-              <KeyFact label="เว็บไซต์" value={`${symbol.symbol.toLowerCase()}.com`} />
+              <KeyFact label="Industry" value={financials['industry'] || '—'} />
+              <KeyFact label="เว็บไซต์" value={financials['web_url'] || '—'} />
               <KeyFact label="Sector" value={financials['sector'] || '—'} />
             </div>
           </div>
 
           {/* Ownership + Capital Structure */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+            <div className="rounded-lg border border-border/30 bg-card/30 p-4">
               <SectionTitle title="ความเป็นเจ้าของ" />
-              <div className="flex items-center gap-6">
-                <div className="w-28 h-28">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartPie>
-                      <Pie data={[{ name: 'Institutional', value: 55.6 }, { name: 'Retail', value: 44.4 }]}
-                        cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
-                        <Cell fill="#f59e0b" />
-                        <Cell fill="#06b6d4" />
-                      </Pie>
-                    </RechartPie>
-                  </ResponsiveContainer>
-                </div>
-                <div className="space-y-2 text-[11px] font-mono">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-terminal-amber" />
-                    <span className="text-muted-foreground">หุ้นที่ถูกถือเฉพาะกลุ่ม</span>
-                    <span className="text-terminal-amber font-medium ml-auto">{fmt(marketCap * 0.556)} (55.6%)</span>
+              {ownershipData ? (
+                <div className="flex items-center gap-6">
+                  <div className="w-28 h-28">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartPie>
+                        <Pie data={ownershipData.map(d => ({ name: d.name, value: d.value }))}
+                          cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
+                          <Cell fill="#d4a843" />
+                          <Cell fill="#38bdf8" />
+                        </Pie>
+                      </RechartPie>
+                    </ResponsiveContainer>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-terminal-cyan" />
-                    <span className="text-muted-foreground">หุ้นที่ถูกกระจายสู่รายย่อย</span>
-                    <span className="text-terminal-cyan font-medium ml-auto">{fmt(marketCap * 0.444)} (44.4%)</span>
+                  <div className="space-y-2 text-[11px] font-mono">
+                    {ownershipData.map((item, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: i === 0 ? '#d4a843' : '#38bdf8' }} />
+                        <span className="text-muted-foreground/70">{item.name}</span>
+                        <span className="text-foreground font-medium ml-auto">{item.value.toFixed(1)}%</span>
+                      </div>
+                    ))}
+                    {fundHoldingPct != null && (
+                      <div className="flex items-center gap-2 pt-1 border-t border-border/20">
+                        <span className="text-muted-foreground/70">กองทุนถือ</span>
+                        <span className="text-foreground font-medium ml-auto">{fmtPct(fundHoldingPct)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="text-[11px] font-mono text-muted-foreground/50 py-4 text-center">ไม่มีข้อมูลสัดส่วนการถือหุ้น</div>
+              )}
             </div>
 
-            <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+            <div className="rounded-lg border border-border/30 bg-card/30 p-4">
               <SectionTitle title="โครงสร้างเงินทุน" />
               {capitalData.length > 0 && (
                 <div className="space-y-3">
@@ -311,10 +336,16 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                     {capitalData.map((d, i) => (
                       <div key={i} className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
-                        <span className="text-muted-foreground truncate">{d.name}</span>
+                        <span className="text-muted-foreground/70 truncate">{d.name}</span>
                         <span className="text-foreground font-medium ml-auto">{fmt(d.value)}</span>
                       </div>
                     ))}
+                    {netDebt != null && !isNaN(netDebt) && (
+                      <div className="flex items-center gap-1.5 col-span-2 pt-1 border-t border-border/20">
+                        <span className="text-muted-foreground/70">หนี้สินสุทธิ</span>
+                        <span className={`font-medium ml-auto ${Number(netDebt) > 0 ? 'text-red-400' : 'text-terminal-green'}`}>{fmt(netDebt)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -325,7 +356,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
           <div>
             <SectionTitle title="การประเมินมูลค่า ›" subtitle="ตัวชี้วัดทางพื้นฐานเพื่อกำหนดมูลค่ายุติธรรมของหุ้น" />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+              <div className="rounded-lg border border-border/30 bg-card/30 p-4">
                 <div className="text-[10px] font-mono text-muted-foreground mb-2 flex items-center gap-1">สรุป <Info className="w-3 h-3" /></div>
                 <div className="flex items-center gap-6">
                   <div className="w-28 h-28">
@@ -333,20 +364,20 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <RechartPie>
                         <Pie data={[{ name: 'MCap', value: marketCap }, { name: 'Revenue', value: totalRevenue || 1 }, { name: 'Net Inc', value: Math.abs(netIncome || 1) }]}
                           cx="50%" cy="50%" innerRadius={25} outerRadius={45} dataKey="value" stroke="none">
-                          <Cell fill="#f59e0b" />
-                          <Cell fill="#22c55e" />
-                          <Cell fill="#06b6d4" />
+                          <Cell fill="#d4a843" />
+                          <Cell fill="#4ade80" />
+                          <Cell fill="#38bdf8" />
                         </Pie>
                       </RechartPie>
                     </ResponsiveContainer>
                   </div>
                   <div className="space-y-2 text-[11px] font-mono">
-                    <div><span className="text-muted-foreground">P/E</span> <span className="text-terminal-amber font-bold ml-3">{fmtRatio(financials['price_earnings_ttm'])}x</span></div>
-                    <div><span className="text-muted-foreground">P/S</span> <span className="text-terminal-cyan font-bold ml-3">{fmtRatio(financials['price_sales_ratio'])}x</span></div>
+                    <div><span className="text-muted-foreground">P/E</span> <span className="text-foreground font-bold ml-3">{fmtRatio(financials['price_earnings_ttm'])}x</span></div>
+                    <div><span className="text-muted-foreground">P/S</span> <span className="text-foreground font-bold ml-3">{fmtRatio(financials['price_sales_ratio'])}x</span></div>
                   </div>
                 </div>
               </div>
-              <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+              <div className="rounded-lg border border-border/30 bg-card/30 p-4">
                 <div className="text-[10px] font-mono text-muted-foreground mb-2">อัตราส่วนการประเมินมูลค่า</div>
                 <div className="h-48">
                   <ResponsiveContainer width="100%" height="100%">
@@ -357,8 +388,8 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <YAxis yAxisId="right" orientation="right" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ fontSize: '10px' }} />
-                      <Line yAxisId="left" dataKey="ps" name="P/S" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} />
-                      <Line yAxisId="right" dataKey="pe" name="P/E" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line yAxisId="left" dataKey="ps" name="P/S" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line yAxisId="right" dataKey="pe" name="P/E" stroke="#d4a843" strokeWidth={2} dot={{ r: 3 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -370,7 +401,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
           <div>
             <SectionTitle title="ความเติบโตและการทำกำไร ›" subtitle="ประสิทธิภาพและมาร์จิ้นล่าสุดของบริษัท" />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+              <div className="rounded-lg border border-border/30 bg-card/30 p-4">
                 <div className="text-[10px] font-mono text-muted-foreground mb-2">ประสิทธิภาพ</div>
                 <div className="h-52">
                   <ResponsiveContainer width="100%" height="100%">
@@ -381,14 +412,14 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <YAxis yAxisId="right" orientation="right" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ fontSize: '10px' }} />
-                      <Bar yAxisId="left" dataKey="revenue" name="รายได้" fill="#f59e0b" radius={[3, 3, 0, 0]} />
-                      <Bar yAxisId="left" dataKey="netIncome" name="รายได้สุทธิ" fill="#22c55e" radius={[3, 3, 0, 0]} />
-                      <Line yAxisId="right" dataKey="netMargin" name="อัตรากำไรสุทธิ %" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} />
+                      <Bar yAxisId="left" dataKey="revenue" name="รายได้" fill="#d4a843" radius={[3, 3, 0, 0]} />
+                      <Bar yAxisId="left" dataKey="netIncome" name="รายได้สุทธิ" fill="#4ade80" radius={[3, 3, 0, 0]} />
+                      <Line yAxisId="right" dataKey="netMargin" name="อัตรากำไรสุทธิ %" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </div>
-              <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+              <div className="rounded-lg border border-border/30 bg-card/30 p-4">
                 <div className="text-[10px] font-mono text-muted-foreground mb-2">อัตรารายได้ต่อกำไร</div>
                 <div className="h-52">
                   <ResponsiveContainer width="100%" height="100%">
@@ -399,7 +430,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                       <Tooltip content={<CustomTooltip />} />
                       <Bar dataKey="value" name="Value" radius={[3, 3, 0, 0]}>
                         {waterfallData.map((entry, index) => (
-                          <Cell key={index} fill={entry.value >= 0 ? '#22c55e' : '#ef4444'} />
+                          <Cell key={index} fill={entry.value >= 0 ? '#4ade80' : '#f87171'} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -427,9 +458,9 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                 { label: 'Div Yield', value: fmtPct(financials['dividends_yield']), clr: colorVal(financials['dividends_yield']) },
                 { label: 'RSI (14)', value: fmtRatio(financials['RSI']) },
               ].map((item) => (
-              <div key={item.label} className="rounded-md border border-border/30 bg-card/20 px-3 py-2 hover:border-terminal-amber/30 transition-colors">
-                  <div className="text-[9px] font-mono text-muted-foreground/70">{item.label}</div>
-                  <div className={`text-[13px] font-mono font-bold ${item.clr || 'text-terminal-cyan'}`}>{item.value}</div>
+              <div key={item.label} className="rounded-md border border-border/30 bg-card/20 px-3 py-2 hover:border-border/50 transition-colors">
+                  <div className="text-[9px] font-mono text-muted-foreground/60">{item.label}</div>
+                  <div className={`text-[13px] font-mono font-bold ${item.clr || 'text-foreground'}`}>{item.value}</div>
                 </div>
               ))}
             </div>
@@ -441,7 +472,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
       {tab === 'income' && (
         <div className="space-y-4">
           <SectionTitle title="งบกำไรขาดทุน" subtitle="รายได้ ต้นทุน และกำไรของบริษัท" />
-           <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+           <div className="rounded-lg border border-border/30 bg-card/30 p-4">
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
@@ -450,9 +481,9 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                   <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{ fontSize: '10px' }} />
-                  <Bar dataKey="revenue" name="Revenue" fill="#f59e0b" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="grossProfit" name="Gross Profit" fill="#22c55e" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="netIncome" name="Net Income" fill="#06b6d4" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="revenue" name="Revenue" fill="#d4a843" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="grossProfit" name="Gross Profit" fill="#4ade80" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="netIncome" name="Net Income" fill="#38bdf8" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -501,9 +532,9 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                 { label: 'Quick Ratio', value: financials['quick_ratio'], format: 'ratio' },
               ]},
             ].map(section => (
-              <div key={section.title} className="rounded-lg border border-terminal-amber/20 overflow-hidden">
-                <div className="px-3 py-2 bg-terminal-amber/5 border-b border-terminal-amber/20">
-                  <span className="text-[10px] font-mono font-bold text-terminal-amber uppercase">{section.title}</span>
+              <div key={section.title} className="rounded-lg border border-border/30 overflow-hidden">
+                <div className="px-3 py-2 bg-muted/20 border-b border-border/30">
+                  <span className="text-[10px] font-mono font-bold text-foreground/80 uppercase">{section.title}</span>
                 </div>
                 {section.items.filter(i => i.value != null && !isNaN(i.value)).map(item => (
                   <MetricRow key={item.label} label={item.label} value={item.value} format={item.format} />
@@ -525,9 +556,9 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
               { label: 'จ่ายต่อเนื่อง (ปี)', value: fmtRatio(financials['continuous_dividend_payout']) },
               { label: 'เติบโตต่อเนื่อง (ปี)', value: fmtRatio(financials['continuous_dividend_growth']) },
             ].map(s => (
-              <div key={s.label} className="rounded-md border border-terminal-amber/20 bg-card/20 px-3 py-3 hover:border-terminal-amber/40 transition-colors">
-                <div className="text-[9px] font-mono text-muted-foreground/70">{s.label}</div>
-                <div className="text-lg font-mono font-bold text-terminal-amber">{s.value}</div>
+              <div key={s.label} className="rounded-md border border-border/30 bg-card/20 px-3 py-3 hover:border-border/50 transition-colors">
+                <div className="text-[9px] font-mono text-muted-foreground/60">{s.label}</div>
+                <div className="text-lg font-mono font-bold text-foreground">{s.value}</div>
               </div>
             ))}
           </div>
@@ -545,22 +576,22 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
         <div className="space-y-4">
           <SectionTitle title="ผลประกอบการ" subtitle="EPS และการเติบโต" />
           <div className="grid grid-cols-3 gap-3">
-             <div className="rounded-md border border-terminal-amber/20 bg-card/20 px-3 py-3">
-               <div className="text-[9px] font-mono text-muted-foreground/70">EPS (TTM)</div>
-               <div className="text-lg font-mono font-bold text-terminal-green">{fmtPrice(financials['earnings_per_share_diluted_ttm'])}</div>
+             <div className="rounded-md border border-border/30 bg-card/20 px-3 py-3">
+               <div className="text-[9px] font-mono text-muted-foreground/60">EPS (TTM)</div>
+               <div className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['earnings_per_share_diluted_ttm'])}</div>
              </div>
-             <div className="rounded-md border border-terminal-amber/20 bg-card/20 px-3 py-3">
-               <div className="text-[9px] font-mono text-muted-foreground/70">EPS ล่าสุด (MRQ)</div>
-               <div className="text-lg font-mono font-bold text-terminal-cyan">{fmtPrice(financials['earnings_per_share_fq'])}</div>
+             <div className="rounded-md border border-border/30 bg-card/20 px-3 py-3">
+               <div className="text-[9px] font-mono text-muted-foreground/60">EPS ล่าสุด (MRQ)</div>
+               <div className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['earnings_per_share_fq'])}</div>
              </div>
-             <div className="rounded-md border border-terminal-amber/20 bg-card/20 px-3 py-3">
-               <div className="text-[9px] font-mono text-muted-foreground/70">รอบประกาศถัดไป</div>
-               <div className="text-sm font-mono font-bold text-terminal-amber">
+             <div className="rounded-md border border-border/30 bg-card/20 px-3 py-3">
+               <div className="text-[9px] font-mono text-muted-foreground/60">รอบประกาศถัดไป</div>
+               <div className="text-sm font-mono font-bold text-foreground">
                  {financials['earnings_release_next_date'] ? new Date(Number(financials['earnings_release_next_date']) * 1000).toLocaleDateString('th-TH') : '—'}
                </div>
              </div>
-          </div>
-          <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+           </div>
+          <div className="rounded-lg border border-border/30 bg-card/30 p-4">
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
@@ -568,7 +599,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                   <XAxis dataKey="period" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
                   <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="eps" name="EPS" fill="#f59e0b" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="eps" name="EPS" fill="#d4a843" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -587,7 +618,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
         <div className="space-y-4">
           <SectionTitle title="รายได้" subtitle="Revenue, Gross Profit และแนวโน้ม" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-             <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+             <div className="rounded-lg border border-border/30 bg-card/30 p-4">
               <div className="text-[10px] font-mono text-muted-foreground mb-2">Revenue vs Gross Profit</div>
               <div className="h-52">
                 <ResponsiveContainer width="100%" height="100%">
@@ -597,13 +628,13 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                     <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend wrapperStyle={{ fontSize: '10px' }} />
-                    <Bar dataKey="revenue" name="Revenue" fill="#f59e0b" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="grossProfit" name="Gross Profit" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="revenue" name="Revenue" fill="#d4a843" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="grossProfit" name="Gross Profit" fill="#4ade80" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
+            <div className="rounded-lg border border-border/30 bg-card/30 p-4">
               <div className="text-[10px] font-mono text-muted-foreground mb-2">Revenue Breakdown</div>
               <div className="h-52">
                 <ResponsiveContainer width="100%" height="100%">
@@ -614,7 +645,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                     <Tooltip content={<CustomTooltip />} />
                     <Bar dataKey="value" radius={[3, 3, 0, 0]}>
                       {waterfallData.map((entry, index) => (
-                        <Cell key={index} fill={entry.value >= 0 ? '#22c55e' : '#ef4444'} />
+                        <Cell key={index} fill={entry.value >= 0 ? '#4ade80' : '#f87171'} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -791,9 +822,9 @@ const ScreenerFilings = () => {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'annual': return <FileCheck className="w-3.5 h-3.5 text-terminal-green" />;
-      case 'interim': case 'quarterly': return <FileText className="w-3.5 h-3.5 text-terminal-cyan" />;
-      case 'slides': return <Presentation className="w-3.5 h-3.5 text-terminal-amber" />;
+      case 'annual': return <FileCheck className="w-3.5 h-3.5 text-emerald-400" />;
+      case 'interim': case 'quarterly': return <FileText className="w-3.5 h-3.5 text-sky-400" />;
+      case 'slides': return <Presentation className="w-3.5 h-3.5 text-muted-foreground" />;
       default: return <FileText className="w-3.5 h-3.5 text-muted-foreground" />;
     }
   };
@@ -883,12 +914,12 @@ const ScreenerFilings = () => {
       {selectedSymbol && (
         <div className="px-3 py-2 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-terminal-amber/10 border border-terminal-amber/30 flex items-center justify-center text-[11px]">
+            <div className="w-6 h-6 rounded-full bg-muted/30 border border-border/40 flex items-center justify-center text-[11px]">
               {getExchangeFlag(selectedSymbol.exchange)}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-[12px] font-mono font-bold text-terminal-amber">{selectedSymbol.symbol}</span>
+                <span className="text-[12px] font-mono font-bold text-foreground">{selectedSymbol.symbol}</span>
                 <span className="text-[11px] font-mono text-muted-foreground truncate">{selectedSymbol.description}</span>
               </div>
               <span className="text-[9px] font-mono text-muted-foreground">• {selectedSymbol.exchange}</span>
@@ -896,7 +927,7 @@ const ScreenerFilings = () => {
             {viewMode !== 'choose' && (
               <button
                 onClick={() => { setViewMode('choose'); setFilings([]); setFinancials(null); }}
-                className="text-[10px] font-mono text-terminal-amber hover:text-terminal-amber/80 transition-colors px-2 py-1 rounded border border-terminal-amber/30 hover:bg-terminal-amber/5"
+                className="text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded border border-border/40 hover:bg-muted/20"
               >
                 ← เลือกใหม่
               </button>
@@ -911,9 +942,9 @@ const ScreenerFilings = () => {
         {!selectedSymbol && !showSuggestions && (
           <div className="flex items-center justify-center p-12">
             <div className="text-center space-y-3 max-w-xs">
-              <Building2 className="w-10 h-10 mx-auto text-terminal-amber/40" />
+               <Building2 className="w-10 h-10 mx-auto text-muted-foreground/40" />
               <div>
-                <h3 className="text-sm font-mono font-bold text-terminal-amber mb-1">ค้นหาข้อมูลบริษัท</h3>
+                 <h3 className="text-sm font-mono font-bold text-foreground mb-1">ค้นหาข้อมูลบริษัท</h3>
                 <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
                   พิมพ์ชื่อหรือตัวย่อหุ้นเพื่อดูงบการเงินขั้นต้น หรือเอกสารการเงินของบริษัท
                 </p>
@@ -921,7 +952,7 @@ const ScreenerFilings = () => {
               <div className="flex items-center gap-1.5 justify-center flex-wrap">
                 {['PTT', 'GULF', 'AAPL', 'ADVANC', 'NVDA'].map(s => (
                   <button key={s} onClick={() => setSearchQuery(s)}
-                    className="px-2 py-0.5 rounded border border-terminal-amber/30 text-[10px] font-mono text-terminal-amber hover:bg-terminal-amber/10 transition-colors">
+                    className="px-2 py-0.5 rounded border border-border/40 text-[10px] font-mono text-foreground/80 hover:bg-muted/20 transition-colors">
                     {s}
                   </button>
                 ))}
@@ -937,10 +968,10 @@ const ScreenerFilings = () => {
             <div className="grid grid-cols-1 gap-3 max-w-sm mx-auto">
               <button
                 onClick={() => handleChooseMode('statements')}
-                 className="flex items-center gap-4 p-4 rounded-lg border border-border hover:border-terminal-cyan/50 hover:bg-terminal-cyan/5 transition-all text-left group"
+                 className="flex items-center gap-4 p-4 rounded-lg border border-border hover:border-foreground/30 hover:bg-muted/10 transition-all text-left group"
                >
-                 <div className="w-12 h-12 rounded-lg bg-terminal-cyan/10 border border-terminal-cyan/20 flex items-center justify-center shrink-0 group-hover:bg-terminal-cyan/20 transition-colors">
-                   <Calculator className="w-6 h-6 text-terminal-cyan" />
+                 <div className="w-12 h-12 rounded-lg bg-muted/30 border border-border/40 flex items-center justify-center shrink-0 group-hover:bg-muted/50 transition-colors">
+                   <Calculator className="w-6 h-6 text-foreground/70" />
                 </div>
                 <div>
                   <h4 className="text-[13px] font-mono font-bold text-foreground">📊 งบการเงินขั้นต้น</h4>
@@ -957,10 +988,10 @@ const ScreenerFilings = () => {
 
               <button
                 onClick={() => handleChooseMode('filings')}
-                 className="flex items-center gap-4 p-4 rounded-lg border border-border hover:border-terminal-amber/50 hover:bg-terminal-amber/5 transition-all text-left group"
+                 className="flex items-center gap-4 p-4 rounded-lg border border-border hover:border-foreground/30 hover:bg-muted/10 transition-all text-left group"
                >
-                 <div className="w-12 h-12 rounded-lg bg-terminal-amber/10 border border-terminal-amber/20 flex items-center justify-center shrink-0 group-hover:bg-terminal-amber/20 transition-colors">
-                   <FileText className="w-6 h-6 text-terminal-amber" />
+                 <div className="w-12 h-12 rounded-lg bg-muted/30 border border-border/40 flex items-center justify-center shrink-0 group-hover:bg-muted/50 transition-colors">
+                   <FileText className="w-6 h-6 text-foreground/70" />
                 </div>
                 <div>
                   <h4 className="text-[13px] font-mono font-bold text-foreground">📋 เอกสารการเงินบริษัท</h4>
@@ -1023,7 +1054,7 @@ const ScreenerFilings = () => {
                   <div className="flex items-center gap-3">
                     <span className="text-lg font-mono font-bold text-foreground">{fmtPrice(financials['close'])}</span>
                     {financials['change'] != null && (
-                     <span className={`text-sm font-mono font-medium ${financials['change'] > 0 ? 'text-terminal-green' : 'text-red-400'}`}>
+                     <span className={`text-sm font-mono font-medium ${financials['change'] > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {financials['change'] > 0 ? '▲' : '▼'} {Math.abs(financials['change']).toFixed(2)}%
                       </span>
                     )}
