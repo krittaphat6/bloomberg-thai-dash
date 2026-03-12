@@ -845,8 +845,7 @@ const ScreenerFilings = () => {
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
                                 {item.documents.map((doc, di) => {
-                                  const fallbackUrl = `https://www.tradingview.com/symbols/${selectedSymbol.exchange}-${selectedSymbol.symbol}/financials-overview/`;
-                                  const href = doc.url || fallbackUrl;
+                                  const href = doc.url || getFallbackDocumentUrl(selectedSymbol);
                                   return (
                                     <a
                                       key={di}
