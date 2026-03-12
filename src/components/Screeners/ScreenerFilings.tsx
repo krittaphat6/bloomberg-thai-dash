@@ -560,7 +560,7 @@ const FinancialStatementsView = ({ financials, symbol }: { financials: Financial
                </div>
              </div>
           </div>
-          <div className="rounded-lg border border-border/40 bg-card/30 p-4">
+          <div className="rounded-lg border border-terminal-amber/20 bg-card/30 p-4">
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
