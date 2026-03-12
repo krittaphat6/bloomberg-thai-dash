@@ -952,7 +952,7 @@ const ScreenerFilings = () => {
               <div className="flex items-center gap-1.5 justify-center flex-wrap">
                 {['PTT', 'GULF', 'AAPL', 'ADVANC', 'NVDA'].map(s => (
                   <button key={s} onClick={() => setSearchQuery(s)}
-                    className="px-2 py-0.5 rounded border border-terminal-amber/30 text-[10px] font-mono text-terminal-amber hover:bg-terminal-amber/10 transition-colors">
+                    className="px-2 py-0.5 rounded border border-border/40 text-[10px] font-mono text-foreground/80 hover:bg-muted/20 transition-colors">
                     {s}
                   </button>
                 ))}
