@@ -443,6 +443,7 @@ const ScreenerFilings = () => {
     setViewMode('choose');
     setFilings([]);
     setFinancials(null);
+    setStatementSeries(null);
   }, []);
 
   // ─── Load data based on mode ────────────────────────────────────────────
