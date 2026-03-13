@@ -18,6 +18,7 @@ import { SentimentHistoryChart, SpikeAlert } from './TopNews/SentimentHistoryCha
 import { AlertSystem, Alert } from './TopNews/AlertSystem';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
+import { fetchModuleData, calculateModuleScores } from '@/services/ModuleDataService';
 
 // ABLE-HF 3.0 Analysis Result from Backend
 interface AbleAnalysisResult {
@@ -256,21 +257,16 @@ export const TopNews = () => {
           `);
         }
 
-        // Extract ABLE analysis from backend response
-        const ableResults: Record<string, AbleAnalysisResult> = {};
-        (data.macro || []).forEach((macro: MacroAnalysis) => {
-          if (macro.ableAnalysis) {
-            ableResults[macro.symbol] = macro.ableAnalysis;
-            console.log(`✅ ABLE analysis loaded: ${macro.symbol} - ${macro.ableAnalysis.decision}`);
-          }
-        });
-        setAbleAnalysis(ableResults);
-        if (Object.keys(ableResults).length === 0 && pinnedAssets.length > 0) {
-          console.warn('⚠️ No ABLE analysis from backend');
+        // Save news to history for sentiment analysis
+        if (data.rawNews && data.rawNews.length > 0) {
+          saveNewsToHistory(data.rawNews);
         }
+
+        setLastUpdated(new Date());
+
         if (!initialLoading) {
           toast({
-            title: '✅ ABLE-HF 3.0 Updated',
+            title: '✅ ABLE-HF 4.0 Updated',
             description: `${data.sourcesCount || 0} sources • ${data.processingTime}ms`
           });
         }
@@ -313,6 +309,87 @@ export const TopNews = () => {
     }
   };
 
+  // ✅ ABLE-HF 4.0: Local analysis using real market data
+  const MODULE_WEIGHTS: Record<string, number> = {
+    macro_neural_forecast: 0.065, central_bank_sentiment: 0.070, yield_curve_signal: 0.045,
+    inflation_momentum: 0.040, gdp_growth_trajectory: 0.035, employment_dynamics: 0.030,
+    trade_balance_flow: 0.025, fiscal_policy_impact: 0.020, news_sentiment_cfa: 0.075,
+    social_media_pulse: 0.055, institutional_flow: 0.050, retail_sentiment: 0.040,
+    options_sentiment: 0.035, cot_positioning: 0.030, dark_pool_activity: 0.025,
+    etf_flow_momentum: 0.020, trend_regime_detector: 0.045, momentum_oscillator: 0.040,
+    volatility_regime: 0.035, support_resistance: 0.030, pattern_recognition: 0.025,
+    volume_analysis: 0.020, market_breadth: 0.015, intermarket_correlation: 0.015,
+    event_shock: 0.065, geopolitical_risk: 0.045, black_swan_detector: 0.040,
+    liquidity_risk: 0.030, correlation_breakdown: 0.025, tail_risk_monitor: 0.020,
+    regulatory_risk: 0.015, systemic_risk: 0.015, quantum_sentiment: 0.025,
+    neural_ensemble: 0.045, nlp_deep_analysis: 0.035, satellite_data: 0.020,
+    web_traffic_signal: 0.020, patent_innovation: 0.015, esg_momentum: 0.015,
+    crypto_correlation: 0.015,
+  };
+
+  const runLocalAnalysis = useCallback(async (newsItems: any[]) => {
+    setAnalyzing(true);
+    console.log('📊 Running ABLE-HF 4.0 local analysis from real-time market data...');
+
+    const newsText = newsItems.map((n: any) => `${n.title} ${n.description || ''}`).join(' ');
+    const results: Record<string, AbleAnalysisResult> = {};
+
+    for (const asset of pinnedAssets) {
+      try {
+        const moduleData = await fetchModuleData(asset.symbol);
+        const rawScores = calculateModuleScores(moduleData, newsText, asset.symbol);
+
+        let totalWeight = 0;
+        let weightedSum = 0;
+        Object.entries(rawScores).forEach(([key, val]) => {
+          const weight = MODULE_WEIGHTS[key] || 0;
+          totalWeight += weight;
+          weightedSum += val * weight;
+        });
+
+        const P_up = totalWeight > 0 ? (weightedSum / totalWeight) * 100 : 50;
+        const confidence = Math.min(95, Math.max(30, Math.abs(P_up - 50) * 2 + 40));
+
+        const keyDrivers = Object.entries(rawScores)
+          .sort((a, b) => Math.abs(b[1] - 0.5) - Math.abs(a[1] - 0.5))
+          .slice(0, 5)
+          .map(([key, val]) => {
+            const dir = val > 0.5 ? '↑' : '↓';
+            const score = Math.round((val - 0.5) * 200);
+            return `${dir} ${key.replace(/_/g, ' ')}: ${score > 0 ? '+' : ''}${score}`;
+          });
+
+        const riskWarnings: string[] = [];
+        if (moduleData.vixLevel && moduleData.vixLevel > 25) riskWarnings.push(`⚠️ VIX สูง (${moduleData.vixLevel.toFixed(1)})`);
+        if (moduleData.yieldCurveSpread !== null && moduleData.yieldCurveSpread < 0) riskWarnings.push('⚠️ Yield Curve Inverted');
+
+        const direction = P_up > 60 ? 'ขาขึ้น' : P_up < 40 ? 'ขาลง' : 'ไซด์เวย์';
+        const thaiSummary = `${asset.symbol}: แนวโน้ม${direction} P(Up)=${P_up.toFixed(1)}%${moduleData.vixLevel ? ` | VIX=${moduleData.vixLevel.toFixed(1)}` : ''}`;
+
+        results[asset.symbol] = {
+          P_up_pct: Math.round(P_up * 10) / 10,
+          P_down_pct: Math.round((100 - P_up) * 10) / 10,
+          decision: P_up > 60 ? '🟢 BUY' : P_up < 40 ? '🔴 SELL' : '🟡 HOLD',
+          confidence: Math.round(confidence),
+          scores: Object.fromEntries(Object.entries(rawScores).map(([k, v]) => [k, Math.round((v - 0.5) * 200)])),
+          thai_summary: thaiSummary,
+          key_drivers: keyDrivers,
+          risk_warnings: riskWarnings,
+          analyzed_at: new Date().toISOString(),
+          market_regime: moduleData.vixLevel ? (moduleData.vixLevel > 25 ? 'High Volatility' : moduleData.vixLevel < 15 ? 'Low Volatility' : 'Normal') : 'Unknown',
+        };
+
+        console.log(`✅ ${asset.symbol}: P(Up)=${P_up.toFixed(1)}% ${results[asset.symbol].decision}`);
+      } catch (err) {
+        console.warn(`⚠️ Analysis failed for ${asset.symbol}:`, err);
+      }
+    }
+
+    setAbleAnalysis(results);
+    setAnalyzing(false);
+    console.log(`📊 ABLE-HF 4.0 analysis complete: ${Object.keys(results).length}/${pinnedAssets.length} assets`);
+  }, [pinnedAssets]);
+
   // ✅ NEW: Fetch เมื่อเปิด component + Auto-refresh ทุก 10 นาที + Cleanup
   useEffect(() => {
     console.log('🚀 TopNews component mounted - Starting AI analysis...');
@@ -334,6 +411,13 @@ export const TopNews = () => {
       setIsComponentActive(false);
     };
   }, []); // [] = run เฉพาะตอน mount/unmount เท่านั้น
+
+  // ✅ Trigger local analysis when rawNews or lastUpdated changes
+  useEffect(() => {
+    if (lastUpdated) {
+      runLocalAnalysis(rawNews);
+    }
+  }, [lastUpdated]);
 
   // Get available assets (not already pinned)
   const getAvailableAssets = () => {
@@ -368,8 +452,8 @@ export const TopNews = () => {
     return <div className="flex h-full bg-zinc-950 text-white items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-          <p className="text-emerald-300/70">Loading ABLE-HF 3.0 Intelligence...</p>
-          <p className="text-zinc-500 text-xs">Powered by Gemini AI</p>
+          <p className="text-emerald-300/70">Loading ABLE-HF 4.0 Intelligence...</p>
+          <p className="text-zinc-500 text-xs">Real-Time Market Data Analysis</p>
         </div>
       </div>;
   }
@@ -541,7 +625,7 @@ export const TopNews = () => {
               const isFallback = !hasAnalysis || analysis?.decision?.includes('Fallback');
               const P_up = hasAnalysis ? analysis.P_up_pct : 50;
               const decision = hasAnalysis ? (analysis.decision || 'HOLD') : '—';
-              const analysisText = hasAnalysis ? (analysis.thai_summary || 'กำลังรอการวิเคราะห์...') : 'กดปุ่ม "Run Gemini AI" เพื่อเริ่มการวิเคราะห์';
+              const analysisText = hasAnalysis ? (analysis.thai_summary || 'กำลังรอการวิเคราะห์...') : 'กำลังโหลดข้อมูลตลาด...';
               const priceData = assetPrices[asset.symbol];
               
               return <Card 
@@ -588,7 +672,7 @@ export const TopNews = () => {
                           <div className="flex items-center gap-1 mb-1">
                             <Brain className={`w-3 h-3 ${!hasAnalysis ? 'text-zinc-600' : isFallback ? 'text-yellow-400' : 'text-emerald-400'}`} />
                             <span className={`text-xs ${!hasAnalysis ? 'text-zinc-600' : isFallback ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                              {!hasAnalysis ? '⏳ Pending Analysis' : isFallback ? '⚠️ Fallback Mode' : 'ABLE-HF 3.0 Analysis'}
+                              {!hasAnalysis ? '⏳ Loading...' : isFallback ? '⚠️ Fallback Mode' : 'ABLE-HF 4.0 Analysis'}
                             </span>
                             {analyzing && <Loader2 className="w-3 h-3 animate-spin text-emerald-400 ml-1" />}
                           </div>
@@ -606,11 +690,11 @@ export const TopNews = () => {
                             </div>
                           </div>}
                           
-                        {/* Placeholder for no analysis */}
+                        {/* Placeholder for loading */}
                         {!hasAnalysis && (
                           <div className="mb-3 flex items-center gap-2 text-zinc-600">
-                            <Sparkles className="w-3 h-3" />
-                            <span className="text-[10px]">กดปุ่ม Run Gemini AI เพื่อวิเคราะห์</span>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span className="text-[10px]">กำลังวิเคราะห์จากข้อมูลตลาดจริง...</span>
                           </div>
                         )}
 
