@@ -257,21 +257,19 @@ export const TopNews = () => {
           `);
         }
 
-        // Extract ABLE analysis from backend response
-        const ableResults: Record<string, AbleAnalysisResult> = {};
-        (data.macro || []).forEach((macro: MacroAnalysis) => {
-          if (macro.ableAnalysis) {
-            ableResults[macro.symbol] = macro.ableAnalysis;
-            console.log(`✅ ABLE analysis loaded: ${macro.symbol} - ${macro.ableAnalysis.decision}`);
-          }
-        });
-        setAbleAnalysis(ableResults);
-        if (Object.keys(ableResults).length === 0 && pinnedAssets.length > 0) {
-          console.warn('⚠️ No ABLE analysis from backend');
+        // Save news to history for sentiment analysis
+        if (data.rawNews && data.rawNews.length > 0) {
+          saveNewsToHistory(data.rawNews);
         }
+
+        setLastUpdated(new Date());
+
+        // Run local ABLE-HF 4.0 analysis for each asset
+        runLocalAnalysis(data.rawNews || []);
+
         if (!initialLoading) {
           toast({
-            title: '✅ ABLE-HF 3.0 Updated',
+            title: '✅ ABLE-HF 4.0 Updated',
             description: `${data.sourcesCount || 0} sources • ${data.processingTime}ms`
           });
         }
