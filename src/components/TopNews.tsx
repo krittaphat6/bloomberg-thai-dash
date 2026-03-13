@@ -413,8 +413,10 @@ export const TopNews = () => {
     console.log('🚀 TopNews component mounted - Starting AI analysis...');
     setIsComponentActive(true);
 
-    // 1. Fetch ทันทีที่เปิด component
+    // 1. Fetch news + run analysis immediately
     fetchNews();
+    // Also run analysis right away with empty news (will use market data)
+    runLocalAnalysis([]);
 
     // 2. ตั้ง interval refresh ทุก 10 นาที (600,000 ms)
     const refreshInterval = setInterval(() => {
