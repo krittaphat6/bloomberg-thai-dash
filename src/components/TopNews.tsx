@@ -367,8 +367,8 @@ export const TopNews = () => {
     return <div className="flex h-full bg-zinc-950 text-white items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-          <p className="text-emerald-300/70">Loading ABLE-HF 3.0 Intelligence...</p>
-          <p className="text-zinc-500 text-xs">Powered by Gemini AI</p>
+          <p className="text-emerald-300/70">Loading ABLE-HF 4.0 Intelligence...</p>
+          <p className="text-zinc-500 text-xs">Real-Time Market Data Analysis</p>
         </div>
       </div>;
   }
