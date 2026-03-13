@@ -587,7 +587,7 @@ export const TopNews = () => {
                           <div className="flex items-center gap-1 mb-1">
                             <Brain className={`w-3 h-3 ${!hasAnalysis ? 'text-zinc-600' : isFallback ? 'text-yellow-400' : 'text-emerald-400'}`} />
                             <span className={`text-xs ${!hasAnalysis ? 'text-zinc-600' : isFallback ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                              {!hasAnalysis ? '⏳ Pending Analysis' : isFallback ? '⚠️ Fallback Mode' : 'ABLE-HF 3.0 Analysis'}
+                              {!hasAnalysis ? '⏳ Loading...' : isFallback ? '⚠️ Fallback Mode' : 'ABLE-HF 4.0 Analysis'}
                             </span>
                             {analyzing && <Loader2 className="w-3 h-3 animate-spin text-emerald-400 ml-1" />}
                           </div>
