@@ -264,9 +264,6 @@ export const TopNews = () => {
 
         setLastUpdated(new Date());
 
-        // Run local ABLE-HF 4.0 analysis for each asset
-        runLocalAnalysis(data.rawNews || []);
-
         if (!initialLoading) {
           toast({
             title: '✅ ABLE-HF 4.0 Updated',
