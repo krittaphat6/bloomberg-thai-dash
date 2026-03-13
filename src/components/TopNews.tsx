@@ -605,11 +605,11 @@ export const TopNews = () => {
                             </div>
                           </div>}
                           
-                        {/* Placeholder for no analysis */}
+                        {/* Placeholder for loading */}
                         {!hasAnalysis && (
                           <div className="mb-3 flex items-center gap-2 text-zinc-600">
-                            <Sparkles className="w-3 h-3" />
-                            <span className="text-[10px]">กดปุ่ม Run Gemini AI เพื่อวิเคราะห์</span>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span className="text-[10px]">กำลังวิเคราะห์จากข้อมูลตลาดจริง...</span>
                           </div>
                         )}
 
