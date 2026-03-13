@@ -312,7 +312,6 @@ export const TopNews = () => {
       console.warn('Failed to save news history:', err);
     }
   };
-  };
 
   // ✅ NEW: Fetch เมื่อเปิด component + Auto-refresh ทุก 10 นาที + Cleanup
   useEffect(() => {
