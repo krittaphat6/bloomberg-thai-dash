@@ -491,118 +491,11 @@ export const TopNews = () => {
                     <Brain className="w-3 h-3 mr-1" />
                     ABLE-HF 4.0
                   </Badge>
-                  {/* ✅ NEW: Data source status */}
                   <Badge variant="outline" className="border-purple-500/30 text-purple-400 text-xs hidden md:flex">
                     📡 16 Real-time • 📰 17 News • ≈ 7 Proxy
                   </Badge>
-                  {geminiResult && (
-                    <Badge variant="outline" className="border-purple-500/30 text-purple-400 text-xs">
-                      ✨ AI Analyzed
-                    </Badge>
-                  )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* ✅ Run Gemini Deep Analysis Button */}
-                  <Button 
-                    size="sm" 
-                    variant="default"
-                    onClick={async () => {
-                      if (rawNews.length === 0) {
-                        toast({ title: '⚠️ ไม่มีข่าว', description: 'กดปุ่ม Refresh เพื่อดึงข่าวก่อน', variant: 'destructive' });
-                        return;
-                      }
-                      if (pinnedAssets.length === 0) {
-                        toast({ title: '⚠️ ไม่มีสินทรัพย์', description: 'เพิ่มสินทรัพย์ก่อน', variant: 'destructive' });
-                        return;
-                      }
-                      
-                      setGeminiDeepLoading(true);
-                      setShowGeminiPanel(true);
-                      setGeminiThinking('🧠 กำลังวิเคราะห์ข่าว ' + rawNews.length + ' รายการ...\n');
-                      
-                      try {
-                        // Analyze first pinned asset with all news
-                        const targetSymbol = pinnedAssets[0].symbol;
-                        setGeminiThinking(prev => prev + '📊 กำลังวิเคราะห์ ' + targetSymbol + ' ตามหลัก ABLE-HF 3.0\n');
-                        
-                        const { data, error } = await supabase.functions.invoke('gemini-deep-analysis', {
-                          body: {
-                            symbol: targetSymbol,
-                            news: rawNews.slice(0, 50),
-                            priceData: assetPrices[targetSymbol]
-                          }
-                        });
-                        
-                        if (error) throw error;
-                        
-                        if (data?.success && data?.analysis) {
-                          setGeminiThinking(prev => prev + '\n✅ วิเคราะห์เสร็จสิ้น!\n');
-                          setGeminiThinking(prev => prev + '📈 Decision: ' + data.analysis.decision + '\n');
-                          setGeminiThinking(prev => prev + '🎯 P(Up): ' + data.analysis.P_up_pct?.toFixed(1) + '%\n');
-                          setGeminiThinking(prev => prev + '💪 Confidence: ' + data.analysis.confidence + '%\n\n');
-                          
-                          // ✅ NEW: Show filter stats in thinking
-                          if (data.analysis.filtered_news_count) {
-                            setGeminiThinking(prev => prev + `📰 News Filter: ${data.analysis.filtered_news_count}/${data.analysis.news_count} (${data.analysis.filter_pass_rate})\n`);
-                            if (data.analysis.market_moving_news > 0) {
-                              setGeminiThinking(prev => prev + `🚨 Market Moving News: ${data.analysis.market_moving_news}\n`);
-                            }
-                          }
-                          
-                          setGeminiThinking(prev => prev + '\n💭 ' + (data.analysis.thinking_process || data.analysis.thai_summary || '') + '\n');
-                          
-                          setGeminiResult(data.analysis);
-                          
-                          // ✅ NEW: Update filter stats
-                          setNewsFilterStats({
-                            totalNews: data.analysis.news_count || 0,
-                            filteredNews: data.analysis.filtered_news_count || 0,
-                            passRate: data.analysis.filter_pass_rate || '0%',
-                            marketMovingCount: data.analysis.market_moving_news || 0,
-                            topNews: data.analysis.top_news || []
-                          });
-                          
-                          // Update ableAnalysis with new deep analysis
-                          setAbleAnalysis(prev => ({
-                            ...prev,
-                            [targetSymbol]: data.analysis
-                          }));
-                          
-                          toast({
-                            title: `✅ Gemini วิเคราะห์ ${targetSymbol} เสร็จสิ้น`,
-                            description: `${data.analysis.decision} • ${data.analysis.filtered_news_count}/${data.analysis.news_count} news filtered`
-                          });
-                        } else {
-                          throw new Error(data?.error || 'Analysis failed');
-                        }
-                      } catch (err) {
-                        console.error('Gemini deep analysis error:', err);
-                        setGeminiThinking(prev => prev + '\n❌ เกิดข้อผิดพลาด: ' + (err instanceof Error ? err.message : 'Unknown error'));
-                        toast({
-                          title: '❌ การวิเคราะห์ล้มเหลว',
-                          description: err instanceof Error ? err.message : 'Unknown error',
-                          variant: 'destructive'
-                        });
-                      } finally {
-                        setGeminiDeepLoading(false);
-                      }
-                    }}
-                    disabled={geminiDeepLoading || rawNews.length === 0}
-                    className="h-8 text-xs bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0"
-                  >
-                    {geminiDeepLoading ? (
-                      <>
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        Analyzing...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-3 h-3 mr-1" />
-                        Run Gemini AI
-                      </>
-                    )}
-                  </Button>
-                  
                   {/* Toggle Chart Button */}
                   <Button 
                     size="sm" 
@@ -613,15 +506,10 @@ export const TopNews = () => {
                     {showSentimentChart ? <EyeOff className="w-3 h-3 mr-1" /> : <Eye className="w-3 h-3 mr-1" />}
                     Chart
                   </Button>
-                  
-                  <Button size="sm" variant="outline" onClick={() => setShowAddAsset(!showAddAsset)} className="h-8 text-xs border-zinc-700 text-zinc-400 hover:text-white hover:border-emerald-500">
-                    <Plus className="w-3 h-3 mr-1" />
-                    Add Asset ({pinnedAssets.length}/8)
-                  </Button>
                 </div>
               </div>
               
-              {/* ✅ NEW: Alert System */}
+              {/* Alert System */}
               <AlertSystem 
                 rawNews={rawNews}
                 pinnedAssets={pinnedAssets}
@@ -631,7 +519,7 @@ export const TopNews = () => {
                 }}
               />
               
-              {/* ✅ NEW: Sentiment History Chart */}
+              {/* Sentiment History Chart */}
               {showSentimentChart && rawNews.length > 0 && (
                 <SentimentHistoryChart 
                   pinnedAssets={pinnedAssets}
@@ -641,114 +529,6 @@ export const TopNews = () => {
                   }}
                 />
               )}
-              
-              {/* ✅ Gemini Thinking Panel */}
-              {showGeminiPanel && (
-                <Card className="mb-4 p-4 bg-gradient-to-br from-purple-950/30 to-pink-950/30 border-purple-500/30">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Brain className="w-5 h-5 text-purple-400 animate-pulse" />
-                      <h3 className="text-sm font-medium text-purple-400">Gemini Deep Analysis</h3>
-                      {geminiDeepLoading && <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />}
-                    </div>
-                    <Button 
-                      size="icon" 
-                      variant="ghost" 
-                      onClick={() => setShowGeminiPanel(false)}
-                      className="h-6 w-6 text-zinc-500 hover:text-white"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  
-                  {/* Thinking Stream */}
-                  <ScrollArea className="h-[200px] mb-3">
-                    <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-mono leading-relaxed">
-                      {geminiThinking || '🧠 พร้อมวิเคราะห์...'}
-                    </pre>
-                  </ScrollArea>
-                  
-                  {/* Results Summary */}
-                  {geminiResult && (
-                    <div className="space-y-3 border-t border-purple-500/20 pt-3">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        <div className="p-2 bg-black/30 rounded-lg">
-                          <p className="text-[10px] text-zinc-500">Decision</p>
-                          <p className={`text-sm font-bold ${
-                            geminiResult.decision?.includes('BUY') ? 'text-emerald-400' :
-                            geminiResult.decision?.includes('SELL') ? 'text-red-400' : 'text-zinc-400'
-                          }`}>
-                            {geminiResult.decision || 'HOLD'}
-                          </p>
-                        </div>
-                        <div className="p-2 bg-black/30 rounded-lg">
-                          <p className="text-[10px] text-zinc-500">P(Up)</p>
-                          <p className="text-sm font-bold text-purple-400">{geminiResult.P_up_pct?.toFixed(1) || 50}%</p>
-                        </div>
-                        <div className="p-2 bg-black/30 rounded-lg">
-                          <p className="text-[10px] text-zinc-500">Confidence</p>
-                          <p className="text-sm font-bold text-cyan-400">{geminiResult.confidence || 60}%</p>
-                        </div>
-                        <div className="p-2 bg-black/30 rounded-lg">
-                          <p className="text-[10px] text-zinc-500">Regime</p>
-                          <p className="text-sm font-bold text-yellow-400">{geminiResult.market_regime || 'ranging'}</p>
-                        </div>
-                      </div>
-                      
-                      {/* Category Performance */}
-                      {geminiResult.category_performance && (
-                        <div className="grid grid-cols-5 gap-1">
-                          {Object.entries(geminiResult.category_performance).map(([key, val]) => (
-                            <div key={key} className="text-center p-1 bg-black/20 rounded">
-                              <p className="text-[8px] text-zinc-500 truncate">{key.replace('_', ' ')}</p>
-                              <p className={`text-xs font-bold ${(val as number) > 60 ? 'text-emerald-400' : (val as number) < 40 ? 'text-red-400' : 'text-zinc-400'}`}>
-                                {(val as number).toFixed(0)}%
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {/* View Full Analysis Button */}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          const symbol = pinnedAssets[0]?.symbol;
-                          if (symbol) setSelectedAssetForModal(symbol);
-                        }}
-                        className="w-full h-8 text-xs border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
-                      >
-                        <BarChart3 className="w-3 h-3 mr-1" />
-                        View 40 Module Analysis
-                      </Button>
-                    </div>
-                  )}
-                </Card>
-              )}
-
-              {showAddAsset && <Card className="p-3 mb-4 bg-zinc-900 border-zinc-800">
-                  <div className="space-y-3">
-                    {getAvailableAssets().map(category => category.assets.length > 0 && <div key={category.label}>
-                          <p className="text-xs text-zinc-500 mb-2 font-medium">{category.label}</p>
-                          <div className="flex flex-wrap gap-2">
-                            {category.assets.map(asset => <Badge 
-                              key={asset} 
-                              variant="outline" 
-                              className="cursor-pointer border-zinc-700 text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 text-xs px-3 py-1.5 transition-all hover:bg-emerald-500/10" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                console.log('Adding asset:', asset);
-                                handleAddAsset(asset);
-                                setShowAddAsset(false);
-                              }}>
-                                <Plus className="w-3 h-3 mr-1" />
-                                {ASSET_DISPLAY_NAMES[asset] || asset}
-                              </Badge>)}
-                          </div>
-                        </div>)}
-                  </div>
-                </Card>}
 
               {/* Macro Analysis Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
