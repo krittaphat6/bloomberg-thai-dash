@@ -288,71 +288,30 @@ export const TopNews = () => {
     }
   }, [toast, initialLoading, pinnedAssets]);
 
-  // Add asset handler - ✅ FIXED: แสดงผลทันที
-  const handleAddAsset = (symbol: string) => {
-    if (pinnedAssets.find(p => p.symbol === symbol)) {
-      toast({
-        title: 'Asset already added',
-        variant: 'destructive'
-      });
-      return;
+  // Save news to news_history table
+  const saveNewsToHistory = async (newsItems: any[]) => {
+    if (!newsItems || newsItems.length === 0) return;
+    try {
+      const newsToInsert = newsItems.slice(0, 50).map((n: any) => ({
+        title: n.title,
+        description: n.description || null,
+        url: n.url || null,
+        source: n.source || 'unknown',
+        category: n.category || null,
+        published_at: n.publishedAt || null,
+        timestamp: n.timestamp || Date.now(),
+        sentiment: n.sentiment || 'neutral',
+        importance: n.importance || 'medium',
+        related_assets: n.relatedAssets || [],
+      }));
+      for (const news of newsToInsert) {
+        await supabase.from('news_history').upsert(news, { onConflict: 'title', ignoreDuplicates: true });
+      }
+      console.log(`📝 Saved ${newsToInsert.length} news to history`);
+    } catch (err) {
+      console.warn('Failed to save news history:', err);
     }
-    if (pinnedAssets.length >= 8) {
-      toast({
-        title: 'Maximum 8 assets',
-        description: 'Remove an asset first',
-        variant: 'destructive'
-      });
-      return;
-    }
-    
-    // ✅ NEW: อัพเดท state ทันที
-    const newAsset = { symbol, addedAt: Date.now() };
-    setPinnedAssets(prev => {
-      const updated = [...prev, newAsset];
-      console.log('✅ Asset added:', symbol, 'Total:', updated.length);
-      return updated;
-    });
-    
-    // Close dropdown
-    setShowAddAsset(false);
-    
-    toast({
-      title: `✅ ${ASSET_DISPLAY_NAMES[symbol] || symbol} added`,
-      description: 'Fetching AI analysis...'
-    });
-    
-    // Fetch analysis for new asset
-    setTimeout(() => fetchNews(), 300);
   };
-
-  // Remove asset handler - ✅ FIXED: ลบได้จริงและ refetch
-  const handleRemoveAsset = (symbol: string) => {
-    console.log('🗑️ Removing asset:', symbol);
-    
-    // อัปเดต state ทันที
-    setPinnedAssets(prev => {
-      const updated = prev.filter(p => p.symbol !== symbol);
-      console.log('✅ Asset removed, remaining:', updated.length);
-      return updated;
-    });
-    
-    // ลบ analysis ของ asset นั้น
-    setAbleAnalysis(prev => {
-      const newAnalysis = { ...prev };
-      delete newAnalysis[symbol];
-      return newAnalysis;
-    });
-    
-    // ลบ macro data ของ asset นั้น
-    setMacroData(prev => prev.filter(m => m.symbol !== symbol));
-    
-    // ลบราคา
-    setAssetPrices(prev => {
-      const newPrices = { ...prev };
-      delete newPrices[symbol];
-      return newPrices;
-    });
   };
 
   // ✅ NEW: Fetch เมื่อเปิด component + Auto-refresh ทุก 10 นาที + Cleanup
