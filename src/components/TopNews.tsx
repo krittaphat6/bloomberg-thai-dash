@@ -540,7 +540,7 @@ export const TopNews = () => {
               const isFallback = !hasAnalysis || analysis?.decision?.includes('Fallback');
               const P_up = hasAnalysis ? analysis.P_up_pct : 50;
               const decision = hasAnalysis ? (analysis.decision || 'HOLD') : '—';
-              const analysisText = hasAnalysis ? (analysis.thai_summary || 'กำลังรอการวิเคราะห์...') : 'กดปุ่ม "Run Gemini AI" เพื่อเริ่มการวิเคราะห์';
+              const analysisText = hasAnalysis ? (analysis.thai_summary || 'กำลังรอการวิเคราะห์...') : 'กำลังโหลดข้อมูลตลาด...';
               const priceData = assetPrices[asset.symbol];
               
               return <Card 
