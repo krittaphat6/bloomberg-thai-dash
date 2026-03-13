@@ -18,6 +18,7 @@ import { SentimentHistoryChart, SpikeAlert } from './TopNews/SentimentHistoryCha
 import { AlertSystem, Alert } from './TopNews/AlertSystem';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
+import { fetchModuleData, calculateModuleScores } from '@/services/ModuleDataService';
 
 // ABLE-HF 3.0 Analysis Result from Backend
 interface AbleAnalysisResult {
