@@ -16,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { supabase } from '@/integrations/supabase/client';
 
 interface DailySentiment {
   date: string;

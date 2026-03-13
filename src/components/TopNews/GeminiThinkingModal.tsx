@@ -213,7 +213,7 @@ export const GeminiThinkingModal: React.FC<GeminiThinkingModalProps> = ({
                 </DialogTitle>
                 <p className="text-sm text-zinc-500 flex items-center gap-2 mt-1">
                   <Sparkles className="w-4 h-4 text-purple-400" />
-                  ABLE-HF 3.0 × Gemini AI Analysis
+                  ABLE-HF 4.0 × Real-Time Market Analysis
                 </p>
               </div>
             </div>
