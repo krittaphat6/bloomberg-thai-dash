@@ -16,7 +16,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from '@/integrations/supabase/client';
 
 interface DailySentiment {
   date: string;
@@ -210,54 +209,22 @@ export const SentimentHistoryChart: React.FC<SentimentHistoryChartProps> = ({
   const [selectedAsset, setSelectedAsset] = useState('ALL');
   const [timeRange, setTimeRange] = useState<7 | 14 | 30>(7);
   const [loading, setLoading] = useState(false);
-  const [historicalNews, setHistoricalNews] = useState<any[]>([]);
-
-  // Fetch news from news_history DB table
-  useEffect(() => {
-    async function fetchHistory() {
-      setLoading(true);
-      try {
-        const daysAgo = new Date();
-        daysAgo.setDate(daysAgo.getDate() - timeRange);
-
-        const { data } = await supabase
-          .from('news_history')
-          .select('title, sentiment, timestamp, source')
-          .gte('timestamp', daysAgo.getTime())
-          .order('timestamp', { ascending: false })
-          .limit(2000);
-
-        if (data) {
-          setHistoricalNews(data.map(n => ({
-            id: `${n.timestamp}`,
-            title: n.title,
-            sentiment: n.sentiment,
-            timestamp: n.timestamp,
-            source: n.source,
-          })));
-        }
-      } catch (err) {
-        console.warn('Failed to fetch sentiment history:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchHistory();
-  }, [timeRange]);
 
   // Filter news by asset if selected
   const filteredNews = useMemo(() => {
-    const newsToUse = historicalNews.length > 0 ? historicalNews : rawNews;
-    if (selectedAsset === 'ALL') return newsToUse;
-    return newsToUse.filter(n => 
+    if (selectedAsset === 'ALL') return rawNews;
+    return rawNews.filter(n => 
       n.title.toLowerCase().includes(selectedAsset.toLowerCase()) ||
       n.title.includes(selectedAsset)
     );
-  }, [historicalNews, rawNews, selectedAsset]);
+  }, [rawNews, selectedAsset]);
 
   // Calculate chart data
   const chartData = useMemo(() => {
-    return calculateDailySentiment(filteredNews, timeRange);
+    setLoading(true);
+    const data = calculateDailySentiment(filteredNews, timeRange);
+    setLoading(false);
+    return data;
   }, [filteredNews, timeRange]);
 
   // Check for spikes and notify
