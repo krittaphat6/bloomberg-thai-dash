@@ -331,6 +331,13 @@ export const TopNews = () => {
     };
   }, []); // [] = run เฉพาะตอน mount/unmount เท่านั้น
 
+  // ✅ Trigger local analysis when rawNews or lastUpdated changes
+  useEffect(() => {
+    if (lastUpdated) {
+      runLocalAnalysis(rawNews);
+    }
+  }, [lastUpdated]);
+
   // Get available assets (not already pinned)
   const getAvailableAssets = () => {
     const pinnedSymbols = pinnedAssets.map(p => p.symbol);
