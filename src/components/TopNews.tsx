@@ -334,56 +334,74 @@ export const TopNews = () => {
     const newsText = newsItems.map((n: any) => `${n.title} ${n.description || ''}`).join(' ');
     const results: Record<string, AbleAnalysisResult> = {};
 
-    for (const asset of pinnedAssets) {
-      try {
-        const moduleData = await fetchModuleData(asset.symbol);
-        const rawScores = calculateModuleScores(moduleData, newsText, asset.symbol);
+    // Helper to build result from scores
+    const buildResult = (symbol: string, moduleData: ModuleRealTimeData, rawScores: Record<string, number>): AbleAnalysisResult => {
+      let totalWeight = 0;
+      let weightedSum = 0;
+      Object.entries(rawScores).forEach(([key, val]) => {
+        const weight = MODULE_WEIGHTS[key] || 0;
+        totalWeight += weight;
+        weightedSum += val * weight;
+      });
 
-        let totalWeight = 0;
-        let weightedSum = 0;
-        Object.entries(rawScores).forEach(([key, val]) => {
-          const weight = MODULE_WEIGHTS[key] || 0;
-          totalWeight += weight;
-          weightedSum += val * weight;
+      const P_up = totalWeight > 0 ? (weightedSum / totalWeight) * 100 : 50;
+      const confidence = Math.min(95, Math.max(30, Math.abs(P_up - 50) * 2 + 40));
+
+      const keyDrivers = Object.entries(rawScores)
+        .sort((a, b) => Math.abs(b[1] - 0.5) - Math.abs(a[1] - 0.5))
+        .slice(0, 5)
+        .map(([key, val]) => {
+          const dir = val > 0.5 ? '↑' : '↓';
+          const score = Math.round((val - 0.5) * 200);
+          return `${dir} ${key.replace(/_/g, ' ')}: ${score > 0 ? '+' : ''}${score}`;
         });
 
-        const P_up = totalWeight > 0 ? (weightedSum / totalWeight) * 100 : 50;
-        const confidence = Math.min(95, Math.max(30, Math.abs(P_up - 50) * 2 + 40));
+      const riskWarnings: string[] = [];
+      if (moduleData.vixLevel && moduleData.vixLevel > 25) riskWarnings.push(`⚠️ VIX สูง (${moduleData.vixLevel.toFixed(1)})`);
+      if (moduleData.yieldCurveSpread !== null && moduleData.yieldCurveSpread < 0) riskWarnings.push('⚠️ Yield Curve Inverted');
 
-        const keyDrivers = Object.entries(rawScores)
-          .sort((a, b) => Math.abs(b[1] - 0.5) - Math.abs(a[1] - 0.5))
-          .slice(0, 5)
-          .map(([key, val]) => {
-            const dir = val > 0.5 ? '↑' : '↓';
-            const score = Math.round((val - 0.5) * 200);
-            return `${dir} ${key.replace(/_/g, ' ')}: ${score > 0 ? '+' : ''}${score}`;
-          });
+      const direction = P_up > 60 ? 'ขาขึ้น' : P_up < 40 ? 'ขาลง' : 'ไซด์เวย์';
+      const thaiSummary = `${symbol}: แนวโน้ม${direction} P(Up)=${P_up.toFixed(1)}%${moduleData.vixLevel ? ` | VIX=${moduleData.vixLevel.toFixed(1)}` : ''}`;
 
-        const riskWarnings: string[] = [];
-        if (moduleData.vixLevel && moduleData.vixLevel > 25) riskWarnings.push(`⚠️ VIX สูง (${moduleData.vixLevel.toFixed(1)})`);
-        if (moduleData.yieldCurveSpread !== null && moduleData.yieldCurveSpread < 0) riskWarnings.push('⚠️ Yield Curve Inverted');
+      return {
+        P_up_pct: Math.round(P_up * 10) / 10,
+        P_down_pct: Math.round((100 - P_up) * 10) / 10,
+        decision: P_up > 60 ? '🟢 BUY' : P_up < 40 ? '🔴 SELL' : '🟡 HOLD',
+        confidence: Math.round(confidence),
+        scores: Object.fromEntries(Object.entries(rawScores).map(([k, v]) => [k, Math.round((v - 0.5) * 200)])),
+        thai_summary: thaiSummary,
+        key_drivers: keyDrivers,
+        risk_warnings: riskWarnings,
+        analyzed_at: new Date().toISOString(),
+        market_regime: moduleData.vixLevel ? (moduleData.vixLevel > 25 ? 'High Volatility' : moduleData.vixLevel < 15 ? 'Low Volatility' : 'Normal') : 'Unknown',
+      };
+    };
 
-        const direction = P_up > 60 ? 'ขาขึ้น' : P_up < 40 ? 'ขาลง' : 'ไซด์เวย์';
-        const thaiSummary = `${asset.symbol}: แนวโน้ม${direction} P(Up)=${P_up.toFixed(1)}%${moduleData.vixLevel ? ` | VIX=${moduleData.vixLevel.toFixed(1)}` : ''}`;
-
-        results[asset.symbol] = {
-          P_up_pct: Math.round(P_up * 10) / 10,
-          P_down_pct: Math.round((100 - P_up) * 10) / 10,
-          decision: P_up > 60 ? '🟢 BUY' : P_up < 40 ? '🔴 SELL' : '🟡 HOLD',
-          confidence: Math.round(confidence),
-          scores: Object.fromEntries(Object.entries(rawScores).map(([k, v]) => [k, Math.round((v - 0.5) * 200)])),
-          thai_summary: thaiSummary,
-          key_drivers: keyDrivers,
-          risk_warnings: riskWarnings,
-          analyzed_at: new Date().toISOString(),
-          market_regime: moduleData.vixLevel ? (moduleData.vixLevel > 25 ? 'High Volatility' : moduleData.vixLevel < 15 ? 'Low Volatility' : 'Normal') : 'Unknown',
-        };
-
-        console.log(`✅ ${asset.symbol}: P(Up)=${P_up.toFixed(1)}% ${results[asset.symbol].decision}`);
+    // Fetch with 8s timeout per asset
+    const fetchWithTimeout = async (symbol: string): Promise<void> => {
+      try {
+        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000));
+        const moduleData = await Promise.race([fetchModuleData(symbol), timeoutPromise]);
+        const rawScores = calculateModuleScores(moduleData, newsText, symbol);
+        results[symbol] = buildResult(symbol, moduleData, rawScores);
+        console.log(`✅ ${symbol}: P(Up)=${results[symbol].P_up_pct}% ${results[symbol].decision}`);
       } catch (err) {
-        console.warn(`⚠️ Analysis failed for ${asset.symbol}:`, err);
+        // Fallback: generate analysis from news text only (no market data)
+        console.warn(`⚠️ ${symbol} data fetch failed, using news-only fallback`);
+        const emptyData: ModuleRealTimeData = {
+          yieldCurveSpread: null, vixLevel: null, gdpGrowth: null, inflationRate: null,
+          unemploymentRate: null, priceData: null, etfFlows: null, btcChange24h: null,
+          btcVolume: null, advanceDecline: null, dxyLevel: null, dxyChange: null,
+          lastUpdated: new Date(),
+        };
+        const rawScores = calculateModuleScores(emptyData, newsText, symbol);
+        results[symbol] = buildResult(symbol, emptyData, rawScores);
+        results[symbol].thai_summary = `${symbol}: วิเคราะห์จากข่าวสาร (ไม่มีข้อมูลตลาด)`;
       }
-    }
+    };
+
+    // Run ALL assets in parallel
+    await Promise.all(pinnedAssets.map(asset => fetchWithTimeout(asset.symbol)));
 
     setAbleAnalysis(results);
     setAnalyzing(false);
