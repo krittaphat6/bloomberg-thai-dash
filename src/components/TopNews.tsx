@@ -550,18 +550,6 @@ export const TopNews = () => {
                 className={`p-4 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer bg-black relative group ${!hasAnalysis ? 'opacity-75' : ''}`} 
                 onClick={() => hasAnalysis ? setSelectedAssetForModal(asset.symbol) : null}
               >
-                        {/* DELETE BUTTON */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveAsset(asset.symbol);
-                            toast({ title: `❌ ${ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol} removed` });
-                          }}
-                          className="absolute top-2 right-2 p-1.5 rounded-full bg-zinc-800/80 hover:bg-red-500/30 text-zinc-500 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 z-10"
-                          title={`Remove ${ASSET_DISPLAY_NAMES[asset.symbol] || asset.symbol}`}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
 
                         {/* Header */}
                         <div className="flex items-center justify-between mb-3">
