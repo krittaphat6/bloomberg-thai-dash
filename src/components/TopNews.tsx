@@ -132,6 +132,18 @@ const ASSET_CATEGORIES = {
     assets: ['US500', 'US100', 'US30', 'DE40', 'UK100', 'JP225']
   }
 };
+// Default assets - hardcoded, no add/remove
+const DEFAULT_ASSETS: PinnedAsset[] = [
+  { symbol: 'XAUUSD', addedAt: Date.now() },
+  { symbol: 'EURUSD', addedAt: Date.now() },
+  { symbol: 'GBPUSD', addedAt: Date.now() },
+  { symbol: 'USDJPY', addedAt: Date.now() },
+  { symbol: 'BTCUSD', addedAt: Date.now() },
+  { symbol: 'ETHUSD', addedAt: Date.now() },
+  { symbol: 'USOIL', addedAt: Date.now() },
+  { symbol: 'US500', addedAt: Date.now() },
+];
+
 export const TopNews = () => {
   const {
     toast
@@ -151,24 +163,14 @@ export const TopNews = () => {
   const [ableAnalysis, setAbleAnalysis] = useState<Record<string, AbleAnalysisResult>>({});
   const [analyzing, setAnalyzing] = useState(false);
   const [dailyReportAI, setDailyReportAI] = useState<any>(null);
-  const [showAddAsset, setShowAddAsset] = useState(false);
-
-  // ✅ NEW: Gemini Deep Analysis States
-  const [geminiDeepLoading, setGeminiDeepLoading] = useState(false);
-  const [geminiThinking, setGeminiThinking] = useState<string>('');
-  const [geminiResult, setGeminiResult] = useState<any>(null);
-  const [showGeminiPanel, setShowGeminiPanel] = useState(false);
   
-  // ✅ NEW: Daily Report Gemini States
+  // Daily Report Gemini States
   const [dailyReportLoading, setDailyReportLoading] = useState(false);
   const [dailyReportData, setDailyReportData] = useState<any>(null);
   const [dailyReportThinking, setDailyReportThinking] = useState<string>('');
 
-  // Asset management
-  const [pinnedAssets, setPinnedAssets] = useState<PinnedAsset[]>([{
-    symbol: 'XAUUSD',
-    addedAt: Date.now()
-  }]);
+  // Use hardcoded assets
+  const pinnedAssets = DEFAULT_ASSETS;
   const [assetPrices, setAssetPrices] = useState<Record<string, AssetPrice>>({});
 
   // ✅ NEW: Metadata และ component active state
