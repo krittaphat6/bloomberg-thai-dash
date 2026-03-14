@@ -286,42 +286,25 @@ export const TopNews = () => {
     }
   }, [toast, initialLoading, pinnedAssets]);
 
-  // Add asset handler - ✅ FIXED: แสดงผลทันที
+  // Add asset handler - ✅ FIXED: don't trigger full refetch that resets cards
   const handleAddAsset = (symbol: string) => {
     if (pinnedAssets.find(p => p.symbol === symbol)) {
-      toast({
-        title: 'Asset already added',
-        variant: 'destructive'
-      });
+      toast({ title: 'Asset already added', variant: 'destructive' });
       return;
     }
     if (pinnedAssets.length >= 8) {
-      toast({
-        title: 'Maximum 8 assets',
-        description: 'Remove an asset first',
-        variant: 'destructive'
-      });
+      toast({ title: 'Maximum 8 assets', description: 'Remove an asset first', variant: 'destructive' });
       return;
     }
     
-    // ✅ NEW: อัพเดท state ทันที
     const newAsset = { symbol, addedAt: Date.now() };
-    setPinnedAssets(prev => {
-      const updated = [...prev, newAsset];
-      console.log('✅ Asset added:', symbol, 'Total:', updated.length);
-      return updated;
-    });
-    
-    // Close dropdown
+    setPinnedAssets(prev => [...prev, newAsset]);
     setShowAddAsset(false);
     
     toast({
       title: `✅ ${ASSET_DISPLAY_NAMES[symbol] || symbol} added`,
-      description: 'Fetching AI analysis...'
+      description: 'Analysis will update on next refresh'
     });
-    
-    // Fetch analysis for new asset
-    setTimeout(() => fetchNews(), 300);
   };
 
   // Remove asset handler - ✅ FIXED: ลบได้จริงและ refetch
