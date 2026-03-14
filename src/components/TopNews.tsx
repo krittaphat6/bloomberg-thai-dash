@@ -353,27 +353,30 @@ export const TopNews = () => {
     });
   };
 
-  // ✅ NEW: Fetch เมื่อเปิด component + Auto-refresh ทุก 10 นาที + Cleanup
+  // ✅ FIXED: Fetch on mount + Auto-refresh every 10 min
+  // Use ref to avoid stale closure issues
+  const fetchNewsRef = useRef(fetchNews);
+  fetchNewsRef.current = fetchNews;
+  
   useEffect(() => {
     console.log('🚀 TopNews component mounted - Starting AI analysis...');
     setIsComponentActive(true);
 
-    // 1. Fetch ทันทีที่เปิด component
-    fetchNews();
+    // 1. Fetch immediately
+    fetchNewsRef.current();
 
-    // 2. ตั้ง interval refresh ทุก 10 นาที (600,000 ms)
+    // 2. Auto-refresh every 10 minutes
     const refreshInterval = setInterval(() => {
       console.log('🔄 10-minute auto-refresh triggered');
-      fetchNews();
-    }, 600000); // 600000ms = 10 minutes
+      fetchNewsRef.current();
+    }, 600000);
 
-    // 3. Cleanup: หยุด interval เมื่อปิด component
     return () => {
-      console.log('👋 TopNews component unmounted - Stopping auto-refresh');
+      console.log('👋 TopNews component unmounted');
       clearInterval(refreshInterval);
       setIsComponentActive(false);
     };
-  }, []); // [] = run เฉพาะตอน mount/unmount เท่านั้น
+  }, []);
 
   // Get available assets (not already pinned)
   const getAvailableAssets = () => {
