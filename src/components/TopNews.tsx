@@ -286,42 +286,25 @@ export const TopNews = () => {
     }
   }, [toast, initialLoading, pinnedAssets]);
 
-  // Add asset handler - ✅ FIXED: แสดงผลทันที
+  // Add asset handler - ✅ FIXED: don't trigger full refetch that resets cards
   const handleAddAsset = (symbol: string) => {
     if (pinnedAssets.find(p => p.symbol === symbol)) {
-      toast({
-        title: 'Asset already added',
-        variant: 'destructive'
-      });
+      toast({ title: 'Asset already added', variant: 'destructive' });
       return;
     }
     if (pinnedAssets.length >= 8) {
-      toast({
-        title: 'Maximum 8 assets',
-        description: 'Remove an asset first',
-        variant: 'destructive'
-      });
+      toast({ title: 'Maximum 8 assets', description: 'Remove an asset first', variant: 'destructive' });
       return;
     }
     
-    // ✅ NEW: อัพเดท state ทันที
     const newAsset = { symbol, addedAt: Date.now() };
-    setPinnedAssets(prev => {
-      const updated = [...prev, newAsset];
-      console.log('✅ Asset added:', symbol, 'Total:', updated.length);
-      return updated;
-    });
-    
-    // Close dropdown
+    setPinnedAssets(prev => [...prev, newAsset]);
     setShowAddAsset(false);
     
     toast({
       title: `✅ ${ASSET_DISPLAY_NAMES[symbol] || symbol} added`,
-      description: 'Fetching AI analysis...'
+      description: 'Analysis will update on next refresh'
     });
-    
-    // Fetch analysis for new asset
-    setTimeout(() => fetchNews(), 300);
   };
 
   // Remove asset handler - ✅ FIXED: ลบได้จริงและ refetch
@@ -353,27 +336,30 @@ export const TopNews = () => {
     });
   };
 
-  // ✅ NEW: Fetch เมื่อเปิด component + Auto-refresh ทุก 10 นาที + Cleanup
+  // ✅ FIXED: Fetch on mount + Auto-refresh every 10 min
+  // Use ref to avoid stale closure issues
+  const fetchNewsRef = useRef(fetchNews);
+  fetchNewsRef.current = fetchNews;
+  
   useEffect(() => {
     console.log('🚀 TopNews component mounted - Starting AI analysis...');
     setIsComponentActive(true);
 
-    // 1. Fetch ทันทีที่เปิด component
-    fetchNews();
+    // 1. Fetch immediately
+    fetchNewsRef.current();
 
-    // 2. ตั้ง interval refresh ทุก 10 นาที (600,000 ms)
+    // 2. Auto-refresh every 10 minutes
     const refreshInterval = setInterval(() => {
       console.log('🔄 10-minute auto-refresh triggered');
-      fetchNews();
-    }, 600000); // 600000ms = 10 minutes
+      fetchNewsRef.current();
+    }, 600000);
 
-    // 3. Cleanup: หยุด interval เมื่อปิด component
     return () => {
-      console.log('👋 TopNews component unmounted - Stopping auto-refresh');
+      console.log('👋 TopNews component unmounted');
       clearInterval(refreshInterval);
       setIsComponentActive(false);
     };
-  }, []); // [] = run เฉพาะตอน mount/unmount เท่านั้น
+  }, []);
 
   // Get available assets (not already pinned)
   const getAvailableAssets = () => {

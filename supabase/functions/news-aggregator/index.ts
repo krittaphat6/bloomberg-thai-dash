@@ -2240,6 +2240,113 @@ serve(async (req) => {
     uniqueNews.sort((a, b) => b.timestamp - a.timestamp);
     console.log(`✅ ${uniqueNews.length} unique news ready`);
 
+    // ✅ Persist top news to news_history for sentiment tracking
+    try {
+      const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || Deno.env.get('VITE_SUPABASE_URL');
+      const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY');
+      if (SUPABASE_URL && SUPABASE_KEY) {
+        const topToSave = uniqueNews.slice(0, 100).map(n => ({
+          title: n.title.substring(0, 500),
+          source: n.source,
+          timestamp: n.timestamp,
+          sentiment: n.sentiment || 'neutral',
+          importance: n.importance || 'medium',
+          category: n.category || null,
+          url: n.url || null,
+          related_assets: n.relatedAssets || null,
+          description: (n.description || '').substring(0, 500),
+        }));
+        
+        // Batch insert (upsert-like: just insert, duplicates will be ignored by unique constraint or just pile up)
+        const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/news_history`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Prefer': 'resolution=ignore-duplicates'
+          },
+          body: JSON.stringify(topToSave)
+        });
+        console.log(`💾 Persisted ${topToSave.length} news to DB: ${insertRes.status}`);
+      }
+    } catch (e) {
+      console.warn('News persistence failed:', e);
+    }
+
+    // ✅ Generate and persist alerts
+    try {
+      const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || Deno.env.get('VITE_SUPABASE_URL');
+      const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY');
+      if (SUPABASE_URL && SUPABASE_KEY) {
+        const alertsToSave: any[] = [];
+        
+        // Check for market-moving news
+        const marketMovingKeywords = ['fed', 'fomc', 'rate cut', 'rate hike', 'powell', 'trump', 'tariff', 'trade war', 'sanction', 'war', 'invasion', 'crash', 'collapse', 'surge', 'record high', 'all-time'];
+        const recentHighImpact = uniqueNews.filter(n => {
+          const lower = n.title.toLowerCase();
+          const matched = marketMovingKeywords.filter(kw => lower.includes(kw));
+          return matched.length >= 2 && (Date.now() - n.timestamp < 3600000);
+        });
+        
+        for (const news of recentHighImpact.slice(0, 3)) {
+          alertsToSave.push({
+            type: 'market_moving',
+            severity: 'critical',
+            title: '🚨 Market Moving News',
+            message: news.title.substring(0, 200),
+            symbol: news.relatedAssets?.[0] || null,
+            data: { source: news.source, url: news.url, keywords: marketMovingKeywords.filter(kw => news.title.toLowerCase().includes(kw)) }
+          });
+        }
+        
+        // Volume spike alert
+        const oneHourAgo = Date.now() - 3600000;
+        const recentCount = uniqueNews.filter(n => n.timestamp > oneHourAgo).length;
+        if (recentCount > 30) {
+          alertsToSave.push({
+            type: 'volume_spike',
+            severity: recentCount > 50 ? 'critical' : 'warning',
+            title: '📊 News Volume Spike',
+            message: `${recentCount} articles in the last hour - unusual activity detected`,
+            data: { count: recentCount }
+          });
+        }
+        
+        // Sentiment shift detection
+        const bullishCount = uniqueNews.filter(n => n.sentiment === 'bullish').length;
+        const bearishCount = uniqueNews.filter(n => n.sentiment === 'bearish').length;
+        const totalSentiment = bullishCount + bearishCount;
+        if (totalSentiment > 10) {
+          const bullishRatio = bullishCount / totalSentiment;
+          if (bullishRatio > 0.75 || bullishRatio < 0.25) {
+            alertsToSave.push({
+              type: 'sentiment_shift',
+              severity: 'warning',
+              title: bullishRatio > 0.75 ? '📈 Strong Bullish Sentiment' : '📉 Strong Bearish Sentiment',
+              message: `${bullishRatio > 0.75 ? 'Bullish' : 'Bearish'} dominance: ${Math.round(bullishRatio > 0.75 ? bullishRatio * 100 : (1 - bullishRatio) * 100)}% of ${totalSentiment} analyzed articles`,
+              data: { bullish: bullishCount, bearish: bearishCount, ratio: bullishRatio }
+            });
+          }
+        }
+        
+        if (alertsToSave.length > 0) {
+          const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/alerts`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`,
+            },
+            body: JSON.stringify(alertsToSave)
+          });
+          console.log(`🚨 Saved ${alertsToSave.length} alerts to DB: ${insertRes.status}`);
+        }
+      }
+    } catch (e) {
+      console.warn('Alert persistence failed:', e);
+    }
+
     // Gemini Analysis
     const macroAnalysis = await analyzeWithGemini(uniqueNews, pinnedAssets);
     console.log(`✅ Analysis complete: ${macroAnalysis.length} assets`);
