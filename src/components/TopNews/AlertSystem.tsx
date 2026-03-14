@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,10 +7,10 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Bell, BellRing, AlertTriangle, AlertCircle, Info, X, 
   ChevronDown, ChevronUp, Volume2, VolumeX, Trash2,
-  TrendingUp, TrendingDown, Newspaper, Clock
+  TrendingUp, TrendingDown, Newspaper, Clock, Database
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
-// Alert Types
 export interface Alert {
   id: string;
   type: 'volume_spike' | 'sentiment_shift' | 'market_moving' | 'price_alert';
@@ -38,132 +38,6 @@ interface AlertSystemProps {
   onAlertClick?: (alert: Alert) => void;
 }
 
-// Alert Detection Functions
-function detectVolumeSpike(
-  news: AlertSystemProps['rawNews'],
-  windowHours: number = 1
-): Alert | null {
-  const now = Date.now();
-  const windowMs = windowHours * 60 * 60 * 1000;
-  
-  const recentNews = news.filter(n => now - n.timestamp < windowMs);
-  const olderNews = news.filter(n => 
-    now - n.timestamp >= windowMs && 
-    now - n.timestamp < windowMs * 24
-  );
-  
-  const recentCount = recentNews.length;
-  const avgHourly = olderNews.length / 24;
-  
-  if (avgHourly === 0) return null;
-  
-  const zScore = (recentCount - avgHourly) / Math.max(avgHourly * 0.5, 1);
-  
-  if (zScore > 3) {
-    return {
-      id: `spike-${Date.now()}`,
-      type: 'volume_spike',
-      severity: zScore > 4 ? 'critical' : 'warning',
-      title: 'News Volume Spike Detected',
-      message: `${recentCount} articles in ${windowHours}hr (normal: ${avgHourly.toFixed(0)}/hr) +${zScore.toFixed(1)}σ`,
-      value: recentCount,
-      threshold: avgHourly,
-      timestamp: Date.now(),
-      isRead: false,
-      isDismissed: false,
-      metadata: { zScore, recentNews: recentNews.slice(0, 5) }
-    };
-  }
-  
-  return null;
-}
-
-function detectSentimentShift(
-  news: AlertSystemProps['rawNews'],
-  windowHours: number = 2
-): Alert | null {
-  const now = Date.now();
-  const windowMs = windowHours * 60 * 60 * 1000;
-  
-  const recentNews = news.filter(n => now - n.timestamp < windowMs);
-  const olderNews = news.filter(n => 
-    now - n.timestamp >= windowMs && 
-    now - n.timestamp < windowMs * 2
-  );
-  
-  const calcSentiment = (items: typeof news) => {
-    if (items.length === 0) return 0;
-    let score = 0;
-    items.forEach(n => {
-      if (n.sentiment === 'bullish') score += 1;
-      else if (n.sentiment === 'bearish') score -= 1;
-    });
-    return score / items.length;
-  };
-  
-  const recentSentiment = calcSentiment(recentNews);
-  const olderSentiment = calcSentiment(olderNews);
-  const shift = recentSentiment - olderSentiment;
-  
-  if (Math.abs(shift) > 0.4) {
-    const direction = shift > 0 ? 'Bullish' : 'Bearish';
-    return {
-      id: `shift-${Date.now()}`,
-      type: 'sentiment_shift',
-      severity: Math.abs(shift) > 0.6 ? 'critical' : 'warning',
-      title: `Sentiment Shift to ${direction}`,
-      message: `${olderSentiment > 0 ? 'Bullish' : olderSentiment < 0 ? 'Bearish' : 'Neutral'} → ${direction} (${shift > 0 ? '+' : ''}${shift.toFixed(2)}) in ${windowHours}hr`,
-      value: shift,
-      timestamp: Date.now(),
-      isRead: false,
-      isDismissed: false,
-      metadata: { recentSentiment, olderSentiment }
-    };
-  }
-  
-  return null;
-}
-
-function detectMarketMovingNews(
-  news: AlertSystemProps['rawNews']
-): Alert | null {
-  const marketMovingKeywords = [
-    'fed', 'fomc', 'rate cut', 'rate hike', 'powell',
-    'trump', 'tariff', 'trade war', 'sanction',
-    'war', 'invasion', 'conflict', 'crisis',
-    'crash', 'collapse', 'surge', 'record high', 'all-time'
-  ];
-  
-  const now = Date.now();
-  const recentNews = news.filter(n => now - n.timestamp < 30 * 60 * 1000);
-  
-  for (const item of recentNews) {
-    const lower = item.title.toLowerCase();
-    const matchedKeywords = marketMovingKeywords.filter(kw => lower.includes(kw));
-    
-    if (matchedKeywords.length >= 2) {
-      return {
-        id: `moving-${item.id}`,
-        type: 'market_moving',
-        severity: matchedKeywords.length >= 3 ? 'critical' : 'warning',
-        title: 'Market Moving News',
-        message: item.title.substring(0, 100),
-        timestamp: Date.now(),
-        isRead: false,
-        isDismissed: false,
-        metadata: { 
-          keywords: matchedKeywords, 
-          source: item.source,
-          newsId: item.id 
-        }
-      };
-    }
-  }
-  
-  return null;
-}
-
-// Alert Item Component
 const AlertItem: React.FC<{
   alert: Alert;
   onDismiss: (id: string) => void;
@@ -189,14 +63,14 @@ const AlertItem: React.FC<{
     const diff = Date.now() - timestamp;
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins} min ago`;
+    if (mins < 60) return `${mins}m ago`;
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} hr ago`;
-    return `${Math.floor(hours / 24)} days ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
   };
 
   return (
-    <div className={`p-3 rounded-lg border ${getBgColor()} ${!alert.isRead ? 'ring-1 ring-offset-1 ring-offset-zinc-900' : ''}`}>
+    <div className={`p-3 rounded-lg border ${getBgColor()}`}>
       <div className="flex items-start gap-3">
         <div className="mt-0.5">{getIcon()}</div>
         <div className="flex-1 min-w-0">
@@ -208,21 +82,14 @@ const AlertItem: React.FC<{
             </span>
           </div>
           <p className="text-[11px] text-zinc-400 line-clamp-2">{alert.message}</p>
+          {alert.asset && (
+            <Badge variant="outline" className="text-[9px] mt-1 border-zinc-700 text-zinc-400">{alert.asset}</Badge>
+          )}
           <div className="flex items-center gap-2 mt-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onView(alert)}
-              className="h-6 text-[10px] text-zinc-400 hover:text-white px-2"
-            >
+            <Button size="sm" variant="ghost" onClick={() => onView(alert)} className="h-6 text-[10px] text-zinc-400 hover:text-white px-2">
               View Details
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onDismiss(alert.id)}
-              className="h-6 text-[10px] text-zinc-500 hover:text-red-400 px-2"
-            >
+            <Button size="sm" variant="ghost" onClick={() => onDismiss(alert.id)} className="h-6 text-[10px] text-zinc-500 hover:text-red-400 px-2">
               Dismiss
             </Button>
           </div>
@@ -232,7 +99,6 @@ const AlertItem: React.FC<{
   );
 };
 
-// Main Alert System Component
 export const AlertSystem: React.FC<AlertSystemProps> = ({
   rawNews,
   pinnedAssets,
@@ -242,65 +108,99 @@ export const AlertSystem: React.FC<AlertSystemProps> = ({
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [lastCheckTime, setLastCheckTime] = useState(Date.now());
+  const [loading, setLoading] = useState(true);
+  const fetchedRef = useRef(false);
 
-  // Check for new alerts
-  const checkAlerts = useCallback(() => {
-    const newAlerts: Alert[] = [];
+  // Fetch alerts from database on mount
+  useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
     
-    // Check volume spike
-    const volumeSpike = detectVolumeSpike(rawNews);
-    if (volumeSpike && !alerts.find(a => a.type === 'volume_spike' && Date.now() - a.timestamp < 300000)) {
-      newAlerts.push(volumeSpike);
-    }
-    
-    // Check sentiment shift
-    const sentimentShift = detectSentimentShift(rawNews);
-    if (sentimentShift && !alerts.find(a => a.type === 'sentiment_shift' && Date.now() - a.timestamp < 300000)) {
-      newAlerts.push(sentimentShift);
-    }
-    
-    // Check market moving news
-    const marketMoving = detectMarketMovingNews(rawNews);
-    if (marketMoving && !alerts.find(a => a.type === 'market_moving' && a.metadata?.newsId === marketMoving.metadata?.newsId)) {
-      newAlerts.push(marketMoving);
-    }
-    
-    if (newAlerts.length > 0) {
-      setAlerts(prev => [...newAlerts, ...prev].slice(0, 50));
-      
-      // Show toast for critical alerts
-      newAlerts.filter(a => a.severity === 'critical').forEach(alert => {
-        toast({
-          title: `🚨 ${alert.title}`,
-          description: alert.message,
-          variant: 'destructive',
-        });
+    const fetchAlerts = async () => {
+      try {
+        const { data: dbAlerts, error } = await supabase
+          .from('alerts')
+          .select('*')
+          .eq('is_read', false)
+          .order('created_at', { ascending: false })
+          .limit(30);
         
-        // Play sound if enabled
-        if (soundEnabled) {
-          try {
-            const audio = new Audio('/alert.mp3');
-            audio.volume = 0.5;
-            audio.play().catch(() => {});
-          } catch {}
+        if (error) throw error;
+        
+        if (dbAlerts && dbAlerts.length > 0) {
+          const mapped: Alert[] = dbAlerts.map((a: any) => ({
+            id: a.id,
+            type: a.type as any || 'market_moving',
+            severity: a.severity as any || 'info',
+            title: a.title,
+            message: a.message,
+            asset: a.symbol || undefined,
+            timestamp: new Date(a.created_at).getTime(),
+            isRead: a.is_read || false,
+            isDismissed: false,
+            metadata: a.data as any || {},
+          }));
+          setAlerts(mapped);
+          console.log(`🚨 Loaded ${mapped.length} alerts from DB`);
         }
+      } catch (err) {
+        console.warn('Alert fetch failed:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAlerts();
+  }, []);
+
+  // Also detect local alerts from rawNews (supplement DB alerts)
+  useEffect(() => {
+    if (rawNews.length === 0) return;
+    
+    const localAlerts: Alert[] = [];
+    
+    // Detect market-moving news
+    const marketMovingKeywords = ['fed', 'fomc', 'rate cut', 'rate hike', 'powell', 'trump', 'tariff', 'trade war', 'sanction', 'war', 'invasion', 'crash', 'collapse', 'surge', 'record high', 'all-time'];
+    const recentNews = rawNews.filter(n => Date.now() - n.timestamp < 3600000);
+    
+    for (const item of recentNews.slice(0, 20)) {
+      const lower = item.title.toLowerCase();
+      const matched = marketMovingKeywords.filter(kw => lower.includes(kw));
+      if (matched.length >= 2) {
+        const existsInDB = alerts.some(a => a.message.includes(item.title.substring(0, 50)));
+        if (!existsInDB) {
+          localAlerts.push({
+            id: `local-${item.id}`,
+            type: 'market_moving',
+            severity: matched.length >= 3 ? 'critical' : 'warning',
+            title: '🚨 Market Moving News',
+            message: item.title.substring(0, 200),
+            timestamp: item.timestamp,
+            isRead: false,
+            isDismissed: false,
+            metadata: { keywords: matched, source: item.source }
+          });
+        }
+      }
+    }
+    
+    if (localAlerts.length > 0) {
+      setAlerts(prev => {
+        const existingIds = new Set(prev.map(a => a.id));
+        const newOnes = localAlerts.filter(a => !existingIds.has(a.id));
+        return [...newOnes, ...prev].slice(0, 50);
       });
     }
-    
-    setLastCheckTime(Date.now());
-  }, [rawNews, alerts, soundEnabled, toast]);
+  }, [rawNews.length]);
 
-  // Check alerts every 30 seconds
-  useEffect(() => {
-    checkAlerts();
-    const interval = setInterval(checkAlerts, 30000);
-    return () => clearInterval(interval);
-  }, [checkAlerts]);
-
-  // Handlers
-  const handleDismiss = (id: string) => {
+  const handleDismiss = async (id: string) => {
     setAlerts(prev => prev.map(a => a.id === id ? { ...a, isDismissed: true } : a));
+    // Mark as read in DB if it's a DB alert
+    if (!id.startsWith('local-')) {
+      try {
+        await supabase.from('alerts').update({ is_read: true }).eq('id', id);
+      } catch {}
+    }
   };
 
   const handleClearAll = () => {
@@ -312,85 +212,60 @@ export const AlertSystem: React.FC<AlertSystemProps> = ({
     onAlertClick?.(alert);
   };
 
-  // Filter active alerts
   const activeAlerts = alerts.filter(a => !a.isDismissed);
   const unreadCount = activeAlerts.filter(a => !a.isRead).length;
   const criticalCount = activeAlerts.filter(a => a.severity === 'critical').length;
 
+  if (loading) {
+    return (
+      <Card className="mb-4 bg-zinc-900/50 border-zinc-800 p-3">
+        <div className="flex items-center gap-2 text-zinc-500 text-sm">
+          <Bell className="w-4 h-4" />
+          <span>Loading alerts...</span>
+        </div>
+      </Card>
+    );
+  }
+
   if (activeAlerts.length === 0) {
-    return null;
+    return (
+      <Card className="mb-4 bg-zinc-900/50 border-zinc-800 p-3">
+        <div className="flex items-center gap-2 text-zinc-500 text-sm">
+          <Bell className="w-4 h-4" />
+          <span>No active alerts</span>
+          <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400 ml-auto">
+            ✅ All Clear
+          </Badge>
+        </div>
+      </Card>
+    );
   }
 
   return (
     <Card className={`mb-4 bg-zinc-900/50 border-zinc-800 overflow-hidden ${criticalCount > 0 ? 'border-red-500/30' : ''}`}>
-      {/* Header */}
-      <div 
-        className="flex items-center justify-between p-3 cursor-pointer hover:bg-zinc-800/50 transition-colors"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
+      <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}>
         <div className="flex items-center gap-2">
-          {criticalCount > 0 ? (
-            <BellRing className="w-4 h-4 text-red-400 animate-pulse" />
-          ) : (
-            <Bell className="w-4 h-4 text-orange-400" />
-          )}
-          <span className="text-sm font-medium text-white">
-            Active Alerts
-          </span>
+          {criticalCount > 0 ? <BellRing className="w-4 h-4 text-red-400 animate-pulse" /> : <Bell className="w-4 h-4 text-orange-400" />}
+          <span className="text-sm font-medium text-white">Active Alerts</span>
           {unreadCount > 0 && (
-            <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400">
-              {unreadCount} new
-            </Badge>
+            <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400">{unreadCount} new</Badge>
           )}
         </div>
-        
         <div className="flex items-center gap-2">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 text-zinc-500 hover:text-white"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSoundEnabled(!soundEnabled);
-            }}
-          >
-            {soundEnabled ? (
-              <Volume2 className="w-3 h-3" />
-            ) : (
-              <VolumeX className="w-3 h-3" />
-            )}
+          <Button size="sm" variant="ghost" className="h-6 text-[10px] text-zinc-500 hover:text-red-400"
+            onClick={(e) => { e.stopPropagation(); handleClearAll(); }}>
+            <Trash2 className="w-3 h-3 mr-1" />Clear
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 text-[10px] text-zinc-500 hover:text-red-400"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleClearAll();
-            }}
-          >
-            <Trash2 className="w-3 h-3 mr-1" />
-            Clear
-          </Button>
-          {isExpanded ? (
-            <ChevronUp className="w-4 h-4 text-zinc-500" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-zinc-500" />
-          )}
+          {isExpanded ? <ChevronUp className="w-4 h-4 text-zinc-500" /> : <ChevronDown className="w-4 h-4 text-zinc-500" />}
         </div>
       </div>
 
-      {/* Alert List */}
       {isExpanded && (
         <ScrollArea className="max-h-[300px]">
           <div className="p-3 pt-0 space-y-2">
             {activeAlerts.map(alert => (
-              <AlertItem 
-                key={alert.id} 
-                alert={alert} 
-                onDismiss={handleDismiss}
-                onView={handleView}
-              />
+              <AlertItem key={alert.id} alert={alert} onDismiss={handleDismiss} onView={handleView} />
             ))}
           </div>
         </ScrollArea>
