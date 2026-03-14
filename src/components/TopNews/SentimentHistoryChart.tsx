@@ -371,12 +371,13 @@ export const SentimentHistoryChart: React.FC<SentimentHistoryChartProps> = ({
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
               <XAxis dataKey="displayDate" tick={{ fill: '#71717a', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#27272a' }} />
-              <YAxis domain={[-1, 1]} tick={{ fill: '#71717a', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#27272a' }} tickFormatter={(v) => v.toFixed(1)} />
+              <YAxis yAxisId="left" domain={[-1, 1]} tick={{ fill: '#71717a', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#27272a' }} tickFormatter={(v) => v.toFixed(1)} />
+              <YAxis yAxisId="right" orientation="right" tick={false} axisLine={false} tickLine={false} />
               <Tooltip content={<CustomTooltip />} />
-              <ReferenceLine y={0} stroke="#3f3f46" strokeDasharray="3 3" />
+              <ReferenceLine y={0} stroke="#3f3f46" strokeDasharray="3 3" yAxisId="left" />
               <Bar dataKey="news_count" fill="#3f3f46" opacity={0.3} yAxisId="right" />
-              <Area type="monotone" dataKey="sentiment_mean" fill="url(#sentimentGradient)" stroke="transparent" />
-              <Line type="monotone" dataKey="sentiment_mean" stroke="#8b5cf6" strokeWidth={2} dot={<CustomDot />} activeDot={{ r: 6, fill: '#a855f7' }} />
+              <Area type="monotone" dataKey="sentiment_mean" fill="url(#sentimentGradient)" stroke="transparent" yAxisId="left" />
+              <Line type="monotone" dataKey="sentiment_mean" stroke="#8b5cf6" strokeWidth={2} dot={<CustomDot />} activeDot={{ r: 6, fill: '#a855f7' }} yAxisId="left" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
