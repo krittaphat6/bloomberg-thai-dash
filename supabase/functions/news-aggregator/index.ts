@@ -1674,7 +1674,7 @@ async function fetchCentralBankWatch(): Promise<RawNewsItem[]> {
 }
 
 // ============================================
-// ✅ ENHANCED: ABLE-HF 4.0 ANALYSIS WITH FULL CONTEXT
+// ✅ ENHANCED: ABLE-HF 5.0 ANALYSIS WITH CHAIN-OF-THOUGHT + TRUMP INTEL
 // ============================================
 
 function buildFullAnalysisPrompt(news: any[], symbol: string): string {
