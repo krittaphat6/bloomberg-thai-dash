@@ -2203,6 +2203,35 @@ serve(async (req) => {
       
       // Cyber & Security
       fetchGoogleNewsFeed('cybersecurity OR "data breach" OR ransomware OR APT when:2d', 'Cyber Threats', 'Security'),
+      
+      // ✅ NEW: Twitter/X Intelligence - Key Market Movers
+      // Trump / Truth Social / Policy
+      fetchGoogleNewsFeed('Trump tweet OR "Truth Social" OR Trump statement tariff China when:1d', 'Trump Social', 'Trump/Policy', 15),
+      fetchGoogleNewsFeed('Trump executive order OR Trump policy economy trade when:1d', 'Trump Policy', 'Trump/Policy', 12),
+      fetchGoogleNewsFeed('"Trump said" OR "Trump announced" OR "Trump threatens" tariff trade when:1d', 'Trump Statements', 'Trump/Policy', 10),
+      
+      // Elon Musk / Crypto / Tesla influence
+      fetchGoogleNewsFeed('Elon Musk tweet OR Musk crypto OR Musk bitcoin OR DOGE Musk when:2d', 'Musk Social', 'Influencer', 10),
+      fetchGoogleNewsFeed('Elon Musk Tesla OR SpaceX OR xAI when:2d', 'Musk Business', 'Influencer', 8),
+      
+      // Fed Officials & Central Bankers
+      fetchGoogleNewsFeed('Powell speech OR Waller OR Brainard OR "Fed official" OR FOMC member when:2d', 'Fed Officials', 'Central Bank', 12),
+      fetchGoogleNewsFeed('Lagarde speech OR ECB member OR "ECB official" when:3d', 'ECB Officials', 'Central Bank', 8),
+      fetchGoogleNewsFeed('BOJ Ueda OR "Japan intervention" OR "yen intervention" when:3d', 'BOJ Watch', 'Central Bank', 8),
+      
+      // Macro Influencers & Analysts
+      fetchGoogleNewsFeed('"Ray Dalio" OR "Jamie Dimon" OR "Warren Buffett" OR "Larry Fink" market when:3d', 'Market Titans', 'Influencer', 10),
+      fetchGoogleNewsFeed('"Peter Schiff" gold OR "Cathie Wood" OR "Michael Saylor" bitcoin when:3d', 'Crypto Bulls', 'Influencer', 8),
+      fetchGoogleNewsFeed('"Goldman Sachs" forecast OR "JPMorgan" outlook OR "Morgan Stanley" target when:2d', 'Wall Street', 'Research', 12),
+      
+      // WSJ / The Economist / Barron's
+      fetchGoogleNewsFeed('site:wsj.com markets economy when:1d', 'Wall Street Journal', 'Premium News', 15),
+      fetchGoogleNewsFeed('site:economist.com economy markets when:3d', 'The Economist', 'Premium News', 10),
+      fetchGoogleNewsFeed('site:barrons.com markets stocks when:2d', "Barron's", 'Premium News', 10),
+      
+      // Reddit Trump/Policy Sentiment
+      fetchReddit('trump', 'Trump/Policy'),
+      fetchReddit('TruthSocial', 'Trump/Policy'),
     ]);
 
     // Flatten worldmonitor sources
