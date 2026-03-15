@@ -2623,7 +2623,7 @@ serve(async (req) => {
         sourcesCount: newsMetadata.sourcesCount,
         sources: newsMetadata.sources,
         gemini_api: 'direct',
-        version: 'ABLE-HF 4.0'
+        version: 'ABLE-HF 5.0'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
