@@ -14,8 +14,6 @@ import { ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntell
 import { GeminiThinkingModal } from './TopNews/GeminiThinkingModal';
 import { RelationshipDiagram } from './TopNews/RelationshipDiagram';
 import { FlowchartDiagram } from './TopNews/FlowchartDiagram';
-import { SentimentHistoryChart, SpikeAlert } from './TopNews/SentimentHistoryChart';
-import { AlertSystem, Alert } from './TopNews/AlertSystem';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
 
