@@ -1,6 +1,6 @@
 // supabase/functions/news-aggregator/index.ts
 // ✅ ENHANCED VERSION 2.0 - 50+ News Sources + AI Deep Analysis + Full Context Reading
-// ABLE-HF 4.0 Full Analysis via Direct Gemini API with Financial Intelligence
+// ✅ ABLE-HF 5.0 Full Analysis + Trump/Twitter Intelligence + 150+ Sources
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -102,6 +102,23 @@ const CONTEXTUAL_SENTIMENT: Record<string, { bullishFor: string[], bearishFor: s
   'opec cut': { bullishFor: ['USOIL', 'XAUUSD'], bearishFor: ['US500'] },
   'etf inflow': { bullishFor: ['BTCUSD', 'XAUUSD'], bearishFor: [] },
   'etf outflow': { bullishFor: [], bearishFor: ['BTCUSD', 'XAUUSD'] },
+  // ✅ NEW: Trump & Policy specific triggers
+  'trump truth social': { bullishFor: ['XAUUSD'], bearishFor: ['US500', 'EURUSD'] },
+  'trump tariff china': { bullishFor: ['XAUUSD', 'USDJPY'], bearishFor: ['US500', 'AUDUSD', 'EURUSD'] },
+  'trump executive order': { bullishFor: ['XAUUSD'], bearishFor: ['US500'] },
+  'trump social media': { bullishFor: ['XAUUSD'], bearishFor: ['US500'] },
+  'musk tweet': { bullishFor: ['BTCUSD'], bearishFor: [] },
+  'elon musk': { bullishFor: ['BTCUSD'], bearishFor: [] },
+  'debt ceiling': { bullishFor: ['XAUUSD'], bearishFor: ['US500', 'DXY'] },
+  'government shutdown': { bullishFor: ['XAUUSD'], bearishFor: ['US500', 'DXY'] },
+  'rate pause': { bullishFor: ['XAUUSD', 'US500', 'BTCUSD'], bearishFor: [] },
+  'quantitative tightening': { bullishFor: ['DXY'], bearishFor: ['XAUUSD', 'BTCUSD', 'US500'] },
+  'quantitative easing': { bullishFor: ['XAUUSD', 'BTCUSD', 'US500'], bearishFor: ['DXY'] },
+  'de-dollarization': { bullishFor: ['XAUUSD', 'BTCUSD'], bearishFor: ['DXY'] },
+  'brics': { bullishFor: ['XAUUSD'], bearishFor: ['DXY'] },
+  'nuclear': { bullishFor: ['XAUUSD', 'USOIL'], bearishFor: ['US500', 'EURUSD'] },
+  'ceasefire': { bullishFor: ['EURUSD', 'US500'], bearishFor: ['XAUUSD', 'USOIL'] },
+  'peace deal': { bullishFor: ['EURUSD', 'US500'], bearishFor: ['XAUUSD', 'USOIL'] },
 };
 
 // ============================================
@@ -1657,11 +1674,10 @@ async function fetchCentralBankWatch(): Promise<RawNewsItem[]> {
 }
 
 // ============================================
-// ✅ ENHANCED: ABLE-HF 4.0 ANALYSIS WITH FULL CONTEXT
+// ✅ ENHANCED: ABLE-HF 5.0 ANALYSIS WITH CHAIN-OF-THOUGHT + TRUMP INTEL
 // ============================================
 
 function buildFullAnalysisPrompt(news: any[], symbol: string): string {
-  // ✅ NEW: Build full context with descriptions, not just headlines
   const categorizedNews = {
     directlyRelevant: news.filter(n => n.relatedAssets?.includes(symbol)),
     geopolitical: news.filter(n => 
@@ -1670,15 +1686,22 @@ function buildFullAnalysisPrompt(news: any[], symbol: string): string {
     centralBank: news.filter(n => 
       n.title?.toLowerCase().match(/fed|ecb|boj|boe|rate|fomc|powell|lagarde|inflation|cpi/)
     ),
+    trumpPolicy: news.filter(n =>
+      n.title?.toLowerCase().match(/trump|truth social|executive order|tariff|trade deal|maga/)
+    ),
+    influencer: news.filter(n =>
+      n.title?.toLowerCase().match(/musk|elon|dalio|dimon|buffett|saylor|cathie wood|peter schiff|goldman|jpmorgan/)
+    ),
   };
 
-  // ✅ NEW: Include full content for smarter analysis
   const topNews = [
-    ...categorizedNews.directlyRelevant.slice(0, 10),
+    ...categorizedNews.directlyRelevant.slice(0, 12),
+    ...categorizedNews.trumpPolicy.slice(0, 6),
     ...categorizedNews.geopolitical.slice(0, 5),
     ...categorizedNews.centralBank.slice(0, 5),
+    ...categorizedNews.influencer.slice(0, 4),
     ...news.slice(0, 5)
-  ].slice(0, 20);
+  ].slice(0, 30);
 
   const seen = new Set();
   const uniqueTopNews = topNews.filter(n => {
@@ -1688,110 +1711,136 @@ function buildFullAnalysisPrompt(news: any[], symbol: string): string {
     return true;
   });
 
-  // ✅ NEW: Include correlations and impact factors
   const correlations = FINANCIAL_CORRELATIONS[symbol] || {};
   const impactFactors = ASSET_IMPACT_FACTORS[symbol] || [];
 
-  return `# ABLE-HF 4.0 ADVANCED HEDGE FUND ANALYST
+  const totalBullish = news.filter(n => n.sentiment === 'bullish').length;
+  const totalBearish = news.filter(n => n.sentiment === 'bearish').length;
+  const totalNeutral = news.filter(n => n.sentiment === 'neutral').length;
 
-## ROLE
-คุณคือนักวิเคราะห์ระดับ Hedge Fund ที่ใช้ 40 modules + Financial Intelligence วิเคราะห์
+  return `# ABLE-HF 5.0 ULTRA INTELLIGENT HEDGE FUND ANALYST
 
-## TARGET ASSET: ${symbol}
-### Key Impact Factors for ${symbol}:
+## MISSION
+คุณคือ AI Analyst ระดับ Bridgewater Associates / Two Sigma ที่วิเคราะห์ตลาดด้วยความแม่นยำสูงสุด
+คุณต้อง "คิดแบบ Hedge Fund PM" — ไม่ใช่แค่ดูข่าว แต่ต้องเข้าใจ cause-effect chain, second-order effects, และ positioning
+
+## CHAIN OF THOUGHT ANALYSIS REQUIRED
+ก่อนให้คำตอบ คุณต้องทำ 5 ขั้นตอนในหัว:
+1. **Identify dominant narrative** — theme หลักที่ขับเคลื่อนตลาดตอนนี้คืออะไร?
+2. **Map causality chain** — ข่าว A → ส่งผล B → ทำให้ C → ส่งผลต่อ ${symbol} อย่างไร?
+3. **Assess positioning** — Smart money กำลังทำอะไร? Fund flow เป็นอย่างไร?
+4. **Calculate risk/reward** — Upside vs downside scenario
+5. **Determine conviction** — มั่นใจแค่ไหน? อะไรทำให้ confident ขึ้น/ลง?
+
+## TARGET: ${symbol}
+### Key Impact Factors:
 ${impactFactors.map((f, i) => `${i+1}. ${f}`).join('\n')}
 
-### Correlation Matrix (${symbol}):
+### Correlation Matrix:
 ${Object.entries(correlations).map(([asset, corr]) => `- ${asset}: ${corr > 0 ? '+' : ''}${(corr * 100).toFixed(0)}%`).join('\n')}
 
-## NEWS ANALYSIS (${uniqueTopNews.length} items - FULL CONTEXT)
+### Market Sentiment Overview:
+📊 Bullish: ${totalBullish} | Bearish: ${totalBearish} | Neutral: ${totalNeutral}
+📈 Bull Ratio: ${totalBullish + totalBearish > 0 ? ((totalBullish / (totalBullish + totalBearish)) * 100).toFixed(1) : 50}%
 
-### Directly Related to ${symbol} (${categorizedNews.directlyRelevant.length} items):
-${categorizedNews.directlyRelevant.slice(0, 8).map((n, i) => `
-${i+1}. [${n.sentiment?.toUpperCase() || 'NEUTRAL'}] ${n.title}
-   📰 Source: ${n.source} | ⏰ ${n.ageText}
-   📝 ${n.description?.substring(0, 200) || 'No description'}
-   🏷️ Assets: ${n.relatedAssets?.join(', ') || 'N/A'}
+## INTELLIGENCE FEED (${uniqueTopNews.length} curated from 150+ sources)
+
+### 🎯 Directly Relevant to ${symbol} (${categorizedNews.directlyRelevant.length}):
+${categorizedNews.directlyRelevant.slice(0, 10).map((n, i) => `
+${i+1}. [${n.sentiment?.toUpperCase()}|${n.importance?.toUpperCase()}] ${n.title}
+   📰 ${n.source} | ⏰ ${n.ageText}
+   📝 ${n.description?.substring(0, 250) || ''}
 `).join('\n')}
 
-### Geopolitical/Tariff News (${categorizedNews.geopolitical.length} items):
+### 🏛️ Trump / Policy / Trade War (${categorizedNews.trumpPolicy.length}):
+${categorizedNews.trumpPolicy.slice(0, 6).map((n, i) => `
+${i+1}. [${n.sentiment?.toUpperCase()}] ${n.title}
+   📰 ${n.source} | ⏰ ${n.ageText}
+   📝 ${n.description?.substring(0, 200) || ''}
+`).join('\n')}
+
+### ⚔️ Geopolitical (${categorizedNews.geopolitical.length}):
 ${categorizedNews.geopolitical.slice(0, 5).map((n, i) => `
-${i+1}. [${n.sentiment?.toUpperCase() || 'NEUTRAL'}] ${n.title}
-   📰 Source: ${n.source} | Impact: ${n.importance?.toUpperCase() || 'MEDIUM'}
-   📝 ${n.description?.substring(0, 150) || ''}
+${i+1}. [${n.sentiment?.toUpperCase()}] ${n.title} — ${n.source}
 `).join('\n')}
 
-### Central Bank/Fed News (${categorizedNews.centralBank.length} items):
+### 🏦 Central Bank / Fed (${categorizedNews.centralBank.length}):
 ${categorizedNews.centralBank.slice(0, 5).map((n, i) => `
-${i+1}. [${n.sentiment?.toUpperCase() || 'NEUTRAL'}] ${n.title}
-   📰 Source: ${n.source}
-   📝 ${n.description?.substring(0, 150) || ''}
+${i+1}. [${n.sentiment?.toUpperCase()}] ${n.title} — ${n.source}
 `).join('\n')}
 
-## ANALYSIS FRAMEWORK (ABLE-HF 4.0)
-วิเคราะห์ครบ 5 หมวด:
-1. **Macro & Economic (33%)**: Fed, ECB, BOJ, inflation, GDP, employment
-2. **Sentiment & Flow (29%)**: News sentiment, institutional flow, COT, ETF flow
-3. **Technical & Regime (20%)**: Trend, momentum, volatility, support/resistance
-4. **Risk & Event (23.5%)**: Geopolitical, tariffs, Trump, war, sanctions, black swan
-5. **Alternative & AI (14.5%)**: NLP analysis, neural signals, cross-asset correlations
+### 📣 Influencer / Wall Street (${categorizedNews.influencer.length}):
+${categorizedNews.influencer.slice(0, 4).map((n, i) => `
+${i+1}. ${n.title} — ${n.source}
+`).join('\n')}
 
-## SPECIAL ANALYSIS RULES FOR ${symbol}
+## ABLE-HF 5.0 ANALYSIS FRAMEWORK (Weighted)
+1. **Macro & Fed Policy (30%)**: Rate expectations, QT/QE, inflation, labor
+2. **Trump/Policy Risk (20%)**: Tariffs, executive orders, trade negotiations
+3. **Geopolitical & Event Risk (18%)**: Wars, sanctions, OPEC, elections
+4. **Sentiment & Flow (17%)**: News sentiment, ETF flows, COT, positioning
+5. **Technical Regime (15%)**: Trend, momentum, volatility, key levels
+
+## SMART RULES FOR ${symbol}
 ${symbol === 'XAUUSD' ? `
-⚠️ Gold Analysis Rules:
-- Safe Haven Asset → Geopolitical risk, tariffs, war = BULLISH for Gold
-- Fed hawkish/rate hike = BEARISH for Gold
-- USD strength (DXY up) = BEARISH for Gold  
-- Real yields rising = BEARISH for Gold
-- Inflation fears = BULLISH for Gold
-- Central bank buying = BULLISH for Gold
-- Trade war/Tariffs = BULLISH for Gold (uncertainty)
-` : ''}
-${symbol === 'BTCUSD' ? `
-⚠️ Bitcoin Analysis Rules:
-- ETF inflows = BULLISH
-- Regulation news = Watch carefully (can be both)
-- Halving cycle = Long-term BULLISH
-- Risk-on sentiment = BULLISH
-- Fed dovish = BULLISH (liquidity)
-` : ''}
-${symbol.includes('USD') && symbol !== 'XAUUSD' && symbol !== 'BTCUSD' ? `
-⚠️ Forex Analysis Rules:
-- Focus on central bank policy differential
-- Interest rate expectations are key
-- Watch for intervention risks
+⚠️ Gold Intelligence:
+- Trump tariff threats → BULLISH (uncertainty = gold)
+- Trump attacks Fed → BULLISH (credibility concern)
+- Trump trade deal → BEARISH (risk-on)
+- Real yield falling → BULLISH | Rising → BEARISH
+- DXY weakness → BULLISH | DXY strength → BEARISH
+- Geopolitical escalation → BULLISH
+- BRICS de-dollarization → STRUCTURAL BULLISH
+- Central bank gold buying → STRUCTURAL BULLISH
+` : ''}${symbol === 'BTCUSD' ? `
+⚠️ Bitcoin Intelligence:
+- Trump pro-crypto → BULLISH
+- ETF inflows → VERY BULLISH
+- Musk tweets crypto → Short-term VOLATILE
+- Fed dovish → BULLISH (liquidity)
+- Regulation clarity → BULLISH | Crackdown → BEARISH
+` : ''}${symbol === 'EURUSD' ? `
+⚠️ EUR/USD Intelligence:
+- Trump tariffs EU → BEARISH EUR
+- ECB vs Fed differential → KEY
+- Ukraine peace → BULLISH EUR
+- Energy crisis → BEARISH EUR
+` : ''}${symbol === 'US500' || symbol === 'US100' ? `
+⚠️ Equities Intelligence:
+- Trump tariffs → BEARISH (trade uncertainty)
+- Trump tax cuts → BULLISH
+- Fed pivot → BULLISH
+- AI narrative → BULLISH US100
 ` : ''}
 
-## CRITICAL INSTRUCTIONS
-1. อ่านข่าวแต่ละข่าวอย่างละเอียด รวมถึง description
-2. พิจารณา correlations กับสินทรัพย์อื่น
-3. ถ้าไม่มีข่าวที่เกี่ยวข้องโดยตรง → ลด confidence
-4. ข่าว Geopolitical/Fed มีผลกระทบสูง → ให้น้ำหนักมาก
-5. P_up_pct + P_down_pct ต้องรวมกันได้ 100
-
-## OUTPUT FORMAT (JSON ONLY)
+## OUTPUT (STRICT JSON ONLY)
 {
   "P_up_pct": 78.5,
   "P_down_pct": 21.5,
   "decision": "🟢 BUY",
   "confidence": 76,
   "market_regime": "TRENDING_UP",
+  "dominant_narrative": "<1 sentence: main story driving ${symbol}>",
+  "causality_chain": "<A → B → C → ${symbol} impact>",
   "trading_signal": {
     "signal": "BUY",
     "icon": "🟢",
     "color": "#22C55E",
-    "strength": 75
+    "strength": 75,
+    "timeframe": "1-3 days"
   },
-  "thai_summary": "<สรุป 3-4 ประโยค อ้างอิงข่าวที่สำคัญที่สุด>",
-  "key_drivers": ["<ปัจจัย 1 - อ้างอิงข่าวจริง>", "<ปัจจัย 2>", "<ปัจจัย 3>"],
-  "risk_warnings": ["<ความเสี่ยง 1>", "<ความเสี่ยง 2>"],
-  "correlated_impact": [
-    {"asset": "EURUSD", "direction": "bullish", "reason": "USD weakness"},
-    {"asset": "USDJPY", "direction": "bearish", "reason": "Risk-off"}
-  ],
+  "thai_summary": "<สรุป 4-5 ประโยค อ้างอิงข่าวสำคัญ + เหตุผลเชิงลึก + คำแนะนำ>",
+  "key_drivers": ["<ปัจจัยหลัก 1 อ้างอิงข่าว>", "<ปัจจัยหลัก 2>", "<ปัจจัยหลัก 3>", "<ปัจจัยหลัก 4>"],
+  "risk_warnings": ["<ความเสี่ยง 1>", "<ความเสี่ยง 2>", "<ความเสี่ยง 3>"],
+  "trump_impact": "<วิเคราะห์ผลกระทบ Trump/policy ต่อ ${symbol} or null>",
+  "smart_money_assessment": "<ประเมิน institutional positioning or null>",
+  "correlated_impact": [{"asset": "EURUSD", "direction": "bullish", "reason": "..."}],
+  "second_order_effects": ["<ผลกระทบที่คนมองข้าม>"],
   "analyzed_at": "${new Date().toISOString()}",
   "news_count": ${news.length},
-  "relevant_news_count": ${categorizedNews.directlyRelevant.length}
+  "relevant_news_count": ${categorizedNews.directlyRelevant.length},
+  "trump_news_count": ${categorizedNews.trumpPolicy.length},
+  "model_version": "ABLE-HF 5.0"
 }`;
 }
 
@@ -2014,7 +2063,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log('🚀 ABLE-HF 4.0 Enhanced News Aggregator (120+ sources)...');
+    console.log('🚀 ABLE-HF 5.0 Enhanced News Aggregator (150+ sources + Trump Intel)...');
     const startTime = Date.now();
     
     let pinnedAssets: string[] = [];
@@ -2026,9 +2075,9 @@ serve(async (req) => {
     } catch {}
     
     console.log(`📌 Assets: ${pinnedAssets.join(', ') || 'default'}`);
-    console.log('📡 Fetching 120+ global news sources (WorldMonitor integrated)...');
+    console.log('📡 Fetching 150+ global news sources (Trump/Twitter Intel integrated)...');
     
-    // ✅ EXPANDED: 120+ sources in parallel - GLOBAL + WORLDMONITOR COVERAGE
+    // ✅ EXPANDED: 150+ sources - GLOBAL + TWITTER/TRUMP + WORLDMONITOR
     const [
       // ✅ Real News APIs
       gNewsGold, gNewsForex, gNewsCrypto, gNewsTariff, gNewsEconomy, gNewsCentralBanks,
@@ -2186,6 +2235,35 @@ serve(async (req) => {
       
       // Cyber & Security
       fetchGoogleNewsFeed('cybersecurity OR "data breach" OR ransomware OR APT when:2d', 'Cyber Threats', 'Security'),
+      
+      // ✅ NEW: Twitter/X Intelligence - Key Market Movers
+      // Trump / Truth Social / Policy
+      fetchGoogleNewsFeed('Trump tweet OR "Truth Social" OR Trump statement tariff China when:1d', 'Trump Social', 'Trump/Policy', 15),
+      fetchGoogleNewsFeed('Trump executive order OR Trump policy economy trade when:1d', 'Trump Policy', 'Trump/Policy', 12),
+      fetchGoogleNewsFeed('"Trump said" OR "Trump announced" OR "Trump threatens" tariff trade when:1d', 'Trump Statements', 'Trump/Policy', 10),
+      
+      // Elon Musk / Crypto / Tesla influence
+      fetchGoogleNewsFeed('Elon Musk tweet OR Musk crypto OR Musk bitcoin OR DOGE Musk when:2d', 'Musk Social', 'Influencer', 10),
+      fetchGoogleNewsFeed('Elon Musk Tesla OR SpaceX OR xAI when:2d', 'Musk Business', 'Influencer', 8),
+      
+      // Fed Officials & Central Bankers
+      fetchGoogleNewsFeed('Powell speech OR Waller OR Brainard OR "Fed official" OR FOMC member when:2d', 'Fed Officials', 'Central Bank', 12),
+      fetchGoogleNewsFeed('Lagarde speech OR ECB member OR "ECB official" when:3d', 'ECB Officials', 'Central Bank', 8),
+      fetchGoogleNewsFeed('BOJ Ueda OR "Japan intervention" OR "yen intervention" when:3d', 'BOJ Watch', 'Central Bank', 8),
+      
+      // Macro Influencers & Analysts
+      fetchGoogleNewsFeed('"Ray Dalio" OR "Jamie Dimon" OR "Warren Buffett" OR "Larry Fink" market when:3d', 'Market Titans', 'Influencer', 10),
+      fetchGoogleNewsFeed('"Peter Schiff" gold OR "Cathie Wood" OR "Michael Saylor" bitcoin when:3d', 'Crypto Bulls', 'Influencer', 8),
+      fetchGoogleNewsFeed('"Goldman Sachs" forecast OR "JPMorgan" outlook OR "Morgan Stanley" target when:2d', 'Wall Street', 'Research', 12),
+      
+      // WSJ / The Economist / Barron's
+      fetchGoogleNewsFeed('site:wsj.com markets economy when:1d', 'Wall Street Journal', 'Premium News', 15),
+      fetchGoogleNewsFeed('site:economist.com economy markets when:3d', 'The Economist', 'Premium News', 10),
+      fetchGoogleNewsFeed('site:barrons.com markets stocks when:2d', "Barron's", 'Premium News', 10),
+      
+      // Reddit Trump/Policy Sentiment
+      fetchReddit('trump', 'Trump/Policy'),
+      fetchReddit('TruthSocial', 'Trump/Policy'),
     ]);
 
     // Flatten worldmonitor sources
@@ -2545,7 +2623,7 @@ serve(async (req) => {
         sourcesCount: newsMetadata.sourcesCount,
         sources: newsMetadata.sources,
         gemini_api: 'direct',
-        version: 'ABLE-HF 4.0'
+        version: 'ABLE-HF 5.0'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
