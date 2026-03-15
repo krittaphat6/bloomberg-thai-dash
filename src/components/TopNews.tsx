@@ -529,59 +529,61 @@ export const TopNews = () => {
                       
                       setGeminiDeepLoading(true);
                       setShowGeminiPanel(true);
-                      setGeminiThinking('🧠 กำลังวิเคราะห์ข่าว ' + rawNews.length + ' รายการ...\n');
+                      setGeminiThinking('🧠 กำลังดึงข่าว 120+ แหล่ง + วิเคราะห์ด้วย Gemini AI...\n');
                       
                       try {
-                        // Analyze first pinned asset with all news
-                        const targetSymbol = pinnedAssets[0].symbol;
-                        setGeminiThinking(prev => prev + '📊 กำลังวิเคราะห์ ' + targetSymbol + ' ตามหลัก ABLE-HF 3.0\n');
+                        setGeminiThinking(prev => prev + '📡 กำลังรวบรวมข่าว + วิเคราะห์ทุกสินทรัพย์...\n');
                         
-                        const { data, error } = await supabase.functions.invoke('gemini-deep-analysis', {
+                        // Re-fetch with analysis enabled
+                        const { data, error } = await supabase.functions.invoke('news-aggregator', {
                           body: {
-                            symbol: targetSymbol,
-                            news: rawNews.slice(0, 50),
-                            priceData: assetPrices[targetSymbol]
+                            pinnedAssets: pinnedAssets.map(p => p.symbol),
+                            skipAnalysis: false
                           }
                         });
                         
                         if (error) throw error;
                         
-                        if (data?.success && data?.analysis) {
-                          setGeminiThinking(prev => prev + '\n✅ วิเคราะห์เสร็จสิ้น!\n');
-                          setGeminiThinking(prev => prev + '📈 Decision: ' + data.analysis.decision + '\n');
-                          setGeminiThinking(prev => prev + '🎯 P(Up): ' + data.analysis.P_up_pct?.toFixed(1) + '%\n');
-                          setGeminiThinking(prev => prev + '💪 Confidence: ' + data.analysis.confidence + '%\n\n');
+                        if (data?.success) {
+                          // Update news data
+                          setRawNews(data.rawNews || []);
+                          setForYouItems(data.forYou || []);
+                          setMacroData(data.macro || []);
+                          setNewsMetadata(data.newsMetadata || null);
+                          setLastUpdated(new Date());
                           
-                          // ✅ NEW: Show filter stats in thinking
-                          if (data.analysis.filtered_news_count) {
-                            setGeminiThinking(prev => prev + `📰 News Filter: ${data.analysis.filtered_news_count}/${data.analysis.news_count} (${data.analysis.filter_pass_rate})\n`);
-                            if (data.analysis.market_moving_news > 0) {
-                              setGeminiThinking(prev => prev + `🚨 Market Moving News: ${data.analysis.market_moving_news}\n`);
+                          // Extract and set ABLE analysis from all assets
+                          const ableResults: Record<string, AbleAnalysisResult> = {};
+                          (data.macro || []).forEach((macro: MacroAnalysis) => {
+                            if (macro.ableAnalysis && macro.ableAnalysis.P_up_pct !== undefined) {
+                              ableResults[macro.symbol] = macro.ableAnalysis;
+                              setGeminiThinking(prev => prev + `\n✅ ${macro.symbol}: ${macro.ableAnalysis.decision} (P_up: ${macro.ableAnalysis.P_up_pct?.toFixed(1)}%)\n`);
                             }
-                          }
-                          
-                          setGeminiThinking(prev => prev + '\n💭 ' + (data.analysis.thinking_process || data.analysis.thai_summary || '') + '\n');
-                          
-                          setGeminiResult(data.analysis);
-                          
-                          // ✅ NEW: Update filter stats
-                          setNewsFilterStats({
-                            totalNews: data.analysis.news_count || 0,
-                            filteredNews: data.analysis.filtered_news_count || 0,
-                            passRate: data.analysis.filter_pass_rate || '0%',
-                            marketMovingCount: data.analysis.market_moving_news || 0,
-                            topNews: data.analysis.top_news || []
                           });
                           
-                          // Update ableAnalysis with new deep analysis
-                          setAbleAnalysis(prev => ({
-                            ...prev,
-                            [targetSymbol]: data.analysis
-                          }));
+                          setAbleAnalysis(ableResults);
+                          
+                          // Use first asset's analysis as the main Gemini result
+                          const firstResult = Object.values(ableResults)[0];
+                          if (firstResult) {
+                            setGeminiResult(firstResult);
+                            setGeminiThinking(prev => prev + `\n📊 วิเคราะห์ ${Object.keys(ableResults).length} สินทรัพย์เสร็จสิ้น\n`);
+                            setGeminiThinking(prev => prev + `📰 ข่าวทั้งหมด: ${data.rawNews?.length || 0} | แหล่งข่าว: ${data.sourcesCount || 0}\n`);
+                            setGeminiThinking(prev => prev + '\n💭 ' + (firstResult.thai_summary || '') + '\n');
+                            
+                            // Update filter stats
+                            setNewsFilterStats({
+                              totalNews: firstResult.news_count || 0,
+                              filteredNews: firstResult.filtered_news_count || 0,
+                              passRate: firstResult.filter_pass_rate || '0%',
+                              marketMovingCount: firstResult.market_moving_news || 0,
+                              topNews: firstResult.top_news || []
+                            });
+                          }
                           
                           toast({
-                            title: `✅ Gemini วิเคราะห์ ${targetSymbol} เสร็จสิ้น`,
-                            description: `${data.analysis.decision} • ${data.analysis.filtered_news_count}/${data.analysis.news_count} news filtered`
+                            title: `✅ Gemini AI วิเคราะห์ ${Object.keys(ableResults).length} สินทรัพย์เสร็จ`,
+                            description: `${data.rawNews?.length || 0} news • ${data.sourcesCount || 0} sources`
                           });
                         } else {
                           throw new Error(data?.error || 'Analysis failed');
