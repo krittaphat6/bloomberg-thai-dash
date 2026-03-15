@@ -2541,6 +2541,7 @@ serve(async (req) => {
         }),
         xNotifications,
         rawNews: uniqueNews.slice(0, 80),
+        historicalNews: historicalNews.slice(0, 500),
         sourcesCount: newsMetadata.sourcesCount,
         sources: newsMetadata.sources,
         gemini_api: 'direct',
