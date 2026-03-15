@@ -102,6 +102,23 @@ const CONTEXTUAL_SENTIMENT: Record<string, { bullishFor: string[], bearishFor: s
   'opec cut': { bullishFor: ['USOIL', 'XAUUSD'], bearishFor: ['US500'] },
   'etf inflow': { bullishFor: ['BTCUSD', 'XAUUSD'], bearishFor: [] },
   'etf outflow': { bullishFor: [], bearishFor: ['BTCUSD', 'XAUUSD'] },
+  // ✅ NEW: Trump & Policy specific triggers
+  'trump truth social': { bullishFor: ['XAUUSD'], bearishFor: ['US500', 'EURUSD'] },
+  'trump tariff china': { bullishFor: ['XAUUSD', 'USDJPY'], bearishFor: ['US500', 'AUDUSD', 'EURUSD'] },
+  'trump executive order': { bullishFor: ['XAUUSD'], bearishFor: ['US500'] },
+  'trump social media': { bullishFor: ['XAUUSD'], bearishFor: ['US500'] },
+  'musk tweet': { bullishFor: ['BTCUSD'], bearishFor: [] },
+  'elon musk': { bullishFor: ['BTCUSD'], bearishFor: [] },
+  'debt ceiling': { bullishFor: ['XAUUSD'], bearishFor: ['US500', 'DXY'] },
+  'government shutdown': { bullishFor: ['XAUUSD'], bearishFor: ['US500', 'DXY'] },
+  'rate pause': { bullishFor: ['XAUUSD', 'US500', 'BTCUSD'], bearishFor: [] },
+  'quantitative tightening': { bullishFor: ['DXY'], bearishFor: ['XAUUSD', 'BTCUSD', 'US500'] },
+  'quantitative easing': { bullishFor: ['XAUUSD', 'BTCUSD', 'US500'], bearishFor: ['DXY'] },
+  'de-dollarization': { bullishFor: ['XAUUSD', 'BTCUSD'], bearishFor: ['DXY'] },
+  'brics': { bullishFor: ['XAUUSD'], bearishFor: ['DXY'] },
+  'nuclear': { bullishFor: ['XAUUSD', 'USOIL'], bearishFor: ['US500', 'EURUSD'] },
+  'ceasefire': { bullishFor: ['EURUSD', 'US500'], bearishFor: ['XAUUSD', 'USOIL'] },
+  'peace deal': { bullishFor: ['EURUSD', 'US500'], bearishFor: ['XAUUSD', 'USOIL'] },
 };
 
 // ============================================
