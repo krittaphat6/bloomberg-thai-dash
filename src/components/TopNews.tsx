@@ -614,17 +614,8 @@ export const TopNews = () => {
                     )}
                   </Button>
                   
-                  {/* Toggle Chart Button */}
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => setShowSentimentChart(!showSentimentChart)}
-                    className="h-8 text-xs border-zinc-700 text-zinc-400 hover:text-purple-400 hover:border-purple-500"
-                  >
-                    {showSentimentChart ? <EyeOff className="w-3 h-3 mr-1" /> : <Eye className="w-3 h-3 mr-1" />}
-                    Chart
-                  </Button>
-                  
+
+
                   <Button size="sm" variant="outline" onClick={() => setShowAddAsset(!showAddAsset)} className="h-8 text-xs border-zinc-700 text-zinc-400 hover:text-white hover:border-emerald-500">
                     <Plus className="w-3 h-3 mr-1" />
                     Add Asset ({pinnedAssets.length}/8)
