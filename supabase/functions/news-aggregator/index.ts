@@ -2018,9 +2018,11 @@ serve(async (req) => {
     const startTime = Date.now();
     
     let pinnedAssets: string[] = [];
+    let skipAnalysis = false;
     try {
       const body = await req.json();
       pinnedAssets = body.pinnedAssets || [];
+      skipAnalysis = body.skipAnalysis || false;
     } catch {}
     
     console.log(`📌 Assets: ${pinnedAssets.join(', ') || 'default'}`);
@@ -2347,9 +2349,48 @@ serve(async (req) => {
       console.warn('Alert persistence failed:', e);
     }
 
-    // Gemini Analysis
-    const macroAnalysis = await analyzeWithGemini(uniqueNews, pinnedAssets);
-    console.log(`✅ Analysis complete: ${macroAnalysis.length} assets`);
+    // Gemini Analysis - only when explicitly requested
+    let macroAnalysis: MacroAnalysis[] = [];
+    if (!skipAnalysis) {
+      macroAnalysis = await analyzeWithGemini(uniqueNews, pinnedAssets);
+      console.log(`✅ Analysis complete: ${macroAnalysis.length} assets`);
+    } else {
+      console.log(`⏭️ Skipping Gemini analysis (skipAnalysis=true)`);
+      // Return basic macro structure without AI analysis
+      macroAnalysis = pinnedAssets.map(symbol => ({
+        symbol,
+        sentiment: 'neutral' as const,
+        confidence: 0,
+        analysis: '',
+        change: '0%',
+        changeValue: 0,
+      }));
+    }
+
+    // ✅ Fetch 3-month historical news from DB
+    let historicalNews: any[] = [];
+    try {
+      const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || Deno.env.get('VITE_SUPABASE_URL');
+      const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY');
+      if (SUPABASE_URL && SUPABASE_KEY) {
+        const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+        const histRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/news_history?created_at=gte.${threeMonthsAgo}&order=created_at.desc&limit=500`,
+          {
+            headers: {
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`,
+            }
+          }
+        );
+        if (histRes.ok) {
+          historicalNews = await histRes.json();
+          console.log(`📚 Loaded ${historicalNews.length} historical news (3 months)`);
+        }
+      }
+    } catch (e) {
+      console.warn('Historical news fetch failed:', e);
+    }
 
     // Build forYou items
     const forYouItems: any[] = [];
@@ -2500,6 +2541,7 @@ serve(async (req) => {
         }),
         xNotifications,
         rawNews: uniqueNews.slice(0, 80),
+        historicalNews: historicalNews.slice(0, 500),
         sourcesCount: newsMetadata.sourcesCount,
         sources: newsMetadata.sources,
         gemini_api: 'direct',

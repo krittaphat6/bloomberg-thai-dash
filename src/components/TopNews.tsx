@@ -7,15 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, Sparkles, ExternalLink, Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3, Settings, Eye, EyeOff, FileText, Users, Zap, Loader2, Target, Plus, X, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Search, Pin, Newspaper } from 'lucide-react';
+import { RefreshCw, Sparkles, ExternalLink, Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3, Settings, FileText, Users, Zap, Loader2, Target, Plus, X, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Search, Pin, Newspaper } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';
 import { GeminiThinkingModal } from './TopNews/GeminiThinkingModal';
 import { RelationshipDiagram } from './TopNews/RelationshipDiagram';
 import { FlowchartDiagram } from './TopNews/FlowchartDiagram';
-import { SentimentHistoryChart, SpikeAlert } from './TopNews/SentimentHistoryChart';
-import { AlertSystem, Alert } from './TopNews/AlertSystem';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { fetchRealTimePrice, fetchCryptoPrice } from '@/services/realTimePriceService';
 
@@ -184,9 +182,6 @@ export const TopNews = () => {
     topNews: any[];
   } | null>(null);
 
-  // ✅ NEW: Sentiment Chart & Alert System States
-  const [showSentimentChart, setShowSentimentChart] = useState(true);
-  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
   // Fetch prices
   const fetchPrices = useCallback(async () => {
@@ -226,7 +221,8 @@ export const TopNews = () => {
         error
       } = await supabase.functions.invoke('news-aggregator', {
         body: {
-          pinnedAssets: pinnedAssets.map(p => p.symbol)
+          pinnedAssets: pinnedAssets.map(p => p.symbol),
+          skipAnalysis: true
         }
       });
       if (error) {
@@ -254,18 +250,8 @@ export const TopNews = () => {
           `);
         }
 
-        // Extract ABLE analysis from backend response
-        const ableResults: Record<string, AbleAnalysisResult> = {};
-        (data.macro || []).forEach((macro: MacroAnalysis) => {
-          if (macro.ableAnalysis) {
-            ableResults[macro.symbol] = macro.ableAnalysis;
-            console.log(`✅ ABLE analysis loaded: ${macro.symbol} - ${macro.ableAnalysis.decision}`);
-          }
-        });
-        setAbleAnalysis(ableResults);
-        if (Object.keys(ableResults).length === 0 && pinnedAssets.length > 0) {
-          console.warn('⚠️ No ABLE analysis from backend');
-        }
+        // Don't auto-populate ableAnalysis - user must click "Run Gemini AI"
+        console.log('📰 News loaded. Click "Run Gemini AI" to start analysis.');
         if (!initialLoading) {
           toast({
             title: '✅ ABLE-HF 3.0 Updated',
@@ -543,59 +529,61 @@ export const TopNews = () => {
                       
                       setGeminiDeepLoading(true);
                       setShowGeminiPanel(true);
-                      setGeminiThinking('🧠 กำลังวิเคราะห์ข่าว ' + rawNews.length + ' รายการ...\n');
+                      setGeminiThinking('🧠 กำลังดึงข่าว 120+ แหล่ง + วิเคราะห์ด้วย Gemini AI...\n');
                       
                       try {
-                        // Analyze first pinned asset with all news
-                        const targetSymbol = pinnedAssets[0].symbol;
-                        setGeminiThinking(prev => prev + '📊 กำลังวิเคราะห์ ' + targetSymbol + ' ตามหลัก ABLE-HF 3.0\n');
+                        setGeminiThinking(prev => prev + '📡 กำลังรวบรวมข่าว + วิเคราะห์ทุกสินทรัพย์...\n');
                         
-                        const { data, error } = await supabase.functions.invoke('gemini-deep-analysis', {
+                        // Re-fetch with analysis enabled
+                        const { data, error } = await supabase.functions.invoke('news-aggregator', {
                           body: {
-                            symbol: targetSymbol,
-                            news: rawNews.slice(0, 50),
-                            priceData: assetPrices[targetSymbol]
+                            pinnedAssets: pinnedAssets.map(p => p.symbol),
+                            skipAnalysis: false
                           }
                         });
                         
                         if (error) throw error;
                         
-                        if (data?.success && data?.analysis) {
-                          setGeminiThinking(prev => prev + '\n✅ วิเคราะห์เสร็จสิ้น!\n');
-                          setGeminiThinking(prev => prev + '📈 Decision: ' + data.analysis.decision + '\n');
-                          setGeminiThinking(prev => prev + '🎯 P(Up): ' + data.analysis.P_up_pct?.toFixed(1) + '%\n');
-                          setGeminiThinking(prev => prev + '💪 Confidence: ' + data.analysis.confidence + '%\n\n');
+                        if (data?.success) {
+                          // Update news data
+                          setRawNews(data.rawNews || []);
+                          setForYouItems(data.forYou || []);
+                          setMacroData(data.macro || []);
+                          setNewsMetadata(data.newsMetadata || null);
+                          setLastUpdated(new Date());
                           
-                          // ✅ NEW: Show filter stats in thinking
-                          if (data.analysis.filtered_news_count) {
-                            setGeminiThinking(prev => prev + `📰 News Filter: ${data.analysis.filtered_news_count}/${data.analysis.news_count} (${data.analysis.filter_pass_rate})\n`);
-                            if (data.analysis.market_moving_news > 0) {
-                              setGeminiThinking(prev => prev + `🚨 Market Moving News: ${data.analysis.market_moving_news}\n`);
+                          // Extract and set ABLE analysis from all assets
+                          const ableResults: Record<string, AbleAnalysisResult> = {};
+                          (data.macro || []).forEach((macro: MacroAnalysis) => {
+                            if (macro.ableAnalysis && macro.ableAnalysis.P_up_pct !== undefined) {
+                              ableResults[macro.symbol] = macro.ableAnalysis;
+                              setGeminiThinking(prev => prev + `\n✅ ${macro.symbol}: ${macro.ableAnalysis.decision} (P_up: ${macro.ableAnalysis.P_up_pct?.toFixed(1)}%)\n`);
                             }
-                          }
-                          
-                          setGeminiThinking(prev => prev + '\n💭 ' + (data.analysis.thinking_process || data.analysis.thai_summary || '') + '\n');
-                          
-                          setGeminiResult(data.analysis);
-                          
-                          // ✅ NEW: Update filter stats
-                          setNewsFilterStats({
-                            totalNews: data.analysis.news_count || 0,
-                            filteredNews: data.analysis.filtered_news_count || 0,
-                            passRate: data.analysis.filter_pass_rate || '0%',
-                            marketMovingCount: data.analysis.market_moving_news || 0,
-                            topNews: data.analysis.top_news || []
                           });
                           
-                          // Update ableAnalysis with new deep analysis
-                          setAbleAnalysis(prev => ({
-                            ...prev,
-                            [targetSymbol]: data.analysis
-                          }));
+                          setAbleAnalysis(ableResults);
+                          
+                          // Use first asset's analysis as the main Gemini result
+                          const firstResult = Object.values(ableResults)[0];
+                          if (firstResult) {
+                            setGeminiResult(firstResult);
+                            setGeminiThinking(prev => prev + `\n📊 วิเคราะห์ ${Object.keys(ableResults).length} สินทรัพย์เสร็จสิ้น\n`);
+                            setGeminiThinking(prev => prev + `📰 ข่าวทั้งหมด: ${data.rawNews?.length || 0} | แหล่งข่าว: ${data.sourcesCount || 0}\n`);
+                            setGeminiThinking(prev => prev + '\n💭 ' + (firstResult.thai_summary || '') + '\n');
+                            
+                            // Update filter stats
+                            setNewsFilterStats({
+                              totalNews: firstResult.news_count || 0,
+                              filteredNews: firstResult.filtered_news_count || 0,
+                              passRate: firstResult.filter_pass_rate || '0%',
+                              marketMovingCount: firstResult.market_moving_news || 0,
+                              topNews: firstResult.top_news || []
+                            });
+                          }
                           
                           toast({
-                            title: `✅ Gemini วิเคราะห์ ${targetSymbol} เสร็จสิ้น`,
-                            description: `${data.analysis.decision} • ${data.analysis.filtered_news_count}/${data.analysis.news_count} news filtered`
+                            title: `✅ Gemini AI วิเคราะห์ ${Object.keys(ableResults).length} สินทรัพย์เสร็จ`,
+                            description: `${data.rawNews?.length || 0} news • ${data.sourcesCount || 0} sources`
                           });
                         } else {
                           throw new Error(data?.error || 'Analysis failed');
@@ -628,44 +616,14 @@ export const TopNews = () => {
                     )}
                   </Button>
                   
-                  {/* Toggle Chart Button */}
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => setShowSentimentChart(!showSentimentChart)}
-                    className="h-8 text-xs border-zinc-700 text-zinc-400 hover:text-purple-400 hover:border-purple-500"
-                  >
-                    {showSentimentChart ? <EyeOff className="w-3 h-3 mr-1" /> : <Eye className="w-3 h-3 mr-1" />}
-                    Chart
-                  </Button>
-                  
+
+
                   <Button size="sm" variant="outline" onClick={() => setShowAddAsset(!showAddAsset)} className="h-8 text-xs border-zinc-700 text-zinc-400 hover:text-white hover:border-emerald-500">
                     <Plus className="w-3 h-3 mr-1" />
                     Add Asset ({pinnedAssets.length}/8)
                   </Button>
                 </div>
               </div>
-              
-              {/* ✅ NEW: Alert System */}
-              <AlertSystem 
-                rawNews={rawNews}
-                pinnedAssets={pinnedAssets}
-                onAlertClick={(alert) => {
-                  setSelectedAlert(alert);
-                  console.log('Alert clicked:', alert);
-                }}
-              />
-              
-              {/* ✅ NEW: Sentiment History Chart */}
-              {showSentimentChart && rawNews.length > 0 && (
-                <SentimentHistoryChart 
-                  pinnedAssets={pinnedAssets}
-                  rawNews={rawNews}
-                  onSpikeDetected={(spike: SpikeAlert) => {
-                    console.log('Spike detected from chart:', spike);
-                  }}
-                />
-              )}
               
               {/* ✅ Gemini Thinking Panel */}
               {showGeminiPanel && (
