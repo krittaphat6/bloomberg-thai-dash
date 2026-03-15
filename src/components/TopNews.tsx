@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, Sparkles, ExternalLink, Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3, Settings, Eye, EyeOff, FileText, Users, Zap, Loader2, Target, Plus, X, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Search, Pin, Newspaper } from 'lucide-react';
+import { RefreshCw, Sparkles, ExternalLink, Brain, TrendingUp, TrendingDown, ChevronRight, Clock, BarChart3, Settings, FileText, Users, Zap, Loader2, Target, Plus, X, ChevronDown, AlertCircle, PlayCircle, CheckCircle2, Search, Pin, Newspaper } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { ASSET_DISPLAY_NAMES, AVAILABLE_ASSETS } from '@/services/ableNewsIntelligence';

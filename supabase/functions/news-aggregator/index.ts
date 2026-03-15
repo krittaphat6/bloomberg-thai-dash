@@ -2018,9 +2018,11 @@ serve(async (req) => {
     const startTime = Date.now();
     
     let pinnedAssets: string[] = [];
+    let skipAnalysis = false;
     try {
       const body = await req.json();
       pinnedAssets = body.pinnedAssets || [];
+      skipAnalysis = body.skipAnalysis || false;
     } catch {}
     
     console.log(`📌 Assets: ${pinnedAssets.join(', ') || 'default'}`);
