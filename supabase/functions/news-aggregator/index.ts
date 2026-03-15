@@ -1,6 +1,6 @@
 // supabase/functions/news-aggregator/index.ts
 // ✅ ENHANCED VERSION 2.0 - 50+ News Sources + AI Deep Analysis + Full Context Reading
-// ABLE-HF 4.0 Full Analysis via Direct Gemini API with Financial Intelligence
+// ✅ ABLE-HF 5.0 Full Analysis + Trump/Twitter Intelligence + 150+ Sources
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
