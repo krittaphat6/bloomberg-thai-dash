@@ -182,9 +182,6 @@ export const TopNews = () => {
     topNews: any[];
   } | null>(null);
 
-  // ✅ NEW: Sentiment Chart & Alert System States
-  const [showSentimentChart, setShowSentimentChart] = useState(true);
-  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
   // Fetch prices
   const fetchPrices = useCallback(async () => {
