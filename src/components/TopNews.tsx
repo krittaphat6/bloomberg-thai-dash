@@ -221,7 +221,8 @@ export const TopNews = () => {
         error
       } = await supabase.functions.invoke('news-aggregator', {
         body: {
-          pinnedAssets: pinnedAssets.map(p => p.symbol)
+          pinnedAssets: pinnedAssets.map(p => p.symbol),
+          skipAnalysis: true
         }
       });
       if (error) {
