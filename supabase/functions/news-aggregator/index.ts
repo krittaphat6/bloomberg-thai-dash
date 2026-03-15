@@ -2063,7 +2063,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log('🚀 ABLE-HF 4.0 Enhanced News Aggregator (120+ sources)...');
+    console.log('🚀 ABLE-HF 5.0 Enhanced News Aggregator (150+ sources + Trump Intel)...');
     const startTime = Date.now();
     
     let pinnedAssets: string[] = [];
