@@ -250,18 +250,8 @@ export const TopNews = () => {
           `);
         }
 
-        // Extract ABLE analysis from backend response
-        const ableResults: Record<string, AbleAnalysisResult> = {};
-        (data.macro || []).forEach((macro: MacroAnalysis) => {
-          if (macro.ableAnalysis) {
-            ableResults[macro.symbol] = macro.ableAnalysis;
-            console.log(`✅ ABLE analysis loaded: ${macro.symbol} - ${macro.ableAnalysis.decision}`);
-          }
-        });
-        setAbleAnalysis(ableResults);
-        if (Object.keys(ableResults).length === 0 && pinnedAssets.length > 0) {
-          console.warn('⚠️ No ABLE analysis from backend');
-        }
+        // Don't auto-populate ableAnalysis - user must click "Run Gemini AI"
+        console.log('📰 News loaded. Click "Run Gemini AI" to start analysis.');
         if (!initialLoading) {
           toast({
             title: '✅ ABLE-HF 3.0 Updated',
