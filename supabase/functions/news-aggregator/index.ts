@@ -2077,7 +2077,7 @@ serve(async (req) => {
     console.log(`📌 Assets: ${pinnedAssets.join(', ') || 'default'}`);
     console.log('📡 Fetching 150+ global news sources (Trump/Twitter Intel integrated)...');
     
-    // ✅ EXPANDED: 120+ sources in parallel - GLOBAL + WORLDMONITOR COVERAGE
+    // ✅ EXPANDED: 150+ sources - GLOBAL + TWITTER/TRUMP + WORLDMONITOR
     const [
       // ✅ Real News APIs
       gNewsGold, gNewsForex, gNewsCrypto, gNewsTariff, gNewsEconomy, gNewsCentralBanks,
