@@ -1678,7 +1678,6 @@ async function fetchCentralBankWatch(): Promise<RawNewsItem[]> {
 // ============================================
 
 function buildFullAnalysisPrompt(news: any[], symbol: string): string {
-  // ✅ NEW: Build full context with descriptions, not just headlines
   const categorizedNews = {
     directlyRelevant: news.filter(n => n.relatedAssets?.includes(symbol)),
     geopolitical: news.filter(n => 
@@ -1687,15 +1686,22 @@ function buildFullAnalysisPrompt(news: any[], symbol: string): string {
     centralBank: news.filter(n => 
       n.title?.toLowerCase().match(/fed|ecb|boj|boe|rate|fomc|powell|lagarde|inflation|cpi/)
     ),
+    trumpPolicy: news.filter(n =>
+      n.title?.toLowerCase().match(/trump|truth social|executive order|tariff|trade deal|maga/)
+    ),
+    influencer: news.filter(n =>
+      n.title?.toLowerCase().match(/musk|elon|dalio|dimon|buffett|saylor|cathie wood|peter schiff|goldman|jpmorgan/)
+    ),
   };
 
-  // ✅ NEW: Include full content for smarter analysis
   const topNews = [
-    ...categorizedNews.directlyRelevant.slice(0, 10),
+    ...categorizedNews.directlyRelevant.slice(0, 12),
+    ...categorizedNews.trumpPolicy.slice(0, 6),
     ...categorizedNews.geopolitical.slice(0, 5),
     ...categorizedNews.centralBank.slice(0, 5),
+    ...categorizedNews.influencer.slice(0, 4),
     ...news.slice(0, 5)
-  ].slice(0, 20);
+  ].slice(0, 30);
 
   const seen = new Set();
   const uniqueTopNews = topNews.filter(n => {
@@ -1705,110 +1711,136 @@ function buildFullAnalysisPrompt(news: any[], symbol: string): string {
     return true;
   });
 
-  // ✅ NEW: Include correlations and impact factors
   const correlations = FINANCIAL_CORRELATIONS[symbol] || {};
   const impactFactors = ASSET_IMPACT_FACTORS[symbol] || [];
 
-  return `# ABLE-HF 4.0 ADVANCED HEDGE FUND ANALYST
+  const totalBullish = news.filter(n => n.sentiment === 'bullish').length;
+  const totalBearish = news.filter(n => n.sentiment === 'bearish').length;
+  const totalNeutral = news.filter(n => n.sentiment === 'neutral').length;
 
-## ROLE
-คุณคือนักวิเคราะห์ระดับ Hedge Fund ที่ใช้ 40 modules + Financial Intelligence วิเคราะห์
+  return `# ABLE-HF 5.0 ULTRA INTELLIGENT HEDGE FUND ANALYST
 
-## TARGET ASSET: ${symbol}
-### Key Impact Factors for ${symbol}:
+## MISSION
+คุณคือ AI Analyst ระดับ Bridgewater Associates / Two Sigma ที่วิเคราะห์ตลาดด้วยความแม่นยำสูงสุด
+คุณต้อง "คิดแบบ Hedge Fund PM" — ไม่ใช่แค่ดูข่าว แต่ต้องเข้าใจ cause-effect chain, second-order effects, และ positioning
+
+## CHAIN OF THOUGHT ANALYSIS REQUIRED
+ก่อนให้คำตอบ คุณต้องทำ 5 ขั้นตอนในหัว:
+1. **Identify dominant narrative** — theme หลักที่ขับเคลื่อนตลาดตอนนี้คืออะไร?
+2. **Map causality chain** — ข่าว A → ส่งผล B → ทำให้ C → ส่งผลต่อ ${symbol} อย่างไร?
+3. **Assess positioning** — Smart money กำลังทำอะไร? Fund flow เป็นอย่างไร?
+4. **Calculate risk/reward** — Upside vs downside scenario
+5. **Determine conviction** — มั่นใจแค่ไหน? อะไรทำให้ confident ขึ้น/ลง?
+
+## TARGET: ${symbol}
+### Key Impact Factors:
 ${impactFactors.map((f, i) => `${i+1}. ${f}`).join('\n')}
 
-### Correlation Matrix (${symbol}):
+### Correlation Matrix:
 ${Object.entries(correlations).map(([asset, corr]) => `- ${asset}: ${corr > 0 ? '+' : ''}${(corr * 100).toFixed(0)}%`).join('\n')}
 
-## NEWS ANALYSIS (${uniqueTopNews.length} items - FULL CONTEXT)
+### Market Sentiment Overview:
+📊 Bullish: ${totalBullish} | Bearish: ${totalBearish} | Neutral: ${totalNeutral}
+📈 Bull Ratio: ${totalBullish + totalBearish > 0 ? ((totalBullish / (totalBullish + totalBearish)) * 100).toFixed(1) : 50}%
 
-### Directly Related to ${symbol} (${categorizedNews.directlyRelevant.length} items):
-${categorizedNews.directlyRelevant.slice(0, 8).map((n, i) => `
-${i+1}. [${n.sentiment?.toUpperCase() || 'NEUTRAL'}] ${n.title}
-   📰 Source: ${n.source} | ⏰ ${n.ageText}
-   📝 ${n.description?.substring(0, 200) || 'No description'}
-   🏷️ Assets: ${n.relatedAssets?.join(', ') || 'N/A'}
+## INTELLIGENCE FEED (${uniqueTopNews.length} curated from 150+ sources)
+
+### 🎯 Directly Relevant to ${symbol} (${categorizedNews.directlyRelevant.length}):
+${categorizedNews.directlyRelevant.slice(0, 10).map((n, i) => `
+${i+1}. [${n.sentiment?.toUpperCase()}|${n.importance?.toUpperCase()}] ${n.title}
+   📰 ${n.source} | ⏰ ${n.ageText}
+   📝 ${n.description?.substring(0, 250) || ''}
 `).join('\n')}
 
-### Geopolitical/Tariff News (${categorizedNews.geopolitical.length} items):
+### 🏛️ Trump / Policy / Trade War (${categorizedNews.trumpPolicy.length}):
+${categorizedNews.trumpPolicy.slice(0, 6).map((n, i) => `
+${i+1}. [${n.sentiment?.toUpperCase()}] ${n.title}
+   📰 ${n.source} | ⏰ ${n.ageText}
+   📝 ${n.description?.substring(0, 200) || ''}
+`).join('\n')}
+
+### ⚔️ Geopolitical (${categorizedNews.geopolitical.length}):
 ${categorizedNews.geopolitical.slice(0, 5).map((n, i) => `
-${i+1}. [${n.sentiment?.toUpperCase() || 'NEUTRAL'}] ${n.title}
-   📰 Source: ${n.source} | Impact: ${n.importance?.toUpperCase() || 'MEDIUM'}
-   📝 ${n.description?.substring(0, 150) || ''}
+${i+1}. [${n.sentiment?.toUpperCase()}] ${n.title} — ${n.source}
 `).join('\n')}
 
-### Central Bank/Fed News (${categorizedNews.centralBank.length} items):
+### 🏦 Central Bank / Fed (${categorizedNews.centralBank.length}):
 ${categorizedNews.centralBank.slice(0, 5).map((n, i) => `
-${i+1}. [${n.sentiment?.toUpperCase() || 'NEUTRAL'}] ${n.title}
-   📰 Source: ${n.source}
-   📝 ${n.description?.substring(0, 150) || ''}
+${i+1}. [${n.sentiment?.toUpperCase()}] ${n.title} — ${n.source}
 `).join('\n')}
 
-## ANALYSIS FRAMEWORK (ABLE-HF 4.0)
-วิเคราะห์ครบ 5 หมวด:
-1. **Macro & Economic (33%)**: Fed, ECB, BOJ, inflation, GDP, employment
-2. **Sentiment & Flow (29%)**: News sentiment, institutional flow, COT, ETF flow
-3. **Technical & Regime (20%)**: Trend, momentum, volatility, support/resistance
-4. **Risk & Event (23.5%)**: Geopolitical, tariffs, Trump, war, sanctions, black swan
-5. **Alternative & AI (14.5%)**: NLP analysis, neural signals, cross-asset correlations
+### 📣 Influencer / Wall Street (${categorizedNews.influencer.length}):
+${categorizedNews.influencer.slice(0, 4).map((n, i) => `
+${i+1}. ${n.title} — ${n.source}
+`).join('\n')}
 
-## SPECIAL ANALYSIS RULES FOR ${symbol}
+## ABLE-HF 5.0 ANALYSIS FRAMEWORK (Weighted)
+1. **Macro & Fed Policy (30%)**: Rate expectations, QT/QE, inflation, labor
+2. **Trump/Policy Risk (20%)**: Tariffs, executive orders, trade negotiations
+3. **Geopolitical & Event Risk (18%)**: Wars, sanctions, OPEC, elections
+4. **Sentiment & Flow (17%)**: News sentiment, ETF flows, COT, positioning
+5. **Technical Regime (15%)**: Trend, momentum, volatility, key levels
+
+## SMART RULES FOR ${symbol}
 ${symbol === 'XAUUSD' ? `
-⚠️ Gold Analysis Rules:
-- Safe Haven Asset → Geopolitical risk, tariffs, war = BULLISH for Gold
-- Fed hawkish/rate hike = BEARISH for Gold
-- USD strength (DXY up) = BEARISH for Gold  
-- Real yields rising = BEARISH for Gold
-- Inflation fears = BULLISH for Gold
-- Central bank buying = BULLISH for Gold
-- Trade war/Tariffs = BULLISH for Gold (uncertainty)
-` : ''}
-${symbol === 'BTCUSD' ? `
-⚠️ Bitcoin Analysis Rules:
-- ETF inflows = BULLISH
-- Regulation news = Watch carefully (can be both)
-- Halving cycle = Long-term BULLISH
-- Risk-on sentiment = BULLISH
-- Fed dovish = BULLISH (liquidity)
-` : ''}
-${symbol.includes('USD') && symbol !== 'XAUUSD' && symbol !== 'BTCUSD' ? `
-⚠️ Forex Analysis Rules:
-- Focus on central bank policy differential
-- Interest rate expectations are key
-- Watch for intervention risks
+⚠️ Gold Intelligence:
+- Trump tariff threats → BULLISH (uncertainty = gold)
+- Trump attacks Fed → BULLISH (credibility concern)
+- Trump trade deal → BEARISH (risk-on)
+- Real yield falling → BULLISH | Rising → BEARISH
+- DXY weakness → BULLISH | DXY strength → BEARISH
+- Geopolitical escalation → BULLISH
+- BRICS de-dollarization → STRUCTURAL BULLISH
+- Central bank gold buying → STRUCTURAL BULLISH
+` : ''}${symbol === 'BTCUSD' ? `
+⚠️ Bitcoin Intelligence:
+- Trump pro-crypto → BULLISH
+- ETF inflows → VERY BULLISH
+- Musk tweets crypto → Short-term VOLATILE
+- Fed dovish → BULLISH (liquidity)
+- Regulation clarity → BULLISH | Crackdown → BEARISH
+` : ''}${symbol === 'EURUSD' ? `
+⚠️ EUR/USD Intelligence:
+- Trump tariffs EU → BEARISH EUR
+- ECB vs Fed differential → KEY
+- Ukraine peace → BULLISH EUR
+- Energy crisis → BEARISH EUR
+` : ''}${symbol === 'US500' || symbol === 'US100' ? `
+⚠️ Equities Intelligence:
+- Trump tariffs → BEARISH (trade uncertainty)
+- Trump tax cuts → BULLISH
+- Fed pivot → BULLISH
+- AI narrative → BULLISH US100
 ` : ''}
 
-## CRITICAL INSTRUCTIONS
-1. อ่านข่าวแต่ละข่าวอย่างละเอียด รวมถึง description
-2. พิจารณา correlations กับสินทรัพย์อื่น
-3. ถ้าไม่มีข่าวที่เกี่ยวข้องโดยตรง → ลด confidence
-4. ข่าว Geopolitical/Fed มีผลกระทบสูง → ให้น้ำหนักมาก
-5. P_up_pct + P_down_pct ต้องรวมกันได้ 100
-
-## OUTPUT FORMAT (JSON ONLY)
+## OUTPUT (STRICT JSON ONLY)
 {
   "P_up_pct": 78.5,
   "P_down_pct": 21.5,
   "decision": "🟢 BUY",
   "confidence": 76,
   "market_regime": "TRENDING_UP",
+  "dominant_narrative": "<1 sentence: main story driving ${symbol}>",
+  "causality_chain": "<A → B → C → ${symbol} impact>",
   "trading_signal": {
     "signal": "BUY",
     "icon": "🟢",
     "color": "#22C55E",
-    "strength": 75
+    "strength": 75,
+    "timeframe": "1-3 days"
   },
-  "thai_summary": "<สรุป 3-4 ประโยค อ้างอิงข่าวที่สำคัญที่สุด>",
-  "key_drivers": ["<ปัจจัย 1 - อ้างอิงข่าวจริง>", "<ปัจจัย 2>", "<ปัจจัย 3>"],
-  "risk_warnings": ["<ความเสี่ยง 1>", "<ความเสี่ยง 2>"],
-  "correlated_impact": [
-    {"asset": "EURUSD", "direction": "bullish", "reason": "USD weakness"},
-    {"asset": "USDJPY", "direction": "bearish", "reason": "Risk-off"}
-  ],
+  "thai_summary": "<สรุป 4-5 ประโยค อ้างอิงข่าวสำคัญ + เหตุผลเชิงลึก + คำแนะนำ>",
+  "key_drivers": ["<ปัจจัยหลัก 1 อ้างอิงข่าว>", "<ปัจจัยหลัก 2>", "<ปัจจัยหลัก 3>", "<ปัจจัยหลัก 4>"],
+  "risk_warnings": ["<ความเสี่ยง 1>", "<ความเสี่ยง 2>", "<ความเสี่ยง 3>"],
+  "trump_impact": "<วิเคราะห์ผลกระทบ Trump/policy ต่อ ${symbol} or null>",
+  "smart_money_assessment": "<ประเมิน institutional positioning or null>",
+  "correlated_impact": [{"asset": "EURUSD", "direction": "bullish", "reason": "..."}],
+  "second_order_effects": ["<ผลกระทบที่คนมองข้าม>"],
   "analyzed_at": "${new Date().toISOString()}",
   "news_count": ${news.length},
-  "relevant_news_count": ${categorizedNews.directlyRelevant.length}
+  "relevant_news_count": ${categorizedNews.directlyRelevant.length},
+  "trump_news_count": ${categorizedNews.trumpPolicy.length},
+  "model_version": "ABLE-HF 5.0"
 }`;
 }
 
