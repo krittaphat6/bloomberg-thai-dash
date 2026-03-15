@@ -632,27 +632,6 @@ export const TopNews = () => {
                 </div>
               </div>
               
-              {/* ✅ NEW: Alert System */}
-              <AlertSystem 
-                rawNews={rawNews}
-                pinnedAssets={pinnedAssets}
-                onAlertClick={(alert) => {
-                  setSelectedAlert(alert);
-                  console.log('Alert clicked:', alert);
-                }}
-              />
-              
-              {/* ✅ NEW: Sentiment History Chart */}
-              {showSentimentChart && rawNews.length > 0 && (
-                <SentimentHistoryChart 
-                  pinnedAssets={pinnedAssets}
-                  rawNews={rawNews}
-                  onSpikeDetected={(spike: SpikeAlert) => {
-                    console.log('Spike detected from chart:', spike);
-                  }}
-                />
-              )}
-              
               {/* ✅ Gemini Thinking Panel */}
               {showGeminiPanel && (
                 <Card className="mb-4 p-4 bg-gradient-to-br from-purple-950/30 to-pink-950/30 border-purple-500/30">
