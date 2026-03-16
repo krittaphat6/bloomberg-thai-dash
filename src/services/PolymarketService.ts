@@ -53,8 +53,37 @@ export interface PriceHistoryPoint {
   p: number;
 }
 
+export interface MarketHolder {
+  proxyWallet: string;
+  asset: string;
+  size: number;
+  avgPrice: number;
+  currentValue: number;
+  cashPnl: number;
+  percentPnl: number;
+  curPrice: number;
+  title: string;
+  outcome: string;
+}
+
+export interface TradeData {
+  id: string;
+  taker_order_id: string;
+  market: string;
+  asset_id: string;
+  side: 'BUY' | 'SELL';
+  size: string;
+  fee_rate_bps: string;
+  price: string;
+  status: string;
+  match_time: string;
+  outcome: string;
+  bucket_index: number;
+  title: string;
+}
+
 const cache: Map<string, { data: any; timestamp: number }> = new Map();
-const CACHE_DURATION = 60_000;
+const CACHE_DURATION = 30_000;
 
 function getCached<T>(key: string): T | null {
   const c = cache.get(key);
@@ -109,7 +138,30 @@ export const PolymarketService = {
   },
 
   async getOrderbook(tokenId: string): Promise<OrderbookData> {
+    // No cache for real-time orderbook
     return await callProxy('orderbook', { tokenId });
+  },
+
+  async getSpread(tokenId: string): Promise<any> {
+    return await callProxy('spread', { tokenId });
+  },
+
+  async getRecentTrades(market: string, limit = 20): Promise<TradeData[]> {
+    try {
+      return await callProxy('trades', { market, limit });
+    } catch { return []; }
+  },
+
+  async getHolders(market: string, limit = 10): Promise<MarketHolder[]> {
+    try {
+      return await callProxy('holders', { market, limit });
+    } catch { return []; }
+  },
+
+  async getOpenInterest(market: string): Promise<any> {
+    try {
+      return await callProxy('open_interest', { market });
+    } catch { return null; }
   },
 
   parseOutcomes(market: PolymarketMarket): { outcome: string; price: number; tokenId: string }[] {
@@ -135,5 +187,50 @@ export const PolymarketService = {
 
   formatProbability(price: number): string {
     return `${Math.round(price * 100)}%`;
+  },
+
+  // === CALCULATION UTILITIES ===
+
+  /** Kelly Criterion: optimal bet sizing */
+  kellyFraction(probability: number, odds: number): number {
+    const q = 1 - probability;
+    const kelly = (probability * odds - q) / odds;
+    return Math.max(0, Math.min(kelly, 1));
+  },
+
+  /** Expected Value of a bet */
+  expectedValue(probability: number, betAmount: number, payout: number): number {
+    return probability * payout - (1 - probability) * betAmount;
+  },
+
+  /** Implied probability from price */
+  impliedProbability(price: number): number {
+    return Math.max(0, Math.min(price, 1));
+  },
+
+  /** Break-even probability */
+  breakEvenProb(price: number): number {
+    return price; // In binary markets, break-even = price paid
+  },
+
+  /** Potential ROI % */
+  potentialROI(entryPrice: number): number {
+    if (entryPrice <= 0 || entryPrice >= 1) return 0;
+    return ((1 - entryPrice) / entryPrice) * 100;
+  },
+
+  /** Sharpe-like ratio for prediction market */
+  predictionSharpe(probability: number, price: number): number {
+    const edge = probability - price;
+    const variance = price * (1 - price);
+    if (variance <= 0) return 0;
+    return edge / Math.sqrt(variance);
+  },
+
+  /** Risk/Reward ratio */
+  riskReward(entryPrice: number): { risk: number; reward: number; ratio: number } {
+    const risk = entryPrice;
+    const reward = 1 - entryPrice;
+    return { risk, reward, ratio: reward > 0 ? risk / reward : Infinity };
   },
 };

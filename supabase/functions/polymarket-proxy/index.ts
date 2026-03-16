@@ -86,6 +86,26 @@ serve(async (req) => {
         result = await res.json();
         break;
       }
+      case 'trades': {
+        const qp = new URLSearchParams();
+        if (params?.market) qp.set('market', params.market);
+        if (params?.limit) qp.set('limit', params.limit.toString());
+        const res = await fetch(`${CLOB_API}/trades?${qp}`);
+        result = await res.json();
+        break;
+      }
+      case 'holders': {
+        const qp = new URLSearchParams({ market: params.market });
+        if (params?.limit) qp.set('limit', params.limit.toString());
+        const res = await fetch(`${GAMMA_API}/markets/${params.market}/holders?${qp}`);
+        result = await res.json();
+        break;
+      }
+      case 'open_interest': {
+        const res = await fetch(`${CLOB_API}/spread?token_id=${params.market}`);
+        result = await res.json();
+        break;
+      }
       default:
         return new Response(
           JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
