@@ -55,6 +55,7 @@ import { TacticalCommandMap } from './TacticalMap';
 import { SuperClawPanel } from './SuperClawPanel';
 import ScreenerMain from './Screeners/ScreenerMain';
 import { Network } from 'lucide-react';
+import PolymarketHub from './PolymarketHub';
 
 interface PanelData {
   id: string;
