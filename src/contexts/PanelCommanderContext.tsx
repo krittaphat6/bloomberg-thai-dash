@@ -36,6 +36,7 @@ export const AVAILABLE_PANELS: PanelConfig[] = [
   { id: 'gold', title: '🥇 SPDR GOLD DATA', keywords: ['gold', 'gld', 'spdr', 'ทอง', 'gold data'], category: 'analysis' },
   { id: 'realmarket', title: '📡 REAL MARKET DATA', keywords: ['real market', 'live data', 'real-time'], category: 'analysis' },
   { id: 'bitcoin', title: '⛏️ BITCOIN MEMPOOL', keywords: ['mempool', 'bitcoin mempool', 'btc mempool', 'blockchain'], category: 'analysis' },
+  { id: 'polymarket', title: '🔮 POLYMARKET HUB', keywords: ['polymarket', 'prediction', 'probability', 'forecast', 'prediction market', 'พยากรณ์', 'ทำนาย', 'betting'], category: 'analysis' },
   
   // Intelligence & AI
   { id: 'able-focus', title: '🔍 ABLE-FOCUS', keywords: ['focus', 'able focus', 'relationship', 'network'], category: 'intelligence' },
