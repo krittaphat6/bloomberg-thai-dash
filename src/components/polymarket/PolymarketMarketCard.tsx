@@ -19,32 +19,32 @@ export const PolymarketMarketCard = ({ market, isSelected, onClick }: Props) => 
   return (
     <div
       onClick={onClick}
-      className={`px-3 py-2.5 cursor-pointer transition-colors ${
-        isSelected ? 'bg-amber-500/5 border-l-2 border-l-amber-500' : 'hover:bg-accent/50 border-l-2 border-l-transparent'
+      className={`px-3 py-3 cursor-pointer transition-all ${
+        isSelected ? 'bg-amber-500/5 border-l-2 border-l-amber-500' : 'hover:bg-[#1c2333] border-l-2 border-l-transparent'
       }`}
     >
-      <div className="text-[11px] text-foreground leading-snug mb-1.5 line-clamp-2">
+      <div className="text-[12px] font-semibold text-foreground leading-snug mb-2">
         {market.question}
       </div>
       {/* Probability bar */}
-      <div className="flex h-5 rounded-sm overflow-hidden mb-1.5">
+      <div className="flex h-6 rounded overflow-hidden mb-2">
         <div
-          className="flex items-center justify-center text-[10px] font-bold text-black bg-green-500"
-          style={{ width: `${Math.max(yesPct, 5)}%` }}
+          className="flex items-center justify-center text-[11px] font-bold text-black"
+          style={{ width: `${Math.max(yesPct, 8)}%`, backgroundColor: '#22c55e' }}
         >
-          {yesPct}%
+          {yesPct}% Yes
         </div>
         <div
-          className="flex items-center justify-center text-[10px] font-bold text-white bg-red-500/70"
-          style={{ width: `${Math.max(noPct, 5)}%` }}
+          className="flex items-center justify-center text-[11px] font-bold text-white"
+          style={{ width: `${Math.max(noPct, 8)}%`, backgroundColor: '#ef4444' }}
         >
           {noPct}%
         </div>
       </div>
-      <div className="flex gap-3 text-[9px] text-muted-foreground">
-        <span>Vol: {vol}</span>
-        <span>Liq: {liq}</span>
-        {endDate && <span>{endDate}</span>}
+      <div className="flex gap-3 text-[10px] text-muted-foreground">
+        <span className="text-green-400">Vol: {vol}</span>
+        <span>Liquidity: {liq}</span>
+        {endDate && <span>Ends: {endDate}</span>}
       </div>
     </div>
   );
