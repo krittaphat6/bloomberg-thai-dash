@@ -339,6 +339,15 @@ const MarketData = () => {
       description: 'Bitcoin mempool and transaction data',
       tags: ['bitcoin', 'mempool', 'blockchain', 'transactions']
     },
+    {
+      id: 'polymarket',
+      title: '🔮 POLYMARKET HUB',
+      component: <PolymarketHub />,
+      category: 'analysis',
+      icon: <TrendingUp className="w-5 h-5" />,
+      description: 'Polymarket Prediction Market - Real-time prediction trading analysis',
+      tags: ['polymarket', 'prediction', 'market', 'probability', 'betting', 'forecast']
+    },
     
     // Intelligence & AI
     { 
