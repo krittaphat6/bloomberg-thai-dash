@@ -27,17 +27,17 @@ export const PolymarketPriceChart = ({ data }: Props) => {
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.3} />
           <XAxis
             dataKey="t"
-            tick={{ fontSize: 9, fill: '#6b7280' }}
+            tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
             tickFormatter={t => new Date(t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             interval="preserveStartEnd"
-            axisLine={{ stroke: '#1e293b' }}
+            axisLine={{ stroke: 'hsl(var(--border))' }}
           />
           <YAxis
             domain={[0, 1]}
-            tick={{ fontSize: 9, fill: '#6b7280' }}
+            tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
             tickFormatter={v => `${Math.round(v * 100)}%`}
             width={35}
-            axisLine={{ stroke: '#1e293b' }}
+            axisLine={{ stroke: 'hsl(var(--border))' }}
           />
           <Tooltip
             contentStyle={{ backgroundColor: '#0d1117', border: '1px solid #1e293b', fontSize: 10, borderRadius: 4 }}
