@@ -20,11 +20,11 @@ export const PolymarketPriceChart = ({ data }: Props) => {
         <AreaChart data={data}>
           <defs>
             <linearGradient id="polyProbGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#22c55e" stopOpacity={0.02} />
+              <stop offset="5%" stopColor="hsl(var(--terminal-green))" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="hsl(var(--terminal-green))" stopOpacity={0.02} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.3} />
           <XAxis
             dataKey="t"
             tick={{ fontSize: 9, fill: '#6b7280' }}
