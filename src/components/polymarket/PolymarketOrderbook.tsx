@@ -3,9 +3,10 @@ import { OrderbookData } from '@/services/PolymarketService';
 
 interface Props {
   orderbook: OrderbookData;
+  isLive?: boolean;
 }
 
-export const PolymarketOrderbook = ({ orderbook }: Props) => {
+export const PolymarketOrderbook = ({ orderbook, isLive }: Props) => {
   const bids = useMemo(() => (orderbook.bids || []).slice(0, 8), [orderbook]);
   const asks = useMemo(() => (orderbook.asks || []).slice(0, 8), [orderbook]);
 
