@@ -37,8 +37,8 @@ export const PolymarketOrderbook = ({ orderbook, isLive }: Props) => {
             const pct = (parseFloat(b.size) / maxSize) * 100;
             return (
               <div key={i} className="relative flex justify-between px-1 py-[3px] rounded-sm mb-[1px]">
-                <div className="absolute inset-0 bg-green-500/10 rounded-sm" style={{ width: `${pct}%` }} />
-                <span className="relative text-green-400 font-mono">${parseFloat(b.price).toFixed(2)}</span>
+                <div className="absolute inset-0 bg-terminal-green/10 rounded-sm" style={{ width: `${pct}%` }} />
+                <span className="relative text-terminal-green font-mono">${parseFloat(b.price).toFixed(2)}</span>
                 <span className="relative text-muted-foreground font-mono">{parseFloat(b.size).toLocaleString()}</span>
               </div>
             );
