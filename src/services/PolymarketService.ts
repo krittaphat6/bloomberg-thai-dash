@@ -127,6 +127,75 @@ export const PolymarketService = {
     return await callProxy('search', { query });
   },
 
+  async getAllActiveEvents(): Promise<PolymarketEvent[]> {
+    const ck = 'all_active_events';
+    const cached = getCached<PolymarketEvent[]>(ck);
+    if (cached) return cached;
+
+    const allEvents: PolymarketEvent[] = [];
+    let offset = 0;
+    const limit = 100;
+    let hasMore = true;
+
+    while (hasMore && offset < 500) {
+      try {
+        const result = await callProxy('events', { limit, offset, order: 'volume24hr' });
+        if (!result || !Array.isArray(result) || result.length === 0) {
+          hasMore = false;
+        } else {
+          allEvents.push(...result);
+          offset += limit;
+          if (result.length < limit) hasMore = false;
+        }
+      } catch {
+        hasMore = false;
+      }
+    }
+    console.log(`[Polymarket] Fetched ${allEvents.length} total active events`);
+    setCache(ck, allEvents);
+    return allEvents;
+  },
+
+  async getAllActiveMarkets(): Promise<PolymarketMarket[]> {
+    const ck = 'all_active_markets';
+    const cached = getCached<PolymarketMarket[]>(ck);
+    if (cached) return cached;
+
+    const allMarkets: PolymarketMarket[] = [];
+    let offset = 0;
+    const limit = 100;
+    let hasMore = true;
+
+    while (hasMore && offset < 500) {
+      try {
+        const result = await callProxy('markets', { limit, offset, order: 'volume24hr' });
+        if (!result || !Array.isArray(result) || result.length === 0) {
+          hasMore = false;
+        } else {
+          allMarkets.push(...result);
+          offset += limit;
+          if (result.length < limit) hasMore = false;
+        }
+      } catch {
+        hasMore = false;
+      }
+    }
+    console.log(`[Polymarket] Fetched ${allMarkets.length} total active markets`);
+    setCache(ck, allMarkets);
+    return allMarkets;
+  },
+
+  extractTokenIds(markets: PolymarketMarket[]): string[] {
+    const tokenIds: string[] = [];
+    for (const market of markets) {
+      try {
+        const ids: string[] = JSON.parse(market.clobTokenIds || '[]');
+        tokenIds.push(...ids.filter(Boolean));
+      } catch { /* skip */ }
+    }
+    return tokenIds;
+  },
+
   async getPriceHistory(tokenId: string, interval = 'max', fidelity = 60): Promise<PriceHistoryPoint[]> {
     const ck = `history_${tokenId}_${interval}`;
     const cached = getCached<PriceHistoryPoint[]>(ck);
@@ -138,7 +207,6 @@ export const PolymarketService = {
   },
 
   async getOrderbook(tokenId: string): Promise<OrderbookData> {
-    // No cache for real-time orderbook
     return await callProxy('orderbook', { tokenId });
   },
 
@@ -147,21 +215,18 @@ export const PolymarketService = {
   },
 
   async getRecentTrades(market: string, limit = 20): Promise<TradeData[]> {
-    try {
-      return await callProxy('trades', { market, limit });
-    } catch { return []; }
+    try { return await callProxy('trades', { market, limit }); }
+    catch { return []; }
   },
 
   async getHolders(market: string, limit = 10): Promise<MarketHolder[]> {
-    try {
-      return await callProxy('holders', { market, limit });
-    } catch { return []; }
+    try { return await callProxy('holders', { market, limit }); }
+    catch { return []; }
   },
 
   async getOpenInterest(market: string): Promise<any> {
-    try {
-      return await callProxy('open_interest', { market });
-    } catch { return null; }
+    try { return await callProxy('open_interest', { market }); }
+    catch { return null; }
   },
 
   parseOutcomes(market: PolymarketMarket): { outcome: string; price: number; tokenId: string }[] {
@@ -174,9 +239,7 @@ export const PolymarketService = {
         price: parseFloat(prices[i] || '0'),
         tokenId: tokenIds[i] || '',
       }));
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   },
 
   formatVolume(vol: number): string {
@@ -189,37 +252,27 @@ export const PolymarketService = {
     return `${Math.round(price * 100)}%`;
   },
 
-  // === CALCULATION UTILITIES ===
-
-  /** Kelly Criterion: optimal bet sizing */
   kellyFraction(probability: number, odds: number): number {
     const q = 1 - probability;
     const kelly = (probability * odds - q) / odds;
     return Math.max(0, Math.min(kelly, 1));
   },
 
-  /** Expected Value of a bet */
   expectedValue(probability: number, betAmount: number, payout: number): number {
     return probability * payout - (1 - probability) * betAmount;
   },
 
-  /** Implied probability from price */
   impliedProbability(price: number): number {
     return Math.max(0, Math.min(price, 1));
   },
 
-  /** Break-even probability */
-  breakEvenProb(price: number): number {
-    return price; // In binary markets, break-even = price paid
-  },
+  breakEvenProb(price: number): number { return price; },
 
-  /** Potential ROI % */
   potentialROI(entryPrice: number): number {
     if (entryPrice <= 0 || entryPrice >= 1) return 0;
     return ((1 - entryPrice) / entryPrice) * 100;
   },
 
-  /** Sharpe-like ratio for prediction market */
   predictionSharpe(probability: number, price: number): number {
     const edge = probability - price;
     const variance = price * (1 - price);
@@ -227,7 +280,6 @@ export const PolymarketService = {
     return edge / Math.sqrt(variance);
   },
 
-  /** Risk/Reward ratio */
   riskReward(entryPrice: number): { risk: number; reward: number; ratio: number } {
     const risk = entryPrice;
     const reward = 1 - entryPrice;
