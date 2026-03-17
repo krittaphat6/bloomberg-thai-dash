@@ -46,8 +46,10 @@ export const PolymarketOrderbook = ({ orderbook, isLive }: Props) => {
         </div>
         {/* Asks */}
         <div>
-          <div className="flex justify-between text-muted-foreground mb-1.5 px-1 font-bold">
-            <span>ASKS (YES)</span><span>SIZE</span>
+          <div className="flex items-center gap-2 text-muted-foreground mb-1.5 px-1 font-bold">
+            <span>ASKS (YES)</span>
+            {isLive && <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" />}
+            <span className="ml-auto">SIZE</span>
           </div>
           {asks.map((a, i) => {
             const pct = (parseFloat(a.size) / maxSize) * 100;
