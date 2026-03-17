@@ -40,11 +40,11 @@ export const PolymarketPriceChart = ({ data }: Props) => {
             axisLine={{ stroke: 'hsl(var(--border))' }}
           />
           <Tooltip
-            contentStyle={{ backgroundColor: '#0d1117', border: '1px solid #1e293b', fontSize: 10, borderRadius: 4 }}
+            contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 10, borderRadius: 4 }}
             labelFormatter={t => new Date(Number(t) * 1000).toLocaleDateString()}
             formatter={(v: number) => [`${Math.round(v * 100)}%`, 'Probability']}
           />
-          <Area type="monotone" dataKey="p" stroke="#22c55e" fill="url(#polyProbGrad)" strokeWidth={2} dot={false} />
+          <Area type="monotone" dataKey="p" stroke="hsl(var(--terminal-green))" fill="url(#polyProbGrad)" strokeWidth={2} dot={false} />
         </AreaChart>
       </ResponsiveContainer>
     </div>

@@ -65,7 +65,7 @@ export const PolymarketOrderbook = ({ orderbook, isLive }: Props) => {
       </div>
       {spread && (
         <div className="text-center mt-2 text-[9px] text-muted-foreground">
-          Spread: <span className="text-amber-400 font-mono">${spread}</span>
+          Spread: <span className="text-terminal-amber font-mono">${spread}</span>
         </div>
       )}
     </div>
