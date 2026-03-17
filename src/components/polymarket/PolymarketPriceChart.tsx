@@ -20,31 +20,31 @@ export const PolymarketPriceChart = ({ data }: Props) => {
         <AreaChart data={data}>
           <defs>
             <linearGradient id="polyProbGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#22c55e" stopOpacity={0.02} />
+              <stop offset="5%" stopColor="hsl(var(--terminal-green))" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="hsl(var(--terminal-green))" stopOpacity={0.02} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.3} />
           <XAxis
             dataKey="t"
-            tick={{ fontSize: 9, fill: '#6b7280' }}
+            tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
             tickFormatter={t => new Date(t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             interval="preserveStartEnd"
-            axisLine={{ stroke: '#1e293b' }}
+            axisLine={{ stroke: 'hsl(var(--border))' }}
           />
           <YAxis
             domain={[0, 1]}
-            tick={{ fontSize: 9, fill: '#6b7280' }}
+            tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
             tickFormatter={v => `${Math.round(v * 100)}%`}
             width={35}
-            axisLine={{ stroke: '#1e293b' }}
+            axisLine={{ stroke: 'hsl(var(--border))' }}
           />
           <Tooltip
-            contentStyle={{ backgroundColor: '#0d1117', border: '1px solid #1e293b', fontSize: 10, borderRadius: 4 }}
+            contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 10, borderRadius: 4 }}
             labelFormatter={t => new Date(Number(t) * 1000).toLocaleDateString()}
             formatter={(v: number) => [`${Math.round(v * 100)}%`, 'Probability']}
           />
-          <Area type="monotone" dataKey="p" stroke="#22c55e" fill="url(#polyProbGrad)" strokeWidth={2} dot={false} />
+          <Area type="monotone" dataKey="p" stroke="hsl(var(--terminal-green))" fill="url(#polyProbGrad)" strokeWidth={2} dot={false} />
         </AreaChart>
       </ResponsiveContainer>
     </div>

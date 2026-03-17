@@ -3,10 +3,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, RotateCcw, Search, TrendingUp, DollarSign, Target, BarChart3, CheckCircle } from 'lucide-react';
+import { Loader2, RotateCcw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { PolymarketService, PolymarketEvent, PolymarketMarket, PriceHistoryPoint, OrderbookData } from '@/services/PolymarketService';
+import { polymarketWS, PolymarketBookUpdate, PolymarketLastTrade } from '@/services/PolymarketWebSocketService';
 import { PolymarketMarketCard } from '@/components/polymarket/PolymarketMarketCard';
 import { PolymarketMarketDetail } from '@/components/polymarket/PolymarketMarketDetail';
 
@@ -31,9 +31,10 @@ const PolymarketHub = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([]);
-  const [orderbook, setOrderbook] = useState<OrderbookData | null>(null);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-  const orderbookRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [liveBooks, setLiveBooks] = useState<Map<string, PolymarketBookUpdate>>(new Map());
+  const [liveTrades, setLiveTrades] = useState<PolymarketLastTrade[]>([]);
+  const [totalMarketCount, setTotalMarketCount] = useState(0);
 
   const fetchData = useCallback(async (tag?: string) => {
     setLoading(true);
@@ -44,7 +45,17 @@ const PolymarketHub = () => {
       ]);
       setEvents(Array.isArray(evts) ? evts : []);
       setAllMarkets(Array.isArray(mkts) ? mkts : []);
-      setLastUpdate(new Date());
+
+      // Subscribe top markets to WebSocket
+      const markets = Array.isArray(mkts) ? mkts : [];
+      const topMarkets = markets
+        .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
+        .slice(0, 100);
+      const tokenIds = PolymarketService.extractTokenIds(topMarkets);
+      if (tokenIds.length > 0) {
+        polymarketWS.subscribeToAssets(tokenIds);
+      }
+      setTotalMarketCount(markets.length);
     } catch (e: any) {
       console.error('Polymarket fetch error:', e);
       toast.error('Failed to load Polymarket data');
@@ -62,25 +73,47 @@ const PolymarketHub = () => {
     return () => clearInterval(iv);
   }, [activeTab]);
 
-  // When market selected, fetch detail + start realtime orderbook
+  // WebSocket status
   useEffect(() => {
-    if (orderbookRef.current) clearInterval(orderbookRef.current);
-    if (!selectedMarket) return;
+    const unsub = polymarketWS.onStatus(setWsConnected);
+    return unsub;
+  }, []);
 
+  // Subscribe to ALL book & trade updates
+  useEffect(() => {
+    const unsubBook = polymarketWS.onBook('ALL', (data) => {
+      setLiveBooks(prev => {
+        const next = new Map(prev);
+        next.set(data.asset_id, data);
+        return next;
+      });
+    });
+    const unsubTrade = polymarketWS.onTrade('ALL', (data) => {
+      setLiveTrades(prev => [data, ...prev].slice(0, 50));
+    });
+    return () => { unsubBook(); unsubTrade(); };
+  }, []);
+
+  // When market selected — fetch price history + subscribe WS
+  useEffect(() => {
+    if (!selectedMarket) return;
     const outcomes = PolymarketService.parseOutcomes(selectedMarket);
     const yesToken = outcomes[0]?.tokenId;
     if (!yesToken) return;
 
     PolymarketService.getPriceHistory(yesToken).then(setPriceHistory).catch(() => setPriceHistory([]));
-    PolymarketService.getOrderbook(yesToken).then(setOrderbook).catch(() => setOrderbook(null));
 
-    // Real-time orderbook polling every 5s
-    orderbookRef.current = setInterval(() => {
-      PolymarketService.getOrderbook(yesToken).then(setOrderbook).catch(() => {});
-    }, 5000);
-
-    return () => { if (orderbookRef.current) clearInterval(orderbookRef.current); };
+    // Subscribe selected market tokens
+    const tokenIds = outcomes.map(o => o.tokenId).filter(Boolean);
+    if (tokenIds.length > 0) {
+      polymarketWS.subscribeToAssets(tokenIds);
+    }
   }, [selectedMarket]);
+
+  // Cleanup WS on unmount
+  useEffect(() => {
+    return () => { polymarketWS.disconnect(); };
+  }, []);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -97,19 +130,53 @@ const PolymarketHub = () => {
     }
   };
 
+  const getLivePrice = useCallback((market: PolymarketMarket): { yesPrice: number; noPrice: number } => {
+    const outcomes = PolymarketService.parseOutcomes(market);
+    const yesTokenId = outcomes[0]?.tokenId;
+    if (yesTokenId) {
+      const liveBook = liveBooks.get(yesTokenId);
+      if (liveBook && liveBook.bids?.length > 0 && liveBook.asks?.length > 0) {
+        const bestBid = parseFloat(liveBook.bids[0].price);
+        const bestAsk = parseFloat(liveBook.asks[0].price);
+        const mid = (bestBid + bestAsk) / 2;
+        return { yesPrice: mid, noPrice: 1 - mid };
+      }
+    }
+    const yesPrice = outcomes[0]?.price || 0;
+    return { yesPrice, noPrice: 1 - yesPrice };
+  }, [liveBooks]);
+
+  const getLiveOrderbook = useCallback((): OrderbookData | null => {
+    if (!selectedMarket) return null;
+    const outcomes = PolymarketService.parseOutcomes(selectedMarket);
+    const yesTokenId = outcomes[0]?.tokenId;
+    if (yesTokenId) {
+      const liveBook = liveBooks.get(yesTokenId);
+      if (liveBook) return {
+        bids: liveBook.bids,
+        asks: liveBook.asks,
+        hash: liveBook.hash,
+        timestamp: liveBook.timestamp,
+        market: liveBook.market,
+      };
+    }
+    return null;
+  }, [selectedMarket, liveBooks]);
+
   const activeCount = allMarkets.filter(m => m.active && !m.closed).length;
   const totalVol24h = allMarkets.reduce((s, m) => s + (m.volume24hr || 0), 0);
   const totalLiquidity = allMarkets.reduce((s, m) => s + parseFloat(m.liquidity || '0'), 0);
-  const resolvedCount = allMarkets.filter(m => m.closed).length;
 
   const displayMarkets = allMarkets.length > 0
     ? allMarkets.filter(m => m.active && !m.closed)
     : events.flatMap(e => e.markets || []).filter(m => m.active && !m.closed);
 
+  const liveOrderbook = getLiveOrderbook();
+
   return (
-    <div className="h-full flex flex-col bg-[#0d1117] text-foreground overflow-hidden font-mono">
+    <div className="h-full flex flex-col bg-background text-foreground overflow-hidden">
       {/* Main Tabs */}
-      <div className="flex items-center border-b border-border/50 bg-[#161b22]">
+      <div className="flex items-center border-b border-border bg-card">
         <div className="flex-1 flex">
           {MAIN_TABS.map(tab => (
             <button
@@ -117,7 +184,7 @@ const PolymarketHub = () => {
               onClick={() => { setActiveTab(tab); setSelectedMarket(null); }}
               className={`px-4 py-2.5 text-[11px] font-bold tracking-wider transition-colors border-b-2 ${
                 activeTab === tab
-                  ? 'border-amber-500 text-amber-400'
+                  ? 'border-terminal-amber text-terminal-amber'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -126,13 +193,20 @@ const PolymarketHub = () => {
           ))}
         </div>
         <div className="flex items-center gap-2 px-3">
+          {/* WS Status */}
+          <div className="flex items-center gap-1.5 mr-2">
+            <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-terminal-green animate-pulse' : 'bg-destructive'}`} />
+            <span className={`text-[9px] font-bold ${wsConnected ? 'text-terminal-green' : 'text-destructive'}`}>
+              {wsConnected ? 'LIVE' : 'OFFLINE'}
+            </span>
+          </div>
           <div className="flex items-center gap-1">
             <Input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
               placeholder="Search markets..."
-              className="h-7 w-44 text-[10px] bg-[#0d1117] border-border/50"
+              className="h-7 w-44 text-[10px] bg-background border-border"
             />
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSearch}>
               <Search className="w-3 h-3" />
@@ -145,23 +219,23 @@ const PolymarketHub = () => {
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-4 gap-0 border-b border-border/50">
-        <StatCard label="ACTIVE MARKETS" value={activeCount.toLocaleString()} color="text-cyan-400" />
-        <StatCard label="24H VOLUME" value={PolymarketService.formatVolume(totalVol24h)} color="text-green-400" />
-        <StatCard label="OPEN INTEREST" value={PolymarketService.formatVolume(totalLiquidity)} color="text-amber-400" />
-        <StatCard label="RESOLVED TODAY" value={resolvedCount.toString()} color="text-purple-400" />
+      <div className="grid grid-cols-4 gap-0 border-b border-border">
+        <StatCard label="ACTIVE MARKETS" value={activeCount.toLocaleString()} color="text-terminal-cyan" />
+        <StatCard label="24H VOLUME" value={PolymarketService.formatVolume(totalVol24h)} color="text-terminal-green" />
+        <StatCard label="OPEN INTEREST" value={PolymarketService.formatVolume(totalLiquidity)} color="text-terminal-amber" />
+        <StatCard label="WS STREAMS" value={polymarketWS.getSubscribedCount().toString()} color="text-terminal-cyan" />
       </div>
 
       {/* Sub Tags */}
-      <div className="flex gap-1.5 px-3 py-2 border-b border-border/50 bg-[#161b22]/50 overflow-x-auto">
+      <div className="flex gap-1.5 px-3 py-2 border-b border-border bg-card/50 overflow-x-auto">
         {SUB_TAGS.map(tag => (
           <button
             key={tag}
             onClick={() => setActiveSubTag(tag)}
             className={`px-2.5 py-1 text-[10px] border rounded transition-colors whitespace-nowrap ${
               activeSubTag === tag
-                ? 'border-green-500/50 text-green-400 bg-green-500/10'
-                : 'border-border/50 text-muted-foreground hover:text-foreground hover:bg-[#1c2333]'
+                ? 'border-terminal-green/50 text-terminal-green bg-terminal-green/10'
+                : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted'
             }`}
           >
             {tag}
@@ -178,11 +252,11 @@ const PolymarketHub = () => {
       ) : (
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Left: Market List */}
-          <div className="w-[480px] min-w-[380px] border-r border-border/50 flex flex-col">
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/30 bg-[#161b22]/30">
-              <span className="text-[10px] font-bold text-green-400 tracking-wider">TRENDING MARKETS</span>
-              <Badge variant="outline" className="text-[9px] border-green-500/40 text-green-400 px-1.5 py-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse mr-1 inline-block" />
+          <div className="w-[480px] min-w-[380px] border-r border-border flex flex-col">
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/50 bg-card/30">
+              <span className="text-[10px] font-bold text-terminal-green tracking-wider">TRENDING MARKETS</span>
+              <Badge variant="outline" className="text-[9px] border-terminal-green/40 text-terminal-green px-1.5 py-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-terminal-green animate-pulse mr-1 inline-block" />
                 LIVE
               </Badge>
             </div>
@@ -197,6 +271,7 @@ const PolymarketHub = () => {
                       market={market}
                       isSelected={selectedMarket?.id === market.id}
                       onClick={() => setSelectedMarket(market)}
+                      getLivePrice={getLivePrice}
                     />
                   ))
                 )}
@@ -210,9 +285,11 @@ const PolymarketHub = () => {
               <PolymarketMarketDetail
                 market={selectedMarket}
                 priceHistory={priceHistory}
-                orderbook={orderbook}
+                orderbook={liveOrderbook}
                 allMarkets={displayMarkets}
                 onSelectMarket={setSelectedMarket}
+                liveTrades={liveTrades}
+                wsConnected={wsConnected}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-xs text-muted-foreground p-8">
@@ -230,7 +307,7 @@ const PolymarketHub = () => {
 };
 
 const StatCard = ({ label, value, color }: { label: string; value: string; color: string }) => (
-  <div className="px-4 py-3 border-r border-border/30 last:border-r-0 bg-[#161b22]/30">
+  <div className="px-4 py-3 border-r border-border/30 last:border-r-0 bg-card/30">
     <div className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
     <div className={`text-lg font-bold ${color}`}>{value}</div>
   </div>

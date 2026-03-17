@@ -21,13 +21,13 @@ serve(async (req) => {
     switch (action) {
       case 'events': {
         const qp = new URLSearchParams({
-          limit: params?.limit?.toString() || '20',
-          active: 'true',
-          closed: 'false',
+          limit: params?.limit?.toString() || '100',
+          active: params?.active?.toString() || 'true',
+          closed: params?.closed?.toString() || 'false',
           order: params?.order || 'volume24hr',
           ascending: 'false',
           ...(params?.tag && { tag: params.tag }),
-          ...(params?.offset && { offset: params.offset.toString() }),
+          ...(params?.offset !== undefined && { offset: params.offset.toString() }),
         });
         const res = await fetch(`${GAMMA_API}/events?${qp}`);
         result = await res.json();
@@ -40,12 +40,13 @@ serve(async (req) => {
       }
       case 'markets': {
         const qp = new URLSearchParams({
-          limit: params?.limit?.toString() || '50',
-          active: 'true',
-          closed: 'false',
+          limit: params?.limit?.toString() || '100',
+          active: params?.active?.toString() || 'true',
+          closed: params?.closed?.toString() || 'false',
           order: params?.order || 'volume24hr',
           ascending: 'false',
           ...(params?.tag && { tag: params.tag }),
+          ...(params?.offset !== undefined && { offset: params.offset.toString() }),
         });
         const res = await fetch(`${GAMMA_API}/markets?${qp}`);
         result = await res.json();
