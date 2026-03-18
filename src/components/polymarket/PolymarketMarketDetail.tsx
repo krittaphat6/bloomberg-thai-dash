@@ -37,13 +37,11 @@ export const PolymarketMarketDetail = ({ market, priceHistory, orderbook, allMar
     return (now - pastPoint.p) * 100;
   }, [priceHistory]);
 
-  // Filter trades for this market
   const marketTrades = useMemo(() => {
     const tokenIds = outcomes.map(o => o.tokenId).filter(Boolean);
     return liveTrades.filter(t => tokenIds.includes(t.asset_id)).slice(0, 15);
   }, [liveTrades, outcomes]);
 
-  // Show all trades if none match this specific market (fallback)
   const displayTrades = marketTrades.length > 0 ? marketTrades : liveTrades.slice(0, 15);
 
   const statusConfig = {
@@ -91,31 +89,37 @@ export const PolymarketMarketDetail = ({ market, priceHistory, orderbook, allMar
           </div>
         </div>
 
+        {/* Buy Yes / Buy No for binary */}
+        <div className="flex gap-2">
+          <button className="flex-1 py-2.5 rounded text-sm font-bold bg-terminal-green/20 text-terminal-green border border-terminal-green/30 hover:bg-terminal-green/30 transition-colors">
+            Buy Yes {Math.round(yesPrice * 100)}¢
+          </button>
+          <button className="flex-1 py-2.5 rounded text-sm font-bold bg-destructive/20 text-destructive border border-destructive/30 hover:bg-destructive/30 transition-colors">
+            Buy No {Math.round((1 - yesPrice) * 100)}¢
+          </button>
+        </div>
+
         {/* Price Chart */}
         <div className="border border-border rounded bg-card p-3">
           <div className="text-[10px] text-terminal-amber uppercase tracking-wider mb-2">PRICE HISTORY</div>
           <PolymarketPriceChart data={priceHistory} />
         </div>
 
-        {/* Orderbook - Real-time */}
+        {/* Orderbook */}
         <div className="border border-border rounded bg-card p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-terminal-amber uppercase tracking-wider font-bold">ORDER BOOK</span>
-              <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.color} ${dataStatus === 'live' ? 'animate-pulse' : ''}`} />
-              <span className={`text-[9px] ${statusConfig.text}`}>{statusConfig.label}</span>
-            </div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] text-terminal-amber uppercase tracking-wider font-bold">ORDER BOOK</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.color} ${dataStatus === 'live' ? 'animate-pulse' : ''}`} />
+            <span className={`text-[9px] ${statusConfig.text}`}>{statusConfig.label}</span>
           </div>
           {orderbook ? (
             <PolymarketOrderbook orderbook={orderbook} isLive={wsConnected} />
           ) : (
-            <div className="text-center py-4 text-[10px] text-muted-foreground">
-              Waiting for orderbook data...
-            </div>
+            <div className="text-center py-4 text-[10px] text-muted-foreground">Waiting for orderbook data...</div>
           )}
         </div>
 
-        {/* Live Trades Feed */}
+        {/* Trades */}
         <div className="border border-border rounded bg-card p-3">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[10px] text-terminal-amber uppercase tracking-wider font-bold">
@@ -130,38 +134,25 @@ export const PolymarketMarketDetail = ({ market, priceHistory, orderbook, allMar
             <div className="space-y-1 max-h-[200px] overflow-y-auto">
               {displayTrades.map((trade, i) => (
                 <div key={i} className="flex items-center justify-between text-[10px] px-2 py-1 rounded bg-muted/30">
-                  <Badge
-                    variant="outline"
-                    className={`text-[8px] px-1 py-0 ${
-                      trade.side === 'BUY' ? 'border-terminal-green/50 text-terminal-green' : 'border-destructive/50 text-destructive'
-                    }`}
-                  >
+                  <Badge variant="outline" className={`text-[8px] px-1 py-0 ${
+                    trade.side === 'BUY' ? 'border-terminal-green/50 text-terminal-green' : 'border-destructive/50 text-destructive'
+                  }`}>
                     {trade.side}
                   </Badge>
                   <span className="text-foreground">${trade.price} × {parseFloat(trade.size).toLocaleString()}</span>
-                  <span className="text-muted-foreground">
-                    {new Date(parseInt(trade.timestamp)).toLocaleTimeString()}
-                  </span>
+                  <span className="text-muted-foreground">{new Date(parseInt(trade.timestamp)).toLocaleTimeString()}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-3 text-[10px] text-muted-foreground">
-              Waiting for trades...
-            </div>
+            <div className="text-center py-3 text-[10px] text-muted-foreground">Waiting for trades...</div>
           )}
         </div>
 
-        {/* Calculator */}
         <PolymarketCalculator market={market} />
-
-        {/* AI Analysis */}
         <PolymarketAIAnalysis market={market} priceHistory={priceHistory} orderbook={orderbook} />
-
-        {/* Correlated Markets */}
         <PolymarketCorrelated currentMarket={market} allMarkets={allMarkets} onSelect={onSelectMarket} />
 
-        {/* Description */}
         {market.description && (
           <div className="border border-border rounded bg-card p-3">
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">DETAILS</div>

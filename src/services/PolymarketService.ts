@@ -38,6 +38,7 @@ export interface PolymarketMarket {
   icon: string;
   description: string;
   tags: string[];
+  groupItemTitle?: string;
 }
 
 export interface OrderbookData {
@@ -137,7 +138,7 @@ export const PolymarketService = {
     const limit = 100;
     let hasMore = true;
 
-    while (hasMore && offset < 500) {
+    while (hasMore && offset < 2000) {
       try {
         const result = await callProxy('events', { limit, offset, order: 'volume24hr' });
         if (!result || !Array.isArray(result) || result.length === 0) {
@@ -166,7 +167,7 @@ export const PolymarketService = {
     const limit = 100;
     let hasMore = true;
 
-    while (hasMore && offset < 500) {
+    while (hasMore && offset < 2000) {
       try {
         const result = await callProxy('markets', { limit, offset, order: 'volume24hr' });
         if (!result || !Array.isArray(result) || result.length === 0) {
@@ -206,6 +207,21 @@ export const PolymarketService = {
     return history;
   },
 
+  async getMultiOutcomePriceHistory(markets: PolymarketMarket[], interval = 'max'): Promise<Map<string, PriceHistoryPoint[]>> {
+    const map = new Map<string, PriceHistoryPoint[]>();
+    const promises = markets.map(async (m) => {
+      const outcomes = this.parseOutcomes(m);
+      const yesToken = outcomes[0]?.tokenId;
+      if (!yesToken) return;
+      try {
+        const history = await this.getPriceHistory(yesToken, interval);
+        map.set(m.groupItemTitle || m.question || m.id, history);
+      } catch { /* skip */ }
+    });
+    await Promise.all(promises);
+    return map;
+  },
+
   async getOrderbook(tokenId: string): Promise<OrderbookData> {
     return await callProxy('orderbook', { tokenId });
   },
@@ -243,6 +259,7 @@ export const PolymarketService = {
   },
 
   formatVolume(vol: number): string {
+    if (vol >= 1_000_000_000) return `$${(vol / 1_000_000_000).toFixed(1)}B`;
     if (vol >= 1_000_000) return `$${(vol / 1_000_000).toFixed(1)}M`;
     if (vol >= 1_000) return `$${(vol / 1_000).toFixed(1)}K`;
     return `$${vol.toFixed(0)}`;
