@@ -40,6 +40,15 @@ type PriceCallback = (data: PolymarketPriceChange) => void;
 type TradeCallback = (data: PolymarketLastTrade) => void;
 type StatusCallback = (connected: boolean) => void;
 
+// Internal mutable orderbook state per asset
+interface MutableOrderbook {
+  bids: Map<string, string>; // price -> size
+  asks: Map<string, string>;
+  timestamp: string;
+  hash: string;
+  market: string;
+}
+
 class PolymarketWebSocketService {
   private readonly WS_URL = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
 
@@ -60,8 +69,14 @@ class PolymarketWebSocketService {
   private latestBooks: Map<string, PolymarketBookUpdate> = new Map();
   private latestPrices: Map<string, PolymarketPriceChange> = new Map();
 
+  // Mutable orderbook state — updated on both 'book' and 'price_change'
+  private liveOrderbooks: Map<string, MutableOrderbook> = new Map();
+
   connect() {
+    // Only skip if already OPEN — allow reconnect if CONNECTING or CLOSED
     if (this.ws?.readyState === WebSocket.OPEN) return;
+    // If CONNECTING, don't create another
+    if (this.ws?.readyState === WebSocket.CONNECTING) return;
 
     try {
       this.ws = new WebSocket(this.WS_URL);
@@ -72,6 +87,7 @@ class PolymarketWebSocketService {
         this.reconnectAttempts = 0;
         this.notifyStatus(true);
 
+        // Always re-subscribe on reconnect
         if (this.subscribedAssets.size > 0) {
           this.sendSubscription();
         }
@@ -134,7 +150,7 @@ class PolymarketWebSocketService {
 
     if (changed && this.ws?.readyState === WebSocket.OPEN) {
       this.sendSubscription();
-    } else if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    } else if (!this.ws || (this.ws.readyState !== WebSocket.OPEN && this.ws.readyState !== WebSocket.CONNECTING)) {
       this.connect();
     }
   }
@@ -147,6 +163,14 @@ class PolymarketWebSocketService {
       this.tradeSubscribers.delete(id);
       this.latestBooks.delete(id);
       this.latestPrices.delete(id);
+      this.liveOrderbooks.delete(id);
+    }
+  }
+
+  /** Force re-send subscription message (useful after adding assets while WS was connecting) */
+  forceResubscribe() {
+    if (this.ws?.readyState === WebSocket.OPEN && this.subscribedAssets.size > 0) {
+      this.sendSubscription();
     }
   }
 
@@ -170,6 +194,20 @@ class PolymarketWebSocketService {
       case 'book': {
         const bookData = data as PolymarketBookUpdate;
         this.latestBooks.set(assetId, bookData);
+
+        // Initialize mutable orderbook from snapshot
+        const bidMap = new Map<string, string>();
+        const askMap = new Map<string, string>();
+        for (const b of bookData.bids || []) bidMap.set(b.price, b.size);
+        for (const a of bookData.asks || []) askMap.set(a.price, a.size);
+        this.liveOrderbooks.set(assetId, {
+          bids: bidMap,
+          asks: askMap,
+          timestamp: bookData.timestamp,
+          hash: bookData.hash,
+          market: bookData.market,
+        });
+
         this.bookSubscribers.get(assetId)?.forEach(cb => cb(bookData));
         this.bookSubscribers.get('ALL')?.forEach(cb => cb(bookData));
         break;
@@ -179,6 +217,26 @@ class PolymarketWebSocketService {
         this.latestPrices.set(assetId, priceData);
         this.priceSubscribers.get(assetId)?.forEach(cb => cb(priceData));
         this.priceSubscribers.get('ALL')?.forEach(cb => cb(priceData));
+
+        // Update mutable orderbook with new best bid/ask, then fire book subscribers
+        const ob = this.liveOrderbooks.get(assetId);
+        if (ob && priceData.price_changes?.[0]) {
+          const pc = priceData.price_changes[0];
+          // Update best bid/ask in the orderbook
+          if (pc.best_bid) {
+            ob.bids.set(pc.best_bid, ob.bids.get(pc.best_bid) || '1');
+          }
+          if (pc.best_ask) {
+            ob.asks.set(pc.best_ask, ob.asks.get(pc.best_ask) || '1');
+          }
+          ob.timestamp = priceData.timestamp;
+
+          // Reconstruct book update and fire to subscribers
+          const reconstructed = this.reconstructBook(assetId, ob);
+          this.latestBooks.set(assetId, reconstructed);
+          this.bookSubscribers.get(assetId)?.forEach(cb => cb(reconstructed));
+          this.bookSubscribers.get('ALL')?.forEach(cb => cb(reconstructed));
+        }
         break;
       }
       case 'last_trade_price': {
@@ -188,6 +246,30 @@ class PolymarketWebSocketService {
         break;
       }
     }
+  }
+
+  /** Reconstruct a PolymarketBookUpdate from mutable orderbook state */
+  private reconstructBook(assetId: string, ob: MutableOrderbook): PolymarketBookUpdate {
+    // Sort bids descending by price, asks ascending
+    const bids = Array.from(ob.bids.entries())
+      .filter(([, size]) => parseFloat(size) > 0)
+      .sort(([a], [b]) => parseFloat(b) - parseFloat(a))
+      .map(([price, size]) => ({ price, size }));
+
+    const asks = Array.from(ob.asks.entries())
+      .filter(([, size]) => parseFloat(size) > 0)
+      .sort(([a], [b]) => parseFloat(a) - parseFloat(b))
+      .map(([price, size]) => ({ price, size }));
+
+    return {
+      event_type: 'book',
+      asset_id: assetId,
+      market: ob.market,
+      bids,
+      asks,
+      timestamp: ob.timestamp,
+      hash: ob.hash,
+    };
   }
 
   onBook(assetId: string, callback: BookCallback): () => void {
