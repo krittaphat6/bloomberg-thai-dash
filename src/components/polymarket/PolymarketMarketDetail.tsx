@@ -17,9 +17,10 @@ interface Props {
   onSelectMarket: (m: PolymarketMarket) => void;
   liveTrades: PolymarketLastTrade[];
   wsConnected: boolean;
+  dataStatus?: 'live' | 'polling' | 'offline';
 }
 
-export const PolymarketMarketDetail = ({ market, priceHistory, orderbook, allMarkets, onSelectMarket, liveTrades, wsConnected }: Props) => {
+export const PolymarketMarketDetail = ({ market, priceHistory, orderbook, allMarkets, onSelectMarket, liveTrades, wsConnected, dataStatus = 'offline' }: Props) => {
   const outcomes = PolymarketService.parseOutcomes(market);
   const yesPrice = outcomes[0]?.price || 0;
   const yesPct = Math.round(yesPrice * 100);
@@ -42,18 +43,25 @@ export const PolymarketMarketDetail = ({ market, priceHistory, orderbook, allMar
     return liveTrades.filter(t => tokenIds.includes(t.asset_id)).slice(0, 15);
   }, [liveTrades, outcomes]);
 
+  // Show all trades if none match this specific market (fallback)
+  const displayTrades = marketTrades.length > 0 ? marketTrades : liveTrades.slice(0, 15);
+
+  const statusConfig = {
+    live: { color: 'bg-terminal-green', text: 'text-terminal-green', border: 'border-terminal-green/40', label: 'WS LIVE' },
+    polling: { color: 'bg-terminal-amber', text: 'text-terminal-amber', border: 'border-terminal-amber/40', label: 'POLLING' },
+    offline: { color: 'bg-destructive', text: 'text-destructive', border: 'border-destructive/40', label: 'OFFLINE' },
+  }[dataStatus];
+
   return (
     <div className="flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/30">
         <span className="text-[10px] font-bold text-terminal-amber tracking-wider">MARKET DETAIL</span>
         <div className="flex items-center gap-2">
-          {wsConnected && (
-            <Badge variant="outline" className="text-[8px] border-terminal-green/40 text-terminal-green px-1 py-0">
-              <span className="w-1 h-1 rounded-full bg-terminal-green animate-pulse mr-1 inline-block" />
-              WS LIVE
-            </Badge>
-          )}
+          <Badge variant="outline" className={`text-[8px] ${statusConfig.border} ${statusConfig.text} px-1 py-0`}>
+            <span className={`w-1 h-1 rounded-full ${statusConfig.color} ${dataStatus === 'live' ? 'animate-pulse' : ''} mr-1 inline-block`} />
+            {statusConfig.label}
+          </Badge>
           <span className="text-[9px] text-muted-foreground">ID: {conditionId.slice(0, 8)}…</span>
         </div>
       </div>
@@ -90,28 +98,37 @@ export const PolymarketMarketDetail = ({ market, priceHistory, orderbook, allMar
         </div>
 
         {/* Orderbook - Real-time */}
-        {orderbook && (
-          <div className="border border-border rounded bg-card p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-terminal-amber uppercase tracking-wider font-bold">ORDER BOOK</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-terminal-green animate-pulse" />
-                <span className="text-[9px] text-terminal-green">REAL-TIME WS</span>
-              </div>
+        <div className="border border-border rounded bg-card p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-terminal-amber uppercase tracking-wider font-bold">ORDER BOOK</span>
+              <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.color} ${dataStatus === 'live' ? 'animate-pulse' : ''}`} />
+              <span className={`text-[9px] ${statusConfig.text}`}>{statusConfig.label}</span>
             </div>
-            <PolymarketOrderbook orderbook={orderbook} isLive={wsConnected} />
           </div>
-        )}
+          {orderbook ? (
+            <PolymarketOrderbook orderbook={orderbook} isLive={wsConnected} />
+          ) : (
+            <div className="text-center py-4 text-[10px] text-muted-foreground">
+              Waiting for orderbook data...
+            </div>
+          )}
+        </div>
 
         {/* Live Trades Feed */}
-        {marketTrades.length > 0 && (
-          <div className="border border-border rounded bg-card p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[10px] text-terminal-amber uppercase tracking-wider font-bold">LIVE TRADES</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-terminal-green animate-pulse" />
-            </div>
+        <div className="border border-border rounded bg-card p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] text-terminal-amber uppercase tracking-wider font-bold">
+              {dataStatus === 'live' ? 'LIVE TRADES' : 'RECENT TRADES'}
+            </span>
+            {dataStatus !== 'offline' && (
+              <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.color} ${dataStatus === 'live' ? 'animate-pulse' : ''}`} />
+            )}
+            <span className="text-[9px] text-muted-foreground ml-auto">{displayTrades.length} trades</span>
+          </div>
+          {displayTrades.length > 0 ? (
             <div className="space-y-1 max-h-[200px] overflow-y-auto">
-              {marketTrades.map((trade, i) => (
+              {displayTrades.map((trade, i) => (
                 <div key={i} className="flex items-center justify-between text-[10px] px-2 py-1 rounded bg-muted/30">
                   <Badge
                     variant="outline"
@@ -128,8 +145,12 @@ export const PolymarketMarketDetail = ({ market, priceHistory, orderbook, allMar
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center py-3 text-[10px] text-muted-foreground">
+              Waiting for trades...
+            </div>
+          )}
+        </div>
 
         {/* Calculator */}
         <PolymarketCalculator market={market} />
