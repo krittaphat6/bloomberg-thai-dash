@@ -830,6 +830,8 @@ const MultiOutcomePriceChart = memo(({ histories }: { histories: Map<string, Pri
     return data.filter((_, i) => i % step === 0 || i === data.length - 1);
   }, [histories, labels]);
 
+  if (chartData.length === 0) return <div className="h-[250px] flex items-center justify-center text-[10px] text-muted-foreground">Loading chart...</div>;
+
   return (
     <ResponsiveContainer width="100%" height={250}>
       <LineChart data={chartData}>
