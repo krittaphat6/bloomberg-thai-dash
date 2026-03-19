@@ -258,7 +258,7 @@ const PolymarketHub = () => {
     if (activeSubTag !== 'All') {
       const tagLower = activeSubTag.toLowerCase();
       filtered = filtered.filter(e =>
-        e.tags?.some(t => t.toLowerCase().includes(tagLower)) ||
+        e.tags?.some((t: any) => (typeof t === 'string' ? t : t?.label || '').toLowerCase().includes(tagLower)) ||
         e.title?.toLowerCase().includes(tagLower)
       );
     }
@@ -594,9 +594,10 @@ const EventDetailView = ({
           <div className="flex-1">
             {event.tags?.length > 0 && (
               <div className="flex gap-1 mb-1">
-                {event.tags.slice(0, 3).map(t => (
-                  <span key={t} className="text-[9px] text-muted-foreground">{t}</span>
-                ))}
+                {event.tags.slice(0, 3).map((t: any, i: number) => {
+                  const label = typeof t === 'string' ? t : t?.label || '';
+                  return label ? <span key={label || i} className="text-[9px] text-muted-foreground">{label}</span> : null;
+                })}
               </div>
             )}
             <h3 className="text-base font-bold text-foreground leading-snug">{event.title}</h3>
