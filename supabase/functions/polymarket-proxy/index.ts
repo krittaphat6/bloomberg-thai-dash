@@ -8,6 +8,7 @@ const corsHeaders = {
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
+const DATA_API = 'https://data-api.polymarket.com';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -90,8 +91,9 @@ serve(async (req) => {
       case 'trades': {
         const qp = new URLSearchParams();
         if (params?.market) qp.set('market', params.market);
+        if (params?.asset_id) qp.set('asset', params.asset_id);
         if (params?.limit) qp.set('limit', params.limit.toString());
-        const res = await fetch(`${CLOB_API}/trades?${qp}`);
+        const res = await fetch(`${DATA_API}/trades?${qp}`);
         result = await res.json();
         break;
       }

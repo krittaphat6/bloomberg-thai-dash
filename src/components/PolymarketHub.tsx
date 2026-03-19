@@ -54,6 +54,16 @@ const normalizeTrades = (trades: TradeData[]): PolymarketLastTrade[] =>
     timestamp: t.match_time ? String(new Date(t.match_time).getTime()) : String(Date.now()),
   }));
 
+const getTimestampMs = (timestamp?: string) => {
+  if (!timestamp) return 0;
+  const numeric = Number(timestamp);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric > 1_000_000_000_000 ? numeric : numeric * 1000;
+  }
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
 const PolymarketHub = () => {
   const [events, setEvents] = useState<PolymarketEvent[]>([]);
   const [allMarkets, setAllMarkets] = useState<PolymarketMarket[]>([]);
@@ -197,51 +207,71 @@ const PolymarketHub = () => {
 
     const outcomes = PolymarketService.parseOutcomes(selectedMarket);
     const yesToken = outcomes[0]?.tokenId;
+    const conditionId = selectedMarket.conditionId || selectedMarket.id;
+    const tokenIds = outcomes.map(o => o.tokenId).filter(Boolean);
+
     if (!yesToken) return;
 
-    // Reset
+    setPolledOrderbook(null);
+    setPolledTrades([]);
     setSelectedOrderbook(null);
     setSelectedTrades([]);
+    setPollingActive(false);
 
-    // Check if we already have WS data
     const existingBook = liveBooksRef.current.get(yesToken);
     if (existingBook) {
       setSelectedOrderbook({
-        bids: existingBook.bids, asks: existingBook.asks,
-        hash: existingBook.hash, timestamp: existingBook.timestamp, market: existingBook.market,
+        bids: existingBook.bids,
+        asks: existingBook.asks,
+        hash: existingBook.hash,
+        timestamp: existingBook.timestamp,
+        market: existingBook.market,
       });
+    }
+
+    const existingTrades = liveTradesRef.current
+      .filter(trade => tokenIds.includes(trade.asset_id))
+      .sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp))
+      .slice(0, 50);
+    if (existingTrades.length > 0) {
+      setSelectedTrades(existingTrades);
     }
 
     PolymarketService.getPriceHistory(yesToken).then(setPriceHistory).catch(() => setPriceHistory([]));
 
-    const tokenIds = outcomes.map(o => o.tokenId).filter(Boolean);
     if (tokenIds.length > 0) {
       polymarketWS.subscribeToAssets(tokenIds);
       polymarketWS.forceResubscribe();
     }
 
-    // REST polling as fallback
     const fetchOrderbook = async () => {
       try {
         const ob = await PolymarketService.getOrderbook(yesToken);
-        if (ob) { setPolledOrderbook(ob); setPollingActive(true); }
-      } catch { /* silent */ }
+        if (ob) {
+          setPolledOrderbook(ob);
+          setPollingActive(true);
+        }
+      } catch {
+        // silent
+      }
     };
 
-    const conditionId = selectedMarket.conditionId || selectedMarket.id;
     const fetchTrades = async () => {
       try {
-        const trades = await PolymarketService.getRecentTrades(conditionId, 20);
-        if (Array.isArray(trades) && trades.length > 0) {
+        const trades = await PolymarketService.getRecentTrades(conditionId, 50);
+        if (Array.isArray(trades)) {
           setPolledTrades(normalizeTrades(trades));
+          setPollingActive(true);
         }
-      } catch { /* silent */ }
+      } catch {
+        // silent
+      }
     };
 
     fetchOrderbook();
     fetchTrades();
-    obPollRef.current = setInterval(fetchOrderbook, 3000);
-    tradePollRef.current = setInterval(fetchTrades, 5000);
+    obPollRef.current = setInterval(fetchOrderbook, 1000);
+    tradePollRef.current = setInterval(fetchTrades, 2000);
 
     return () => {
       if (obPollRef.current) clearInterval(obPollRef.current);
@@ -279,14 +309,29 @@ const PolymarketHub = () => {
   }, [priceTickCounter]);
 
   const liveOrderbook = useMemo((): OrderbookData | null => {
-    if (wsConnected && selectedOrderbook && selectedOrderbook.bids?.length > 0) {
-      return selectedOrderbook;
-    }
-    return polledOrderbook;
-  }, [selectedOrderbook, wsConnected, polledOrderbook]);
+    if (!selectedOrderbook && !polledOrderbook) return null;
+    if (!selectedOrderbook) return polledOrderbook;
+    if (!polledOrderbook) return selectedOrderbook;
+
+    const selectedTimestamp = getTimestampMs(selectedOrderbook.timestamp);
+    const polledTimestamp = getTimestampMs(polledOrderbook.timestamp);
+    return selectedTimestamp >= polledTimestamp ? selectedOrderbook : polledOrderbook;
+  }, [selectedOrderbook, polledOrderbook]);
 
   const mergedTrades = useMemo(() => {
-    return selectedTrades.length > 0 ? selectedTrades : polledTrades;
+    const merged = [...selectedTrades, ...polledTrades];
+    const deduped = new Map<string, PolymarketLastTrade>();
+
+    for (const trade of merged) {
+      const key = `${trade.asset_id}-${trade.side}-${trade.price}-${trade.size}-${trade.timestamp}`;
+      if (!deduped.has(key)) {
+        deduped.set(key, trade);
+      }
+    }
+
+    return Array.from(deduped.values())
+      .sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp))
+      .slice(0, 50);
   }, [selectedTrades, polledTrades]);
 
   const dataStatus: 'live' | 'polling' | 'offline' = wsConnected
