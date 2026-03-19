@@ -258,7 +258,7 @@ const PolymarketHub = () => {
     if (activeSubTag !== 'All') {
       const tagLower = activeSubTag.toLowerCase();
       filtered = filtered.filter(e =>
-        e.tags?.some(t => t.toLowerCase().includes(tagLower)) ||
+        e.tags?.some((t: any) => (typeof t === 'string' ? t : t?.label || '').toLowerCase().includes(tagLower)) ||
         e.title?.toLowerCase().includes(tagLower)
       );
     }
