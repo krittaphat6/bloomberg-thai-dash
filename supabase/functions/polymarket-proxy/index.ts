@@ -8,6 +8,7 @@ const corsHeaders = {
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
+const DATA_API = 'https://data-api.polymarket.com';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {

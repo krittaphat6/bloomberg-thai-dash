@@ -54,6 +54,16 @@ const normalizeTrades = (trades: TradeData[]): PolymarketLastTrade[] =>
     timestamp: t.match_time ? String(new Date(t.match_time).getTime()) : String(Date.now()),
   }));
 
+const getTimestampMs = (timestamp?: string) => {
+  if (!timestamp) return 0;
+  const numeric = Number(timestamp);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric > 1_000_000_000_000 ? numeric : numeric * 1000;
+  }
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
 const PolymarketHub = () => {
   const [events, setEvents] = useState<PolymarketEvent[]>([]);
   const [allMarkets, setAllMarkets] = useState<PolymarketMarket[]>([]);
