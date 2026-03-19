@@ -309,14 +309,29 @@ const PolymarketHub = () => {
   }, [priceTickCounter]);
 
   const liveOrderbook = useMemo((): OrderbookData | null => {
-    if (wsConnected && selectedOrderbook && selectedOrderbook.bids?.length > 0) {
-      return selectedOrderbook;
-    }
-    return polledOrderbook;
-  }, [selectedOrderbook, wsConnected, polledOrderbook]);
+    if (!selectedOrderbook && !polledOrderbook) return null;
+    if (!selectedOrderbook) return polledOrderbook;
+    if (!polledOrderbook) return selectedOrderbook;
+
+    const selectedTimestamp = getTimestampMs(selectedOrderbook.timestamp);
+    const polledTimestamp = getTimestampMs(polledOrderbook.timestamp);
+    return selectedTimestamp >= polledTimestamp ? selectedOrderbook : polledOrderbook;
+  }, [selectedOrderbook, polledOrderbook]);
 
   const mergedTrades = useMemo(() => {
-    return selectedTrades.length > 0 ? selectedTrades : polledTrades;
+    const merged = [...selectedTrades, ...polledTrades];
+    const deduped = new Map<string, PolymarketLastTrade>();
+
+    for (const trade of merged) {
+      const key = `${trade.asset_id}-${trade.side}-${trade.price}-${trade.size}-${trade.timestamp}`;
+      if (!deduped.has(key)) {
+        deduped.set(key, trade);
+      }
+    }
+
+    return Array.from(deduped.values())
+      .sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp))
+      .slice(0, 50);
   }, [selectedTrades, polledTrades]);
 
   const dataStatus: 'live' | 'polling' | 'offline' = wsConnected

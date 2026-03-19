@@ -91,8 +91,9 @@ serve(async (req) => {
       case 'trades': {
         const qp = new URLSearchParams();
         if (params?.market) qp.set('market', params.market);
+        if (params?.asset_id) qp.set('asset', params.asset_id);
         if (params?.limit) qp.set('limit', params.limit.toString());
-        const res = await fetch(`${CLOB_API}/trades?${qp}`);
+        const res = await fetch(`${DATA_API}/trades?${qp}`);
         result = await res.json();
         break;
       }
