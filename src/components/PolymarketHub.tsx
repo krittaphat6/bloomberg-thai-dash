@@ -207,51 +207,71 @@ const PolymarketHub = () => {
 
     const outcomes = PolymarketService.parseOutcomes(selectedMarket);
     const yesToken = outcomes[0]?.tokenId;
+    const conditionId = selectedMarket.conditionId || selectedMarket.id;
+    const tokenIds = outcomes.map(o => o.tokenId).filter(Boolean);
+
     if (!yesToken) return;
 
-    // Reset
+    setPolledOrderbook(null);
+    setPolledTrades([]);
     setSelectedOrderbook(null);
     setSelectedTrades([]);
+    setPollingActive(false);
 
-    // Check if we already have WS data
     const existingBook = liveBooksRef.current.get(yesToken);
     if (existingBook) {
       setSelectedOrderbook({
-        bids: existingBook.bids, asks: existingBook.asks,
-        hash: existingBook.hash, timestamp: existingBook.timestamp, market: existingBook.market,
+        bids: existingBook.bids,
+        asks: existingBook.asks,
+        hash: existingBook.hash,
+        timestamp: existingBook.timestamp,
+        market: existingBook.market,
       });
+    }
+
+    const existingTrades = liveTradesRef.current
+      .filter(trade => tokenIds.includes(trade.asset_id))
+      .sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp))
+      .slice(0, 50);
+    if (existingTrades.length > 0) {
+      setSelectedTrades(existingTrades);
     }
 
     PolymarketService.getPriceHistory(yesToken).then(setPriceHistory).catch(() => setPriceHistory([]));
 
-    const tokenIds = outcomes.map(o => o.tokenId).filter(Boolean);
     if (tokenIds.length > 0) {
       polymarketWS.subscribeToAssets(tokenIds);
       polymarketWS.forceResubscribe();
     }
 
-    // REST polling as fallback
     const fetchOrderbook = async () => {
       try {
         const ob = await PolymarketService.getOrderbook(yesToken);
-        if (ob) { setPolledOrderbook(ob); setPollingActive(true); }
-      } catch { /* silent */ }
+        if (ob) {
+          setPolledOrderbook(ob);
+          setPollingActive(true);
+        }
+      } catch {
+        // silent
+      }
     };
 
-    const conditionId = selectedMarket.conditionId || selectedMarket.id;
     const fetchTrades = async () => {
       try {
-        const trades = await PolymarketService.getRecentTrades(conditionId, 20);
-        if (Array.isArray(trades) && trades.length > 0) {
+        const trades = await PolymarketService.getRecentTrades(conditionId, 50);
+        if (Array.isArray(trades)) {
           setPolledTrades(normalizeTrades(trades));
+          setPollingActive(true);
         }
-      } catch { /* silent */ }
+      } catch {
+        // silent
+      }
     };
 
     fetchOrderbook();
     fetchTrades();
-    obPollRef.current = setInterval(fetchOrderbook, 3000);
-    tradePollRef.current = setInterval(fetchTrades, 5000);
+    obPollRef.current = setInterval(fetchOrderbook, 1000);
+    tradePollRef.current = setInterval(fetchTrades, 2000);
 
     return () => {
       if (obPollRef.current) clearInterval(obPollRef.current);
