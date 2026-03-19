@@ -808,9 +808,10 @@ EventDetailView.displayName = 'EventDetailView';
 
 const MultiOutcomePriceChart = memo(({ histories }: { histories: Map<string, PriceHistoryPoint[]> }) => {
   const labels = Array.from(histories.keys());
-  if (labels.length === 0) return <div className="h-[250px] flex items-center justify-center text-[10px] text-muted-foreground">Loading chart...</div>;
 
   const chartData = useMemo(() => {
+    if (labels.length === 0) return [];
+
     const allTimestamps = new Set<number>();
     histories.forEach(points => points.forEach(p => allTimestamps.add(p.t)));
     const sortedTs = Array.from(allTimestamps).sort((a, b) => a - b);
