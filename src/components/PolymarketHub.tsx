@@ -1,26 +1,58 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, RotateCcw, Search, TrendingUp, BarChart3, Users, Wifi } from 'lucide-react';
+import { Loader2, RotateCcw, Search, TrendingUp, BarChart3, Wifi } from 'lucide-react';
 import { toast } from 'sonner';
 import { PolymarketService, PolymarketEvent, PolymarketMarket, PriceHistoryPoint, OrderbookData, TradeData } from '@/services/PolymarketService';
 import { polymarketWS, PolymarketBookUpdate, PolymarketLastTrade } from '@/services/PolymarketWebSocketService';
 import { PolymarketMarketDetail } from '@/components/polymarket/PolymarketMarketDetail';
 import { PolymarketPriceChart } from '@/components/polymarket/PolymarketPriceChart';
+import { PolymarketCalculator } from '@/components/polymarket/PolymarketCalculator';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const MAIN_TABS = ['TRENDING', 'POLITICS', 'CRYPTO', 'SPORTS', 'FINANCE', 'AI & TECH'];
 const SUB_TAGS = ['All', 'Elections', 'Fed & Rates', 'Bitcoin', 'Geopolitics', 'AI Models', 'Sports', 'Regulation', 'Earnings'];
 
 const TAB_TO_TAG: Record<string, string | undefined> = {
-  TRENDING: undefined,
-  POLITICS: 'politics',
-  CRYPTO: 'crypto',
-  SPORTS: 'sports',
-  FINANCE: 'finance',
-  'AI & TECH': 'ai',
+  TRENDING: undefined, POLITICS: 'politics', CRYPTO: 'crypto',
+  SPORTS: 'sports', FINANCE: 'finance', 'AI & TECH': 'ai',
 };
+
+// Category mapping for events
+const CATEGORY_MAP: Record<string, string[]> = {
+  'Elections': ['election', 'president', 'governor', 'senate', 'congress', 'vote', 'nominee', 'primary', 'democrat', 'republican'],
+  'Fed & Rates': ['fed', 'fomc', 'interest rate', 'inflation', 'cpi', 'gdp', 'treasury', 'unemployment', 'jobs', 'monetary'],
+  'Bitcoin': ['bitcoin', 'btc', 'crypto', 'ethereum', 'eth', 'solana', 'defi', 'nft', 'blockchain'],
+  'Geopolitics': ['war', 'conflict', 'military', 'nato', 'china', 'russia', 'ukraine', 'iran', 'missile', 'sanction', 'territory'],
+  'AI Models': ['ai', 'gpt', 'openai', 'google', 'anthropic', 'llm', 'artificial intelligence', 'machine learning', 'chatgpt'],
+  'Sports': ['nba', 'nfl', 'mlb', 'soccer', 'football', 'basketball', 'tennis', 'premier league', 'champion', 'playoff', 'world cup', 'lakers', 'warriors'],
+  'Regulation': ['regulation', 'sec', 'ban', 'law', 'bill', 'congress', 'executive order', 'tariff', 'policy'],
+  'Earnings': ['earnings', 'revenue', 'stock', 'market cap', 'ipo', 'tesla', 'apple', 'nvidia', 'sp500', 's&p'],
+};
+
+function categorizeEvent(event: PolymarketEvent): string {
+  const text = `${event.title} ${event.description || ''}`.toLowerCase();
+  const tagLabels = (event.tags || []).map((t: any) => (typeof t === 'string' ? t : t?.label || '').toLowerCase()).join(' ');
+  const combined = `${text} ${tagLabels}`;
+
+  for (const [cat, keywords] of Object.entries(CATEGORY_MAP)) {
+    if (keywords.some(kw => combined.includes(kw))) return cat;
+  }
+  return 'Other';
+}
+
+const normalizeTrades = (trades: TradeData[]): PolymarketLastTrade[] =>
+  trades.map(t => ({
+    event_type: 'last_trade_price' as const,
+    asset_id: t.asset_id || '',
+    market: t.market || '',
+    price: t.price || '0',
+    size: t.size || '0',
+    side: t.side || 'BUY',
+    timestamp: t.match_time ? String(new Date(t.match_time).getTime()) : String(Date.now()),
+  }));
 
 const PolymarketHub = () => {
   const [events, setEvents] = useState<PolymarketEvent[]>([]);
@@ -34,19 +66,28 @@ const PolymarketHub = () => {
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([]);
   const [multiPriceHistory, setMultiPriceHistory] = useState<Map<string, PriceHistoryPoint[]>>(new Map());
   const [wsConnected, setWsConnected] = useState(false);
-  const [liveBooks, setLiveBooks] = useState<Map<string, PolymarketBookUpdate>>(new Map());
-  const [liveTrades, setLiveTrades] = useState<PolymarketLastTrade[]>([]);
   const [totalMarketCount, setTotalMarketCount] = useState(0);
 
-  // REST polling fallback
+  // PERFORMANCE: Use refs for high-frequency WS data to avoid re-rendering entire tree
+  const liveBooksRef = useRef<Map<string, PolymarketBookUpdate>>(new Map());
+  const liveTradesRef = useRef<PolymarketLastTrade[]>([]);
+
+  // Only the SELECTED market's orderbook/trades are in state (causes re-render only of detail panel)
+  const [selectedOrderbook, setSelectedOrderbook] = useState<OrderbookData | null>(null);
+  const [selectedTrades, setSelectedTrades] = useState<PolymarketLastTrade[]>([]);
   const [polledOrderbook, setPolledOrderbook] = useState<OrderbookData | null>(null);
   const [polledTrades, setPolledTrades] = useState<PolymarketLastTrade[]>([]);
   const [pollingActive, setPollingActive] = useState(false);
+
+  // For periodic price refresh on event cards (throttled)
+  const [priceTickCounter, setPriceTickCounter] = useState(0);
+
   const obPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tradePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selectedMarketRef = useRef<PolymarketMarket | null>(null);
+  selectedMarketRef.current = selectedMarket;
 
   // ---------- DATA FETCH ----------
-
   const fetchData = useCallback(async (tag?: string) => {
     setLoading(true);
     try {
@@ -69,7 +110,6 @@ const PolymarketHub = () => {
       const markets = Array.isArray(mkts) ? mkts : [];
       setAllMarkets(markets);
 
-      // Subscribe top 200 markets to WebSocket
       const topMarkets = [...markets]
         .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
         .slice(0, 200);
@@ -92,37 +132,65 @@ const PolymarketHub = () => {
     return () => clearInterval(iv);
   }, [activeTab]);
 
-  // ---------- WEBSOCKET ----------
-
+  // ---------- WEBSOCKET (performance-optimized) ----------
   useEffect(() => {
     const unsub = polymarketWS.onStatus(setWsConnected);
     return unsub;
   }, []);
 
   useEffect(() => {
+    // Store WS data in refs (no re-render), then update selected market state
     const unsubBook = polymarketWS.onBook('ALL', (data) => {
-      setLiveBooks(prev => {
-        const next = new Map(prev);
-        next.set(data.asset_id, data);
-        return next;
-      });
+      liveBooksRef.current.set(data.asset_id, data);
+
+      // Only trigger state update if this is the selected market's token
+      const sm = selectedMarketRef.current;
+      if (sm) {
+        const outcomes = PolymarketService.parseOutcomes(sm);
+        const yesToken = outcomes[0]?.tokenId;
+        if (yesToken === data.asset_id) {
+          setSelectedOrderbook({
+            bids: data.bids, asks: data.asks,
+            hash: data.hash, timestamp: data.timestamp, market: data.market,
+          });
+        }
+      }
     });
+
     const unsubTrade = polymarketWS.onTrade('ALL', (data) => {
-      setLiveTrades(prev => [data, ...prev].slice(0, 100));
+      liveTradesRef.current = [data, ...liveTradesRef.current].slice(0, 100);
+
+      // Only update state if trade belongs to selected market
+      const sm = selectedMarketRef.current;
+      if (sm) {
+        const outcomes = PolymarketService.parseOutcomes(sm);
+        const tokenIds = outcomes.map(o => o.tokenId).filter(Boolean);
+        if (tokenIds.includes(data.asset_id)) {
+          setSelectedTrades(prev => [data, ...prev].slice(0, 50));
+        }
+      }
     });
+
     return () => { unsubBook(); unsubTrade(); };
+  }, []);
+
+  // Throttled price refresh for event cards (every 3s)
+  useEffect(() => {
+    const iv = setInterval(() => setPriceTickCounter(c => c + 1), 3000);
+    return () => clearInterval(iv);
   }, []);
 
   useEffect(() => { return () => { polymarketWS.disconnect(); }; }, []);
 
-  // ---------- SELECTED EVENT/MARKET ----------
-
+  // ---------- SELECTED MARKET ----------
   useEffect(() => {
     if (!selectedMarket) {
       if (obPollRef.current) clearInterval(obPollRef.current);
       if (tradePollRef.current) clearInterval(tradePollRef.current);
       setPolledOrderbook(null);
       setPolledTrades([]);
+      setSelectedOrderbook(null);
+      setSelectedTrades([]);
       setPollingActive(false);
       return;
     }
@@ -130,6 +198,19 @@ const PolymarketHub = () => {
     const outcomes = PolymarketService.parseOutcomes(selectedMarket);
     const yesToken = outcomes[0]?.tokenId;
     if (!yesToken) return;
+
+    // Reset
+    setSelectedOrderbook(null);
+    setSelectedTrades([]);
+
+    // Check if we already have WS data
+    const existingBook = liveBooksRef.current.get(yesToken);
+    if (existingBook) {
+      setSelectedOrderbook({
+        bids: existingBook.bids, asks: existingBook.asks,
+        hash: existingBook.hash, timestamp: existingBook.timestamp, market: existingBook.market,
+      });
+    }
 
     PolymarketService.getPriceHistory(yesToken).then(setPriceHistory).catch(() => setPriceHistory([]));
 
@@ -139,6 +220,7 @@ const PolymarketHub = () => {
       polymarketWS.forceResubscribe();
     }
 
+    // REST polling as fallback
     const fetchOrderbook = async () => {
       try {
         const ob = await PolymarketService.getOrderbook(yesToken);
@@ -167,7 +249,7 @@ const PolymarketHub = () => {
     };
   }, [selectedMarket]);
 
-  // Load multi-outcome price histories when event is selected
+  // Multi-outcome price histories
   useEffect(() => {
     if (!selectedEvent || !selectedEvent.markets?.length) {
       setMultiPriceHistory(new Map());
@@ -178,26 +260,12 @@ const PolymarketHub = () => {
       .catch(() => setMultiPriceHistory(new Map()));
   }, [selectedEvent]);
 
-  // ---------- NORMALIZE TRADES ----------
-
-  const normalizeTrades = (trades: TradeData[]): PolymarketLastTrade[] =>
-    trades.map(t => ({
-      event_type: 'last_trade_price' as const,
-      asset_id: t.asset_id || '',
-      market: t.market || '',
-      price: t.price || '0',
-      size: t.size || '0',
-      side: t.side || 'BUY',
-      timestamp: t.match_time ? String(new Date(t.match_time).getTime()) : String(Date.now()),
-    }));
-
   // ---------- LIVE DATA GETTERS ----------
-
   const getLivePrice = useCallback((market: PolymarketMarket): { yesPrice: number; noPrice: number } => {
     const outcomes = PolymarketService.parseOutcomes(market);
     const yesTokenId = outcomes[0]?.tokenId;
     if (yesTokenId) {
-      const liveBook = liveBooks.get(yesTokenId);
+      const liveBook = liveBooksRef.current.get(yesTokenId);
       if (liveBook && liveBook.bids?.length > 0 && liveBook.asks?.length > 0) {
         const bestBid = parseFloat(liveBook.bids[0].price);
         const bestAsk = parseFloat(liveBook.asks[0].price);
@@ -207,32 +275,25 @@ const PolymarketHub = () => {
     }
     const yesPrice = outcomes[0]?.price || 0;
     return { yesPrice, noPrice: 1 - yesPrice };
-  }, [liveBooks]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceTickCounter]);
 
-  const getLiveOrderbook = useCallback((): OrderbookData | null => {
-    if (!selectedMarket) return null;
-    const outcomes = PolymarketService.parseOutcomes(selectedMarket);
-    const yesTokenId = outcomes[0]?.tokenId;
-
-    if (wsConnected && yesTokenId) {
-      const wsBook = liveBooks.get(yesTokenId);
-      if (wsBook?.bids?.length > 0) return {
-        bids: wsBook.bids, asks: wsBook.asks,
-        hash: wsBook.hash, timestamp: wsBook.timestamp, market: wsBook.market,
-      };
+  const liveOrderbook = useMemo((): OrderbookData | null => {
+    if (wsConnected && selectedOrderbook && selectedOrderbook.bids?.length > 0) {
+      return selectedOrderbook;
     }
     return polledOrderbook;
-  }, [selectedMarket, liveBooks, wsConnected, polledOrderbook]);
+  }, [selectedOrderbook, wsConnected, polledOrderbook]);
 
-  const mergedTrades = liveTrades.length > 0 ? liveTrades : polledTrades;
+  const mergedTrades = useMemo(() => {
+    return selectedTrades.length > 0 ? selectedTrades : polledTrades;
+  }, [selectedTrades, polledTrades]);
 
   const dataStatus: 'live' | 'polling' | 'offline' = wsConnected
     ? 'live' : pollingActive ? 'polling' : 'offline';
-
   const isDataAvailable = wsConnected || polledOrderbook !== null;
 
   // ---------- SEARCH ----------
-
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setLoading(true);
@@ -249,30 +310,34 @@ const PolymarketHub = () => {
   };
 
   // ---------- COMPUTED ----------
-
-  const totalVol24h = events.reduce((s, e) => s + (e.volume24hr || 0), 0);
-  const totalLiquidity = events.reduce((s, e) => s + (e.liquidity || 0), 0);
+  const totalVol24h = useMemo(() => events.reduce((s, e) => s + (e.volume24hr || 0), 0), [events]);
+  const totalLiquidity = useMemo(() => events.reduce((s, e) => s + (e.liquidity || 0), 0), [events]);
 
   const displayEvents = useMemo(() => {
     let filtered = events.filter(e => e.active && !e.closed);
     if (activeSubTag !== 'All') {
-      const tagLower = activeSubTag.toLowerCase();
-      filtered = filtered.filter(e =>
-        e.tags?.some((t: any) => (typeof t === 'string' ? t : t?.label || '').toLowerCase().includes(tagLower)) ||
-        e.title?.toLowerCase().includes(tagLower)
-      );
+      filtered = filtered.filter(e => categorizeEvent(e) === activeSubTag);
     }
     return filtered;
   }, [events, activeSubTag]);
 
-  const liveOrderbook = getLiveOrderbook();
+  // Category counts for sub-tags
+  const categoryCounts = useMemo(() => {
+    const active = events.filter(e => e.active && !e.closed);
+    const counts: Record<string, number> = { All: active.length };
+    SUB_TAGS.forEach(tag => {
+      if (tag === 'All') return;
+      counts[tag] = active.filter(e => categorizeEvent(e) === tag).length;
+    });
+    return counts;
+  }, [events]);
 
-  const handleSelectEvent = (event: PolymarketEvent) => {
+  const handleSelectEvent = useCallback((event: PolymarketEvent) => {
     setSelectedEvent(event);
     if (event.markets?.length > 0) {
       setSelectedMarket(event.markets[0]);
     }
-  };
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-background text-foreground overflow-hidden">
@@ -321,7 +386,7 @@ const PolymarketHub = () => {
         <StatCard label="WS STREAMS" value={polymarketWS.getSubscribedCount().toString()} color="text-terminal-cyan" />
       </div>
 
-      {/* Sub Tags */}
+      {/* Sub Tags with counts */}
       <div className="flex gap-1.5 px-3 py-2 border-b border-border bg-card/50 overflow-x-auto">
         {SUB_TAGS.map(tag => (
           <button
@@ -333,7 +398,7 @@ const PolymarketHub = () => {
                 : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted'
             }`}
           >
-            {tag}
+            {tag} {(categoryCounts[tag] || 0) > 0 && <span className="text-[8px] opacity-60">({categoryCounts[tag]})</span>}
           </button>
         ))}
       </div>
@@ -359,13 +424,14 @@ const PolymarketHub = () => {
                 {displayEvents.length === 0 ? (
                   <div className="p-6 text-center text-xs text-muted-foreground">No active markets found</div>
                 ) : (
-                  displayEvents.map(event => (
+                  displayEvents.map((event, idx) => (
                     <EventCard
-                      key={event.id}
+                      key={`${event.id}-${idx}`}
                       event={event}
                       isSelected={selectedEvent?.id === event.id}
                       onClick={() => handleSelectEvent(event)}
                       getLivePrice={getLivePrice}
+                      category={categorizeEvent(event)}
                     />
                   ))
                 )}
@@ -406,13 +472,14 @@ const PolymarketHub = () => {
   );
 };
 
-// ============== EVENT CARD ==============
+// ============== EVENT CARD (memoized) ==============
 
-const EventCard = ({ event, isSelected, onClick, getLivePrice }: {
+const EventCard = memo(({ event, isSelected, onClick, getLivePrice, category }: {
   event: PolymarketEvent;
   isSelected: boolean;
   onClick: () => void;
   getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+  category: string;
 }) => {
   const markets = event.markets || [];
   const vol = PolymarketService.formatVolume(event.volume24hr || 0);
@@ -426,26 +493,24 @@ const EventCard = ({ event, isSelected, onClick, getLivePrice }: {
         isSelected ? 'bg-terminal-amber/5 border-l-2 border-l-terminal-amber' : 'hover:bg-muted/30 border-l-2 border-l-transparent'
       }`}
     >
-      {/* Event title + icon */}
       <div className="flex items-start gap-2 mb-2">
         {event.image && (
-          <img
-            src={event.image}
-            alt=""
-            className="w-8 h-8 rounded object-cover flex-shrink-0 mt-0.5"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
+          <img src={event.image} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0 mt-0.5"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         )}
         <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <Badge variant="outline" className="text-[7px] px-1 py-0 border-border text-muted-foreground">
+              {category}
+            </Badge>
+          </div>
           <div className="text-[12px] font-semibold text-foreground leading-snug line-clamp-2">
             {event.title}
           </div>
         </div>
       </div>
 
-      {/* Outcomes */}
       {markets.length <= 2 ? (
-        // Binary market — show Yes/No bar
         markets.slice(0, 1).map(m => {
           const { yesPrice, noPrice } = getLivePrice(m);
           const yesPct = Math.round(yesPrice * 100);
@@ -453,16 +518,12 @@ const EventCard = ({ event, isSelected, onClick, getLivePrice }: {
           return (
             <div key={m.id} className="mb-2">
               <div className="flex h-6 rounded overflow-hidden">
-                <div
-                  className="flex items-center justify-center text-[11px] font-bold text-black bg-terminal-green transition-all"
-                  style={{ width: `${Math.max(yesPct, 8)}%` }}
-                >
+                <div className="flex items-center justify-center text-[11px] font-bold text-black bg-terminal-green transition-all"
+                  style={{ width: `${Math.max(yesPct, 8)}%` }}>
                   {yesPct}% Yes
                 </div>
-                <div
-                  className="flex items-center justify-center text-[11px] font-bold text-white bg-destructive transition-all"
-                  style={{ width: `${Math.max(noPct, 8)}%` }}
-                >
+                <div className="flex items-center justify-center text-[11px] font-bold text-white bg-destructive transition-all"
+                  style={{ width: `${Math.max(noPct, 8)}%` }}>
                   {noPct}%
                 </div>
               </div>
@@ -470,7 +531,6 @@ const EventCard = ({ event, isSelected, onClick, getLivePrice }: {
           );
         })
       ) : (
-        // Multi-outcome — show compact list
         <div className="space-y-1 mb-2">
           {markets.slice(0, 4).map(m => {
             const { yesPrice } = getLivePrice(m);
@@ -481,10 +541,8 @@ const EventCard = ({ event, isSelected, onClick, getLivePrice }: {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <div className="h-4 bg-terminal-green/20 rounded relative overflow-hidden flex-1">
-                      <div
-                        className="absolute inset-y-0 left-0 bg-terminal-green/60 rounded"
-                        style={{ width: `${Math.max(pct, 2)}%` }}
-                      />
+                      <div className="absolute inset-y-0 left-0 bg-terminal-green/60 rounded"
+                        style={{ width: `${Math.max(pct, 2)}%` }} />
                       <span className="relative text-[9px] font-medium text-foreground px-1.5 leading-4 block truncate">
                         {label}
                       </span>
@@ -510,9 +568,10 @@ const EventCard = ({ event, isSelected, onClick, getLivePrice }: {
       </div>
     </div>
   );
-};
+});
+EventCard.displayName = 'EventCard';
 
-// ============== EVENT DETAIL VIEW (Polymarket-style) ==============
+// ============== EVENT DETAIL VIEW ==============
 
 const CHART_COLORS = [
   'hsl(var(--terminal-cyan))',
@@ -523,7 +582,7 @@ const CHART_COLORS = [
   'hsl(160, 80%, 50%)',
 ];
 
-const EventDetailView = ({
+const EventDetailView = memo(({
   event, selectedMarket, onSelectMarket, priceHistory, multiPriceHistory,
   orderbook, allMarkets, onSelectEvent, liveTrades, wsConnected, dataStatus, getLivePrice,
 }: {
@@ -551,7 +610,7 @@ const EventDetailView = ({
     offline: { color: 'bg-destructive', text: 'text-destructive', border: 'border-destructive/40', label: 'OFFLINE' },
   }[dataStatus];
 
-  // For single/binary market, show classic detail
+  // For binary, use the dedicated detail view
   if (!isMulti && selectedMarket) {
     return (
       <PolymarketMarketDetail
@@ -584,19 +643,15 @@ const EventDetailView = ({
         {/* Event Header */}
         <div className="flex items-start gap-3">
           {event.image && (
-            <img
-              src={event.image}
-              alt=""
-              className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
+            <img src={event.image} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           )}
           <div className="flex-1">
             {event.tags?.length > 0 && (
               <div className="flex gap-1 mb-1">
                 {event.tags.slice(0, 3).map((t: any, i: number) => {
                   const label = typeof t === 'string' ? t : t?.label || '';
-                  return label ? <span key={label || i} className="text-[9px] text-muted-foreground">{label}</span> : null;
+                  return label ? <Badge key={i} variant="outline" className="text-[8px] px-1 py-0 border-border text-muted-foreground">{label}</Badge> : null;
                 })}
               </div>
             )}
@@ -622,7 +677,7 @@ const EventDetailView = ({
           </div>
         )}
 
-        {/* Multi-line Price Chart */}
+        {/* Price Chart */}
         <div className="border border-border rounded bg-card p-3">
           <div className="text-[10px] text-terminal-amber uppercase tracking-wider mb-2">PRICE HISTORY</div>
           {isMulti && multiPriceHistory.size > 0 ? (
@@ -638,9 +693,9 @@ const EventDetailView = ({
           <span className="flex items-center gap-1">📅 {endDate || 'Open'}</span>
         </div>
 
-        {/* Outcome Rows (Polymarket-style) */}
+        {/* Outcome Rows */}
         <div className="border border-border rounded overflow-hidden">
-          {markets.map((m, i) => {
+          {markets.map((m) => {
             const { yesPrice } = getLivePrice(m);
             const pct = Math.round(yesPrice * 100);
             const label = m.groupItemTitle || m.question;
@@ -657,23 +712,18 @@ const EventDetailView = ({
                   isSelected ? 'bg-terminal-amber/5' : 'hover:bg-muted/30'
                 }`}
               >
-                {/* Outcome Name + Volume */}
                 <div className="flex-1 min-w-0">
                   <div className="text-[12px] font-semibold text-foreground">{label}</div>
                   <div className="text-[9px] text-muted-foreground flex items-center gap-1">
                     <BarChart3 className="w-2.5 h-2.5" />
-                    {PolymarketService.formatVolume(mVol)} Vol. 🗑️
+                    {PolymarketService.formatVolume(mVol)} Vol.
                   </div>
                 </div>
-
-                {/* Probability */}
                 <div className="text-right mr-2">
                   <div className={`text-lg font-black ${pct > 50 ? 'text-terminal-green' : pct < 10 ? 'text-muted-foreground' : 'text-foreground'}`}>
                     {pct > 0 ? `${pct}%` : '<1%'}
                   </div>
                 </div>
-
-                {/* Buy Yes / Buy No buttons */}
                 <div className="flex gap-1.5 flex-shrink-0">
                   <button className="px-3 py-1.5 rounded text-[10px] font-bold bg-terminal-green/20 text-terminal-green border border-terminal-green/30 hover:bg-terminal-green/30 transition-colors">
                     Buy Yes {yesCents > 0 ? `${yesCents}¢` : ''}
@@ -687,43 +737,46 @@ const EventDetailView = ({
           })}
         </div>
 
-        {/* Orderbook + Trades if a specific market is selected */}
+        {/* ORDER BOOK — always visible when market selected */}
         {selectedMarket && (
           <>
-            {/* Orderbook */}
             <div className="border border-border rounded bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] text-terminal-amber uppercase tracking-wider font-bold">ORDER BOOK</span>
+                <span className="text-[10px] text-terminal-amber uppercase tracking-wider font-bold">📊 ORDER BOOK</span>
                 <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.color} ${dataStatus === 'live' ? 'animate-pulse' : ''}`} />
                 <span className={`text-[9px] ${statusConfig.text}`}>{statusConfig.label}</span>
               </div>
               {orderbook ? (
                 <OrderbookDisplay orderbook={orderbook} />
               ) : (
-                <div className="text-center py-4 text-[10px] text-muted-foreground">Waiting for orderbook...</div>
+                <div className="text-center py-4 text-[10px] text-muted-foreground">
+                  <Wifi className="w-4 h-4 mx-auto mb-1 animate-pulse" />
+                  Connecting to orderbook...
+                </div>
               )}
             </div>
 
-            {/* Trades */}
+            {/* LIVE TRADES */}
             <div className="border border-border rounded bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-[10px] text-terminal-amber uppercase tracking-wider font-bold">
-                  {dataStatus === 'live' ? 'LIVE TRADES' : 'RECENT TRADES'}
+                  {dataStatus === 'live' ? '⚡ LIVE TRADES' : '📋 RECENT TRADES'}
                 </span>
                 {dataStatus !== 'offline' && (
                   <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.color} ${dataStatus === 'live' ? 'animate-pulse' : ''}`} />
                 )}
+                <span className="text-[9px] text-muted-foreground ml-auto">{liveTrades.length} trades</span>
               </div>
               {liveTrades.length > 0 ? (
                 <div className="space-y-1 max-h-[200px] overflow-y-auto">
                   {liveTrades.slice(0, 15).map((trade, i) => (
-                    <div key={i} className="flex items-center justify-between text-[10px] px-2 py-1 rounded bg-muted/30">
+                    <div key={`${trade.timestamp}-${i}`} className="flex items-center justify-between text-[10px] px-2 py-1 rounded bg-muted/30">
                       <Badge variant="outline" className={`text-[8px] px-1 py-0 ${
                         trade.side === 'BUY' ? 'border-terminal-green/50 text-terminal-green' : 'border-destructive/50 text-destructive'
                       }`}>
                         {trade.side}
                       </Badge>
-                      <span className="text-foreground">${trade.price} × {parseFloat(trade.size).toLocaleString()}</span>
+                      <span className="text-foreground font-mono">${trade.price} × {parseFloat(trade.size).toLocaleString()}</span>
                       <span className="text-muted-foreground">{new Date(parseInt(trade.timestamp)).toLocaleTimeString()}</span>
                     </div>
                   ))}
@@ -733,107 +786,77 @@ const EventDetailView = ({
               )}
             </div>
 
-            {/* Calculator + AI */}
-            <div className="space-y-4">
-              <PolymarketCalculatorInline market={selectedMarket} />
-            </div>
+            {/* Calculator */}
+            <PolymarketCalculator market={selectedMarket} />
           </>
         )}
 
         {/* Description */}
         {event.description && (
           <div className="border border-border rounded bg-card p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Rules</span>
-              <span className="text-[10px] text-muted-foreground">Market Context</span>
-            </div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Rules · Market Context</div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">{event.description}</p>
           </div>
         )}
       </div>
     </div>
   );
-};
+});
+EventDetailView.displayName = 'EventDetailView';
 
-// ============== INLINE CALCULATOR ==============
+// ============== MULTI-OUTCOME PRICE CHART (memoized) ==============
 
-import { PolymarketCalculator } from '@/components/polymarket/PolymarketCalculator';
-
-const PolymarketCalculatorInline = ({ market }: { market: PolymarketMarket }) => (
-  <PolymarketCalculator market={market} />
-);
-
-// ============== MULTI-OUTCOME PRICE CHART ==============
-
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-
-const MultiOutcomePriceChart = ({ histories }: { histories: Map<string, PriceHistoryPoint[]> }) => {
+const MultiOutcomePriceChart = memo(({ histories }: { histories: Map<string, PriceHistoryPoint[]> }) => {
   const labels = Array.from(histories.keys());
   if (labels.length === 0) return <div className="h-[250px] flex items-center justify-center text-[10px] text-muted-foreground">Loading chart...</div>;
 
-  // Merge all timestamps
-  const allTimestamps = new Set<number>();
-  histories.forEach(points => points.forEach(p => allTimestamps.add(p.t)));
-  const sortedTs = Array.from(allTimestamps).sort((a, b) => a - b);
+  const chartData = useMemo(() => {
+    const allTimestamps = new Set<number>();
+    histories.forEach(points => points.forEach(p => allTimestamps.add(p.t)));
+    const sortedTs = Array.from(allTimestamps).sort((a, b) => a - b);
 
-  const chartData = sortedTs.map(t => {
-    const row: any = { t };
-    labels.forEach(label => {
-      const points = histories.get(label) || [];
-      const closest = points.reduce((prev, curr) => Math.abs(curr.t - t) < Math.abs(prev.t - t) ? curr : prev, points[0]);
-      row[label] = closest ? Math.round(closest.p * 100) : null;
+    const data = sortedTs.map(t => {
+      const row: any = { t };
+      labels.forEach(label => {
+        const points = histories.get(label) || [];
+        const closest = points.reduce((prev, curr) => Math.abs(curr.t - t) < Math.abs(prev.t - t) ? curr : prev, points[0]);
+        row[label] = closest ? Math.round(closest.p * 100) : null;
+      });
+      return row;
     });
-    return row;
-  });
 
-  // Sample to max ~200 points for perf
-  const step = Math.max(1, Math.floor(chartData.length / 200));
-  const sampled = chartData.filter((_, i) => i % step === 0 || i === chartData.length - 1);
+    const step = Math.max(1, Math.floor(data.length / 200));
+    return data.filter((_, i) => i % step === 0 || i === data.length - 1);
+  }, [histories, labels]);
 
   return (
     <ResponsiveContainer width="100%" height={250}>
-      <LineChart data={sampled}>
+      <LineChart data={chartData}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.3} />
-        <XAxis
-          dataKey="t"
-          tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+        <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
           tickFormatter={t => new Date(t * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-          interval="preserveStartEnd"
-          axisLine={{ stroke: 'hsl(var(--border))' }}
-        />
-        <YAxis
-          domain={[0, 100]}
-          tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
-          tickFormatter={v => `${v}%`}
-          width={35}
-          axisLine={{ stroke: 'hsl(var(--border))' }}
-        />
+          interval="preserveStartEnd" axisLine={{ stroke: 'hsl(var(--border))' }} />
+        <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+          tickFormatter={v => `${v}%`} width={35} axisLine={{ stroke: 'hsl(var(--border))' }} />
         <Tooltip
           contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 10, borderRadius: 4 }}
           labelFormatter={t => new Date(Number(t) * 1000).toLocaleDateString()}
-          formatter={(v: number, name: string) => [`${v}%`, name]}
-        />
+          formatter={(v: number, name: string) => [`${v}%`, name]} />
         {labels.map((label, i) => (
-          <Line
-            key={label}
-            type="monotone"
-            dataKey={label}
-            stroke={CHART_COLORS[i % CHART_COLORS.length]}
-            strokeWidth={2}
-            dot={false}
-            connectNulls
-          />
+          <Line key={label} type="monotone" dataKey={label} stroke={CHART_COLORS[i % CHART_COLORS.length]}
+            strokeWidth={2} dot={false} connectNulls />
         ))}
       </LineChart>
     </ResponsiveContainer>
   );
-};
+});
+MultiOutcomePriceChart.displayName = 'MultiOutcomePriceChart';
 
-// ============== ORDERBOOK DISPLAY ==============
+// ============== ORDERBOOK DISPLAY (memoized) ==============
 
-const OrderbookDisplay = ({ orderbook }: { orderbook: OrderbookData }) => {
-  const bids = (orderbook.bids || []).slice(0, 8);
-  const asks = (orderbook.asks || []).slice(0, 8);
+const OrderbookDisplay = memo(({ orderbook }: { orderbook: OrderbookData }) => {
+  const bids = (orderbook.bids || []).slice(0, 10);
+  const asks = (orderbook.asks || []).slice(0, 10);
 
   const maxSize = Math.max(
     ...bids.map(b => parseFloat(b.size || '0')),
@@ -857,13 +880,14 @@ const OrderbookDisplay = ({ orderbook }: { orderbook: OrderbookData }) => {
           {bids.map((b, i) => {
             const pct = (parseFloat(b.size) / maxSize) * 100;
             return (
-              <div key={i} className="relative flex justify-between px-1 py-[3px] rounded-sm mb-[1px]">
+              <div key={`bid-${i}`} className="relative flex justify-between px-1 py-[3px] rounded-sm mb-[1px]">
                 <div className="absolute inset-0 bg-terminal-green/10 rounded-sm" style={{ width: `${pct}%` }} />
                 <span className="relative text-terminal-green font-mono">${parseFloat(b.price).toFixed(2)}</span>
                 <span className="relative text-muted-foreground font-mono">{parseFloat(b.size).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
               </div>
             );
           })}
+          {bids.length === 0 && <div className="text-center py-2 text-muted-foreground text-[9px]">No bids</div>}
         </div>
         {/* Asks */}
         <div>
@@ -874,13 +898,14 @@ const OrderbookDisplay = ({ orderbook }: { orderbook: OrderbookData }) => {
           {asks.map((a, i) => {
             const pct = (parseFloat(a.size) / maxSize) * 100;
             return (
-              <div key={i} className="relative flex justify-between px-1 py-[3px] rounded-sm mb-[1px]">
+              <div key={`ask-${i}`} className="relative flex justify-between px-1 py-[3px] rounded-sm mb-[1px]">
                 <div className="absolute inset-0 right-0 bg-destructive/10 rounded-sm" style={{ width: `${pct}%`, marginLeft: 'auto' }} />
                 <span className="relative text-destructive font-mono">${parseFloat(a.price).toFixed(2)}</span>
                 <span className="relative text-muted-foreground font-mono">{parseFloat(a.size).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
               </div>
             );
           })}
+          {asks.length === 0 && <div className="text-center py-2 text-muted-foreground text-[9px]">No asks</div>}
         </div>
       </div>
       {spread && (
@@ -890,18 +915,20 @@ const OrderbookDisplay = ({ orderbook }: { orderbook: OrderbookData }) => {
       )}
     </div>
   );
-};
+});
+OrderbookDisplay.displayName = 'OrderbookDisplay';
 
 // ============== SUB COMPONENTS ==============
 
-const StatCard = ({ label, value, color }: { label: string; value: string; color: string }) => (
+const StatCard = memo(({ label, value, color }: { label: string; value: string; color: string }) => (
   <div className="px-4 py-3 border-r border-border/30 last:border-r-0 bg-card/30">
     <div className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
     <div className={`text-lg font-bold ${color}`}>{value}</div>
   </div>
-);
+));
+StatCard.displayName = 'StatCard';
 
-const StatusBadge = ({ status, compact }: { status: 'live' | 'polling' | 'offline'; compact?: boolean }) => {
+const StatusBadge = memo(({ status, compact }: { status: 'live' | 'polling' | 'offline'; compact?: boolean }) => {
   const config = {
     live: { color: 'bg-terminal-green', text: 'text-terminal-green', border: 'border-terminal-green/40', label: 'LIVE' },
     polling: { color: 'bg-terminal-amber', text: 'text-terminal-amber', border: 'border-terminal-amber/40', label: 'POLLING' },
@@ -918,6 +945,7 @@ const StatusBadge = ({ status, compact }: { status: 'live' | 'polling' | 'offlin
       )}
     </div>
   );
-};
+});
+StatusBadge.displayName = 'StatusBadge';
 
 export default PolymarketHub;
