@@ -138,7 +138,7 @@ export const PolymarketService = {
     const limit = 100;
     let hasMore = true;
 
-    while (hasMore && offset < 2000) {
+    while (hasMore) {
       try {
         const result = await callProxy('events', { limit, offset, order: 'volume24hr' });
         if (!result || !Array.isArray(result) || result.length === 0) {
@@ -167,7 +167,7 @@ export const PolymarketService = {
     const limit = 100;
     let hasMore = true;
 
-    while (hasMore && offset < 2000) {
+    while (hasMore) {
       try {
         const result = await callProxy('markets', { limit, offset, order: 'volume24hr' });
         if (!result || !Array.isArray(result) || result.length === 0) {
