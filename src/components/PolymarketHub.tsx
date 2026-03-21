@@ -3,7 +3,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, RotateCcw, Search, TrendingUp, BarChart3, Wifi, Flame, Grid3X3 } from 'lucide-react';
+import { Loader2, RotateCcw, Search, TrendingUp, TrendingDown, BarChart3, Wifi, Grid3X3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { PolymarketService, PolymarketEvent, PolymarketMarket, PriceHistoryPoint, OrderbookData, TradeData } from '@/services/PolymarketService';
 import { polymarketWS, PolymarketBookUpdate, PolymarketLastTrade } from '@/services/PolymarketWebSocketService';
@@ -16,8 +16,6 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 // ============ CONSTANTS ============
 
 const MAIN_TABS = ['TRENDING', 'POLITICS', 'CRYPTO', 'SPORTS', 'FINANCE', 'AI & TECH'];
-const VIEW_MODES = ['LIST', 'HEATMAP'] as const;
-
 const TAB_TO_TAG: Record<string, string | undefined> = {
   TRENDING: undefined, POLITICS: 'politics', CRYPTO: 'crypto',
   SPORTS: 'sports', FINANCE: 'finance', 'AI & TECH': 'ai',
@@ -75,7 +73,7 @@ const PolymarketHub = () => {
   const [selectedMarket, setSelectedMarket] = useState<PolymarketMarket | null>(null);
   const [activeTab, setActiveTab] = useState('TRENDING');
   const [activeSubTag, setActiveSubTag] = useState('All');
-  const [viewMode, setViewMode] = useState<'LIST' | 'HEATMAP'>('LIST');
+  const [viewMode, setViewMode] = useState<'LIST' | 'HEATMAP' | 'GAINERS'>('LIST');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([]);
@@ -93,6 +91,9 @@ const PolymarketHub = () => {
   const [polledTrades, setPolledTrades] = useState<PolymarketLastTrade[]>([]);
   const [pollingActive, setPollingActive] = useState(false);
   const [priceTickCounter, setPriceTickCounter] = useState(0);
+
+  // Live order ticker tape
+  const [tickerTrades, setTickerTrades] = useState<(PolymarketLastTrade & { title?: string })[]>([]);
 
   const obPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tradePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -160,6 +161,8 @@ const PolymarketHub = () => {
 
     const unsubTrade = polymarketWS.onTrade('ALL', (data) => {
       liveTradesRef.current = [data, ...liveTradesRef.current].slice(0, 100);
+      // Add to ticker tape
+      setTickerTrades(prev => [data, ...prev].slice(0, 30));
       const sm = selectedMarketRef.current;
       if (sm) {
         const outcomes = PolymarketService.parseOutcomes(sm);
@@ -298,7 +301,6 @@ const PolymarketHub = () => {
   const totalVol24h = useMemo(() => events.reduce((s, e) => s + (e.volume24hr || 0), 0), [events]);
   const totalLiquidity = useMemo(() => events.reduce((s, e) => s + (e.liquidity || 0), 0), [events]);
 
-  // All sub-tag names computed from data
   const subTags = useMemo(() => {
     const cats = new Set<string>();
     const active = events.filter(e => e.active && !e.closed);
@@ -309,7 +311,6 @@ const PolymarketHub = () => {
   const displayEvents = useMemo(() => {
     let filtered = events.filter(e => e.active && !e.closed);
     if (activeSubTag !== 'All') filtered = filtered.filter(e => categorizeEvent(e) === activeSubTag);
-    // Sort: volume desc
     return filtered.sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0));
   }, [events, activeSubTag]);
 
@@ -323,13 +324,23 @@ const PolymarketHub = () => {
     return counts;
   }, [events]);
 
-  // Top movers (highest volume24hr)
-  const topMovers = useMemo(() =>
-    [...events]
-      .filter(e => e.active && !e.closed && e.volume24hr > 0)
-      .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
-      .slice(0, 5),
-  [events]);
+  // Top gainers & losers by probability
+  const { topGainers, topLosers } = useMemo(() => {
+    const withPrice = events
+      .filter(e => e.active && !e.closed && e.markets?.length > 0)
+      .map(e => {
+        const m = e.markets[0];
+        const { yesPrice } = getLivePrice(m);
+        return { event: e, market: m, yesPrice, pct: Math.round(yesPrice * 100), vol: e.volume24hr || 0 };
+      })
+      .filter(e => e.pct > 0 && e.pct < 100);
+
+    const sorted = [...withPrice].sort((a, b) => b.pct - a.pct);
+    return {
+      topGainers: sorted.filter(e => e.pct >= 50).slice(0, 10),
+      topLosers: sorted.filter(e => e.pct < 50).sort((a, b) => a.pct - b.pct).slice(0, 10),
+    };
+  }, [events, getLivePrice]);
 
   const handleSelectEvent = useCallback((event: PolymarketEvent) => {
     setSelectedEvent(event);
@@ -339,7 +350,7 @@ const PolymarketHub = () => {
   // ============ RENDER ============
   return (
     <div className="h-full flex flex-col bg-background text-foreground overflow-hidden">
-      {/* Main Tabs + View Mode */}
+      {/* Tab Bar + Controls */}
       <div className="flex items-center border-b border-border bg-card">
         <div className="flex-1 flex overflow-x-auto">
           {MAIN_TABS.map(tab => (
@@ -353,16 +364,13 @@ const PolymarketHub = () => {
           ))}
         </div>
         <div className="flex items-center gap-2 px-3 shrink-0">
-          {/* View mode toggle */}
           <div className="flex border border-border rounded overflow-hidden">
-            <button onClick={() => setViewMode('LIST')}
-              className={`px-2 py-1 text-[9px] ${viewMode === 'LIST' ? 'bg-terminal-green/20 text-terminal-green' : 'text-muted-foreground hover:text-foreground'}`}>
-              ☰ List
-            </button>
-            <button onClick={() => setViewMode('HEATMAP')}
-              className={`px-2 py-1 text-[9px] ${viewMode === 'HEATMAP' ? 'bg-terminal-green/20 text-terminal-green' : 'text-muted-foreground hover:text-foreground'}`}>
-              <Grid3X3 className="w-3 h-3 inline mr-1" />Map
-            </button>
+            {(['LIST', 'GAINERS', 'HEATMAP'] as const).map(mode => (
+              <button key={mode} onClick={() => setViewMode(mode)}
+                className={`px-2 py-1 text-[9px] ${viewMode === mode ? 'bg-terminal-green/20 text-terminal-green' : 'text-muted-foreground hover:text-foreground'}`}>
+                {mode === 'LIST' ? '☰ List' : mode === 'GAINERS' ? '📊 Movers' : <><Grid3X3 className="w-3 h-3 inline mr-0.5" />Map</>}
+              </button>
+            ))}
           </div>
           <StatusBadge status={dataStatus} />
           <div className="flex items-center gap-1">
@@ -385,6 +393,9 @@ const PolymarketHub = () => {
         <StatCard label="WS STREAMS" value={polymarketWS.getSubscribedCount().toString()} color="text-terminal-cyan" />
       </div>
 
+      {/* Live Order Ticker Tape */}
+      <OrderTickerTape trades={tickerTrades} />
+
       {/* Sub Tags */}
       <div className="flex gap-1.5 px-3 py-2 border-b border-border bg-card/50 overflow-x-auto">
         {subTags.map(tag => (
@@ -399,27 +410,6 @@ const PolymarketHub = () => {
         ))}
       </div>
 
-      {/* Top Movers Bar */}
-      {topMovers.length > 0 && viewMode === 'LIST' && (
-        <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-card/20 overflow-x-auto">
-          <span className="text-[9px] text-terminal-amber font-bold flex items-center gap-1 shrink-0">
-            <Flame className="w-3 h-3" /> HOT
-          </span>
-          {topMovers.map(e => {
-            const firstMkt = e.markets?.[0];
-            const pct = firstMkt ? Math.round(getLivePrice(firstMkt).yesPrice * 100) : 0;
-            return (
-              <button key={e.id} onClick={() => handleSelectEvent(e)}
-                className="text-[9px] text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap shrink-0">
-                <span className="text-foreground font-medium">{e.title.slice(0, 30)}{e.title.length > 30 ? '…' : ''}</span>
-                <span className="text-terminal-green ml-1">{pct}%</span>
-                <span className="text-muted-foreground ml-1">{PolymarketService.formatVolume(e.volume24hr || 0)}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       {/* Main Content */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
@@ -428,12 +418,12 @@ const PolymarketHub = () => {
         </div>
       ) : viewMode === 'HEATMAP' ? (
         <div className="flex-1 min-h-0 overflow-hidden">
-          <PolymarketHeatmap
-            events={displayEvents}
-            onSelectEvent={handleSelectEvent}
-            selectedEventId={selectedEvent?.id}
-            getLivePrice={getLivePrice}
-          />
+          <PolymarketHeatmap events={displayEvents} onSelectEvent={handleSelectEvent}
+            selectedEventId={selectedEvent?.id} getLivePrice={getLivePrice} />
+        </div>
+      ) : viewMode === 'GAINERS' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <TopMoversView gainers={topGainers} losers={topLosers} onSelect={handleSelectEvent} selectedId={selectedEvent?.id} />
         </div>
       ) : (
         <div className="flex-1 flex min-h-0 overflow-hidden">
@@ -486,6 +476,113 @@ const PolymarketHub = () => {
     </div>
   );
 };
+
+// ============ ORDER TICKER TAPE ============
+
+const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { title?: string })[] }) => {
+  if (trades.length === 0) return null;
+  return (
+    <div className="border-b border-border bg-card/50 overflow-hidden h-6 relative">
+      <div className="flex items-center gap-6 animate-ticker absolute whitespace-nowrap h-full">
+        {trades.concat(trades).map((t, i) => {
+          const isBuy = t.side === 'BUY';
+          const price = parseFloat(t.price || '0');
+          const size = parseFloat(t.size || '0');
+          const pct = Math.round(price * 100);
+          return (
+            <span key={`${t.timestamp}-${i}`} className="flex items-center gap-1.5 text-[10px] shrink-0">
+              <span className={`font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>
+                {isBuy ? '▲' : '▼'}
+              </span>
+              <span className="text-muted-foreground font-mono">{pct}¢</span>
+              <span className="text-foreground/60">×{size > 1000 ? `${(size / 1000).toFixed(1)}K` : size.toFixed(0)}</span>
+              <span className="text-border">│</span>
+            </span>
+          );
+        })}
+      </div>
+      <style>{`
+        @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .animate-ticker { animation: ticker 30s linear infinite; }
+        .animate-ticker:hover { animation-play-state: paused; }
+      `}</style>
+    </div>
+  );
+});
+OrderTickerTape.displayName = 'OrderTickerTape';
+
+// ============ TOP MOVERS VIEW ============
+
+const TopMoversView = memo(({ gainers, losers, onSelect, selectedId }: {
+  gainers: { event: PolymarketEvent; pct: number; vol: number }[];
+  losers: { event: PolymarketEvent; pct: number; vol: number }[];
+  onSelect: (e: PolymarketEvent) => void;
+  selectedId?: string;
+}) => (
+  <div className="flex-1 grid grid-cols-2 min-h-0 overflow-hidden">
+    <div className="border-r border-border flex flex-col">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-terminal-green/5">
+        <ArrowUpRight className="w-4 h-4 text-terminal-green" />
+        <span className="text-[11px] font-bold text-terminal-green tracking-wider">TOP GAINERS — HIGHEST PROBABILITY</span>
+      </div>
+      <ScrollArea className="flex-1">
+        <div className="divide-y divide-border/20">
+          {gainers.map((g, i) => (
+            <MoverRow key={g.event.id} rank={i + 1} event={g.event} pct={g.pct} vol={g.vol}
+              isGainer onClick={() => onSelect(g.event)} isSelected={selectedId === g.event.id} />
+          ))}
+          {gainers.length === 0 && <div className="p-6 text-center text-xs text-muted-foreground">No data</div>}
+        </div>
+      </ScrollArea>
+    </div>
+    <div className="flex flex-col">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-destructive/5">
+        <ArrowDownRight className="w-4 h-4 text-destructive" />
+        <span className="text-[11px] font-bold text-destructive tracking-wider">TOP LOSERS — LOWEST PROBABILITY</span>
+      </div>
+      <ScrollArea className="flex-1">
+        <div className="divide-y divide-border/20">
+          {losers.map((l, i) => (
+            <MoverRow key={l.event.id} rank={i + 1} event={l.event} pct={l.pct} vol={l.vol}
+              isGainer={false} onClick={() => onSelect(l.event)} isSelected={selectedId === l.event.id} />
+          ))}
+          {losers.length === 0 && <div className="p-6 text-center text-xs text-muted-foreground">No data</div>}
+        </div>
+      </ScrollArea>
+    </div>
+  </div>
+));
+TopMoversView.displayName = 'TopMoversView';
+
+const MoverRow = memo(({ rank, event, pct, vol, isGainer, onClick, isSelected }: {
+  rank: number; event: PolymarketEvent; pct: number; vol: number;
+  isGainer: boolean; onClick: () => void; isSelected: boolean;
+}) => (
+  <div onClick={onClick}
+    className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
+      isSelected ? 'bg-terminal-amber/5' : 'hover:bg-muted/30'
+    }`}>
+    <span className="text-[11px] font-bold text-muted-foreground w-5 text-right">{rank}</span>
+    {event.image && (
+      <img src={event.image} alt="" className="w-7 h-7 rounded object-cover shrink-0"
+        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+    )}
+    <div className="flex-1 min-w-0">
+      <div className="text-[11px] font-semibold text-foreground truncate">{event.title}</div>
+      <div className="text-[9px] text-muted-foreground">{PolymarketService.formatVolume(vol)} vol</div>
+    </div>
+    <div className="flex items-center gap-1.5">
+      <div className={`w-16 h-2 rounded-full bg-muted/50 overflow-hidden`}>
+        <div className={`h-full rounded-full ${isGainer ? 'bg-terminal-green' : 'bg-destructive'}`}
+          style={{ width: `${pct}%` }} />
+      </div>
+      <span className={`text-sm font-black min-w-[45px] text-right ${isGainer ? 'text-terminal-green' : 'text-destructive'}`}>
+        {pct}%
+      </span>
+    </div>
+  </div>
+));
+MoverRow.displayName = 'MoverRow';
 
 // ============ EVENT CARD ============
 
@@ -616,7 +713,6 @@ const EventDetailView = memo(({
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Event Header */}
         <div className="flex items-start gap-3">
           {event.image && (
             <img src={event.image} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
@@ -635,7 +731,6 @@ const EventDetailView = memo(({
           </div>
         </div>
 
-        {/* Multi-Outcome Legend */}
         {isMulti && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px]">
             {markets.map((m, i) => {
@@ -652,7 +747,6 @@ const EventDetailView = memo(({
           </div>
         )}
 
-        {/* Price Chart */}
         <div className="border border-border rounded bg-card p-3">
           <div className="text-[10px] text-terminal-amber uppercase tracking-wider mb-2">PRICE HISTORY</div>
           {isMulti && multiPriceHistory.size > 0 ? (
@@ -662,13 +756,11 @@ const EventDetailView = memo(({
           )}
         </div>
 
-        {/* Stats */}
         <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" />{PolymarketService.formatVolume(totalVol)} Vol.</span>
           <span>📅 {endDate || 'Open'}</span>
         </div>
 
-        {/* Outcome Rows */}
         <div className="border border-border rounded overflow-hidden">
           {markets.map(m => {
             const { yesPrice } = getLivePrice(m);
