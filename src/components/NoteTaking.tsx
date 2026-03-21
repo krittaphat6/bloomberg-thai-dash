@@ -224,16 +224,14 @@ export default function NoteTaking() {
   }, []);
 
   const autoSaveNote = useCallback((noteId: string, updates: Partial<Note>) => {
-    if (autoSaveTimeout) {
-      clearTimeout(autoSaveTimeout);
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
     }
-    
-    const timeout = setTimeout(() => {
+    autoSaveTimeoutRef.current = setTimeout(() => {
       updateNote(noteId, updates);
+      autoSaveTimeoutRef.current = null;
     }, 1000);
-    
-    setAutoSaveTimeout(timeout);
-  }, [autoSaveTimeout, updateNote]);
+  }, [updateNote]);
 
   if (!loaded) {
     return (
