@@ -138,7 +138,7 @@ export default function NoteTaking() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingNote, setEditingNote] = useState<Partial<Note>>({});
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
-  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load spreadsheets from localStorage
   useEffect(() => {
