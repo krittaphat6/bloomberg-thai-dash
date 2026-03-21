@@ -1,5 +1,6 @@
 import { memo, useMemo, useCallback } from 'react';
 import { PolymarketEvent, PolymarketService } from '@/services/PolymarketService';
+import { PolymarketMarket } from '@/services/PolymarketService';
 
 interface Props {
   events: PolymarketEvent[];
@@ -15,10 +16,8 @@ interface TreemapItem {
   category: string;
 }
 
-// Simple treemap layout algorithm (squarified-like)
 function layoutTreemap(items: TreemapItem[], width: number, height: number): (TreemapItem & { x: number; y: number; w: number; h: number })[] {
   if (items.length === 0 || width <= 0 || height <= 0) return [];
-
   const totalVol = items.reduce((s, i) => s + i.volume, 0);
   if (totalVol <= 0) return [];
 
@@ -29,8 +28,6 @@ function layoutTreemap(items: TreemapItem[], width: number, height: number): (Tr
   while (remaining.length > 0) {
     const isHorizontal = w >= h;
     const totalRemaining = remaining.reduce((s, i) => s + i.volume, 0);
-    
-    // Take items for this row
     let row: TreemapItem[] = [];
     let rowVol = 0;
     const target = totalRemaining * (isHorizontal ? h : w) / (isHorizontal ? w : h) * 0.4;
@@ -50,7 +47,6 @@ function layoutTreemap(items: TreemapItem[], width: number, height: number): (Tr
     for (const item of row) {
       const itemFraction = item.volume / rowVol;
       const itemSize = (isHorizontal ? h : w) * itemFraction;
-
       result.push({
         ...item,
         x: isHorizontal ? x : x + offset,
@@ -61,47 +57,32 @@ function layoutTreemap(items: TreemapItem[], width: number, height: number): (Tr
       offset += itemSize;
     }
 
-    if (isHorizontal) {
-      x += rowSize;
-      w -= rowSize;
-    } else {
-      y += rowSize;
-      h -= rowSize;
-    }
+    if (isHorizontal) { x += rowSize; w -= rowSize; }
+    else { y += rowSize; h -= rowSize; }
   }
-
   return result;
 }
 
-function getHeatmapColor(yesPrice: number): string {
-  // Color based on probability: high prob = green, low = red, mid = neutral
-  if (yesPrice >= 0.8) return 'hsl(var(--terminal-green))';
-  if (yesPrice >= 0.6) return 'hsl(142, 60%, 35%)';
-  if (yesPrice >= 0.4) return 'hsl(45, 50%, 35%)';
-  if (yesPrice >= 0.2) return 'hsl(0, 40%, 35%)';
-  return 'hsl(0, 60%, 30%)';
+// TradingView-style color gradient: deep red → red → yellow → green → deep green
+function getTvColor(yesPrice: number): string {
+  if (yesPrice >= 0.85) return '#089981';
+  if (yesPrice >= 0.7) return '#26a69a';
+  if (yesPrice >= 0.55) return '#4caf50';
+  if (yesPrice >= 0.45) return '#787b86';
+  if (yesPrice >= 0.3) return '#f44336';
+  if (yesPrice >= 0.15) return '#ef5350';
+  return '#d32f2f';
 }
 
-function getHeatmapBg(yesPrice: number): string {
-  if (yesPrice >= 0.8) return 'hsla(var(--terminal-green), 0.25)';
-  if (yesPrice >= 0.6) return 'hsla(142, 60%, 35%, 0.2)';
-  if (yesPrice >= 0.4) return 'hsla(45, 50%, 35%, 0.15)';
-  if (yesPrice >= 0.2) return 'hsla(0, 40%, 35%, 0.15)';
-  return 'hsla(0, 60%, 30%, 0.2)';
+function getTvBg(yesPrice: number): string {
+  if (yesPrice >= 0.85) return 'rgba(8,153,129,0.35)';
+  if (yesPrice >= 0.7) return 'rgba(38,166,154,0.25)';
+  if (yesPrice >= 0.55) return 'rgba(76,175,80,0.18)';
+  if (yesPrice >= 0.45) return 'rgba(120,123,134,0.15)';
+  if (yesPrice >= 0.3) return 'rgba(244,67,54,0.18)';
+  if (yesPrice >= 0.15) return 'rgba(239,83,80,0.25)';
+  return 'rgba(211,47,47,0.35)';
 }
-
-const CATEGORY_COLORS: Record<string, string> = {
-  'Elections': 'hsl(210, 70%, 50%)',
-  'Fed & Rates': 'hsl(45, 80%, 50%)',
-  'Bitcoin': 'hsl(35, 90%, 55%)',
-  'Geopolitics': 'hsl(0, 60%, 50%)',
-  'AI & Tech': 'hsl(270, 60%, 55%)',
-  'Sports': 'hsl(142, 50%, 45%)',
-  'Regulation': 'hsl(190, 60%, 45%)',
-  'Earnings': 'hsl(320, 50%, 50%)',
-  'Entertainment': 'hsl(280, 50%, 55%)',
-  'Other': 'hsl(220, 20%, 45%)',
-};
 
 const CATEGORY_MAP: Record<string, string[]> = {
   'Elections': ['election', 'president', 'governor', 'senate', 'congress', 'vote', 'nominee', 'primary', 'democrat', 'republican', 'netanyahu', 'trudeau', 'modi', 'macron', 'starmer'],
@@ -130,21 +111,15 @@ const PolymarketHeatmap = memo(({ events, onSelectEvent, selectedEventId, getLiv
     return events
       .filter(e => e.active && !e.closed && (e.volume24hr || 0) > 0)
       .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
-      .slice(0, 80) // Top 80 by volume for readability
+      .slice(0, 80)
       .map(event => {
         const markets = event.markets || [];
         const firstMarket = markets[0];
         const yesPrice = firstMarket ? getLivePrice(firstMarket).yesPrice : 0.5;
-        return {
-          event,
-          volume: event.volume24hr || 1,
-          yesPrice,
-          category: categorize(event),
-        };
+        return { event, volume: event.volume24hr || 1, yesPrice, category: categorize(event) };
       });
   }, [events, getLivePrice]);
 
-  // Group by category for section headers
   const categoryGroups = useMemo(() => {
     const groups = new Map<string, TreemapItem[]>();
     for (const item of items) {
@@ -159,96 +134,81 @@ const PolymarketHeatmap = memo(({ events, onSelectEvent, selectedEventId, getLiv
     });
   }, [items]);
 
-  const handleClick = useCallback((event: PolymarketEvent) => {
-    onSelectEvent(event);
-  }, [onSelectEvent]);
+  const handleClick = useCallback((event: PolymarketEvent) => { onSelectEvent(event); }, [onSelectEvent]);
 
-  // Full treemap layout
   const containerWidth = 1200;
   const containerHeight = 600;
   const layoutItems = useMemo(() => layoutTreemap(items, containerWidth, containerHeight), [items]);
 
   return (
     <div className="flex flex-col h-full">
-      {/* Category legend */}
-      <div className="flex flex-wrap gap-2 px-3 py-2 border-b border-border bg-card/30">
-        {categoryGroups.map(([cat, catItems]) => (
-          <div key={cat} className="flex items-center gap-1 text-[9px]">
-            <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: CATEGORY_COLORS[cat] || CATEGORY_COLORS['Other'] }} />
-            <span className="text-muted-foreground">{cat}</span>
-            <span className="text-foreground font-bold">({catItems.length})</span>
-          </div>
-        ))}
+      {/* TradingView-style legend */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-card/50">
+        <div className="flex flex-wrap gap-3">
+          {categoryGroups.map(([cat, catItems]) => (
+            <div key={cat} className="flex items-center gap-1.5 text-[10px]">
+              <span className="text-foreground font-semibold">{cat}</span>
+              <span className="text-muted-foreground">({catItems.length})</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+          <span>{items.length} markets</span>
+        </div>
       </div>
 
       {/* Treemap */}
-      <div className="flex-1 p-2 overflow-hidden">
+      <div className="flex-1 p-1 overflow-hidden">
         <div className="relative w-full h-full" style={{ minHeight: 400 }}>
           <svg width="100%" height="100%" viewBox={`0 0 ${containerWidth} ${containerHeight}`} preserveAspectRatio="xMidYMid meet">
-            {layoutItems.map((item, i) => {
+            {layoutItems.map((item) => {
               const pct = Math.round(item.yesPrice * 100);
               const vol = PolymarketService.formatVolume(item.volume);
               const isSelected = selectedEventId === item.event.id;
-              const catColor = CATEGORY_COLORS[item.category] || CATEGORY_COLORS['Other'];
-              const showLabel = item.w > 60 && item.h > 35;
-              const showVol = item.w > 80 && item.h > 50;
+              const color = getTvColor(item.yesPrice);
+              const bg = getTvBg(item.yesPrice);
+              const showLabel = item.w > 55 && item.h > 30;
+              const showVol = item.w > 75 && item.h > 45;
               const title = item.event.title.length > 40 && item.w < 150
-                ? item.event.title.slice(0, 35) + '...'
+                ? item.event.title.slice(0, 30) + '…'
                 : item.event.title.length > 60
-                  ? item.event.title.slice(0, 55) + '...'
+                  ? item.event.title.slice(0, 50) + '…'
                   : item.event.title;
 
               return (
                 <g key={item.event.id} onClick={() => handleClick(item.event)} style={{ cursor: 'pointer' }}>
                   <rect
-                    x={item.x + 1} y={item.y + 1}
-                    width={Math.max(item.w - 2, 0)} height={Math.max(item.h - 2, 0)}
-                    rx={3}
-                    fill={isSelected ? 'hsla(var(--terminal-amber), 0.15)' : getHeatmapBg(item.yesPrice)}
-                    stroke={isSelected ? 'hsl(var(--terminal-amber))' : catColor}
+                    x={item.x + 0.5} y={item.y + 0.5}
+                    width={Math.max(item.w - 1, 0)} height={Math.max(item.h - 1, 0)}
+                    rx={2} fill={bg}
+                    stroke={isSelected ? 'hsl(var(--terminal-amber))' : 'hsl(var(--border))'}
                     strokeWidth={isSelected ? 2 : 0.5}
-                    strokeOpacity={isSelected ? 1 : 0.4}
-                  />
-                  {/* Category stripe */}
-                  <rect
-                    x={item.x + 1} y={item.y + 1}
-                    width={Math.max(item.w - 2, 0)} height={3}
-                    rx={3}
-                    fill={catColor}
-                    opacity={0.7}
+                    strokeOpacity={isSelected ? 1 : 0.6}
                   />
                   {showLabel && (
                     <>
+                      {/* Title */}
                       <text
-                        x={item.x + item.w / 2} y={item.y + item.h / 2 - (showVol ? 8 : 0)}
+                        x={item.x + item.w / 2} y={item.y + item.h / 2 - (showVol ? 10 : 2)}
                         textAnchor="middle" dominantBaseline="central"
                         fill="hsl(var(--foreground))"
                         fontSize={item.w > 200 ? 11 : item.w > 120 ? 9 : 7}
-                        fontWeight="600"
-                        fontFamily="inherit"
-                      >
-                        {title}
-                      </text>
+                        fontWeight="500" opacity={0.9}
+                      >{title}</text>
+                      {/* Percentage — large bold, TradingView style */}
                       <text
-                        x={item.x + item.w / 2} y={item.y + item.h / 2 + (showVol ? 6 : 12)}
+                        x={item.x + item.w / 2} y={item.y + item.h / 2 + (showVol ? 5 : 12)}
                         textAnchor="middle" dominantBaseline="central"
-                        fill={getHeatmapColor(item.yesPrice)}
-                        fontSize={item.w > 200 ? 14 : item.w > 120 ? 11 : 9}
-                        fontWeight="800"
-                        fontFamily="inherit"
-                      >
-                        {pct > 0 ? `${pct}%` : '<1%'}
-                      </text>
+                        fill={color}
+                        fontSize={item.w > 200 ? 18 : item.w > 120 ? 14 : 11}
+                        fontWeight="900"
+                      >{pct > 0 ? `${pct}%` : '<1%'}</text>
                       {showVol && (
                         <text
                           x={item.x + item.w / 2} y={item.y + item.h / 2 + 22}
                           textAnchor="middle" dominantBaseline="central"
-                          fill="hsl(var(--muted-foreground))"
-                          fontSize={8}
-                          fontFamily="inherit"
-                        >
-                          {vol}
-                        </text>
+                          fill="hsl(var(--muted-foreground))" fontSize={8} opacity={0.7}
+                        >{vol}</text>
                       )}
                     </>
                   )}
@@ -259,15 +219,19 @@ const PolymarketHeatmap = memo(({ events, onSelectEvent, selectedEventId, getLiv
         </div>
       </div>
 
-      {/* Volume color legend */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-t border-border bg-card/30 text-[9px] text-muted-foreground">
+      {/* TradingView-style color scale */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-t border-border bg-card/50 text-[9px] text-muted-foreground">
         <span>Size = 24h Volume</span>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm" style={{ backgroundColor: 'hsl(0, 60%, 30%)' }} /> {'<20%'}</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm" style={{ backgroundColor: 'hsl(45, 50%, 35%)' }} /> 40-60%</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm" style={{ backgroundColor: 'hsl(var(--terminal-green))' }} /> {'>80%'}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-[8px]">Low</span>
+          <div className="flex h-2.5 rounded overflow-hidden">
+            {['#d32f2f', '#ef5350', '#f44336', '#787b86', '#4caf50', '#26a69a', '#089981'].map((c, i) => (
+              <div key={i} className="w-5 h-full" style={{ backgroundColor: c }} />
+            ))}
+          </div>
+          <span className="text-[8px]">High</span>
         </div>
-        <span>{items.length} markets shown</span>
+        <span>Probability</span>
       </div>
     </div>
   );

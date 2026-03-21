@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -138,7 +138,7 @@ export default function NoteTaking() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingNote, setEditingNote] = useState<Partial<Note>>({});
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
-  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load spreadsheets from localStorage
   useEffect(() => {
@@ -224,16 +224,14 @@ export default function NoteTaking() {
   }, []);
 
   const autoSaveNote = useCallback((noteId: string, updates: Partial<Note>) => {
-    if (autoSaveTimeout) {
-      clearTimeout(autoSaveTimeout);
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
     }
-    
-    const timeout = setTimeout(() => {
+    autoSaveTimeoutRef.current = setTimeout(() => {
       updateNote(noteId, updates);
+      autoSaveTimeoutRef.current = null;
     }, 1000);
-    
-    setAutoSaveTimeout(timeout);
-  }, [autoSaveTimeout, updateNote]);
+  }, [updateNote]);
 
   if (!loaded) {
     return (
