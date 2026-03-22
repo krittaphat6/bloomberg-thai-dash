@@ -440,6 +440,10 @@ const PolymarketHub = () => {
         <div className="flex-1 min-h-0 overflow-hidden">
           <TopMoversView gainers={topGainers} losers={topLosers} onSelect={handleSelectEvent} selectedId={selectedEvent?.id} />
         </div>
+      ) : viewMode === 'TICKER' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <OrderTickerFullView trades={tickerTrades} marketTitleCache={marketTitleCacheRef.current} />
+        </div>
       ) : (
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Left: Event List */}
