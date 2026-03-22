@@ -221,7 +221,7 @@ export default function NoteTaking() {
       }
       return prevSelected;
     });
-  }, []);
+  }, [setNotes]);
 
   // Use ref to always access latest updateNote without recreating the debounce
   const updateNoteRef = useRef(updateNote);
