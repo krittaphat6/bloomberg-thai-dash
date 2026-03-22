@@ -73,7 +73,7 @@ const PolymarketHub = () => {
   const [selectedMarket, setSelectedMarket] = useState<PolymarketMarket | null>(null);
   const [activeTab, setActiveTab] = useState('TRENDING');
   const [activeSubTag, setActiveSubTag] = useState('All');
-  const [viewMode, setViewMode] = useState<'LIST' | 'HEATMAP' | 'GAINERS'>('LIST');
+  const [viewMode, setViewMode] = useState<'LIST' | 'HEATMAP' | 'GAINERS' | 'TICKER'>('LIST');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([]);
@@ -177,7 +177,7 @@ const PolymarketHub = () => {
       // Add to ticker tape with market title
       const title = marketTitleCacheRef.current.get(data.asset_id) || '';
       const enriched = { ...data, title };
-      setTickerTrades(prev => [enriched, ...prev].slice(0, 40));
+      setTickerTrades(prev => [enriched, ...prev].slice(0, 200));
       const sm = selectedMarketRef.current;
       if (sm) {
         const outcomes = PolymarketService.parseOutcomes(sm);
@@ -352,8 +352,8 @@ const PolymarketHub = () => {
 
     const sorted = [...withPrice].sort((a, b) => b.pct - a.pct);
     return {
-      topGainers: sorted.filter(e => e.pct >= 50).slice(0, 10),
-      topLosers: sorted.filter(e => e.pct < 50).sort((a, b) => a.pct - b.pct).slice(0, 10),
+      topGainers: sorted.filter(e => e.pct >= 50).slice(0, 100),
+      topLosers: sorted.filter(e => e.pct < 50).sort((a, b) => a.pct - b.pct).slice(0, 100),
     };
   }, [events, getLivePrice]);
 
@@ -380,10 +380,10 @@ const PolymarketHub = () => {
         </div>
         <div className="flex items-center gap-2 px-3 shrink-0">
           <div className="flex border border-border rounded overflow-hidden">
-            {(['LIST', 'GAINERS', 'HEATMAP'] as const).map(mode => (
+            {(['LIST', 'GAINERS', 'TICKER', 'HEATMAP'] as const).map(mode => (
               <button key={mode} onClick={() => setViewMode(mode)}
                 className={`px-2 py-1 text-[9px] ${viewMode === mode ? 'bg-terminal-green/20 text-terminal-green' : 'text-muted-foreground hover:text-foreground'}`}>
-                {mode === 'LIST' ? '☰ List' : mode === 'GAINERS' ? '📊 Movers' : <><Grid3X3 className="w-3 h-3 inline mr-0.5" />Map</>}
+                {mode === 'LIST' ? '☰ List' : mode === 'GAINERS' ? '📊 Movers' : mode === 'TICKER' ? '⚡ Ticker' : <><Grid3X3 className="w-3 h-3 inline mr-0.5" />Map</>}
               </button>
             ))}
           </div>
@@ -440,6 +440,10 @@ const PolymarketHub = () => {
         <div className="flex-1 min-h-0 overflow-hidden">
           <TopMoversView gainers={topGainers} losers={topLosers} onSelect={handleSelectEvent} selectedId={selectedEvent?.id} />
         </div>
+      ) : viewMode === 'TICKER' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <OrderTickerFullView trades={tickerTrades} marketTitleCache={marketTitleCacheRef.current} />
+        </div>
       ) : (
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Left: Event List */}
@@ -492,7 +496,7 @@ const PolymarketHub = () => {
   );
 };
 
-// ============ ORDER TICKER TAPE ============
+// ============ ORDER TICKER TAPE (horizontal bar) ============
 
 const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { title?: string })[] }) => {
   if (trades.length === 0) return (
@@ -509,23 +513,17 @@ const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { tit
       <div className="flex items-center gap-0 animate-ticker absolute whitespace-nowrap h-full will-change-transform">
         {doubled.map((t, i) => {
           const isBuy = t.side === 'BUY';
-          const price = parseFloat(t.price || '0');
+          const pct = Math.round(parseFloat(t.price || '0') * 100);
           const size = parseFloat(t.size || '0');
-          const pct = Math.round(price * 100);
           const title = t.title ? (t.title.length > 22 ? t.title.slice(0, 20) + '…' : t.title) : '';
           const sizeStr = size >= 1000 ? `${(size / 1000).toFixed(1)}K` : size.toFixed(0);
-
           return (
             <span key={`${t.timestamp}-${i}`}
               className={`flex items-center gap-1 text-[10px] shrink-0 px-2.5 py-0.5 border-r border-border/20 ${
                 isBuy ? 'bg-terminal-green/[0.03]' : 'bg-destructive/[0.03]'
               }`}>
-              <span className={`font-black text-[11px] ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>
-                {isBuy ? '▲' : '▼'}
-              </span>
-              {title && (
-                <span className="text-foreground/70 font-medium max-w-[140px] truncate">{title}</span>
-              )}
+              <span className={`font-black text-[11px] ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{isBuy ? '▲' : '▼'}</span>
+              {title && <span className="text-foreground/70 font-medium max-w-[140px] truncate">{title}</span>}
               <span className={`font-mono font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{pct}¢</span>
               <span className="text-muted-foreground font-mono">×{sizeStr}</span>
             </span>
@@ -533,23 +531,104 @@ const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { tit
         })}
       </div>
       <style>{`
-        @keyframes ticker {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-ticker {
-          animation: ticker 40s linear infinite;
-        }
-        .animate-ticker:hover {
-          animation-play-state: paused;
-        }
+        @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .animate-ticker { animation: ticker 40s linear infinite; }
+        .animate-ticker:hover { animation-play-state: paused; }
       `}</style>
     </div>
   );
 });
 OrderTickerTape.displayName = 'OrderTickerTape';
 
-// ============ TOP MOVERS VIEW ============
+// ============ ORDER TICKER FULL VIEW (vertical, like stock ticker) ============
+
+const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
+  trades: (PolymarketLastTrade & { title?: string })[];
+  marketTitleCache: Map<string, string>;
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to top on new trades
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, [trades.length]);
+
+  const displayTrades = trades.slice(0, 200);
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/50">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold text-terminal-amber tracking-wider">⚡ LIVE ORDER FLOW</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-terminal-green animate-pulse" />
+          <span className="text-[9px] text-terminal-green">REAL-TIME</span>
+        </div>
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span>{displayTrades.length} orders</span>
+          <span className="text-terminal-green">{displayTrades.filter(t => t.side === 'BUY').length} buys</span>
+          <span className="text-destructive">{displayTrades.filter(t => t.side === 'SELL').length} sells</span>
+        </div>
+      </div>
+
+      {/* Column headers */}
+      <div className="grid grid-cols-[50px_50px_1fr_80px_80px_100px] gap-2 px-4 py-1.5 border-b border-border/50 text-[9px] text-muted-foreground font-bold uppercase tracking-wider bg-card/30">
+        <span>TIME</span>
+        <span>SIDE</span>
+        <span>MARKET</span>
+        <span className="text-right">PRICE</span>
+        <span className="text-right">SIZE</span>
+        <span className="text-right">VALUE</span>
+      </div>
+
+      {/* Trade rows */}
+      <div ref={containerRef} className="flex-1 overflow-y-auto">
+        {displayTrades.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <span className="text-2xl mb-2">⚡</span>
+            <span className="text-xs">Waiting for live orders...</span>
+            <span className="text-[10px] mt-1 text-muted-foreground/50">Orders will appear here in real-time</span>
+          </div>
+        ) : (
+          displayTrades.map((trade, i) => {
+            const isBuy = trade.side === 'BUY';
+            const price = parseFloat(trade.price || '0');
+            const size = parseFloat(trade.size || '0');
+            const pct = Math.round(price * 100);
+            const value = price * size;
+            const title = trade.title || marketTitleCache.get(trade.asset_id) || trade.market?.slice(0, 10) + '…' || 'Unknown';
+            const ts = getTimestampMs(trade.timestamp);
+            const timeStr = ts > 0 ? new Date(ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--';
+            const sizeStr = size >= 1000 ? `${(size / 1000).toFixed(1)}K` : size.toFixed(0);
+            const valStr = value >= 1000 ? `$${(value / 1000).toFixed(1)}K` : `$${value.toFixed(0)}`;
+            const isNew = i < 3;
+
+            return (
+              <div key={`${trade.timestamp}-${trade.asset_id}-${i}`}
+                className={`grid grid-cols-[50px_50px_1fr_80px_80px_100px] gap-2 px-4 py-2 border-b border-border/10 transition-colors ${
+                  isNew ? (isBuy ? 'bg-terminal-green/[0.04]' : 'bg-destructive/[0.04]') : 'hover:bg-muted/20'
+                }`}>
+                <span className="text-[10px] text-muted-foreground font-mono">{timeStr}</span>
+                <span className={`text-[10px] font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>
+                  {isBuy ? '▲ BUY' : '▼ SELL'}
+                </span>
+                <span className="text-[10px] text-foreground truncate font-medium">{title}</span>
+                <span className={`text-[10px] font-mono font-bold text-right ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{pct}¢</span>
+                <span className="text-[10px] font-mono text-muted-foreground text-right">{sizeStr}</span>
+                <span className="text-[10px] font-mono text-terminal-cyan text-right">{valStr}</span>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+});
+OrderTickerFullView.displayName = 'OrderTickerFullView';
+
+// ============ TOP MOVERS VIEW (100 gainers + 100 losers) ============
 
 const TopMoversView = memo(({ gainers, losers, onSelect, selectedId }: {
   gainers: { event: PolymarketEvent; pct: number; vol: number }[];
@@ -559,12 +638,19 @@ const TopMoversView = memo(({ gainers, losers, onSelect, selectedId }: {
 }) => (
   <div className="flex-1 grid grid-cols-2 min-h-0 overflow-hidden">
     <div className="border-r border-border flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-terminal-green/5">
-        <ArrowUpRight className="w-4 h-4 text-terminal-green" />
-        <span className="text-[11px] font-bold text-terminal-green tracking-wider">TOP GAINERS — HIGHEST PROBABILITY</span>
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-terminal-green/5">
+        <div className="flex items-center gap-2">
+          <ArrowUpRight className="w-4 h-4 text-terminal-green" />
+          <span className="text-[11px] font-bold text-terminal-green tracking-wider">TOP GAINERS — HIGHEST PROBABILITY</span>
+        </div>
+        <span className="text-[9px] text-muted-foreground">{gainers.length} markets</span>
+      </div>
+      {/* Column header */}
+      <div className="grid grid-cols-[28px_1fr_60px_55px] gap-2 px-4 py-1 border-b border-border/30 text-[8px] text-muted-foreground font-bold uppercase tracking-wider bg-card/30">
+        <span>#</span><span>MARKET</span><span className="text-right">VOL</span><span className="text-right">PROB</span>
       </div>
       <ScrollArea className="flex-1">
-        <div className="divide-y divide-border/20">
+        <div>
           {gainers.map((g, i) => (
             <MoverRow key={g.event.id} rank={i + 1} event={g.event} pct={g.pct} vol={g.vol}
               isGainer onClick={() => onSelect(g.event)} isSelected={selectedId === g.event.id} />
@@ -574,12 +660,18 @@ const TopMoversView = memo(({ gainers, losers, onSelect, selectedId }: {
       </ScrollArea>
     </div>
     <div className="flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-destructive/5">
-        <ArrowDownRight className="w-4 h-4 text-destructive" />
-        <span className="text-[11px] font-bold text-destructive tracking-wider">TOP LOSERS — LOWEST PROBABILITY</span>
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-destructive/5">
+        <div className="flex items-center gap-2">
+          <ArrowDownRight className="w-4 h-4 text-destructive" />
+          <span className="text-[11px] font-bold text-destructive tracking-wider">TOP LOSERS — LOWEST PROBABILITY</span>
+        </div>
+        <span className="text-[9px] text-muted-foreground">{losers.length} markets</span>
+      </div>
+      <div className="grid grid-cols-[28px_1fr_60px_55px] gap-2 px-4 py-1 border-b border-border/30 text-[8px] text-muted-foreground font-bold uppercase tracking-wider bg-card/30">
+        <span>#</span><span>MARKET</span><span className="text-right">VOL</span><span className="text-right">PROB</span>
       </div>
       <ScrollArea className="flex-1">
-        <div className="divide-y divide-border/20">
+        <div>
           {losers.map((l, i) => (
             <MoverRow key={l.event.id} rank={i + 1} event={l.event} pct={l.pct} vol={l.vol}
               isGainer={false} onClick={() => onSelect(l.event)} isSelected={selectedId === l.event.id} />
@@ -597,26 +689,24 @@ const MoverRow = memo(({ rank, event, pct, vol, isGainer, onClick, isSelected }:
   isGainer: boolean; onClick: () => void; isSelected: boolean;
 }) => (
   <div onClick={onClick}
-    className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
-      isSelected ? 'bg-terminal-amber/5' : 'hover:bg-muted/30'
+    className={`grid grid-cols-[28px_1fr_60px_55px] gap-2 items-center px-4 py-2 cursor-pointer transition-colors border-b border-border/10 ${
+      isSelected ? 'bg-terminal-amber/5' : 'hover:bg-muted/20'
     }`}>
-    <span className="text-[11px] font-bold text-muted-foreground w-5 text-right">{rank}</span>
-    {event.image && (
-      <img src={event.image} alt="" className="w-7 h-7 rounded object-cover shrink-0"
-        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-    )}
-    <div className="flex-1 min-w-0">
-      <div className="text-[11px] font-semibold text-foreground truncate">{event.title}</div>
-      <div className="text-[9px] text-muted-foreground">{PolymarketService.formatVolume(vol)} vol</div>
+    <span className={`text-[10px] font-bold ${rank <= 3 ? 'text-terminal-amber' : 'text-muted-foreground'}`}>{rank}</span>
+    <div className="min-w-0 flex items-center gap-2">
+      {event.image && (
+        <img src={event.image} alt="" className="w-5 h-5 rounded object-cover shrink-0"
+          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+      )}
+      <span className="text-[10px] font-medium text-foreground truncate">{event.title}</span>
     </div>
-    <div className="flex items-center gap-1.5">
-      <div className={`w-16 h-2 rounded-full bg-muted/50 overflow-hidden`}>
+    <span className="text-[9px] text-muted-foreground text-right font-mono">{PolymarketService.formatVolume(vol)}</span>
+    <div className="flex items-center justify-end gap-1">
+      <div className="w-10 h-1.5 rounded-full bg-muted/50 overflow-hidden">
         <div className={`h-full rounded-full ${isGainer ? 'bg-terminal-green' : 'bg-destructive'}`}
           style={{ width: `${pct}%` }} />
       </div>
-      <span className={`text-sm font-black min-w-[45px] text-right ${isGainer ? 'text-terminal-green' : 'text-destructive'}`}>
-        {pct}%
-      </span>
+      <span className={`text-[10px] font-black min-w-[32px] text-right ${isGainer ? 'text-terminal-green' : 'text-destructive'}`}>{pct}%</span>
     </div>
   </div>
 ));
