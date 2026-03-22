@@ -628,7 +628,7 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
 });
 OrderTickerFullView.displayName = 'OrderTickerFullView';
 
-// ============ TOP MOVERS VIEW ============
+// ============ TOP MOVERS VIEW (100 gainers + 100 losers) ============
 
 const TopMoversView = memo(({ gainers, losers, onSelect, selectedId }: {
   gainers: { event: PolymarketEvent; pct: number; vol: number }[];
@@ -638,12 +638,19 @@ const TopMoversView = memo(({ gainers, losers, onSelect, selectedId }: {
 }) => (
   <div className="flex-1 grid grid-cols-2 min-h-0 overflow-hidden">
     <div className="border-r border-border flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-terminal-green/5">
-        <ArrowUpRight className="w-4 h-4 text-terminal-green" />
-        <span className="text-[11px] font-bold text-terminal-green tracking-wider">TOP GAINERS — HIGHEST PROBABILITY</span>
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-terminal-green/5">
+        <div className="flex items-center gap-2">
+          <ArrowUpRight className="w-4 h-4 text-terminal-green" />
+          <span className="text-[11px] font-bold text-terminal-green tracking-wider">TOP GAINERS — HIGHEST PROBABILITY</span>
+        </div>
+        <span className="text-[9px] text-muted-foreground">{gainers.length} markets</span>
+      </div>
+      {/* Column header */}
+      <div className="grid grid-cols-[28px_1fr_60px_55px] gap-2 px-4 py-1 border-b border-border/30 text-[8px] text-muted-foreground font-bold uppercase tracking-wider bg-card/30">
+        <span>#</span><span>MARKET</span><span className="text-right">VOL</span><span className="text-right">PROB</span>
       </div>
       <ScrollArea className="flex-1">
-        <div className="divide-y divide-border/20">
+        <div>
           {gainers.map((g, i) => (
             <MoverRow key={g.event.id} rank={i + 1} event={g.event} pct={g.pct} vol={g.vol}
               isGainer onClick={() => onSelect(g.event)} isSelected={selectedId === g.event.id} />
@@ -653,12 +660,18 @@ const TopMoversView = memo(({ gainers, losers, onSelect, selectedId }: {
       </ScrollArea>
     </div>
     <div className="flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-destructive/5">
-        <ArrowDownRight className="w-4 h-4 text-destructive" />
-        <span className="text-[11px] font-bold text-destructive tracking-wider">TOP LOSERS — LOWEST PROBABILITY</span>
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-destructive/5">
+        <div className="flex items-center gap-2">
+          <ArrowDownRight className="w-4 h-4 text-destructive" />
+          <span className="text-[11px] font-bold text-destructive tracking-wider">TOP LOSERS — LOWEST PROBABILITY</span>
+        </div>
+        <span className="text-[9px] text-muted-foreground">{losers.length} markets</span>
+      </div>
+      <div className="grid grid-cols-[28px_1fr_60px_55px] gap-2 px-4 py-1 border-b border-border/30 text-[8px] text-muted-foreground font-bold uppercase tracking-wider bg-card/30">
+        <span>#</span><span>MARKET</span><span className="text-right">VOL</span><span className="text-right">PROB</span>
       </div>
       <ScrollArea className="flex-1">
-        <div className="divide-y divide-border/20">
+        <div>
           {losers.map((l, i) => (
             <MoverRow key={l.event.id} rank={i + 1} event={l.event} pct={l.pct} vol={l.vol}
               isGainer={false} onClick={() => onSelect(l.event)} isSelected={selectedId === l.event.id} />
@@ -676,26 +689,24 @@ const MoverRow = memo(({ rank, event, pct, vol, isGainer, onClick, isSelected }:
   isGainer: boolean; onClick: () => void; isSelected: boolean;
 }) => (
   <div onClick={onClick}
-    className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
-      isSelected ? 'bg-terminal-amber/5' : 'hover:bg-muted/30'
+    className={`grid grid-cols-[28px_1fr_60px_55px] gap-2 items-center px-4 py-2 cursor-pointer transition-colors border-b border-border/10 ${
+      isSelected ? 'bg-terminal-amber/5' : 'hover:bg-muted/20'
     }`}>
-    <span className="text-[11px] font-bold text-muted-foreground w-5 text-right">{rank}</span>
-    {event.image && (
-      <img src={event.image} alt="" className="w-7 h-7 rounded object-cover shrink-0"
-        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-    )}
-    <div className="flex-1 min-w-0">
-      <div className="text-[11px] font-semibold text-foreground truncate">{event.title}</div>
-      <div className="text-[9px] text-muted-foreground">{PolymarketService.formatVolume(vol)} vol</div>
+    <span className={`text-[10px] font-bold ${rank <= 3 ? 'text-terminal-amber' : 'text-muted-foreground'}`}>{rank}</span>
+    <div className="min-w-0 flex items-center gap-2">
+      {event.image && (
+        <img src={event.image} alt="" className="w-5 h-5 rounded object-cover shrink-0"
+          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+      )}
+      <span className="text-[10px] font-medium text-foreground truncate">{event.title}</span>
     </div>
-    <div className="flex items-center gap-1.5">
-      <div className={`w-16 h-2 rounded-full bg-muted/50 overflow-hidden`}>
+    <span className="text-[9px] text-muted-foreground text-right font-mono">{PolymarketService.formatVolume(vol)}</span>
+    <div className="flex items-center justify-end gap-1">
+      <div className="w-10 h-1.5 rounded-full bg-muted/50 overflow-hidden">
         <div className={`h-full rounded-full ${isGainer ? 'bg-terminal-green' : 'bg-destructive'}`}
           style={{ width: `${pct}%` }} />
       </div>
-      <span className={`text-sm font-black min-w-[45px] text-right ${isGainer ? 'text-terminal-green' : 'text-destructive'}`}>
-        {pct}%
-      </span>
+      <span className={`text-[10px] font-black min-w-[32px] text-right ${isGainer ? 'text-terminal-green' : 'text-destructive'}`}>{pct}%</span>
     </div>
   </div>
 ));
