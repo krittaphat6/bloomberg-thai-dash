@@ -380,10 +380,10 @@ const PolymarketHub = () => {
         </div>
         <div className="flex items-center gap-2 px-3 shrink-0">
           <div className="flex border border-border rounded overflow-hidden">
-            {(['LIST', 'GAINERS', 'HEATMAP'] as const).map(mode => (
+            {(['LIST', 'GAINERS', 'TICKER', 'HEATMAP'] as const).map(mode => (
               <button key={mode} onClick={() => setViewMode(mode)}
                 className={`px-2 py-1 text-[9px] ${viewMode === mode ? 'bg-terminal-green/20 text-terminal-green' : 'text-muted-foreground hover:text-foreground'}`}>
-                {mode === 'LIST' ? '☰ List' : mode === 'GAINERS' ? '📊 Movers' : <><Grid3X3 className="w-3 h-3 inline mr-0.5" />Map</>}
+                {mode === 'LIST' ? '☰ List' : mode === 'GAINERS' ? '📊 Movers' : mode === 'TICKER' ? '⚡ Ticker' : <><Grid3X3 className="w-3 h-3 inline mr-0.5" />Map</>}
               </button>
             ))}
           </div>
