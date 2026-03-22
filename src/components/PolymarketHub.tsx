@@ -177,7 +177,7 @@ const PolymarketHub = () => {
       // Add to ticker tape with market title
       const title = marketTitleCacheRef.current.get(data.asset_id) || '';
       const enriched = { ...data, title };
-      setTickerTrades(prev => [enriched, ...prev].slice(0, 40));
+      setTickerTrades(prev => [enriched, ...prev].slice(0, 200));
       const sm = selectedMarketRef.current;
       if (sm) {
         const outcomes = PolymarketService.parseOutcomes(sm);
