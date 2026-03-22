@@ -94,6 +94,7 @@ const PolymarketHub = () => {
 
   // Live order ticker tape
   const [tickerTrades, setTickerTrades] = useState<(PolymarketLastTrade & { title?: string })[]>([]);
+  const marketTitleCacheRef = useRef<Map<string, string>>(new Map());
 
   const obPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tradePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
