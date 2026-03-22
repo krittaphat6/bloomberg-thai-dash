@@ -73,7 +73,7 @@ const PolymarketHub = () => {
   const [selectedMarket, setSelectedMarket] = useState<PolymarketMarket | null>(null);
   const [activeTab, setActiveTab] = useState('TRENDING');
   const [activeSubTag, setActiveSubTag] = useState('All');
-  const [viewMode, setViewMode] = useState<'LIST' | 'HEATMAP' | 'GAINERS'>('LIST');
+  const [viewMode, setViewMode] = useState<'LIST' | 'HEATMAP' | 'GAINERS' | 'TICKER'>('LIST');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([]);
