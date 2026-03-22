@@ -94,6 +94,7 @@ const PolymarketHub = () => {
 
   // Live order ticker tape
   const [tickerTrades, setTickerTrades] = useState<(PolymarketLastTrade & { title?: string })[]>([]);
+  const marketTitleCacheRef = useRef<Map<string, string>>(new Map());
 
   const obPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tradePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -120,6 +121,18 @@ const PolymarketHub = () => {
       setEvents(Array.isArray(evts) ? evts : []);
       const markets = Array.isArray(mkts) ? mkts : [];
       setAllMarkets(markets);
+
+      // Build title lookup cache from events
+      const titleCache = marketTitleCacheRef.current;
+      for (const evt of (Array.isArray(evts) ? evts : [])) {
+        for (const m of evt.markets || []) {
+          try {
+            const ids: string[] = JSON.parse(m.clobTokenIds || '[]');
+            const label = m.groupItemTitle || m.question || evt.title;
+            ids.forEach(id => { if (id) titleCache.set(id, label); });
+          } catch {}
+        }
+      }
 
       const topMarkets = [...markets]
         .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
@@ -161,8 +174,10 @@ const PolymarketHub = () => {
 
     const unsubTrade = polymarketWS.onTrade('ALL', (data) => {
       liveTradesRef.current = [data, ...liveTradesRef.current].slice(0, 100);
-      // Add to ticker tape
-      setTickerTrades(prev => [data, ...prev].slice(0, 30));
+      // Add to ticker tape with market title
+      const title = marketTitleCacheRef.current.get(data.asset_id) || '';
+      const enriched = { ...data, title };
+      setTickerTrades(prev => [enriched, ...prev].slice(0, 40));
       const sm = selectedMarketRef.current;
       if (sm) {
         const outcomes = PolymarketService.parseOutcomes(sm);
@@ -480,31 +495,54 @@ const PolymarketHub = () => {
 // ============ ORDER TICKER TAPE ============
 
 const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { title?: string })[] }) => {
-  if (trades.length === 0) return null;
+  if (trades.length === 0) return (
+    <div className="border-b border-border bg-card/30 h-7 flex items-center justify-center">
+      <span className="text-[9px] text-muted-foreground/50 animate-pulse">Waiting for live orders...</span>
+    </div>
+  );
+
+  const displayTrades = trades.slice(0, 25);
+  const doubled = displayTrades.concat(displayTrades);
+
   return (
-    <div className="border-b border-border bg-card/50 overflow-hidden h-6 relative">
-      <div className="flex items-center gap-6 animate-ticker absolute whitespace-nowrap h-full">
-        {trades.concat(trades).map((t, i) => {
+    <div className="border-b border-border bg-card/30 overflow-hidden h-7 relative">
+      <div className="flex items-center gap-0 animate-ticker absolute whitespace-nowrap h-full will-change-transform">
+        {doubled.map((t, i) => {
           const isBuy = t.side === 'BUY';
           const price = parseFloat(t.price || '0');
           const size = parseFloat(t.size || '0');
           const pct = Math.round(price * 100);
+          const title = t.title ? (t.title.length > 22 ? t.title.slice(0, 20) + '…' : t.title) : '';
+          const sizeStr = size >= 1000 ? `${(size / 1000).toFixed(1)}K` : size.toFixed(0);
+
           return (
-            <span key={`${t.timestamp}-${i}`} className="flex items-center gap-1.5 text-[10px] shrink-0">
-              <span className={`font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>
+            <span key={`${t.timestamp}-${i}`}
+              className={`flex items-center gap-1 text-[10px] shrink-0 px-2.5 py-0.5 border-r border-border/20 ${
+                isBuy ? 'bg-terminal-green/[0.03]' : 'bg-destructive/[0.03]'
+              }`}>
+              <span className={`font-black text-[11px] ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>
                 {isBuy ? '▲' : '▼'}
               </span>
-              <span className="text-muted-foreground font-mono">{pct}¢</span>
-              <span className="text-foreground/60">×{size > 1000 ? `${(size / 1000).toFixed(1)}K` : size.toFixed(0)}</span>
-              <span className="text-border">│</span>
+              {title && (
+                <span className="text-foreground/70 font-medium max-w-[140px] truncate">{title}</span>
+              )}
+              <span className={`font-mono font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{pct}¢</span>
+              <span className="text-muted-foreground font-mono">×{sizeStr}</span>
             </span>
           );
         })}
       </div>
       <style>{`
-        @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-        .animate-ticker { animation: ticker 30s linear infinite; }
-        .animate-ticker:hover { animation-play-state: paused; }
+        @keyframes ticker {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-ticker {
+          animation: ticker 40s linear infinite;
+        }
+        .animate-ticker:hover {
+          animation-play-state: paused;
+        }
       `}</style>
     </div>
   );
