@@ -223,15 +223,19 @@ export default function NoteTaking() {
     });
   }, []);
 
+  // Use ref to always access latest updateNote without recreating the debounce
+  const updateNoteRef = useRef(updateNote);
+  updateNoteRef.current = updateNote;
+
   const autoSaveNote = useCallback((noteId: string, updates: Partial<Note>) => {
     if (autoSaveTimeoutRef.current) {
       clearTimeout(autoSaveTimeoutRef.current);
     }
     autoSaveTimeoutRef.current = setTimeout(() => {
-      updateNote(noteId, updates);
+      updateNoteRef.current(noteId, updates);
       autoSaveTimeoutRef.current = null;
     }, 1000);
-  }, [updateNote]);
+  }, []);
 
   if (!loaded) {
     return (
