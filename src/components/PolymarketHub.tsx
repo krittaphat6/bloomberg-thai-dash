@@ -496,7 +496,7 @@ const PolymarketHub = () => {
   );
 };
 
-// ============ ORDER TICKER TAPE ============
+// ============ ORDER TICKER TAPE (horizontal bar) ============
 
 const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { title?: string })[] }) => {
   if (trades.length === 0) return (
@@ -513,23 +513,17 @@ const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { tit
       <div className="flex items-center gap-0 animate-ticker absolute whitespace-nowrap h-full will-change-transform">
         {doubled.map((t, i) => {
           const isBuy = t.side === 'BUY';
-          const price = parseFloat(t.price || '0');
+          const pct = Math.round(parseFloat(t.price || '0') * 100);
           const size = parseFloat(t.size || '0');
-          const pct = Math.round(price * 100);
           const title = t.title ? (t.title.length > 22 ? t.title.slice(0, 20) + '…' : t.title) : '';
           const sizeStr = size >= 1000 ? `${(size / 1000).toFixed(1)}K` : size.toFixed(0);
-
           return (
             <span key={`${t.timestamp}-${i}`}
               className={`flex items-center gap-1 text-[10px] shrink-0 px-2.5 py-0.5 border-r border-border/20 ${
                 isBuy ? 'bg-terminal-green/[0.03]' : 'bg-destructive/[0.03]'
               }`}>
-              <span className={`font-black text-[11px] ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>
-                {isBuy ? '▲' : '▼'}
-              </span>
-              {title && (
-                <span className="text-foreground/70 font-medium max-w-[140px] truncate">{title}</span>
-              )}
+              <span className={`font-black text-[11px] ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{isBuy ? '▲' : '▼'}</span>
+              {title && <span className="text-foreground/70 font-medium max-w-[140px] truncate">{title}</span>}
               <span className={`font-mono font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{pct}¢</span>
               <span className="text-muted-foreground font-mono">×{sizeStr}</span>
             </span>
@@ -537,21 +531,102 @@ const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { tit
         })}
       </div>
       <style>{`
-        @keyframes ticker {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-ticker {
-          animation: ticker 40s linear infinite;
-        }
-        .animate-ticker:hover {
-          animation-play-state: paused;
-        }
+        @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .animate-ticker { animation: ticker 40s linear infinite; }
+        .animate-ticker:hover { animation-play-state: paused; }
       `}</style>
     </div>
   );
 });
 OrderTickerTape.displayName = 'OrderTickerTape';
+
+// ============ ORDER TICKER FULL VIEW (vertical, like stock ticker) ============
+
+const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
+  trades: (PolymarketLastTrade & { title?: string })[];
+  marketTitleCache: Map<string, string>;
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to top on new trades
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, [trades.length]);
+
+  const displayTrades = trades.slice(0, 200);
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/50">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold text-terminal-amber tracking-wider">⚡ LIVE ORDER FLOW</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-terminal-green animate-pulse" />
+          <span className="text-[9px] text-terminal-green">REAL-TIME</span>
+        </div>
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span>{displayTrades.length} orders</span>
+          <span className="text-terminal-green">{displayTrades.filter(t => t.side === 'BUY').length} buys</span>
+          <span className="text-destructive">{displayTrades.filter(t => t.side === 'SELL').length} sells</span>
+        </div>
+      </div>
+
+      {/* Column headers */}
+      <div className="grid grid-cols-[50px_50px_1fr_80px_80px_100px] gap-2 px-4 py-1.5 border-b border-border/50 text-[9px] text-muted-foreground font-bold uppercase tracking-wider bg-card/30">
+        <span>TIME</span>
+        <span>SIDE</span>
+        <span>MARKET</span>
+        <span className="text-right">PRICE</span>
+        <span className="text-right">SIZE</span>
+        <span className="text-right">VALUE</span>
+      </div>
+
+      {/* Trade rows */}
+      <div ref={containerRef} className="flex-1 overflow-y-auto">
+        {displayTrades.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <span className="text-2xl mb-2">⚡</span>
+            <span className="text-xs">Waiting for live orders...</span>
+            <span className="text-[10px] mt-1 text-muted-foreground/50">Orders will appear here in real-time</span>
+          </div>
+        ) : (
+          displayTrades.map((trade, i) => {
+            const isBuy = trade.side === 'BUY';
+            const price = parseFloat(trade.price || '0');
+            const size = parseFloat(trade.size || '0');
+            const pct = Math.round(price * 100);
+            const value = price * size;
+            const title = trade.title || marketTitleCache.get(trade.asset_id) || trade.market?.slice(0, 10) + '…' || 'Unknown';
+            const ts = getTimestampMs(trade.timestamp);
+            const timeStr = ts > 0 ? new Date(ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--';
+            const sizeStr = size >= 1000 ? `${(size / 1000).toFixed(1)}K` : size.toFixed(0);
+            const valStr = value >= 1000 ? `$${(value / 1000).toFixed(1)}K` : `$${value.toFixed(0)}`;
+            const isNew = i < 3;
+
+            return (
+              <div key={`${trade.timestamp}-${trade.asset_id}-${i}`}
+                className={`grid grid-cols-[50px_50px_1fr_80px_80px_100px] gap-2 px-4 py-2 border-b border-border/10 transition-colors ${
+                  isNew ? (isBuy ? 'bg-terminal-green/[0.04]' : 'bg-destructive/[0.04]') : 'hover:bg-muted/20'
+                }`}>
+                <span className="text-[10px] text-muted-foreground font-mono">{timeStr}</span>
+                <span className={`text-[10px] font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>
+                  {isBuy ? '▲ BUY' : '▼ SELL'}
+                </span>
+                <span className="text-[10px] text-foreground truncate font-medium">{title}</span>
+                <span className={`text-[10px] font-mono font-bold text-right ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{pct}¢</span>
+                <span className="text-[10px] font-mono text-muted-foreground text-right">{sizeStr}</span>
+                <span className="text-[10px] font-mono text-terminal-cyan text-right">{valStr}</span>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+});
+OrderTickerFullView.displayName = 'OrderTickerFullView';
 
 // ============ TOP MOVERS VIEW ============
 
