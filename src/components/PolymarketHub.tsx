@@ -174,8 +174,10 @@ const PolymarketHub = () => {
 
     const unsubTrade = polymarketWS.onTrade('ALL', (data) => {
       liveTradesRef.current = [data, ...liveTradesRef.current].slice(0, 100);
-      // Add to ticker tape
-      setTickerTrades(prev => [data, ...prev].slice(0, 30));
+      // Add to ticker tape with market title
+      const title = marketTitleCacheRef.current.get(data.asset_id) || '';
+      const enriched = { ...data, title };
+      setTickerTrades(prev => [enriched, ...prev].slice(0, 40));
       const sm = selectedMarketRef.current;
       if (sm) {
         const outcomes = PolymarketService.parseOutcomes(sm);
