@@ -122,6 +122,18 @@ const PolymarketHub = () => {
       const markets = Array.isArray(mkts) ? mkts : [];
       setAllMarkets(markets);
 
+      // Build title lookup cache from events
+      const titleCache = marketTitleCacheRef.current;
+      for (const evt of (Array.isArray(evts) ? evts : [])) {
+        for (const m of evt.markets || []) {
+          try {
+            const ids: string[] = JSON.parse(m.clobTokenIds || '[]');
+            const label = m.groupItemTitle || m.question || evt.title;
+            ids.forEach(id => { if (id) titleCache.set(id, label); });
+          } catch {}
+        }
+      }
+
       const topMarkets = [...markets]
         .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
         .slice(0, 200);
