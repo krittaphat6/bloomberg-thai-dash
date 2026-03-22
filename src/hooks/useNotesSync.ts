@@ -164,7 +164,7 @@ export function useNotesSync(initialNotes: Note[]) {
 
       const { error } = await supabase
         .from('user_notes')
-        .upsert(rows, { onConflict: 'id,user_id' });
+        .upsert(rows, { onConflict: 'id' });
 
       if (error) {
         console.error('Failed to sync notes to cloud:', error);
