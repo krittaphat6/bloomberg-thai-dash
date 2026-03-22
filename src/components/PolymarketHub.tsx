@@ -352,8 +352,8 @@ const PolymarketHub = () => {
 
     const sorted = [...withPrice].sort((a, b) => b.pct - a.pct);
     return {
-      topGainers: sorted.filter(e => e.pct >= 50).slice(0, 10),
-      topLosers: sorted.filter(e => e.pct < 50).sort((a, b) => a.pct - b.pct).slice(0, 10),
+      topGainers: sorted.filter(e => e.pct >= 50).slice(0, 100),
+      topLosers: sorted.filter(e => e.pct < 50).sort((a, b) => a.pct - b.pct).slice(0, 100),
     };
   }, [events, getLivePrice]);
 
