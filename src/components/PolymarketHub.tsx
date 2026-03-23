@@ -568,7 +568,10 @@ const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { tit
 });
 OrderTickerTape.displayName = 'OrderTickerTape';
 
-// ============ ORDER TICKER FULL VIEW (vertical, like stock ticker) ============
+// ============ ORDER TICKER FULL VIEW (vertical, with whale detection) ============
+
+const WHALE_THRESHOLD = 500; // $500+ value = whale order
+const BIG_ORDER_THRESHOLD = 200; // $200+ = big order
 
 const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
   trades: (PolymarketLastTrade & { title?: string })[];
@@ -576,14 +579,19 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to top on new trades
   useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = 0;
-    }
+    if (containerRef.current) containerRef.current.scrollTop = 0;
   }, [trades.length]);
 
   const displayTrades = trades.slice(0, 200);
+
+  // Stats
+  const whaleCount = useMemo(() =>
+    displayTrades.filter(t => parseFloat(t.price || '0') * parseFloat(t.size || '0') >= WHALE_THRESHOLD).length,
+    [displayTrades]);
+  const totalVolume = useMemo(() =>
+    displayTrades.reduce((s, t) => s + parseFloat(t.price || '0') * parseFloat(t.size || '0'), 0),
+    [displayTrades]);
 
   return (
     <div className="flex flex-col h-full">
@@ -598,6 +606,10 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
           <span>{displayTrades.length} orders</span>
           <span className="text-terminal-green">{displayTrades.filter(t => t.side === 'BUY').length} buys</span>
           <span className="text-destructive">{displayTrades.filter(t => t.side === 'SELL').length} sells</span>
+          {whaleCount > 0 && (
+            <span className="text-terminal-amber font-bold">🐋 {whaleCount} whales</span>
+          )}
+          <span className="text-terminal-cyan font-mono">${totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` : totalVolume.toFixed(0)} vol</span>
         </div>
       </div>
 
@@ -617,7 +629,6 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <span className="text-2xl mb-2">⚡</span>
             <span className="text-xs">Waiting for live orders...</span>
-            <span className="text-[10px] mt-1 text-muted-foreground/50">Orders will appear here in real-time</span>
           </div>
         ) : (
           displayTrades.map((trade, i) => {
@@ -626,6 +637,8 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
             const size = parseFloat(trade.size || '0');
             const pct = Math.round(price * 100);
             const value = price * size;
+            const isWhale = value >= WHALE_THRESHOLD;
+            const isBig = value >= BIG_ORDER_THRESHOLD;
             const title = trade.title || marketTitleCache.get(trade.asset_id) || trade.market?.slice(0, 10) + '…' || 'Unknown';
             const ts = getTimestampMs(trade.timestamp);
             const timeStr = ts > 0 ? new Date(ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--';
@@ -635,17 +648,27 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
 
             return (
               <div key={`${trade.timestamp}-${trade.asset_id}-${i}`}
-                className={`grid grid-cols-[50px_50px_1fr_80px_80px_100px] gap-2 px-4 py-2 border-b border-border/10 transition-colors ${
-                  isNew ? (isBuy ? 'bg-terminal-green/[0.04]' : 'bg-destructive/[0.04]') : 'hover:bg-muted/20'
+                className={`grid grid-cols-[50px_50px_1fr_80px_80px_100px] gap-2 px-4 py-2 border-b transition-colors ${
+                  isWhale
+                    ? 'bg-terminal-amber/10 border-terminal-amber/30'
+                    : isBig
+                      ? (isBuy ? 'bg-terminal-green/[0.06]' : 'bg-destructive/[0.06]') + ' border-border/20'
+                      : isNew
+                        ? (isBuy ? 'bg-terminal-green/[0.03]' : 'bg-destructive/[0.03]') + ' border-border/10'
+                        : 'border-border/10 hover:bg-muted/20'
                 }`}>
                 <span className="text-[10px] text-muted-foreground font-mono">{timeStr}</span>
                 <span className={`text-[10px] font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>
                   {isBuy ? '▲ BUY' : '▼ SELL'}
                 </span>
-                <span className="text-[10px] text-foreground truncate font-medium">{title}</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {isWhale && <span className="text-[10px]">🐋</span>}
+                  {isBig && !isWhale && <span className="text-[9px]">💎</span>}
+                  <span className={`text-[10px] truncate font-medium ${isWhale ? 'text-terminal-amber' : 'text-foreground'}`}>{title}</span>
+                </div>
                 <span className={`text-[10px] font-mono font-bold text-right ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{pct}¢</span>
-                <span className="text-[10px] font-mono text-muted-foreground text-right">{sizeStr}</span>
-                <span className="text-[10px] font-mono text-terminal-cyan text-right">{valStr}</span>
+                <span className={`text-[10px] font-mono text-right ${isWhale ? 'text-terminal-amber font-bold' : 'text-muted-foreground'}`}>{sizeStr}</span>
+                <span className={`text-[10px] font-mono text-right ${isWhale ? 'text-terminal-amber font-black' : 'text-terminal-cyan'}`}>{valStr}</span>
               </div>
             );
           })

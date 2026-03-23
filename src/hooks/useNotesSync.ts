@@ -137,6 +137,16 @@ export function useNotesSync(initialNotes: Note[]) {
     }
   }, [userId, loaded, initialNotes]);
 
+  // Safe date serializer — handles Date objects, strings, and invalid values
+  const toISO = (d: any): string => {
+    if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString();
+    if (typeof d === 'string') {
+      const parsed = new Date(d);
+      if (!isNaN(parsed.getTime())) return parsed.toISOString();
+    }
+    return new Date().toISOString();
+  };
+
   // Sync notes to database with debounce
   const syncToDb = useCallback(async (notesToSync: Note[]) => {
     if (!userId) return;
@@ -146,20 +156,20 @@ export function useNotesSync(initialNotes: Note[]) {
       const rows = notesToSync.map(note => ({
         id: note.id,
         user_id: userId,
-        title: note.title,
-        content: note.content,
-        tags: note.tags,
+        title: note.title || 'Untitled',
+        content: note.content || '',
+        tags: Array.isArray(note.tags) ? note.tags : [],
         folder: note.folder || null,
         icon: note.icon || '📄',
-        is_favorite: note.isFavorite,
-        linked_notes: note.linkedNotes,
+        is_favorite: !!note.isFavorite,
+        linked_notes: Array.isArray(note.linkedNotes) ? note.linkedNotes : [],
         rich_content: note.richContent || null,
-        is_rich_text: note.isRichText || false,
+        is_rich_text: !!note.isRichText,
         properties: note.properties || {},
         parent_id: note.parentId || null,
-        children: note.children || [],
-        created_at: note.createdAt.toISOString(),
-        updated_at: note.updatedAt.toISOString(),
+        children: Array.isArray(note.children) ? note.children : [],
+        created_at: toISO(note.createdAt),
+        updated_at: toISO(note.updatedAt),
       }));
 
       const { error } = await supabase
