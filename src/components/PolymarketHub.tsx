@@ -101,30 +101,28 @@ const PolymarketHub = () => {
   const selectedMarketRef = useRef<PolymarketMarket | null>(null);
   selectedMarketRef.current = selectedMarket;
 
-  // ---- DATA FETCH ----
+  // ---- DATA FETCH (Progressive: show first page fast, load rest in background) ----
+  const isLoadingMoreRef = useRef(false);
+
   const fetchData = useCallback(async (tag?: string) => {
     setLoading(true);
     try {
-      let evts: PolymarketEvent[];
-      let mkts: PolymarketMarket[];
-      if (!tag) {
-        [evts, mkts] = await Promise.all([
-          PolymarketService.getAllActiveEvents(),
-          PolymarketService.getAllActiveMarkets(),
-        ]);
-      } else {
-        [evts, mkts] = await Promise.all([
-          PolymarketService.getTrendingEvents(100, tag),
-          PolymarketService.getMarkets(100, tag),
-        ]);
-      }
-      setEvents(Array.isArray(evts) ? evts : []);
-      const markets = Array.isArray(mkts) ? mkts : [];
-      setAllMarkets(markets);
+      // STEP 1: Load first page FAST (100 events)
+      const [firstEvts, firstMkts] = await Promise.all([
+        PolymarketService.getTrendingEvents(100, tag),
+        PolymarketService.getMarkets(100, tag),
+      ]);
 
-      // Build title lookup cache from events
+      const evts1 = Array.isArray(firstEvts) ? firstEvts : [];
+      const mkts1 = Array.isArray(firstMkts) ? firstMkts : [];
+      setEvents(evts1);
+      setAllMarkets(mkts1);
+      setTotalMarketCount(mkts1.length);
+      setLoading(false); // Show data immediately
+
+      // Build title cache from first page
       const titleCache = marketTitleCacheRef.current;
-      for (const evt of (Array.isArray(evts) ? evts : [])) {
+      for (const evt of evts1) {
         for (const m of evt.markets || []) {
           try {
             const ids: string[] = JSON.parse(m.clobTokenIds || '[]');
@@ -134,16 +132,46 @@ const PolymarketHub = () => {
         }
       }
 
-      const topMarkets = [...markets]
+      // Subscribe top 200 to WS
+      const topMarkets = [...mkts1]
         .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
         .slice(0, 200);
       const tokenIds = PolymarketService.extractTokenIds(topMarkets);
       if (tokenIds.length > 0) polymarketWS.subscribeToAssets(tokenIds);
-      setTotalMarketCount(markets.length);
+
+      // STEP 2: If TRENDING (no tag), load ALL remaining in background
+      if (!tag && !isLoadingMoreRef.current) {
+        isLoadingMoreRef.current = true;
+        try {
+          const [allEvts, allMkts] = await Promise.all([
+            PolymarketService.getAllActiveEvents(),
+            PolymarketService.getAllActiveMarkets(),
+          ]);
+          const fullEvts = Array.isArray(allEvts) ? allEvts : evts1;
+          const fullMkts = Array.isArray(allMkts) ? allMkts : mkts1;
+          setEvents(fullEvts);
+          setAllMarkets(fullMkts);
+          setTotalMarketCount(fullMkts.length);
+
+          // Update title cache
+          for (const evt of fullEvts) {
+            for (const m of evt.markets || []) {
+              try {
+                const ids: string[] = JSON.parse(m.clobTokenIds || '[]');
+                const label = m.groupItemTitle || m.question || evt.title;
+                ids.forEach(id => { if (id) titleCache.set(id, label); });
+              } catch {}
+            }
+          }
+        } catch (bgErr) {
+          console.warn('Background pagination partial:', bgErr);
+        } finally {
+          isLoadingMoreRef.current = false;
+        }
+      }
     } catch (e: any) {
       console.error('Polymarket fetch error:', e);
       toast.error('Failed to load Polymarket data');
-    } finally {
       setLoading(false);
     }
   }, []);
@@ -496,7 +524,7 @@ const PolymarketHub = () => {
   );
 };
 
-// ============ ORDER TICKER TAPE (horizontal bar) ============
+// ============ ORDER TICKER TAPE (horizontal bar with whale detection) ============
 
 const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { title?: string })[] }) => {
   if (trades.length === 0) return (
@@ -513,19 +541,24 @@ const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { tit
       <div className="flex items-center gap-0 animate-ticker absolute whitespace-nowrap h-full will-change-transform">
         {doubled.map((t, i) => {
           const isBuy = t.side === 'BUY';
-          const pct = Math.round(parseFloat(t.price || '0') * 100);
+          const price = parseFloat(t.price || '0');
           const size = parseFloat(t.size || '0');
+          const pct = Math.round(price * 100);
+          const value = price * size;
+          const isWhale = value >= 500;
           const title = t.title ? (t.title.length > 22 ? t.title.slice(0, 20) + '…' : t.title) : '';
           const sizeStr = size >= 1000 ? `${(size / 1000).toFixed(1)}K` : size.toFixed(0);
           return (
             <span key={`${t.timestamp}-${i}`}
               className={`flex items-center gap-1 text-[10px] shrink-0 px-2.5 py-0.5 border-r border-border/20 ${
-                isBuy ? 'bg-terminal-green/[0.03]' : 'bg-destructive/[0.03]'
+                isWhale ? 'bg-terminal-amber/10' : isBuy ? 'bg-terminal-green/[0.03]' : 'bg-destructive/[0.03]'
               }`}>
+              {isWhale && <span className="text-[9px]">🐋</span>}
               <span className={`font-black text-[11px] ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{isBuy ? '▲' : '▼'}</span>
-              {title && <span className="text-foreground/70 font-medium max-w-[140px] truncate">{title}</span>}
+              {title && <span className={`font-medium max-w-[140px] truncate ${isWhale ? 'text-terminal-amber' : 'text-foreground/70'}`}>{title}</span>}
               <span className={`font-mono font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{pct}¢</span>
               <span className="text-muted-foreground font-mono">×{sizeStr}</span>
+              {isWhale && <span className="text-terminal-amber font-mono font-bold">${value >= 1000 ? `${(value/1000).toFixed(1)}K` : value.toFixed(0)}</span>}
             </span>
           );
         })}
@@ -540,7 +573,10 @@ const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { tit
 });
 OrderTickerTape.displayName = 'OrderTickerTape';
 
-// ============ ORDER TICKER FULL VIEW (vertical, like stock ticker) ============
+// ============ ORDER TICKER FULL VIEW (vertical, with whale detection) ============
+
+const WHALE_THRESHOLD = 500; // $500+ value = whale order
+const BIG_ORDER_THRESHOLD = 200; // $200+ = big order
 
 const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
   trades: (PolymarketLastTrade & { title?: string })[];
@@ -548,14 +584,19 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to top on new trades
   useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = 0;
-    }
+    if (containerRef.current) containerRef.current.scrollTop = 0;
   }, [trades.length]);
 
   const displayTrades = trades.slice(0, 200);
+
+  // Stats
+  const whaleCount = useMemo(() =>
+    displayTrades.filter(t => parseFloat(t.price || '0') * parseFloat(t.size || '0') >= WHALE_THRESHOLD).length,
+    [displayTrades]);
+  const totalVolume = useMemo(() =>
+    displayTrades.reduce((s, t) => s + parseFloat(t.price || '0') * parseFloat(t.size || '0'), 0),
+    [displayTrades]);
 
   return (
     <div className="flex flex-col h-full">
@@ -570,6 +611,10 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
           <span>{displayTrades.length} orders</span>
           <span className="text-terminal-green">{displayTrades.filter(t => t.side === 'BUY').length} buys</span>
           <span className="text-destructive">{displayTrades.filter(t => t.side === 'SELL').length} sells</span>
+          {whaleCount > 0 && (
+            <span className="text-terminal-amber font-bold">🐋 {whaleCount} whales</span>
+          )}
+          <span className="text-terminal-cyan font-mono">${totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` : totalVolume.toFixed(0)} vol</span>
         </div>
       </div>
 
@@ -589,7 +634,6 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <span className="text-2xl mb-2">⚡</span>
             <span className="text-xs">Waiting for live orders...</span>
-            <span className="text-[10px] mt-1 text-muted-foreground/50">Orders will appear here in real-time</span>
           </div>
         ) : (
           displayTrades.map((trade, i) => {
@@ -598,6 +642,8 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
             const size = parseFloat(trade.size || '0');
             const pct = Math.round(price * 100);
             const value = price * size;
+            const isWhale = value >= WHALE_THRESHOLD;
+            const isBig = value >= BIG_ORDER_THRESHOLD;
             const title = trade.title || marketTitleCache.get(trade.asset_id) || trade.market?.slice(0, 10) + '…' || 'Unknown';
             const ts = getTimestampMs(trade.timestamp);
             const timeStr = ts > 0 ? new Date(ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--';
@@ -607,17 +653,27 @@ const OrderTickerFullView = memo(({ trades, marketTitleCache }: {
 
             return (
               <div key={`${trade.timestamp}-${trade.asset_id}-${i}`}
-                className={`grid grid-cols-[50px_50px_1fr_80px_80px_100px] gap-2 px-4 py-2 border-b border-border/10 transition-colors ${
-                  isNew ? (isBuy ? 'bg-terminal-green/[0.04]' : 'bg-destructive/[0.04]') : 'hover:bg-muted/20'
+                className={`grid grid-cols-[50px_50px_1fr_80px_80px_100px] gap-2 px-4 py-2 border-b transition-colors ${
+                  isWhale
+                    ? 'bg-terminal-amber/10 border-terminal-amber/30'
+                    : isBig
+                      ? (isBuy ? 'bg-terminal-green/[0.06]' : 'bg-destructive/[0.06]') + ' border-border/20'
+                      : isNew
+                        ? (isBuy ? 'bg-terminal-green/[0.03]' : 'bg-destructive/[0.03]') + ' border-border/10'
+                        : 'border-border/10 hover:bg-muted/20'
                 }`}>
                 <span className="text-[10px] text-muted-foreground font-mono">{timeStr}</span>
                 <span className={`text-[10px] font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>
                   {isBuy ? '▲ BUY' : '▼ SELL'}
                 </span>
-                <span className="text-[10px] text-foreground truncate font-medium">{title}</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {isWhale && <span className="text-[10px]">🐋</span>}
+                  {isBig && !isWhale && <span className="text-[9px]">💎</span>}
+                  <span className={`text-[10px] truncate font-medium ${isWhale ? 'text-terminal-amber' : 'text-foreground'}`}>{title}</span>
+                </div>
                 <span className={`text-[10px] font-mono font-bold text-right ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{pct}¢</span>
-                <span className="text-[10px] font-mono text-muted-foreground text-right">{sizeStr}</span>
-                <span className="text-[10px] font-mono text-terminal-cyan text-right">{valStr}</span>
+                <span className={`text-[10px] font-mono text-right ${isWhale ? 'text-terminal-amber font-bold' : 'text-muted-foreground'}`}>{sizeStr}</span>
+                <span className={`text-[10px] font-mono text-right ${isWhale ? 'text-terminal-amber font-black' : 'text-terminal-cyan'}`}>{valStr}</span>
               </div>
             );
           })
