@@ -150,8 +150,8 @@ const PolymarketHub = () => {
   const selectedMarketRef = useRef<PolymarketMarket | null>(null);
   const listViewportRef = useRef<HTMLDivElement | null>(null);
   const requestVersionRef = useRef(0);
-  const backgroundLoadTimerRef = useRef<number | null>(null);
-  const pendingUiTimerRef = useRef<number | null>(null);
+  const backgroundLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingUiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSelectedOrderbookRef = useRef<OrderbookData | null>(null);
   const pendingSelectedTradesRef = useRef<PolymarketLastTrade[] | null>(null);
   const pendingTickerTradesRef = useRef<(PolymarketLastTrade & { title?: string })[] | null>(null);
