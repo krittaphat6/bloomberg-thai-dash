@@ -604,8 +604,14 @@ const PolymarketHub = () => {
         </div>
       ) : viewMode === 'HEATMAP' ? (
         <div className="flex-1 min-h-0 overflow-hidden">
-          <PolymarketHeatmap events={displayEvents} onSelectEvent={handleSelectEvent}
-            selectedEventId={selectedEvent?.id} getLivePrice={getLivePrice} />
+          <Suspense fallback={<PanelFallback label="Loading heatmap..." />}>
+            <PolymarketHeatmap
+              events={displayEvents.map(({ event }) => event)}
+              onSelectEvent={handleSelectEvent}
+              selectedEventId={selectedEvent?.id}
+              getLivePrice={getLivePrice}
+            />
+          </Suspense>
         </div>
       ) : viewMode === 'GAINERS' ? (
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -621,25 +627,25 @@ const PolymarketHub = () => {
           <div className="w-[480px] min-w-[380px] border-r border-border flex flex-col">
             <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/50 bg-card/30">
               <span className="text-[10px] font-bold text-terminal-green tracking-wider">
-                {activeSubTag === 'All' ? 'TRENDING MARKETS' : activeSubTag.toUpperCase()} ({displayEvents.length})
+                {activeSubTag === 'All' ? 'MARKETS' : activeSubTag.toUpperCase()} ({displayEvents.length})
               </span>
               <StatusBadge status={dataStatus} compact />
             </div>
-            <ScrollArea className="flex-1">
-              <div className="divide-y divide-border/30">
+            <div ref={listViewportRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto">
+              <div className="divide-y divide-border/30" style={{ paddingTop: virtualizedEvents.topSpacer, paddingBottom: virtualizedEvents.bottomSpacer }}>
                 {displayEvents.length === 0 ? (
                   <div className="p-6 text-center text-xs text-muted-foreground">No active markets found</div>
                 ) : (
-                  displayEvents.map((event, idx) => (
-                    <EventCard key={`${event.id}-${idx}`} event={event}
+                  virtualizedEvents.items.map(({ event, category }) => (
+                    <EventCard key={event.id} event={event}
                       isSelected={selectedEvent?.id === event.id}
                       onClick={() => handleSelectEvent(event)}
                       getLivePrice={getLivePrice}
-                      category={categorizeEvent(event)} />
+                      category={category} />
                   ))
                 )}
               </div>
-            </ScrollArea>
+            </div>
           </div>
 
           {/* Right: Detail */}
