@@ -84,7 +84,8 @@ export interface TradeData {
 }
 
 const cache: Map<string, { data: any; timestamp: number }> = new Map();
-const CACHE_DURATION = 30_000;
+const inFlightRequests: Map<string, Promise<any>> = new Map();
+const CACHE_DURATION = 60_000;
 
 function getCached<T>(key: string): T | null {
   const c = cache.get(key);
@@ -97,12 +98,26 @@ function setCache(key: string, data: any) {
 }
 
 async function callProxy(action: string, params: Record<string, any> = {}): Promise<any> {
-  const { data, error } = await supabase.functions.invoke('polymarket-proxy', {
-    body: { action, params },
-  });
-  if (error) throw error;
-  if (!data?.success) throw new Error(data?.error || 'Proxy call failed');
-  return data.data;
+  const requestKey = `${action}:${JSON.stringify(params)}`;
+  const existing = inFlightRequests.get(requestKey);
+  if (existing) return existing;
+
+  const request = (async () => {
+    const { data, error } = await supabase.functions.invoke('polymarket-proxy', {
+      body: { action, params },
+    });
+    if (error) throw error;
+    if (!data?.success) throw new Error(data?.error || 'Proxy call failed');
+    return data.data;
+  })();
+
+  inFlightRequests.set(requestKey, request);
+
+  try {
+    return await request;
+  } finally {
+    inFlightRequests.delete(requestKey);
+  }
 }
 
 export const PolymarketService = {
@@ -135,7 +150,7 @@ export const PolymarketService = {
 
     const allEvents: PolymarketEvent[] = [];
     let offset = 0;
-    const limit = 100;
+    const limit = 500;
     let hasMore = true;
 
     while (hasMore) {
@@ -152,9 +167,10 @@ export const PolymarketService = {
         hasMore = false;
       }
     }
-    console.log(`[Polymarket] Fetched ${allEvents.length} total active events`);
-    setCache(ck, allEvents);
-    return allEvents;
+    const deduped = Array.from(new Map(allEvents.map((event) => [event.id, event])).values());
+    console.log(`[Polymarket] Fetched ${deduped.length} total active events`);
+    setCache(ck, deduped);
+    return deduped;
   },
 
   async getAllActiveMarkets(): Promise<PolymarketMarket[]> {
@@ -164,7 +180,7 @@ export const PolymarketService = {
 
     const allMarkets: PolymarketMarket[] = [];
     let offset = 0;
-    const limit = 100;
+    const limit = 500;
     let hasMore = true;
 
     while (hasMore) {
@@ -181,20 +197,21 @@ export const PolymarketService = {
         hasMore = false;
       }
     }
-    console.log(`[Polymarket] Fetched ${allMarkets.length} total active markets`);
-    setCache(ck, allMarkets);
-    return allMarkets;
+    const deduped = Array.from(new Map(allMarkets.map((market) => [market.id, market])).values());
+    console.log(`[Polymarket] Fetched ${deduped.length} total active markets`);
+    setCache(ck, deduped);
+    return deduped;
   },
 
   extractTokenIds(markets: PolymarketMarket[]): string[] {
-    const tokenIds: string[] = [];
+    const tokenIds = new Set<string>();
     for (const market of markets) {
       try {
         const ids: string[] = JSON.parse(market.clobTokenIds || '[]');
-        tokenIds.push(...ids.filter(Boolean));
+        ids.filter(Boolean).forEach((id) => tokenIds.add(id));
       } catch { /* skip */ }
     }
-    return tokenIds;
+    return Array.from(tokenIds);
   },
 
   async getPriceHistory(tokenId: string, interval = 'max', fidelity = 60): Promise<PriceHistoryPoint[]> {

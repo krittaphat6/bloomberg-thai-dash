@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
+import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -7,11 +7,12 @@ import { Loader2, RotateCcw, Search, TrendingUp, TrendingDown, BarChart3, Wifi, 
 import { toast } from 'sonner';
 import { PolymarketService, PolymarketEvent, PolymarketMarket, PriceHistoryPoint, OrderbookData, TradeData } from '@/services/PolymarketService';
 import { polymarketWS, PolymarketBookUpdate, PolymarketLastTrade } from '@/services/PolymarketWebSocketService';
-import { PolymarketMarketDetail } from '@/components/polymarket/PolymarketMarketDetail';
-import { PolymarketPriceChart } from '@/components/polymarket/PolymarketPriceChart';
-import { PolymarketCalculator } from '@/components/polymarket/PolymarketCalculator';
-import PolymarketHeatmap from '@/components/polymarket/PolymarketHeatmap';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+const PolymarketMarketDetail = lazy(async () => ({ default: (await import('@/components/polymarket/PolymarketMarketDetail')).PolymarketMarketDetail }));
+const PolymarketPriceChart = lazy(async () => ({ default: (await import('@/components/polymarket/PolymarketPriceChart')).PolymarketPriceChart }));
+const PolymarketCalculator = lazy(async () => ({ default: (await import('@/components/polymarket/PolymarketCalculator')).PolymarketCalculator }));
+const PolymarketHeatmap = lazy(() => import('@/components/polymarket/PolymarketHeatmap'));
 
 // ============ CONSTANTS ============
 
@@ -64,6 +65,52 @@ const getTimestampMs = (timestamp?: string) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+const EVENT_ROW_ESTIMATE = 156;
+const EVENT_LIST_OVERSCAN = 10;
+
+const extractMarketsFromEvents = (items: PolymarketEvent[]): PolymarketMarket[] => {
+  const deduped = new Map<string, PolymarketMarket>();
+  for (const event of items) {
+    for (const market of event.markets || []) {
+      if (market?.id) deduped.set(market.id, market);
+    }
+  }
+  return Array.from(deduped.values());
+};
+
+const primeMarketTitleCache = (items: PolymarketEvent[], cache: Map<string, string>) => {
+  for (const event of items) {
+    for (const market of event.markets || []) {
+      try {
+        const ids: string[] = JSON.parse(market.clobTokenIds || '[]');
+        const label = market.groupItemTitle || market.question || event.title;
+        ids.forEach((id) => {
+          if (id) cache.set(id, label);
+        });
+      } catch {
+        // Ignore malformed token arrays
+      }
+    }
+  }
+};
+
+const mergeTradeBuffer = <T extends PolymarketLastTrade>(existing: T[], incoming: T, limit: number): T[] => {
+  const incomingKey = `${incoming.asset_id}-${incoming.side}-${incoming.price}-${incoming.size}-${incoming.timestamp}`;
+  const next = existing.filter((trade) => {
+    const tradeKey = `${trade.asset_id}-${trade.side}-${trade.price}-${trade.size}-${trade.timestamp}`;
+    return tradeKey !== incomingKey;
+  });
+
+  return [incoming, ...next].slice(0, limit);
+};
+
+const PanelFallback = ({ label }: { label: string }) => (
+  <div className="h-[240px] flex items-center justify-center text-[10px] text-muted-foreground">
+    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+    {label}
+  </div>
+);
+
 // ============ MAIN COMPONENT ============
 
 const PolymarketHub = () => {
@@ -95,42 +142,78 @@ const PolymarketHub = () => {
   // Live order ticker tape
   const [tickerTrades, setTickerTrades] = useState<(PolymarketLastTrade & { title?: string })[]>([]);
   const marketTitleCacheRef = useRef<Map<string, string>>(new Map());
+  const tickerTradesRef = useRef<(PolymarketLastTrade & { title?: string })[]>([]);
+  const selectedTradesStateRef = useRef<PolymarketLastTrade[]>([]);
 
   const obPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tradePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const selectedMarketRef = useRef<PolymarketMarket | null>(null);
+  const listViewportRef = useRef<HTMLDivElement | null>(null);
+  const requestVersionRef = useRef(0);
+  const backgroundLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingUiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSelectedOrderbookRef = useRef<OrderbookData | null>(null);
+  const pendingSelectedTradesRef = useRef<PolymarketLastTrade[] | null>(null);
+  const pendingTickerTradesRef = useRef<(PolymarketLastTrade & { title?: string })[] | null>(null);
+  const [listScrollTop, setListScrollTop] = useState(0);
+  const [listViewportHeight, setListViewportHeight] = useState(720);
   selectedMarketRef.current = selectedMarket;
 
   // ---- DATA FETCH (Progressive: show first page fast, load rest in background) ----
   const isLoadingMoreRef = useRef(false);
 
+  const scheduleUiFlush = useCallback(() => {
+    if (pendingUiTimerRef.current !== null) return;
+
+    pendingUiTimerRef.current = setTimeout(() => {
+      pendingUiTimerRef.current = null;
+
+      if (pendingSelectedOrderbookRef.current) {
+        setSelectedOrderbook(pendingSelectedOrderbookRef.current);
+        pendingSelectedOrderbookRef.current = null;
+      }
+
+      if (pendingSelectedTradesRef.current) {
+        selectedTradesStateRef.current = pendingSelectedTradesRef.current;
+        setSelectedTrades(pendingSelectedTradesRef.current);
+        pendingSelectedTradesRef.current = null;
+      }
+
+      if (pendingTickerTradesRef.current) {
+        tickerTradesRef.current = pendingTickerTradesRef.current;
+        setTickerTrades(pendingTickerTradesRef.current);
+        pendingTickerTradesRef.current = null;
+      }
+    }, 120);
+  }, []);
+
   const fetchData = useCallback(async (tag?: string) => {
+    const requestVersion = ++requestVersionRef.current;
+
+    if (backgroundLoadTimerRef.current !== null) {
+      clearTimeout(backgroundLoadTimerRef.current);
+      backgroundLoadTimerRef.current = null;
+    }
+
     setLoading(true);
     try {
-      // STEP 1: Load first page FAST (100 events)
-      const [firstEvts, firstMkts] = await Promise.all([
-        PolymarketService.getTrendingEvents(100, tag),
-        PolymarketService.getMarkets(100, tag),
-      ]);
+      const firstEvts = await PolymarketService.getTrendingEvents(100, tag);
+      if (requestVersionRef.current !== requestVersion) return;
 
       const evts1 = Array.isArray(firstEvts) ? firstEvts : [];
-      const mkts1 = Array.isArray(firstMkts) ? firstMkts : [];
+      let mkts1 = extractMarketsFromEvents(evts1);
+
+      if (mkts1.length === 0) {
+        const fallbackMarkets = await PolymarketService.getMarkets(100, tag);
+        if (requestVersionRef.current !== requestVersion) return;
+        mkts1 = Array.isArray(fallbackMarkets) ? fallbackMarkets : [];
+      }
+
+      primeMarketTitleCache(evts1, marketTitleCacheRef.current);
       setEvents(evts1);
       setAllMarkets(mkts1);
       setTotalMarketCount(mkts1.length);
       setLoading(false); // Show data immediately
-
-      // Build title cache from first page
-      const titleCache = marketTitleCacheRef.current;
-      for (const evt of evts1) {
-        for (const m of evt.markets || []) {
-          try {
-            const ids: string[] = JSON.parse(m.clobTokenIds || '[]');
-            const label = m.groupItemTitle || m.question || evt.title;
-            ids.forEach(id => { if (id) titleCache.set(id, label); });
-          } catch {}
-        }
-      }
 
       // Subscribe top 200 to WS
       const topMarkets = [...mkts1]
@@ -142,34 +225,50 @@ const PolymarketHub = () => {
       // STEP 2: If TRENDING (no tag), load ALL remaining in background
       if (!tag && !isLoadingMoreRef.current) {
         isLoadingMoreRef.current = true;
-        try {
-          const [allEvts, allMkts] = await Promise.all([
-            PolymarketService.getAllActiveEvents(),
-            PolymarketService.getAllActiveMarkets(),
-          ]);
-          const fullEvts = Array.isArray(allEvts) ? allEvts : evts1;
-          const fullMkts = Array.isArray(allMkts) ? allMkts : mkts1;
-          setEvents(fullEvts);
-          setAllMarkets(fullMkts);
-          setTotalMarketCount(fullMkts.length);
+        const loadRemaining = async () => {
+          try {
+            const allEvts = await PolymarketService.getAllActiveEvents();
+            if (requestVersionRef.current !== requestVersion) return;
 
-          // Update title cache
-          for (const evt of fullEvts) {
-            for (const m of evt.markets || []) {
-              try {
-                const ids: string[] = JSON.parse(m.clobTokenIds || '[]');
-                const label = m.groupItemTitle || m.question || evt.title;
-                ids.forEach(id => { if (id) titleCache.set(id, label); });
-              } catch {}
+            const fullEvts = Array.isArray(allEvts) ? allEvts : evts1;
+            let fullMkts = extractMarketsFromEvents(fullEvts);
+
+            if (fullMkts.length === 0) {
+              const fallbackAllMarkets = await PolymarketService.getAllActiveMarkets();
+              if (requestVersionRef.current !== requestVersion) return;
+              fullMkts = Array.isArray(fallbackAllMarkets) ? fallbackAllMarkets : mkts1;
+            }
+
+            primeMarketTitleCache(fullEvts, marketTitleCacheRef.current);
+
+            startTransition(() => {
+              setEvents(fullEvts);
+              setAllMarkets(fullMkts);
+              setTotalMarketCount(fullMkts.length);
+            });
+
+            const liveTopMarkets = [...fullMkts]
+              .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
+              .slice(0, 200);
+            const liveTokenIds = PolymarketService.extractTokenIds(liveTopMarkets);
+            if (liveTokenIds.length > 0) polymarketWS.subscribeToAssets(liveTokenIds);
+          } catch (bgErr) {
+            console.warn('Background pagination partial:', bgErr);
+          } finally {
+            if (requestVersionRef.current === requestVersion) {
+              isLoadingMoreRef.current = false;
             }
           }
-        } catch (bgErr) {
-          console.warn('Background pagination partial:', bgErr);
-        } finally {
-          isLoadingMoreRef.current = false;
+        };
+
+        if ('requestIdleCallback' in window) {
+          (window as any).requestIdleCallback(() => { void loadRemaining(); }, { timeout: 1200 });
+        } else {
+          backgroundLoadTimerRef.current = setTimeout(() => { void loadRemaining(); }, 120);
         }
       }
     } catch (e: any) {
+      if (requestVersionRef.current !== requestVersion) return;
       console.error('Polymarket fetch error:', e);
       toast.error('Failed to load Polymarket data');
       setLoading(false);
@@ -192,28 +291,30 @@ const PolymarketHub = () => {
       if (sm) {
         const outcomes = PolymarketService.parseOutcomes(sm);
         if (outcomes[0]?.tokenId === data.asset_id) {
-          setSelectedOrderbook({
+          pendingSelectedOrderbookRef.current = {
             bids: data.bids, asks: data.asks,
             hash: data.hash, timestamp: data.timestamp, market: data.market,
-          });
+          };
+          scheduleUiFlush();
         }
       }
     });
 
     const unsubTrade = polymarketWS.onTrade('ALL', (data) => {
       liveTradesRef.current = [data, ...liveTradesRef.current].slice(0, 100);
-      // Add to ticker tape with market title
       const title = marketTitleCacheRef.current.get(data.asset_id) || '';
       const enriched = { ...data, title };
-      setTickerTrades(prev => [enriched, ...prev].slice(0, 200));
+      pendingTickerTradesRef.current = mergeTradeBuffer(tickerTradesRef.current, enriched, 200);
       const sm = selectedMarketRef.current;
       if (sm) {
         const outcomes = PolymarketService.parseOutcomes(sm);
         const tokenIds = outcomes.map(o => o.tokenId).filter(Boolean);
         if (tokenIds.includes(data.asset_id)) {
-          setSelectedTrades(prev => [data, ...prev].slice(0, 50));
+          pendingSelectedTradesRef.current = mergeTradeBuffer(selectedTradesStateRef.current, data, 50);
         }
       }
+
+      scheduleUiFlush();
     });
 
     return () => { unsubBook(); unsubTrade(); };
@@ -225,7 +326,22 @@ const PolymarketHub = () => {
     return () => clearInterval(iv);
   }, []);
 
-  useEffect(() => () => { polymarketWS.disconnect(); }, []);
+  useEffect(() => () => {
+    if (pendingUiTimerRef.current !== null) clearTimeout(pendingUiTimerRef.current);
+    if (backgroundLoadTimerRef.current !== null) clearTimeout(backgroundLoadTimerRef.current);
+    polymarketWS.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const node = listViewportRef.current;
+    if (!node) return;
+
+    const updateViewport = () => setListViewportHeight(node.clientHeight || 720);
+    updateViewport();
+
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, [viewMode]);
 
   // ---- SELECTED MARKET ----
   useEffect(() => {
@@ -233,6 +349,7 @@ const PolymarketHub = () => {
       if (obPollRef.current) clearInterval(obPollRef.current);
       if (tradePollRef.current) clearInterval(tradePollRef.current);
       setPolledOrderbook(null); setPolledTrades([]); setSelectedOrderbook(null); setSelectedTrades([]);
+      selectedTradesStateRef.current = [];
       setPollingActive(false);
       return;
     }
@@ -244,6 +361,7 @@ const PolymarketHub = () => {
     if (!yesToken) return;
 
     setPolledOrderbook(null); setPolledTrades([]); setSelectedOrderbook(null); setSelectedTrades([]);
+    selectedTradesStateRef.current = [];
     setPollingActive(false);
 
     const existingBook = liveBooksRef.current.get(yesToken);
@@ -255,7 +373,10 @@ const PolymarketHub = () => {
       .filter(trade => tokenIds.includes(trade.asset_id))
       .sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp))
       .slice(0, 50);
-    if (existingTrades.length > 0) setSelectedTrades(existingTrades);
+    if (existingTrades.length > 0) {
+      selectedTradesStateRef.current = existingTrades;
+      setSelectedTrades(existingTrades);
+    }
 
     PolymarketService.getPriceHistory(yesToken).then(setPriceHistory).catch(() => setPriceHistory([]));
     if (tokenIds.length > 0) {
@@ -277,8 +398,8 @@ const PolymarketHub = () => {
     };
 
     fetchOrderbook(); fetchTrades();
-    obPollRef.current = setInterval(fetchOrderbook, 1000);
-    tradePollRef.current = setInterval(fetchTrades, 2000);
+    obPollRef.current = setInterval(fetchOrderbook, 3000);
+    tradePollRef.current = setInterval(fetchTrades, 5000);
 
     return () => {
       if (obPollRef.current) clearInterval(obPollRef.current);
@@ -341,34 +462,52 @@ const PolymarketHub = () => {
   };
 
   // ---- COMPUTED ----
+  const categorizedEvents = useMemo(() => events.map((event) => ({ event, category: categorizeEvent(event) })), [events]);
+
   const totalVol24h = useMemo(() => events.reduce((s, e) => s + (e.volume24hr || 0), 0), [events]);
   const totalLiquidity = useMemo(() => events.reduce((s, e) => s + (e.liquidity || 0), 0), [events]);
 
   const subTags = useMemo(() => {
     const cats = new Set<string>();
-    const active = events.filter(e => e.active && !e.closed);
-    active.forEach(e => cats.add(categorizeEvent(e)));
+    categorizedEvents.forEach(({ event, category }) => {
+      if (event.active && !event.closed) cats.add(category);
+    });
     return ['All', ...Array.from(cats).sort()];
-  }, [events]);
+  }, [categorizedEvents]);
 
   const displayEvents = useMemo(() => {
-    let filtered = events.filter(e => e.active && !e.closed);
-    if (activeSubTag !== 'All') filtered = filtered.filter(e => categorizeEvent(e) === activeSubTag);
-    return filtered.sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0));
-  }, [events, activeSubTag]);
+    let filtered = categorizedEvents.filter(({ event }) => event.active && !event.closed);
+    if (activeSubTag !== 'All') filtered = filtered.filter(({ category }) => category === activeSubTag);
+    return filtered.sort((a, b) => (b.event.volume24hr || 0) - (a.event.volume24hr || 0));
+  }, [categorizedEvents, activeSubTag]);
 
   const categoryCounts = useMemo(() => {
-    const active = events.filter(e => e.active && !e.closed);
+    const active = categorizedEvents.filter(({ event }) => event.active && !event.closed);
     const counts: Record<string, number> = { All: active.length };
-    active.forEach(e => {
-      const cat = categorizeEvent(e);
-      counts[cat] = (counts[cat] || 0) + 1;
+    active.forEach(({ category }) => {
+      counts[category] = (counts[category] || 0) + 1;
     });
     return counts;
-  }, [events]);
+  }, [categorizedEvents]);
+
+  const virtualizedEvents = useMemo(() => {
+    const visibleCount = Math.ceil(listViewportHeight / EVENT_ROW_ESTIMATE) + EVENT_LIST_OVERSCAN * 2;
+    const start = Math.max(0, Math.floor(listScrollTop / EVENT_ROW_ESTIMATE) - EVENT_LIST_OVERSCAN);
+    const end = Math.min(displayEvents.length, start + visibleCount);
+
+    return {
+      items: displayEvents.slice(start, end),
+      topSpacer: start * EVENT_ROW_ESTIMATE,
+      bottomSpacer: Math.max(0, (displayEvents.length - end) * EVENT_ROW_ESTIMATE),
+    };
+  }, [displayEvents, listScrollTop, listViewportHeight]);
 
   // Top gainers & losers by probability
   const { topGainers, topLosers } = useMemo(() => {
+    if (viewMode !== 'GAINERS') {
+      return { topGainers: [], topLosers: [] };
+    }
+
     const withPrice = events
       .filter(e => e.active && !e.closed && e.markets?.length > 0)
       .map(e => {
@@ -383,7 +522,11 @@ const PolymarketHub = () => {
       topGainers: sorted.filter(e => e.pct >= 50).slice(0, 100),
       topLosers: sorted.filter(e => e.pct < 50).sort((a, b) => a.pct - b.pct).slice(0, 100),
     };
-  }, [events, getLivePrice]);
+  }, [events, getLivePrice, viewMode]);
+
+  const handleListScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    setListScrollTop(event.currentTarget.scrollTop);
+  }, []);
 
   const handleSelectEvent = useCallback((event: PolymarketEvent) => {
     setSelectedEvent(event);
@@ -461,8 +604,14 @@ const PolymarketHub = () => {
         </div>
       ) : viewMode === 'HEATMAP' ? (
         <div className="flex-1 min-h-0 overflow-hidden">
-          <PolymarketHeatmap events={displayEvents} onSelectEvent={handleSelectEvent}
-            selectedEventId={selectedEvent?.id} getLivePrice={getLivePrice} />
+          <Suspense fallback={<PanelFallback label="Loading heatmap..." />}>
+            <PolymarketHeatmap
+              events={displayEvents.map(({ event }) => event)}
+              onSelectEvent={handleSelectEvent}
+              selectedEventId={selectedEvent?.id}
+              getLivePrice={getLivePrice}
+            />
+          </Suspense>
         </div>
       ) : viewMode === 'GAINERS' ? (
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -478,25 +627,25 @@ const PolymarketHub = () => {
           <div className="w-[480px] min-w-[380px] border-r border-border flex flex-col">
             <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/50 bg-card/30">
               <span className="text-[10px] font-bold text-terminal-green tracking-wider">
-                {activeSubTag === 'All' ? 'TRENDING MARKETS' : activeSubTag.toUpperCase()} ({displayEvents.length})
+                {activeSubTag === 'All' ? 'MARKETS' : activeSubTag.toUpperCase()} ({displayEvents.length})
               </span>
               <StatusBadge status={dataStatus} compact />
             </div>
-            <ScrollArea className="flex-1">
-              <div className="divide-y divide-border/30">
+            <div ref={listViewportRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto">
+              <div className="divide-y divide-border/30" style={{ paddingTop: virtualizedEvents.topSpacer, paddingBottom: virtualizedEvents.bottomSpacer }}>
                 {displayEvents.length === 0 ? (
                   <div className="p-6 text-center text-xs text-muted-foreground">No active markets found</div>
                 ) : (
-                  displayEvents.map((event, idx) => (
-                    <EventCard key={`${event.id}-${idx}`} event={event}
+                  virtualizedEvents.items.map(({ event, category }) => (
+                    <EventCard key={event.id} event={event}
                       isSelected={selectedEvent?.id === event.id}
                       onClick={() => handleSelectEvent(event)}
                       getLivePrice={getLivePrice}
-                      category={categorizeEvent(event)} />
+                      category={category} />
                   ))
                 )}
               </div>
-            </ScrollArea>
+            </div>
           </div>
 
           {/* Right: Detail */}
@@ -881,9 +1030,13 @@ const EventDetailView = memo(({
   }[dataStatus];
 
   if (!isMulti && selectedMarket) {
-    return <PolymarketMarketDetail market={selectedMarket} priceHistory={priceHistory}
-      orderbook={orderbook} allMarkets={allMarkets} onSelectMarket={onSelectEvent}
-      liveTrades={liveTrades} wsConnected={wsConnected} dataStatus={dataStatus} />;
+    return (
+      <Suspense fallback={<PanelFallback label="Loading market detail..." />}>
+        <PolymarketMarketDetail market={selectedMarket} priceHistory={priceHistory}
+          orderbook={orderbook} allMarkets={allMarkets} onSelectMarket={onSelectEvent}
+          liveTrades={liveTrades} wsConnected={wsConnected} dataStatus={dataStatus} />
+      </Suspense>
+    );
   }
 
   return (
@@ -936,7 +1089,9 @@ const EventDetailView = memo(({
           {isMulti && multiPriceHistory.size > 0 ? (
             <MultiOutcomePriceChart histories={multiPriceHistory} />
           ) : (
-            <PolymarketPriceChart data={priceHistory} />
+            <Suspense fallback={<PanelFallback label="Loading chart..." />}>
+              <PolymarketPriceChart data={priceHistory} />
+            </Suspense>
           )}
         </div>
 
@@ -1025,7 +1180,9 @@ const EventDetailView = memo(({
               )}
             </div>
 
-            <PolymarketCalculator market={selectedMarket} />
+            <Suspense fallback={<PanelFallback label="Loading calculator..." />}>
+              <PolymarketCalculator market={selectedMarket} />
+            </Suspense>
           </>
         )}
 
