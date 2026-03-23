@@ -142,42 +142,78 @@ const PolymarketHub = () => {
   // Live order ticker tape
   const [tickerTrades, setTickerTrades] = useState<(PolymarketLastTrade & { title?: string })[]>([]);
   const marketTitleCacheRef = useRef<Map<string, string>>(new Map());
+  const tickerTradesRef = useRef<(PolymarketLastTrade & { title?: string })[]>([]);
+  const selectedTradesStateRef = useRef<PolymarketLastTrade[]>([]);
 
   const obPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tradePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const selectedMarketRef = useRef<PolymarketMarket | null>(null);
+  const listViewportRef = useRef<HTMLDivElement | null>(null);
+  const requestVersionRef = useRef(0);
+  const backgroundLoadTimerRef = useRef<number | null>(null);
+  const pendingUiTimerRef = useRef<number | null>(null);
+  const pendingSelectedOrderbookRef = useRef<OrderbookData | null>(null);
+  const pendingSelectedTradesRef = useRef<PolymarketLastTrade[] | null>(null);
+  const pendingTickerTradesRef = useRef<(PolymarketLastTrade & { title?: string })[] | null>(null);
+  const [listScrollTop, setListScrollTop] = useState(0);
+  const [listViewportHeight, setListViewportHeight] = useState(720);
   selectedMarketRef.current = selectedMarket;
 
   // ---- DATA FETCH (Progressive: show first page fast, load rest in background) ----
   const isLoadingMoreRef = useRef(false);
 
+  const scheduleUiFlush = useCallback(() => {
+    if (pendingUiTimerRef.current !== null) return;
+
+    pendingUiTimerRef.current = window.setTimeout(() => {
+      pendingUiTimerRef.current = null;
+
+      if (pendingSelectedOrderbookRef.current) {
+        setSelectedOrderbook(pendingSelectedOrderbookRef.current);
+        pendingSelectedOrderbookRef.current = null;
+      }
+
+      if (pendingSelectedTradesRef.current) {
+        selectedTradesStateRef.current = pendingSelectedTradesRef.current;
+        setSelectedTrades(pendingSelectedTradesRef.current);
+        pendingSelectedTradesRef.current = null;
+      }
+
+      if (pendingTickerTradesRef.current) {
+        tickerTradesRef.current = pendingTickerTradesRef.current;
+        setTickerTrades(pendingTickerTradesRef.current);
+        pendingTickerTradesRef.current = null;
+      }
+    }, 120);
+  }, []);
+
   const fetchData = useCallback(async (tag?: string) => {
+    const requestVersion = ++requestVersionRef.current;
+
+    if (backgroundLoadTimerRef.current !== null) {
+      window.clearTimeout(backgroundLoadTimerRef.current);
+      backgroundLoadTimerRef.current = null;
+    }
+
     setLoading(true);
     try {
-      // STEP 1: Load first page FAST (100 events)
-      const [firstEvts, firstMkts] = await Promise.all([
-        PolymarketService.getTrendingEvents(100, tag),
-        PolymarketService.getMarkets(100, tag),
-      ]);
+      const firstEvts = await PolymarketService.getTrendingEvents(100, tag);
+      if (requestVersionRef.current !== requestVersion) return;
 
       const evts1 = Array.isArray(firstEvts) ? firstEvts : [];
-      const mkts1 = Array.isArray(firstMkts) ? firstMkts : [];
+      let mkts1 = extractMarketsFromEvents(evts1);
+
+      if (mkts1.length === 0) {
+        const fallbackMarkets = await PolymarketService.getMarkets(100, tag);
+        if (requestVersionRef.current !== requestVersion) return;
+        mkts1 = Array.isArray(fallbackMarkets) ? fallbackMarkets : [];
+      }
+
+      primeMarketTitleCache(evts1, marketTitleCacheRef.current);
       setEvents(evts1);
       setAllMarkets(mkts1);
       setTotalMarketCount(mkts1.length);
       setLoading(false); // Show data immediately
-
-      // Build title cache from first page
-      const titleCache = marketTitleCacheRef.current;
-      for (const evt of evts1) {
-        for (const m of evt.markets || []) {
-          try {
-            const ids: string[] = JSON.parse(m.clobTokenIds || '[]');
-            const label = m.groupItemTitle || m.question || evt.title;
-            ids.forEach(id => { if (id) titleCache.set(id, label); });
-          } catch {}
-        }
-      }
 
       // Subscribe top 200 to WS
       const topMarkets = [...mkts1]
@@ -189,34 +225,50 @@ const PolymarketHub = () => {
       // STEP 2: If TRENDING (no tag), load ALL remaining in background
       if (!tag && !isLoadingMoreRef.current) {
         isLoadingMoreRef.current = true;
-        try {
-          const [allEvts, allMkts] = await Promise.all([
-            PolymarketService.getAllActiveEvents(),
-            PolymarketService.getAllActiveMarkets(),
-          ]);
-          const fullEvts = Array.isArray(allEvts) ? allEvts : evts1;
-          const fullMkts = Array.isArray(allMkts) ? allMkts : mkts1;
-          setEvents(fullEvts);
-          setAllMarkets(fullMkts);
-          setTotalMarketCount(fullMkts.length);
+        const loadRemaining = async () => {
+          try {
+            const allEvts = await PolymarketService.getAllActiveEvents();
+            if (requestVersionRef.current !== requestVersion) return;
 
-          // Update title cache
-          for (const evt of fullEvts) {
-            for (const m of evt.markets || []) {
-              try {
-                const ids: string[] = JSON.parse(m.clobTokenIds || '[]');
-                const label = m.groupItemTitle || m.question || evt.title;
-                ids.forEach(id => { if (id) titleCache.set(id, label); });
-              } catch {}
+            const fullEvts = Array.isArray(allEvts) ? allEvts : evts1;
+            let fullMkts = extractMarketsFromEvents(fullEvts);
+
+            if (fullMkts.length === 0) {
+              const fallbackAllMarkets = await PolymarketService.getAllActiveMarkets();
+              if (requestVersionRef.current !== requestVersion) return;
+              fullMkts = Array.isArray(fallbackAllMarkets) ? fallbackAllMarkets : mkts1;
+            }
+
+            primeMarketTitleCache(fullEvts, marketTitleCacheRef.current);
+
+            startTransition(() => {
+              setEvents(fullEvts);
+              setAllMarkets(fullMkts);
+              setTotalMarketCount(fullMkts.length);
+            });
+
+            const liveTopMarkets = [...fullMkts]
+              .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
+              .slice(0, 200);
+            const liveTokenIds = PolymarketService.extractTokenIds(liveTopMarkets);
+            if (liveTokenIds.length > 0) polymarketWS.subscribeToAssets(liveTokenIds);
+          } catch (bgErr) {
+            console.warn('Background pagination partial:', bgErr);
+          } finally {
+            if (requestVersionRef.current === requestVersion) {
+              isLoadingMoreRef.current = false;
             }
           }
-        } catch (bgErr) {
-          console.warn('Background pagination partial:', bgErr);
-        } finally {
-          isLoadingMoreRef.current = false;
+        };
+
+        if ('requestIdleCallback' in window) {
+          (window as any).requestIdleCallback(() => { void loadRemaining(); }, { timeout: 1200 });
+        } else {
+          backgroundLoadTimerRef.current = window.setTimeout(() => { void loadRemaining(); }, 120);
         }
       }
     } catch (e: any) {
+      if (requestVersionRef.current !== requestVersion) return;
       console.error('Polymarket fetch error:', e);
       toast.error('Failed to load Polymarket data');
       setLoading(false);
