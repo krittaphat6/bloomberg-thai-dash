@@ -291,28 +291,30 @@ const PolymarketHub = () => {
       if (sm) {
         const outcomes = PolymarketService.parseOutcomes(sm);
         if (outcomes[0]?.tokenId === data.asset_id) {
-          setSelectedOrderbook({
+          pendingSelectedOrderbookRef.current = {
             bids: data.bids, asks: data.asks,
             hash: data.hash, timestamp: data.timestamp, market: data.market,
-          });
+          };
+          scheduleUiFlush();
         }
       }
     });
 
     const unsubTrade = polymarketWS.onTrade('ALL', (data) => {
       liveTradesRef.current = [data, ...liveTradesRef.current].slice(0, 100);
-      // Add to ticker tape with market title
       const title = marketTitleCacheRef.current.get(data.asset_id) || '';
       const enriched = { ...data, title };
-      setTickerTrades(prev => [enriched, ...prev].slice(0, 200));
+      pendingTickerTradesRef.current = mergeTradeBuffer(tickerTradesRef.current, enriched, 200);
       const sm = selectedMarketRef.current;
       if (sm) {
         const outcomes = PolymarketService.parseOutcomes(sm);
         const tokenIds = outcomes.map(o => o.tokenId).filter(Boolean);
         if (tokenIds.includes(data.asset_id)) {
-          setSelectedTrades(prev => [data, ...prev].slice(0, 50));
+          pendingSelectedTradesRef.current = mergeTradeBuffer(selectedTradesStateRef.current, data, 50);
         }
       }
+
+      scheduleUiFlush();
     });
 
     return () => { unsubBook(); unsubTrade(); };
@@ -324,7 +326,22 @@ const PolymarketHub = () => {
     return () => clearInterval(iv);
   }, []);
 
-  useEffect(() => () => { polymarketWS.disconnect(); }, []);
+  useEffect(() => () => {
+    if (pendingUiTimerRef.current !== null) clearTimeout(pendingUiTimerRef.current);
+    if (backgroundLoadTimerRef.current !== null) clearTimeout(backgroundLoadTimerRef.current);
+    polymarketWS.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const node = listViewportRef.current;
+    if (!node) return;
+
+    const updateViewport = () => setListViewportHeight(node.clientHeight || 720);
+    updateViewport();
+
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, [viewMode]);
 
   // ---- SELECTED MARKET ----
   useEffect(() => {
@@ -332,6 +349,7 @@ const PolymarketHub = () => {
       if (obPollRef.current) clearInterval(obPollRef.current);
       if (tradePollRef.current) clearInterval(tradePollRef.current);
       setPolledOrderbook(null); setPolledTrades([]); setSelectedOrderbook(null); setSelectedTrades([]);
+      selectedTradesStateRef.current = [];
       setPollingActive(false);
       return;
     }
@@ -343,6 +361,7 @@ const PolymarketHub = () => {
     if (!yesToken) return;
 
     setPolledOrderbook(null); setPolledTrades([]); setSelectedOrderbook(null); setSelectedTrades([]);
+    selectedTradesStateRef.current = [];
     setPollingActive(false);
 
     const existingBook = liveBooksRef.current.get(yesToken);
@@ -354,7 +373,10 @@ const PolymarketHub = () => {
       .filter(trade => tokenIds.includes(trade.asset_id))
       .sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp))
       .slice(0, 50);
-    if (existingTrades.length > 0) setSelectedTrades(existingTrades);
+    if (existingTrades.length > 0) {
+      selectedTradesStateRef.current = existingTrades;
+      setSelectedTrades(existingTrades);
+    }
 
     PolymarketService.getPriceHistory(yesToken).then(setPriceHistory).catch(() => setPriceHistory([]));
     if (tokenIds.length > 0) {
@@ -376,8 +398,8 @@ const PolymarketHub = () => {
     };
 
     fetchOrderbook(); fetchTrades();
-    obPollRef.current = setInterval(fetchOrderbook, 1000);
-    tradePollRef.current = setInterval(fetchTrades, 2000);
+    obPollRef.current = setInterval(fetchOrderbook, 3000);
+    tradePollRef.current = setInterval(fetchTrades, 5000);
 
     return () => {
       if (obPollRef.current) clearInterval(obPollRef.current);
