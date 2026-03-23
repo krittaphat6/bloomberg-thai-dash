@@ -524,7 +524,7 @@ const PolymarketHub = () => {
   );
 };
 
-// ============ ORDER TICKER TAPE (horizontal bar) ============
+// ============ ORDER TICKER TAPE (horizontal bar with whale detection) ============
 
 const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { title?: string })[] }) => {
   if (trades.length === 0) return (
@@ -541,19 +541,24 @@ const OrderTickerTape = memo(({ trades }: { trades: (PolymarketLastTrade & { tit
       <div className="flex items-center gap-0 animate-ticker absolute whitespace-nowrap h-full will-change-transform">
         {doubled.map((t, i) => {
           const isBuy = t.side === 'BUY';
-          const pct = Math.round(parseFloat(t.price || '0') * 100);
+          const price = parseFloat(t.price || '0');
           const size = parseFloat(t.size || '0');
+          const pct = Math.round(price * 100);
+          const value = price * size;
+          const isWhale = value >= 500;
           const title = t.title ? (t.title.length > 22 ? t.title.slice(0, 20) + '…' : t.title) : '';
           const sizeStr = size >= 1000 ? `${(size / 1000).toFixed(1)}K` : size.toFixed(0);
           return (
             <span key={`${t.timestamp}-${i}`}
               className={`flex items-center gap-1 text-[10px] shrink-0 px-2.5 py-0.5 border-r border-border/20 ${
-                isBuy ? 'bg-terminal-green/[0.03]' : 'bg-destructive/[0.03]'
+                isWhale ? 'bg-terminal-amber/10' : isBuy ? 'bg-terminal-green/[0.03]' : 'bg-destructive/[0.03]'
               }`}>
+              {isWhale && <span className="text-[9px]">🐋</span>}
               <span className={`font-black text-[11px] ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{isBuy ? '▲' : '▼'}</span>
-              {title && <span className="text-foreground/70 font-medium max-w-[140px] truncate">{title}</span>}
+              {title && <span className={`font-medium max-w-[140px] truncate ${isWhale ? 'text-terminal-amber' : 'text-foreground/70'}`}>{title}</span>}
               <span className={`font-mono font-bold ${isBuy ? 'text-terminal-green' : 'text-destructive'}`}>{pct}¢</span>
               <span className="text-muted-foreground font-mono">×{sizeStr}</span>
+              {isWhale && <span className="text-terminal-amber font-mono font-bold">${value >= 1000 ? `${(value/1000).toFixed(1)}K` : value.toFixed(0)}</span>}
             </span>
           );
         })}
