@@ -1030,9 +1030,13 @@ const EventDetailView = memo(({
   }[dataStatus];
 
   if (!isMulti && selectedMarket) {
-    return <PolymarketMarketDetail market={selectedMarket} priceHistory={priceHistory}
-      orderbook={orderbook} allMarkets={allMarkets} onSelectMarket={onSelectEvent}
-      liveTrades={liveTrades} wsConnected={wsConnected} dataStatus={dataStatus} />;
+    return (
+      <Suspense fallback={<PanelFallback label="Loading market detail..." />}>
+        <PolymarketMarketDetail market={selectedMarket} priceHistory={priceHistory}
+          orderbook={orderbook} allMarkets={allMarkets} onSelectMarket={onSelectEvent}
+          liveTrades={liveTrades} wsConnected={wsConnected} dataStatus={dataStatus} />
+      </Suspense>
+    );
   }
 
   return (
@@ -1085,7 +1089,9 @@ const EventDetailView = memo(({
           {isMulti && multiPriceHistory.size > 0 ? (
             <MultiOutcomePriceChart histories={multiPriceHistory} />
           ) : (
-            <PolymarketPriceChart data={priceHistory} />
+            <Suspense fallback={<PanelFallback label="Loading chart..." />}>
+              <PolymarketPriceChart data={priceHistory} />
+            </Suspense>
           )}
         </div>
 
@@ -1174,7 +1180,9 @@ const EventDetailView = memo(({
               )}
             </div>
 
-            <PolymarketCalculator market={selectedMarket} />
+            <Suspense fallback={<PanelFallback label="Loading calculator..." />}>
+              <PolymarketCalculator market={selectedMarket} />
+            </Suspense>
           </>
         )}
 
