@@ -462,34 +462,52 @@ const PolymarketHub = () => {
   };
 
   // ---- COMPUTED ----
+  const categorizedEvents = useMemo(() => events.map((event) => ({ event, category: categorizeEvent(event) })), [events]);
+
   const totalVol24h = useMemo(() => events.reduce((s, e) => s + (e.volume24hr || 0), 0), [events]);
   const totalLiquidity = useMemo(() => events.reduce((s, e) => s + (e.liquidity || 0), 0), [events]);
 
   const subTags = useMemo(() => {
     const cats = new Set<string>();
-    const active = events.filter(e => e.active && !e.closed);
-    active.forEach(e => cats.add(categorizeEvent(e)));
+    categorizedEvents.forEach(({ event, category }) => {
+      if (event.active && !event.closed) cats.add(category);
+    });
     return ['All', ...Array.from(cats).sort()];
-  }, [events]);
+  }, [categorizedEvents]);
 
   const displayEvents = useMemo(() => {
-    let filtered = events.filter(e => e.active && !e.closed);
-    if (activeSubTag !== 'All') filtered = filtered.filter(e => categorizeEvent(e) === activeSubTag);
-    return filtered.sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0));
-  }, [events, activeSubTag]);
+    let filtered = categorizedEvents.filter(({ event }) => event.active && !event.closed);
+    if (activeSubTag !== 'All') filtered = filtered.filter(({ category }) => category === activeSubTag);
+    return filtered.sort((a, b) => (b.event.volume24hr || 0) - (a.event.volume24hr || 0));
+  }, [categorizedEvents, activeSubTag]);
 
   const categoryCounts = useMemo(() => {
-    const active = events.filter(e => e.active && !e.closed);
+    const active = categorizedEvents.filter(({ event }) => event.active && !event.closed);
     const counts: Record<string, number> = { All: active.length };
-    active.forEach(e => {
-      const cat = categorizeEvent(e);
-      counts[cat] = (counts[cat] || 0) + 1;
+    active.forEach(({ category }) => {
+      counts[category] = (counts[category] || 0) + 1;
     });
     return counts;
-  }, [events]);
+  }, [categorizedEvents]);
+
+  const virtualizedEvents = useMemo(() => {
+    const visibleCount = Math.ceil(listViewportHeight / EVENT_ROW_ESTIMATE) + EVENT_LIST_OVERSCAN * 2;
+    const start = Math.max(0, Math.floor(listScrollTop / EVENT_ROW_ESTIMATE) - EVENT_LIST_OVERSCAN);
+    const end = Math.min(displayEvents.length, start + visibleCount);
+
+    return {
+      items: displayEvents.slice(start, end),
+      topSpacer: start * EVENT_ROW_ESTIMATE,
+      bottomSpacer: Math.max(0, (displayEvents.length - end) * EVENT_ROW_ESTIMATE),
+    };
+  }, [displayEvents, listScrollTop, listViewportHeight]);
 
   // Top gainers & losers by probability
   const { topGainers, topLosers } = useMemo(() => {
+    if (viewMode !== 'GAINERS') {
+      return { topGainers: [], topLosers: [] };
+    }
+
     const withPrice = events
       .filter(e => e.active && !e.closed && e.markets?.length > 0)
       .map(e => {
@@ -504,7 +522,11 @@ const PolymarketHub = () => {
       topGainers: sorted.filter(e => e.pct >= 50).slice(0, 100),
       topLosers: sorted.filter(e => e.pct < 50).sort((a, b) => a.pct - b.pct).slice(0, 100),
     };
-  }, [events, getLivePrice]);
+  }, [events, getLivePrice, viewMode]);
+
+  const handleListScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    setListScrollTop(event.currentTarget.scrollTop);
+  }, []);
 
   const handleSelectEvent = useCallback((event: PolymarketEvent) => {
     setSelectedEvent(event);
