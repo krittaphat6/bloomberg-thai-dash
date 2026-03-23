@@ -101,30 +101,28 @@ const PolymarketHub = () => {
   const selectedMarketRef = useRef<PolymarketMarket | null>(null);
   selectedMarketRef.current = selectedMarket;
 
-  // ---- DATA FETCH ----
+  // ---- DATA FETCH (Progressive: show first page fast, load rest in background) ----
+  const isLoadingMoreRef = useRef(false);
+
   const fetchData = useCallback(async (tag?: string) => {
     setLoading(true);
     try {
-      let evts: PolymarketEvent[];
-      let mkts: PolymarketMarket[];
-      if (!tag) {
-        [evts, mkts] = await Promise.all([
-          PolymarketService.getAllActiveEvents(),
-          PolymarketService.getAllActiveMarkets(),
-        ]);
-      } else {
-        [evts, mkts] = await Promise.all([
-          PolymarketService.getTrendingEvents(100, tag),
-          PolymarketService.getMarkets(100, tag),
-        ]);
-      }
-      setEvents(Array.isArray(evts) ? evts : []);
-      const markets = Array.isArray(mkts) ? mkts : [];
-      setAllMarkets(markets);
+      // STEP 1: Load first page FAST (100 events)
+      const [firstEvts, firstMkts] = await Promise.all([
+        PolymarketService.getTrendingEvents(100, tag),
+        PolymarketService.getMarkets(100, tag),
+      ]);
 
-      // Build title lookup cache from events
+      const evts1 = Array.isArray(firstEvts) ? firstEvts : [];
+      const mkts1 = Array.isArray(firstMkts) ? firstMkts : [];
+      setEvents(evts1);
+      setAllMarkets(mkts1);
+      setTotalMarketCount(mkts1.length);
+      setLoading(false); // Show data immediately
+
+      // Build title cache from first page
       const titleCache = marketTitleCacheRef.current;
-      for (const evt of (Array.isArray(evts) ? evts : [])) {
+      for (const evt of evts1) {
         for (const m of evt.markets || []) {
           try {
             const ids: string[] = JSON.parse(m.clobTokenIds || '[]');
@@ -134,16 +132,46 @@ const PolymarketHub = () => {
         }
       }
 
-      const topMarkets = [...markets]
+      // Subscribe top 200 to WS
+      const topMarkets = [...mkts1]
         .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
         .slice(0, 200);
       const tokenIds = PolymarketService.extractTokenIds(topMarkets);
       if (tokenIds.length > 0) polymarketWS.subscribeToAssets(tokenIds);
-      setTotalMarketCount(markets.length);
+
+      // STEP 2: If TRENDING (no tag), load ALL remaining in background
+      if (!tag && !isLoadingMoreRef.current) {
+        isLoadingMoreRef.current = true;
+        try {
+          const [allEvts, allMkts] = await Promise.all([
+            PolymarketService.getAllActiveEvents(),
+            PolymarketService.getAllActiveMarkets(),
+          ]);
+          const fullEvts = Array.isArray(allEvts) ? allEvts : evts1;
+          const fullMkts = Array.isArray(allMkts) ? allMkts : mkts1;
+          setEvents(fullEvts);
+          setAllMarkets(fullMkts);
+          setTotalMarketCount(fullMkts.length);
+
+          // Update title cache
+          for (const evt of fullEvts) {
+            for (const m of evt.markets || []) {
+              try {
+                const ids: string[] = JSON.parse(m.clobTokenIds || '[]');
+                const label = m.groupItemTitle || m.question || evt.title;
+                ids.forEach(id => { if (id) titleCache.set(id, label); });
+              } catch {}
+            }
+          }
+        } catch (bgErr) {
+          console.warn('Background pagination partial:', bgErr);
+        } finally {
+          isLoadingMoreRef.current = false;
+        }
+      }
     } catch (e: any) {
       console.error('Polymarket fetch error:', e);
       toast.error('Failed to load Polymarket data');
-    } finally {
       setLoading(false);
     }
   }, []);
