@@ -165,7 +165,7 @@ const PolymarketHub = () => {
   const scheduleUiFlush = useCallback(() => {
     if (pendingUiTimerRef.current !== null) return;
 
-    pendingUiTimerRef.current = window.setTimeout(() => {
+    pendingUiTimerRef.current = setTimeout(() => {
       pendingUiTimerRef.current = null;
 
       if (pendingSelectedOrderbookRef.current) {
@@ -191,7 +191,7 @@ const PolymarketHub = () => {
     const requestVersion = ++requestVersionRef.current;
 
     if (backgroundLoadTimerRef.current !== null) {
-      window.clearTimeout(backgroundLoadTimerRef.current);
+      clearTimeout(backgroundLoadTimerRef.current);
       backgroundLoadTimerRef.current = null;
     }
 
@@ -264,7 +264,7 @@ const PolymarketHub = () => {
         if ('requestIdleCallback' in window) {
           (window as any).requestIdleCallback(() => { void loadRemaining(); }, { timeout: 1200 });
         } else {
-          backgroundLoadTimerRef.current = window.setTimeout(() => { void loadRemaining(); }, 120);
+          backgroundLoadTimerRef.current = setTimeout(() => { void loadRemaining(); }, 120);
         }
       }
     } catch (e: any) {
