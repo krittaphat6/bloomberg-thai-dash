@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
+import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -7,11 +7,12 @@ import { Loader2, RotateCcw, Search, TrendingUp, TrendingDown, BarChart3, Wifi, 
 import { toast } from 'sonner';
 import { PolymarketService, PolymarketEvent, PolymarketMarket, PriceHistoryPoint, OrderbookData, TradeData } from '@/services/PolymarketService';
 import { polymarketWS, PolymarketBookUpdate, PolymarketLastTrade } from '@/services/PolymarketWebSocketService';
-import { PolymarketMarketDetail } from '@/components/polymarket/PolymarketMarketDetail';
-import { PolymarketPriceChart } from '@/components/polymarket/PolymarketPriceChart';
-import { PolymarketCalculator } from '@/components/polymarket/PolymarketCalculator';
-import PolymarketHeatmap from '@/components/polymarket/PolymarketHeatmap';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+const PolymarketMarketDetail = lazy(async () => ({ default: (await import('@/components/polymarket/PolymarketMarketDetail')).PolymarketMarketDetail }));
+const PolymarketPriceChart = lazy(async () => ({ default: (await import('@/components/polymarket/PolymarketPriceChart')).PolymarketPriceChart }));
+const PolymarketCalculator = lazy(async () => ({ default: (await import('@/components/polymarket/PolymarketCalculator')).PolymarketCalculator }));
+const PolymarketHeatmap = lazy(() => import('@/components/polymarket/PolymarketHeatmap'));
 
 // ============ CONSTANTS ============
 
@@ -63,6 +64,52 @@ const getTimestampMs = (timestamp?: string) => {
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? 0 : parsed;
 };
+
+const EVENT_ROW_ESTIMATE = 156;
+const EVENT_LIST_OVERSCAN = 10;
+
+const extractMarketsFromEvents = (items: PolymarketEvent[]): PolymarketMarket[] => {
+  const deduped = new Map<string, PolymarketMarket>();
+  for (const event of items) {
+    for (const market of event.markets || []) {
+      if (market?.id) deduped.set(market.id, market);
+    }
+  }
+  return Array.from(deduped.values());
+};
+
+const primeMarketTitleCache = (items: PolymarketEvent[], cache: Map<string, string>) => {
+  for (const event of items) {
+    for (const market of event.markets || []) {
+      try {
+        const ids: string[] = JSON.parse(market.clobTokenIds || '[]');
+        const label = market.groupItemTitle || market.question || event.title;
+        ids.forEach((id) => {
+          if (id) cache.set(id, label);
+        });
+      } catch {
+        // Ignore malformed token arrays
+      }
+    }
+  }
+};
+
+const mergeTradeBuffer = <T extends PolymarketLastTrade>(existing: T[], incoming: T, limit: number): T[] => {
+  const incomingKey = `${incoming.asset_id}-${incoming.side}-${incoming.price}-${incoming.size}-${incoming.timestamp}`;
+  const next = existing.filter((trade) => {
+    const tradeKey = `${trade.asset_id}-${trade.side}-${trade.price}-${trade.size}-${trade.timestamp}`;
+    return tradeKey !== incomingKey;
+  });
+
+  return [incoming, ...next].slice(0, limit);
+};
+
+const PanelFallback = ({ label }: { label: string }) => (
+  <div className="h-[240px] flex items-center justify-center text-[10px] text-muted-foreground">
+    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+    {label}
+  </div>
+);
 
 // ============ MAIN COMPONENT ============
 
