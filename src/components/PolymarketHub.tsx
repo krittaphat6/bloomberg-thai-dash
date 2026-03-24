@@ -197,6 +197,7 @@ const PolymarketHub = () => {
 
     setLoading(true);
     try {
+      // STEP 1: Load first batch FAST (100 events)
       const firstEvts = await PolymarketService.getTrendingEvents(100, tag);
       if (requestVersionRef.current !== requestVersion) return;
 
@@ -213,7 +214,7 @@ const PolymarketHub = () => {
       setEvents(evts1);
       setAllMarkets(mkts1);
       setTotalMarketCount(mkts1.length);
-      setLoading(false); // Show data immediately
+      setLoading(false);
 
       // Subscribe top 200 to WS
       const topMarkets = [...mkts1]
@@ -222,36 +223,67 @@ const PolymarketHub = () => {
       const tokenIds = PolymarketService.extractTokenIds(topMarkets);
       if (tokenIds.length > 0) polymarketWS.subscribeToAssets(tokenIds);
 
-      // STEP 2: If TRENDING (no tag), load ALL remaining in background
-      if (!tag && !isLoadingMoreRef.current) {
+      // STEP 2: Load ALL remaining in background — for EVERY tab
+      if (!isLoadingMoreRef.current) {
         isLoadingMoreRef.current = true;
         const loadRemaining = async () => {
           try {
-            const allEvts = await PolymarketService.getAllActiveEvents();
-            if (requestVersionRef.current !== requestVersion) return;
+            // Paginate ALL events (with or without tag)
+            const allEvts: any[] = [];
+            let offset = 100; // skip first batch already loaded
+            const limit = 500;
+            let hasMore = true;
 
-            const fullEvts = Array.isArray(allEvts) ? allEvts : evts1;
-            let fullMkts = extractMarketsFromEvents(fullEvts);
-
-            if (fullMkts.length === 0) {
-              const fallbackAllMarkets = await PolymarketService.getAllActiveMarkets();
+            while (hasMore) {
               if (requestVersionRef.current !== requestVersion) return;
-              fullMkts = Array.isArray(fallbackAllMarkets) ? fallbackAllMarkets : mkts1;
+              try {
+                const batch = await PolymarketService.getTrendingEvents(limit, tag);
+                // Use callProxy with offset via a direct paginated fetch
+                const batchResult = await (async () => {
+                  const { data, error } = await (await import('@/integrations/supabase/client')).supabase.functions.invoke('polymarket-proxy', {
+                    body: { action: 'events', params: { limit, offset, order: 'volume24hr', ...(tag && { tag }) } },
+                  });
+                  if (error || !data?.success) return [];
+                  return Array.isArray(data.data) ? data.data : [];
+                })();
+
+                if (!batchResult || batchResult.length === 0) {
+                  hasMore = false;
+                } else {
+                  allEvts.push(...batchResult);
+                  offset += limit;
+                  if (batchResult.length < limit) hasMore = false;
+                }
+              } catch {
+                hasMore = false;
+              }
             }
 
-            primeMarketTitleCache(fullEvts, marketTitleCacheRef.current);
+            if (requestVersionRef.current !== requestVersion) return;
+
+            // Merge first batch + remaining
+            const mergedEvts = [...evts1, ...allEvts];
+            const deduped = Array.from(new Map(mergedEvts.map(e => [e.id, e])).values());
+            let fullMkts = extractMarketsFromEvents(deduped);
+
+            if (fullMkts.length === 0) fullMkts = mkts1;
+
+            primeMarketTitleCache(deduped, marketTitleCacheRef.current);
 
             startTransition(() => {
-              setEvents(fullEvts);
+              setEvents(deduped);
               setAllMarkets(fullMkts);
               setTotalMarketCount(fullMkts.length);
             });
 
+            // Subscribe more tokens
             const liveTopMarkets = [...fullMkts]
               .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
               .slice(0, 200);
             const liveTokenIds = PolymarketService.extractTokenIds(liveTopMarkets);
             if (liveTokenIds.length > 0) polymarketWS.subscribeToAssets(liveTokenIds);
+
+            console.log(`[Polymarket] Total loaded: ${deduped.length} events, ${fullMkts.length} markets`);
           } catch (bgErr) {
             console.warn('Background pagination partial:', bgErr);
           } finally {
@@ -261,11 +293,8 @@ const PolymarketHub = () => {
           }
         };
 
-        if ('requestIdleCallback' in window) {
-          (window as any).requestIdleCallback(() => { void loadRemaining(); }, { timeout: 1200 });
-        } else {
-          backgroundLoadTimerRef.current = setTimeout(() => { void loadRemaining(); }, 120);
-        }
+        // Start background load after 100ms to let UI settle
+        backgroundLoadTimerRef.current = setTimeout(() => { void loadRemaining(); }, 100);
       }
     } catch (e: any) {
       if (requestVersionRef.current !== requestVersion) return;
