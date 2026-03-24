@@ -22,6 +22,15 @@ const TAB_TO_TAG: Record<string, string | undefined> = {
   SPORTS: 'sports', FINANCE: 'finance', 'AI & TECH': 'ai',
 };
 
+const MAIN_TAB_MATCHERS: Record<string, string[]> = {
+  TRENDING: [],
+  POLITICS: ['politics', 'political', 'election', 'government', 'policy', 'president', 'senate', 'congress', 'trump', 'biden'],
+  CRYPTO: ['crypto', 'cryptocurrency', 'bitcoin', 'btc', 'ethereum', 'eth', 'solana', 'sol', 'blockchain', 'token'],
+  SPORTS: ['sports', 'sport', 'nba', 'nfl', 'mlb', 'soccer', 'football', 'basketball', 'tennis', 'ufc', 'fifa', 'formula'],
+  FINANCE: ['finance', 'financial', 'economy', 'economic', 'fed', 'rates', 'inflation', 'earnings', 'stocks', 'oil', 'gold', 'market'],
+  'AI & TECH': ['ai', 'artificial intelligence', 'tech', 'technology', 'openai', 'chatgpt', 'nvidia', 'google', 'meta', 'apple'],
+};
+
 const CATEGORY_MAP: Record<string, string[]> = {
   'Elections': ['election', 'president', 'governor', 'senate', 'congress', 'vote', 'nominee', 'primary', 'democrat', 'republican', 'netanyahu', 'trudeau', 'modi', 'macron', 'starmer', 'poll'],
   'Fed & Rates': ['fed', 'fomc', 'interest rate', 'inflation', 'cpi', 'gdp', 'treasury', 'unemployment', 'jobs', 'monetary', 'recession'],
@@ -63,6 +72,36 @@ const getTimestampMs = (timestamp?: string) => {
   }
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const getTagTokens = (tags: unknown[]): string[] =>
+  tags.flatMap((tag) => {
+    if (typeof tag === 'string') return [tag.toLowerCase()];
+    if (tag && typeof tag === 'object') {
+      const label = 'label' in tag ? String((tag as { label?: string }).label || '').toLowerCase() : '';
+      const slug = 'slug' in tag ? String((tag as { slug?: string }).slug || '').toLowerCase() : '';
+      return [label, slug].filter(Boolean);
+    }
+    return [];
+  });
+
+const dedupeEvents = (items: PolymarketEvent[]) => Array.from(new Map(items.map((event) => [event.id, event])).values());
+
+const dedupeMarkets = (items: PolymarketMarket[]) => Array.from(new Map(items.map((market) => [market.id, market])).values());
+
+const matchesMainTab = (event: PolymarketEvent, tab: string): boolean => {
+  if (tab === 'TRENDING') return true;
+
+  const matcherTokens = MAIN_TAB_MATCHERS[tab] || [];
+  const eventTokens = [
+    event.title,
+    event.description || '',
+    categorizeEvent(event),
+    ...getTagTokens((event.tags || []) as unknown[]),
+    ...(event.markets || []).flatMap((market) => [market.question, market.description || '', market.groupItemTitle || '']),
+  ].join(' ').toLowerCase();
+
+  return matcherTokens.some((token) => eventTokens.includes(token));
 };
 
 const EVENT_ROW_ESTIMATE = 156;
@@ -151,13 +190,20 @@ const PolymarketHub = () => {
   const listViewportRef = useRef<HTMLDivElement | null>(null);
   const requestVersionRef = useRef(0);
   const backgroundLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fullCatalogPromiseRef = useRef<Promise<void> | null>(null);
+  const partialCatalogRef = useRef<PolymarketEvent[]>([]);
+  const partialCatalogTabRef = useRef<string>('TRENDING');
+  const fullCatalogEventsRef = useRef<PolymarketEvent[]>([]);
+  const fullCatalogMarketsRef = useRef<PolymarketMarket[]>([]);
   const pendingUiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSelectedOrderbookRef = useRef<OrderbookData | null>(null);
   const pendingSelectedTradesRef = useRef<PolymarketLastTrade[] | null>(null);
   const pendingTickerTradesRef = useRef<(PolymarketLastTrade & { title?: string })[] | null>(null);
   const [listScrollTop, setListScrollTop] = useState(0);
   const [listViewportHeight, setListViewportHeight] = useState(720);
+  const activeTabRef = useRef(activeTab);
   selectedMarketRef.current = selectedMarket;
+  activeTabRef.current = activeTab;
 
   // ---- DATA FETCH (Progressive: show first page fast, load rest in background) ----
   const isLoadingMoreRef = useRef(false);
@@ -187,76 +233,106 @@ const PolymarketHub = () => {
     }, 120);
   }, []);
 
-  const fetchData = useCallback(async (tag?: string) => {
+  const applyCatalogToView = useCallback((sourceEvents: PolymarketEvent[], sourceMarkets: PolymarketMarket[], tab: string) => {
+    const filteredEvents = dedupeEvents(sourceEvents)
+      .filter((event) => event.active && !event.closed)
+      .filter((event) => matchesMainTab(event, tab));
+
+    const filteredMarkets = tab === 'TRENDING'
+      ? dedupeMarkets([...extractMarketsFromEvents(filteredEvents), ...sourceMarkets])
+      : extractMarketsFromEvents(filteredEvents);
+
+    primeMarketTitleCache(filteredEvents, marketTitleCacheRef.current);
+
+    startTransition(() => {
+      setEvents(filteredEvents);
+      setAllMarkets(filteredMarkets);
+      setTotalMarketCount(filteredMarkets.length);
+      setLoading(false);
+    });
+
+    const liveTop = [...filteredMarkets]
+      .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
+      .slice(0, 200);
+
+    const liveTokens = PolymarketService.extractTokenIds(liveTop);
+    if (liveTokens.length > 0) {
+      polymarketWS.subscribeToAssets(liveTokens);
+      polymarketWS.forceResubscribe();
+    }
+  }, []);
+
+  const fetchData = useCallback(async (forceRefresh = false) => {
     const requestVersion = ++requestVersionRef.current;
     if (backgroundLoadTimerRef.current !== null) {
       clearTimeout(backgroundLoadTimerRef.current);
       backgroundLoadTimerRef.current = null;
     }
+
+    const currentTab = activeTabRef.current;
+    const cachedFullEvents = fullCatalogEventsRef.current;
+    if (!forceRefresh && cachedFullEvents.length > 0) {
+      applyCatalogToView(cachedFullEvents, fullCatalogMarketsRef.current, currentTab);
+      return;
+    }
+
     setLoading(true);
+
     try {
-      // STEP 1: Load first 100 events FAST for instant display
-      const firstEvts = await PolymarketService.getTrendingEvents(100, tag);
+      const fastTag = TAB_TO_TAG[currentTab];
+      const firstEvts = await PolymarketService.getTrendingEvents(100, fastTag);
       if (requestVersionRef.current !== requestVersion) return;
-      const evts1 = Array.isArray(firstEvts) ? firstEvts : [];
+      const evts1 = dedupeEvents(Array.isArray(firstEvts) ? firstEvts : []);
+      partialCatalogRef.current = evts1;
+      partialCatalogTabRef.current = currentTab;
+
       let mkts1 = extractMarketsFromEvents(evts1);
-      if (mkts1.length === 0) {
-        const fb = await PolymarketService.getMarkets(100, tag);
+      if (mkts1.length === 0 && fastTag) {
+        const fb = await PolymarketService.getMarkets(100, fastTag);
         if (requestVersionRef.current !== requestVersion) return;
-        mkts1 = Array.isArray(fb) ? fb : [];
+        mkts1 = dedupeMarkets(Array.isArray(fb) ? fb : []);
       }
-      primeMarketTitleCache(evts1, marketTitleCacheRef.current);
-      setEvents(evts1);
-      setAllMarkets(mkts1);
-      setTotalMarketCount(mkts1.length);
-      setLoading(false);
 
-      // Subscribe top 200 to WS
-      const topMkts = [...mkts1].sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0)).slice(0, 200);
-      const tids = PolymarketService.extractTokenIds(topMkts);
-      if (tids.length > 0) polymarketWS.subscribeToAssets(tids);
+      applyCatalogToView(evts1, mkts1, currentTab);
 
-      // STEP 2: Load ALL events/markets in background using paginated methods
-      if (!isLoadingMoreRef.current) {
+      if (!isLoadingMoreRef.current || forceRefresh) {
         isLoadingMoreRef.current = true;
         backgroundLoadTimerRef.current = setTimeout(async () => {
-          try {
-            // getAllActiveEvents already paginates 500 per batch until exhausted
-            const allEvts = await PolymarketService.getAllActiveEvents();
+          fullCatalogPromiseRef.current = (async () => {
+            const [allEvtsRaw, allMktsRaw] = await Promise.all([
+              PolymarketService.getAllActiveEvents(),
+              PolymarketService.getAllActiveMarkets(),
+            ]);
+
             if (requestVersionRef.current !== requestVersion) return;
 
-            let allMkts = extractMarketsFromEvents(allEvts);
-            // If tag filter, also get tagged markets
-            if (tag) {
-              const taggedMkts = await PolymarketService.getAllActiveMarkets();
-              if (requestVersionRef.current !== requestVersion) return;
-              const merged = new Map<string, PolymarketMarket>();
-              for (const m of allMkts) merged.set(m.id, m);
-              for (const m of taggedMkts) merged.set(m.id, m);
-              allMkts = Array.from(merged.values());
+            const allEvts = dedupeEvents(Array.isArray(allEvtsRaw) ? allEvtsRaw : []);
+            const allMkts = dedupeMarkets([
+              ...extractMarketsFromEvents(allEvts),
+              ...(Array.isArray(allMktsRaw) ? allMktsRaw : []),
+            ]);
+
+            fullCatalogEventsRef.current = allEvts;
+            fullCatalogMarketsRef.current = allMkts;
+            partialCatalogRef.current = allEvts;
+
+            applyCatalogToView(allEvts, allMkts, activeTabRef.current);
+            console.log(`[Polymarket] Full catalog hydrated: ${allEvts.length} events, ${allMkts.length} markets`);
+          })().catch((bgErr) => {
+            console.warn('Background catalog hydration error:', bgErr);
+          }).finally(() => {
+            fullCatalogPromiseRef.current = null;
+            if (requestVersionRef.current === requestVersion) {
+              isLoadingMoreRef.current = false;
             }
+          });
 
-            if (allMkts.length === 0) allMkts = mkts1;
-            primeMarketTitleCache(allEvts, marketTitleCacheRef.current);
-
-            startTransition(() => {
-              setEvents(allEvts);
-              setAllMarkets(allMkts);
-              setTotalMarketCount(allMkts.length);
-            });
-
-            // Subscribe more tokens
-            const liveTop = [...allMkts].sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0)).slice(0, 200);
-            const liveTids = PolymarketService.extractTokenIds(liveTop);
-            if (liveTids.length > 0) polymarketWS.subscribeToAssets(liveTids);
-
-            console.log(`[Polymarket] Full load: ${allEvts.length} events, ${allMkts.length} markets`);
-          } catch (bgErr) {
-            console.warn('Background pagination error:', bgErr);
+          try {
+            await fullCatalogPromiseRef.current;
           } finally {
-            if (requestVersionRef.current === requestVersion) isLoadingMoreRef.current = false;
+            backgroundLoadTimerRef.current = null;
           }
-        }, 100);
+        }, 40);
       }
     } catch (e: any) {
       if (requestVersionRef.current !== requestVersion) return;
@@ -264,13 +340,29 @@ const PolymarketHub = () => {
       toast.error('Failed to load Polymarket data');
       setLoading(false);
     }
-  }, []);
+  }, [applyCatalogToView]);
 
-  useEffect(() => { fetchData(TAB_TO_TAG[activeTab]); }, [activeTab]);
   useEffect(() => {
-    const iv = setInterval(() => fetchData(TAB_TO_TAG[activeTab]), 5 * 60_000);
+    const sourceEvents = fullCatalogEventsRef.current.length > 0 ? fullCatalogEventsRef.current : partialCatalogRef.current;
+    const sourceMarkets = fullCatalogMarketsRef.current;
+
+    if (fullCatalogEventsRef.current.length > 0) {
+      applyCatalogToView(sourceEvents, sourceMarkets, activeTab);
+      return;
+    }
+
+    if (partialCatalogRef.current.length > 0 && partialCatalogTabRef.current === activeTab) {
+      applyCatalogToView(partialCatalogRef.current, extractMarketsFromEvents(partialCatalogRef.current), activeTab);
+      return;
+    }
+
+    fetchData();
+  }, [activeTab, applyCatalogToView, fetchData]);
+
+  useEffect(() => {
+    const iv = setInterval(() => fetchData(true), 5 * 60_000);
     return () => clearInterval(iv);
-  }, [activeTab]);
+  }, [fetchData]);
 
   // ---- WEBSOCKET ----
   useEffect(() => polymarketWS.onStatus(setWsConnected), []);
@@ -556,7 +648,7 @@ const PolymarketHub = () => {
               placeholder="Search markets..." className="h-7 w-44 text-[10px] bg-background border-border" />
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSearch}><Search className="w-3 h-3" /></Button>
           </div>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => fetchData(TAB_TO_TAG[activeTab])}>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => fetchData(true)}>
             <RotateCcw className="w-3 h-3" />
           </Button>
         </div>
