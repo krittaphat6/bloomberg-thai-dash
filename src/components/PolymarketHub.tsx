@@ -189,27 +189,22 @@ const PolymarketHub = () => {
 
   const fetchData = useCallback(async (tag?: string) => {
     const requestVersion = ++requestVersionRef.current;
-
     if (backgroundLoadTimerRef.current !== null) {
       clearTimeout(backgroundLoadTimerRef.current);
       backgroundLoadTimerRef.current = null;
     }
-
     setLoading(true);
     try {
-      // STEP 1: Load first batch FAST (100 events)
+      // STEP 1: Load first 100 events FAST for instant display
       const firstEvts = await PolymarketService.getTrendingEvents(100, tag);
       if (requestVersionRef.current !== requestVersion) return;
-
       const evts1 = Array.isArray(firstEvts) ? firstEvts : [];
       let mkts1 = extractMarketsFromEvents(evts1);
-
       if (mkts1.length === 0) {
-        const fallbackMarkets = await PolymarketService.getMarkets(100, tag);
+        const fb = await PolymarketService.getMarkets(100, tag);
         if (requestVersionRef.current !== requestVersion) return;
-        mkts1 = Array.isArray(fallbackMarkets) ? fallbackMarkets : [];
+        mkts1 = Array.isArray(fb) ? fb : [];
       }
-
       primeMarketTitleCache(evts1, marketTitleCacheRef.current);
       setEvents(evts1);
       setAllMarkets(mkts1);
@@ -217,84 +212,51 @@ const PolymarketHub = () => {
       setLoading(false);
 
       // Subscribe top 200 to WS
-      const topMarkets = [...mkts1]
-        .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
-        .slice(0, 200);
-      const tokenIds = PolymarketService.extractTokenIds(topMarkets);
-      if (tokenIds.length > 0) polymarketWS.subscribeToAssets(tokenIds);
+      const topMkts = [...mkts1].sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0)).slice(0, 200);
+      const tids = PolymarketService.extractTokenIds(topMkts);
+      if (tids.length > 0) polymarketWS.subscribeToAssets(tids);
 
-      // STEP 2: Load ALL remaining in background — for EVERY tab
+      // STEP 2: Load ALL events/markets in background using paginated methods
       if (!isLoadingMoreRef.current) {
         isLoadingMoreRef.current = true;
-        const loadRemaining = async () => {
+        backgroundLoadTimerRef.current = setTimeout(async () => {
           try {
-            // Paginate ALL events (with or without tag)
-            const allEvts: any[] = [];
-            let offset = 100; // skip first batch already loaded
-            const limit = 500;
-            let hasMore = true;
-
-            while (hasMore) {
-              if (requestVersionRef.current !== requestVersion) return;
-              try {
-                const batch = await PolymarketService.getTrendingEvents(limit, tag);
-                // Use callProxy with offset via a direct paginated fetch
-                const batchResult = await (async () => {
-                  const { data, error } = await (await import('@/integrations/supabase/client')).supabase.functions.invoke('polymarket-proxy', {
-                    body: { action: 'events', params: { limit, offset, order: 'volume24hr', ...(tag && { tag }) } },
-                  });
-                  if (error || !data?.success) return [];
-                  return Array.isArray(data.data) ? data.data : [];
-                })();
-
-                if (!batchResult || batchResult.length === 0) {
-                  hasMore = false;
-                } else {
-                  allEvts.push(...batchResult);
-                  offset += limit;
-                  if (batchResult.length < limit) hasMore = false;
-                }
-              } catch {
-                hasMore = false;
-              }
-            }
-
+            // getAllActiveEvents already paginates 500 per batch until exhausted
+            const allEvts = await PolymarketService.getAllActiveEvents();
             if (requestVersionRef.current !== requestVersion) return;
 
-            // Merge first batch + remaining
-            const mergedEvts = [...evts1, ...allEvts];
-            const deduped = Array.from(new Map(mergedEvts.map(e => [e.id, e])).values());
-            let fullMkts = extractMarketsFromEvents(deduped);
+            let allMkts = extractMarketsFromEvents(allEvts);
+            // If tag filter, also get tagged markets
+            if (tag) {
+              const taggedMkts = await PolymarketService.getAllActiveMarkets();
+              if (requestVersionRef.current !== requestVersion) return;
+              const merged = new Map<string, PolymarketMarket>();
+              for (const m of allMkts) merged.set(m.id, m);
+              for (const m of taggedMkts) merged.set(m.id, m);
+              allMkts = Array.from(merged.values());
+            }
 
-            if (fullMkts.length === 0) fullMkts = mkts1;
-
-            primeMarketTitleCache(deduped, marketTitleCacheRef.current);
+            if (allMkts.length === 0) allMkts = mkts1;
+            primeMarketTitleCache(allEvts, marketTitleCacheRef.current);
 
             startTransition(() => {
-              setEvents(deduped);
-              setAllMarkets(fullMkts);
-              setTotalMarketCount(fullMkts.length);
+              setEvents(allEvts);
+              setAllMarkets(allMkts);
+              setTotalMarketCount(allMkts.length);
             });
 
             // Subscribe more tokens
-            const liveTopMarkets = [...fullMkts]
-              .sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0))
-              .slice(0, 200);
-            const liveTokenIds = PolymarketService.extractTokenIds(liveTopMarkets);
-            if (liveTokenIds.length > 0) polymarketWS.subscribeToAssets(liveTokenIds);
+            const liveTop = [...allMkts].sort((a, b) => (b.volume24hr || 0) - (a.volume24hr || 0)).slice(0, 200);
+            const liveTids = PolymarketService.extractTokenIds(liveTop);
+            if (liveTids.length > 0) polymarketWS.subscribeToAssets(liveTids);
 
-            console.log(`[Polymarket] Total loaded: ${deduped.length} events, ${fullMkts.length} markets`);
+            console.log(`[Polymarket] Full load: ${allEvts.length} events, ${allMkts.length} markets`);
           } catch (bgErr) {
-            console.warn('Background pagination partial:', bgErr);
+            console.warn('Background pagination error:', bgErr);
           } finally {
-            if (requestVersionRef.current === requestVersion) {
-              isLoadingMoreRef.current = false;
-            }
+            if (requestVersionRef.current === requestVersion) isLoadingMoreRef.current = false;
           }
-        };
-
-        // Start background load after 100ms to let UI settle
-        backgroundLoadTimerRef.current = setTimeout(() => { void loadRemaining(); }, 100);
+        }, 100);
       }
     } catch (e: any) {
       if (requestVersionRef.current !== requestVersion) return;
