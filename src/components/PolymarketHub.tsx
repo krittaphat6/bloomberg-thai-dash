@@ -242,7 +242,7 @@ const PolymarketHub = () => {
       ? dedupeMarkets([...extractMarketsFromEvents(filteredEvents), ...sourceMarkets])
       : extractMarketsFromEvents(filteredEvents);
 
-    primeMarketTitleCache(sourceEvents, marketTitleCacheRef.current);
+    primeMarketTitleCache(filteredEvents, marketTitleCacheRef.current);
 
     startTransition(() => {
       setEvents(filteredEvents);
