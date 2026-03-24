@@ -192,6 +192,7 @@ const PolymarketHub = () => {
   const backgroundLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fullCatalogPromiseRef = useRef<Promise<void> | null>(null);
   const partialCatalogRef = useRef<PolymarketEvent[]>([]);
+  const partialCatalogTabRef = useRef<string>('TRENDING');
   const fullCatalogEventsRef = useRef<PolymarketEvent[]>([]);
   const fullCatalogMarketsRef = useRef<PolymarketMarket[]>([]);
   const pendingUiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -283,6 +284,7 @@ const PolymarketHub = () => {
       if (requestVersionRef.current !== requestVersion) return;
       const evts1 = dedupeEvents(Array.isArray(firstEvts) ? firstEvts : []);
       partialCatalogRef.current = evts1;
+      partialCatalogTabRef.current = currentTab;
 
       let mkts1 = extractMarketsFromEvents(evts1);
       if (mkts1.length === 0 && fastTag) {
@@ -344,8 +346,13 @@ const PolymarketHub = () => {
     const sourceEvents = fullCatalogEventsRef.current.length > 0 ? fullCatalogEventsRef.current : partialCatalogRef.current;
     const sourceMarkets = fullCatalogMarketsRef.current;
 
-    if (sourceEvents.length > 0) {
+    if (fullCatalogEventsRef.current.length > 0) {
       applyCatalogToView(sourceEvents, sourceMarkets, activeTab);
+      return;
+    }
+
+    if (partialCatalogRef.current.length > 0 && partialCatalogTabRef.current === activeTab) {
+      applyCatalogToView(partialCatalogRef.current, extractMarketsFromEvents(partialCatalogRef.current), activeTab);
       return;
     }
 
