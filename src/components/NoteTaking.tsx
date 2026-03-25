@@ -267,7 +267,7 @@ export default function NoteTaking() {
       children: []
     };
     
-    setNotes([newNote, ...notes]);
+    setNotes(prev => [newNote, ...prev]);
     setEditingNote({});
     setIsCreating(false);
     setSelectedNote(newNote);
