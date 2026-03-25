@@ -326,7 +326,7 @@ export default function NoteTaking() {
 
 
   const deleteNote = (noteId: string) => {
-    setNotes(notes.filter(note => note.id !== noteId));
+    setNotes(prev => prev.filter(note => note.id !== noteId));
     deleteFromDb(noteId);
     if (selectedNote?.id === noteId) {
       setSelectedNote(null);
