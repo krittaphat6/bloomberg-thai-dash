@@ -309,7 +309,7 @@ export default function NoteTaking() {
       children: []
     };
     
-    setNotes([newNote, ...notes]);
+    setNotes(prev => [newNote, ...prev]);
     setSelectedNote(newNote);
     setMainView('notes');
   };
