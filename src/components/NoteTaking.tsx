@@ -267,7 +267,7 @@ export default function NoteTaking() {
       children: []
     };
     
-    setNotes([newNote, ...notes]);
+    setNotes(prev => [newNote, ...prev]);
     setEditingNote({});
     setIsCreating(false);
     setSelectedNote(newNote);
@@ -309,7 +309,7 @@ export default function NoteTaking() {
       children: []
     };
     
-    setNotes([newNote, ...notes]);
+    setNotes(prev => [newNote, ...prev]);
     setSelectedNote(newNote);
     setMainView('notes');
   };
@@ -326,7 +326,7 @@ export default function NoteTaking() {
 
 
   const deleteNote = (noteId: string) => {
-    setNotes(notes.filter(note => note.id !== noteId));
+    setNotes(prev => prev.filter(note => note.id !== noteId));
     deleteFromDb(noteId);
     if (selectedNote?.id === noteId) {
       setSelectedNote(null);

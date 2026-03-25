@@ -697,14 +697,481 @@ const EdgeScannerPanel = memo(({ events, getLivePrice, onSelect }: {
 });
 EdgeScannerPanel.displayName = 'EdgeScannerPanel';
 
+// ============ NEW PANELS ============
+
+// 1. Momentum Scanner - detect price momentum from live trades
+const MomentumPanel = memo(({ events, liveTrades, getLivePrice, onSelect }: {
+  events: PolymarketEvent[];
+  liveTrades: (PolymarketLastTrade & { title?: string })[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+  onSelect: (e: PolymarketEvent) => void;
+}) => {
+  const momentum = useMemo(() => {
+    const results: { event: PolymarketEvent; market: PolymarketMarket; currentPct: number; tradeCount: number; buyPressure: number; avgTradeSize: number; momentum: 'STRONG_UP' | 'UP' | 'NEUTRAL' | 'DOWN' | 'STRONG_DOWN'; vol24h: number; liq: number }[] = [];
+
+    // Aggregate trade flow per market token
+    const tokenFlow = new Map<string, { buys: number; sells: number; buyVol: number; sellVol: number; count: number }>();
+    for (const t of liveTrades) {
+      const entry = tokenFlow.get(t.asset_id) || { buys: 0, sells: 0, buyVol: 0, sellVol: 0, count: 0 };
+      const size = parseFloat(t.size || '0') * parseFloat(t.price || '0');
+      if (t.side === 'BUY') { entry.buys++; entry.buyVol += size; }
+      else { entry.sells++; entry.sellVol += size; }
+      entry.count++;
+      tokenFlow.set(t.asset_id, entry);
+    }
+
+    for (const event of events) {
+      for (const market of event.markets || []) {
+        const { yesPrice } = getLivePrice(market);
+        if (yesPrice <= 0 || yesPrice >= 1) continue;
+        const vol = market.volume24hr || 0;
+        const liq = parseFloat(market.liquidity || '0');
+        if (vol < 5000) continue;
+
+        // Check token flow
+        const tokens = PolymarketService.extractTokenIds([market]);
+        let totalBuyPressure = 0, totalCount = 0, totalAvgSize = 0;
+        for (const tid of tokens) {
+          const flow = tokenFlow.get(tid);
+          if (flow) {
+            totalBuyPressure += flow.buys / Math.max(flow.buys + flow.sells, 1);
+            totalCount += flow.count;
+            totalAvgSize += (flow.buyVol + flow.sellVol) / Math.max(flow.count, 1);
+          }
+        }
+        const buyPressure = tokens.length > 0 ? totalBuyPressure / tokens.length : 0.5;
+
+        let momentumSignal: 'STRONG_UP' | 'UP' | 'NEUTRAL' | 'DOWN' | 'STRONG_DOWN' = 'NEUTRAL';
+        if (buyPressure > 0.75) momentumSignal = 'STRONG_UP';
+        else if (buyPressure > 0.6) momentumSignal = 'UP';
+        else if (buyPressure < 0.25) momentumSignal = 'STRONG_DOWN';
+        else if (buyPressure < 0.4) momentumSignal = 'DOWN';
+
+        if (momentumSignal !== 'NEUTRAL' && totalCount > 2) {
+          results.push({
+            event, market,
+            currentPct: Math.round(yesPrice * 100),
+            tradeCount: totalCount,
+            buyPressure: Math.round(buyPressure * 100),
+            avgTradeSize: totalAvgSize / Math.max(tokens.length, 1),
+            momentum: momentumSignal,
+            vol24h: vol, liq
+          });
+        }
+      }
+    }
+
+    return results.sort((a, b) => Math.abs(b.buyPressure - 50) - Math.abs(a.buyPressure - 50)).slice(0, 40);
+  }, [events, liveTrades, getLivePrice]);
+
+  const getMomentumColor = (m: string) => {
+    if (m === 'STRONG_UP') return 'text-terminal-green';
+    if (m === 'UP') return 'text-terminal-green/70';
+    if (m === 'STRONG_DOWN') return 'text-destructive';
+    if (m === 'DOWN') return 'text-destructive/70';
+    return 'text-muted-foreground';
+  };
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between px-1 mb-2">
+        <span className="text-[10px] text-muted-foreground">{momentum.length} markets with momentum signals</span>
+      </div>
+      <div className="grid grid-cols-[1fr_50px_60px_70px_70px_80px] gap-2 px-3 py-1.5 text-[9px] text-muted-foreground font-bold uppercase tracking-wider border-b border-border">
+        <span>MARKET</span><span className="text-right">PROB</span><span className="text-right">TRADES</span>
+        <span className="text-right">BUY %</span><span className="text-right">AVG SIZE</span><span className="text-right">SIGNAL</span>
+      </div>
+      {momentum.map((m, i) => (
+        <div key={m.market.id} onClick={() => onSelect(m.event)}
+          className={`grid grid-cols-[1fr_50px_60px_70px_70px_80px] gap-2 px-3 py-2 text-[10px] border-b border-border/20 cursor-pointer hover:bg-muted/30 ${
+            i < 3 ? 'bg-terminal-green/[0.03]' : ''
+          }`}>
+          <span className="text-foreground truncate font-medium">{m.market.question}</span>
+          <span className={`text-right font-bold ${m.currentPct >= 50 ? 'text-terminal-green' : 'text-destructive'}`}>{m.currentPct}%</span>
+          <span className="text-right text-muted-foreground font-mono">{m.tradeCount}</span>
+          <span className={`text-right font-bold ${m.buyPressure >= 60 ? 'text-terminal-green' : m.buyPressure <= 40 ? 'text-destructive' : 'text-muted-foreground'}`}>{m.buyPressure}%</span>
+          <span className="text-right text-terminal-cyan font-mono">${m.avgTradeSize >= 1000 ? `${(m.avgTradeSize / 1000).toFixed(1)}K` : m.avgTradeSize.toFixed(0)}</span>
+          <span className={`text-right font-bold text-[9px] ${getMomentumColor(m.momentum)}`}>
+            {m.momentum === 'STRONG_UP' ? '🚀 STRONG↑' : m.momentum === 'UP' ? '📈 UP' : m.momentum === 'STRONG_DOWN' ? '💥 STRONG↓' : '📉 DOWN'}
+          </span>
+        </div>
+      ))}
+      {momentum.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground text-xs">Waiting for live trade data to compute momentum...</div>
+      )}
+    </div>
+  );
+});
+MomentumPanel.displayName = 'MomentumPanel';
+
+// 2. Time Decay Scanner - markets resolving soon with high uncertainty
+const TimeDecayPanel = memo(({ events, getLivePrice, onSelect }: {
+  events: PolymarketEvent[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+  onSelect: (e: PolymarketEvent) => void;
+}) => {
+  const decaying = useMemo(() => {
+    const results: { event: PolymarketEvent; market: PolymarketMarket; daysLeft: number; yesPct: number; vol: number; liq: number; uncertainty: number; decayRate: string }[] = [];
+
+    for (const event of events) {
+      for (const market of event.markets || []) {
+        if (!market.endDate) continue;
+        const daysLeft = Math.ceil((new Date(market.endDate).getTime() - Date.now()) / 86400000);
+        if (daysLeft <= 0 || daysLeft > 30) continue;
+
+        const { yesPrice } = getLivePrice(market);
+        const yesPct = Math.round(yesPrice * 100);
+        const vol = market.volume24hr || 0;
+        const liq = parseFloat(market.liquidity || '0');
+        
+        // Uncertainty = distance from 0 or 100
+        const uncertainty = Math.min(yesPct, 100 - yesPct);
+        
+        let decayRate = 'LOW';
+        if (daysLeft <= 3 && uncertainty > 20) decayRate = 'CRITICAL';
+        else if (daysLeft <= 7 && uncertainty > 15) decayRate = 'HIGH';
+        else if (daysLeft <= 14 && uncertainty > 25) decayRate = 'MEDIUM';
+
+        if (decayRate !== 'LOW') {
+          results.push({ event, market, daysLeft, yesPct, vol, liq, uncertainty, decayRate });
+        }
+      }
+    }
+
+    return results.sort((a, b) => a.daysLeft - b.daysLeft).slice(0, 40);
+  }, [events, getLivePrice]);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between px-1 mb-2">
+        <span className="text-[10px] text-muted-foreground">{decaying.length} markets with time decay pressure</span>
+      </div>
+      <div className="grid grid-cols-[1fr_50px_50px_60px_70px_70px] gap-2 px-3 py-1.5 text-[9px] text-muted-foreground font-bold uppercase tracking-wider border-b border-border">
+        <span>MARKET</span><span className="text-right">PROB</span><span className="text-right">DAYS</span>
+        <span className="text-right">UNCERT</span><span className="text-right">VOLUME</span><span className="text-right">DECAY</span>
+      </div>
+      {decaying.map((d, i) => (
+        <div key={d.market.id} onClick={() => onSelect(d.event)}
+          className={`grid grid-cols-[1fr_50px_50px_60px_70px_70px] gap-2 px-3 py-2 text-[10px] border-b border-border/20 cursor-pointer hover:bg-muted/30 ${
+            d.decayRate === 'CRITICAL' ? 'bg-destructive/[0.05]' : d.decayRate === 'HIGH' ? 'bg-terminal-amber/[0.03]' : ''
+          }`}>
+          <span className="text-foreground truncate font-medium">{d.market.question}</span>
+          <span className={`text-right font-bold ${d.yesPct >= 50 ? 'text-terminal-green' : 'text-destructive'}`}>{d.yesPct}%</span>
+          <span className={`text-right font-bold ${d.daysLeft <= 3 ? 'text-destructive' : d.daysLeft <= 7 ? 'text-terminal-amber' : 'text-muted-foreground'}`}>{d.daysLeft}d</span>
+          <span className="text-right text-terminal-cyan font-mono">{d.uncertainty}%</span>
+          <span className="text-right text-muted-foreground">{PolymarketService.formatVolume(d.vol)}</span>
+          <span className={`text-right font-bold text-[9px] ${d.decayRate === 'CRITICAL' ? 'text-destructive' : d.decayRate === 'HIGH' ? 'text-terminal-amber' : 'text-terminal-cyan'}`}>
+            {d.decayRate === 'CRITICAL' ? '🔥 CRIT' : d.decayRate === 'HIGH' ? '⚠️ HIGH' : '📊 MED'}
+          </span>
+        </div>
+      ))}
+      {decaying.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground text-xs">No markets with significant time decay pressure</div>
+      )}
+    </div>
+  );
+});
+TimeDecayPanel.displayName = 'TimeDecayPanel';
+
+// 3. Category Rotation - which categories are gaining/losing attention
+const CategoryRotationPanel = memo(({ events, getLivePrice }: {
+  events: PolymarketEvent[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+}) => {
+  const rotation = useMemo(() => {
+    const cats = new Map<string, { count: number; totalVol: number; totalLiq: number; highVol: number; avgProb: number; probSum: number; resolving: number }>();
+
+    for (const event of events) {
+      const cat = categorizeForAnalysis(event);
+      const entry = cats.get(cat) || { count: 0, totalVol: 0, totalLiq: 0, highVol: 0, avgProb: 0, probSum: 0, resolving: 0 };
+
+      for (const market of event.markets || []) {
+        const { yesPrice } = getLivePrice(market);
+        const vol = market.volume24hr || 0;
+        const liq = parseFloat(market.liquidity || '0');
+        entry.count++;
+        entry.totalVol += vol;
+        entry.totalLiq += liq;
+        if (vol > 50000) entry.highVol++;
+        entry.probSum += Math.round(yesPrice * 100);
+        if (market.endDate) {
+          const days = Math.ceil((new Date(market.endDate).getTime() - Date.now()) / 86400000);
+          if (days > 0 && days <= 7) entry.resolving++;
+        }
+      }
+
+      entry.avgProb = entry.count > 0 ? Math.round(entry.probSum / entry.count) : 0;
+      cats.set(cat, entry);
+    }
+
+    return Array.from(cats.entries())
+      .map(([category, data]) => ({
+        category,
+        ...data,
+        volPerMarket: data.count > 0 ? data.totalVol / data.count : 0,
+        liqPerMarket: data.count > 0 ? data.totalLiq / data.count : 0,
+        hotness: data.highVol / Math.max(data.count, 1),
+      }))
+      .sort((a, b) => b.totalVol - a.totalVol);
+  }, [events, getLivePrice]);
+
+  const maxVol = Math.max(...rotation.map(r => r.totalVol), 1);
+
+  return (
+    <div className="space-y-4">
+      <div className="text-[10px] text-muted-foreground px-1">{rotation.length} categories tracked</div>
+      {rotation.map(r => (
+        <div key={r.category} className="border border-border rounded-lg p-3 bg-card/30">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[12px] font-bold text-foreground">{r.category}</span>
+            <div className="flex items-center gap-2">
+              {r.resolving > 0 && <Badge className="text-[8px] bg-terminal-amber/20 text-terminal-amber border-terminal-amber/30">⏰ {r.resolving} resolving</Badge>}
+              <Badge className={`text-[8px] ${r.hotness > 0.3 ? 'bg-destructive/20 text-destructive border-destructive/30' : r.hotness > 0.1 ? 'bg-terminal-amber/20 text-terminal-amber border-terminal-amber/30' : 'bg-muted text-muted-foreground border-border'}`}>
+                {r.hotness > 0.3 ? '🔥 HOT' : r.hotness > 0.1 ? '📈 WARM' : '❄️ COLD'}
+              </Badge>
+            </div>
+          </div>
+          <div className="grid grid-cols-5 gap-3 text-[10px]">
+            <div><span className="text-muted-foreground block">Markets</span><span className="font-bold text-foreground">{r.count}</span></div>
+            <div><span className="text-muted-foreground block">Total Vol</span><span className="font-bold text-terminal-green">{PolymarketService.formatVolume(r.totalVol)}</span></div>
+            <div><span className="text-muted-foreground block">Avg Vol/Mkt</span><span className="font-bold text-terminal-cyan">{PolymarketService.formatVolume(r.volPerMarket)}</span></div>
+            <div><span className="text-muted-foreground block">Liquidity</span><span className="font-bold text-terminal-amber">{PolymarketService.formatVolume(r.totalLiq)}</span></div>
+            <div><span className="text-muted-foreground block">Avg Prob</span><span className={`font-bold ${r.avgProb >= 50 ? 'text-terminal-green' : 'text-destructive'}`}>{r.avgProb}%</span></div>
+          </div>
+          {/* Volume bar */}
+          <div className="mt-2 h-1.5 bg-muted/30 rounded-full overflow-hidden">
+            <div className="h-full bg-terminal-green/60 rounded-full transition-all" style={{ width: `${(r.totalVol / maxVol) * 100}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+});
+CategoryRotationPanel.displayName = 'CategoryRotationPanel';
+
+// 4. Liquidity Depth Analyzer
+const LiquidityPanel = memo(({ events, getLivePrice, onSelect }: {
+  events: PolymarketEvent[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+  onSelect: (e: PolymarketEvent) => void;
+}) => {
+  const liquidityData = useMemo(() => {
+    const results: { event: PolymarketEvent; market: PolymarketMarket; yesPct: number; liq: number; vol: number; liqVolRatio: number; efficiency: string; spread: number }[] = [];
+
+    for (const event of events) {
+      for (const market of event.markets || []) {
+        const { yesPrice } = getLivePrice(market);
+        if (yesPrice <= 0 || yesPrice >= 1) continue;
+        const vol = market.volume24hr || 0;
+        const liq = parseFloat(market.liquidity || '0');
+        if (liq < 1000) continue;
+
+        const liqVolRatio = vol > 0 ? liq / vol : 999;
+        const spread = Math.abs(yesPrice - 0.5) * 2; // simplified spread estimate
+        
+        let efficiency = 'NORMAL';
+        if (liqVolRatio > 10) efficiency = 'DEEP'; // lots of liquidity relative to volume
+        else if (liqVolRatio < 0.5) efficiency = 'THIN'; // high volume draining liquidity
+        else if (liqVolRatio > 5 && vol > 10000) efficiency = 'STABLE';
+
+        results.push({
+          event, market,
+          yesPct: Math.round(yesPrice * 100),
+          liq, vol, liqVolRatio, efficiency, spread
+        });
+      }
+    }
+
+    return results.sort((a, b) => b.liq - a.liq).slice(0, 40);
+  }, [events, getLivePrice]);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between px-1 mb-2">
+        <span className="text-[10px] text-muted-foreground">{liquidityData.length} markets analyzed for liquidity depth</span>
+      </div>
+      <div className="grid grid-cols-[1fr_50px_80px_80px_60px_70px] gap-2 px-3 py-1.5 text-[9px] text-muted-foreground font-bold uppercase tracking-wider border-b border-border">
+        <span>MARKET</span><span className="text-right">PROB</span><span className="text-right">LIQUIDITY</span>
+        <span className="text-right">VOLUME</span><span className="text-right">L/V</span><span className="text-right">TYPE</span>
+      </div>
+      {liquidityData.map((d, i) => (
+        <div key={d.market.id} onClick={() => onSelect(d.event)}
+          className={`grid grid-cols-[1fr_50px_80px_80px_60px_70px] gap-2 px-3 py-2 text-[10px] border-b border-border/20 cursor-pointer hover:bg-muted/30 ${
+            d.efficiency === 'DEEP' ? 'bg-terminal-green/[0.03]' : d.efficiency === 'THIN' ? 'bg-destructive/[0.03]' : ''
+          }`}>
+          <span className="text-foreground truncate font-medium">{d.market.question}</span>
+          <span className={`text-right font-bold ${d.yesPct >= 50 ? 'text-terminal-green' : 'text-destructive'}`}>{d.yesPct}%</span>
+          <span className="text-right text-terminal-cyan font-mono">{PolymarketService.formatVolume(d.liq)}</span>
+          <span className="text-right text-terminal-green font-mono">{PolymarketService.formatVolume(d.vol)}</span>
+          <span className="text-right font-mono text-terminal-amber">{d.liqVolRatio.toFixed(1)}×</span>
+          <span className={`text-right font-bold text-[9px] ${
+            d.efficiency === 'DEEP' ? 'text-terminal-green' : d.efficiency === 'THIN' ? 'text-destructive' : d.efficiency === 'STABLE' ? 'text-terminal-cyan' : 'text-muted-foreground'
+          }`}>
+            {d.efficiency === 'DEEP' ? '🏊 DEEP' : d.efficiency === 'THIN' ? '⚡ THIN' : d.efficiency === 'STABLE' ? '🔒 STABLE' : '➡️ NORM'}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+});
+LiquidityPanel.displayName = 'LiquidityPanel';
+
+// 5. Multi-Outcome Analyzer - events with multiple outcomes
+const MultiOutcomePanel = memo(({ events, getLivePrice, onSelect }: {
+  events: PolymarketEvent[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+  onSelect: (e: PolymarketEvent) => void;
+}) => {
+  const multiOutcome = useMemo(() => {
+    const results: { event: PolymarketEvent; marketCount: number; totalLiq: number; totalVol: number; probSum: number; overround: number; markets: { question: string; yesPct: number; liq: number }[] }[] = [];
+
+    for (const event of events) {
+      const markets = event.markets || [];
+      if (markets.length < 3) continue;
+
+      let totalLiq = 0, totalVol = 0, probSum = 0;
+      const mkts: { question: string; yesPct: number; liq: number }[] = [];
+
+      for (const m of markets) {
+        const { yesPrice } = getLivePrice(m);
+        const liq = parseFloat(m.liquidity || '0');
+        const vol = m.volume24hr || 0;
+        totalLiq += liq;
+        totalVol += vol;
+        probSum += yesPrice;
+        mkts.push({ question: m.question, yesPct: Math.round(yesPrice * 100), liq });
+      }
+
+      const overround = Math.round((probSum - 1) * 100);
+      mkts.sort((a, b) => b.yesPct - a.yesPct);
+
+      results.push({
+        event, marketCount: markets.length,
+        totalLiq, totalVol, probSum,
+        overround, markets: mkts.slice(0, 8)
+      });
+    }
+
+    return results.sort((a, b) => b.totalVol - a.totalVol).slice(0, 20);
+  }, [events, getLivePrice]);
+
+  return (
+    <div className="space-y-3">
+      <div className="text-[10px] text-muted-foreground px-1">{multiOutcome.length} multi-outcome events</div>
+      {multiOutcome.map((mo, i) => (
+        <div key={mo.event.id} className="border border-border rounded-lg p-3 bg-card/30 cursor-pointer hover:border-accent" onClick={() => onSelect(mo.event)}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-foreground line-clamp-1 flex-1">{mo.event.title}</span>
+            <div className="flex items-center gap-2 ml-2">
+              <Badge className="text-[8px] bg-terminal-cyan/20 text-terminal-cyan border-terminal-cyan/30">{mo.marketCount} outcomes</Badge>
+              <Badge className={`text-[8px] ${Math.abs(mo.overround) > 5 ? 'bg-terminal-amber/20 text-terminal-amber border-terminal-amber/30' : 'bg-terminal-green/20 text-terminal-green border-terminal-green/30'}`}>
+                {mo.overround > 0 ? '+' : ''}{mo.overround}% overround
+              </Badge>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-1">
+            {mo.markets.map((m, mi) => (
+              <div key={mi} className="flex items-center justify-between text-[10px] px-2 py-1 rounded bg-muted/20">
+                <span className="text-muted-foreground truncate flex-1 mr-2">{m.question}</span>
+                <span className={`font-bold shrink-0 ${m.yesPct >= 50 ? 'text-terminal-green' : m.yesPct >= 20 ? 'text-terminal-amber' : 'text-destructive'}`}>{m.yesPct}%</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-4 mt-2 text-[9px] text-muted-foreground">
+            <span>Vol: <span className="text-terminal-green font-bold">{PolymarketService.formatVolume(mo.totalVol)}</span></span>
+            <span>Liq: <span className="text-terminal-cyan font-bold">{PolymarketService.formatVolume(mo.totalLiq)}</span></span>
+          </div>
+        </div>
+      ))}
+      {multiOutcome.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground text-xs">No multi-outcome events found</div>
+      )}
+    </div>
+  );
+});
+MultiOutcomePanel.displayName = 'MultiOutcomePanel';
+
+// 6. Heatmap Overview - scatter of volume vs probability
+const HeatmapOverviewPanel = memo(({ events, getLivePrice }: {
+  events: PolymarketEvent[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+}) => {
+  const scatterData = useMemo(() => {
+    const data: { name: string; prob: number; vol: number; liq: number }[] = [];
+
+    for (const event of events) {
+      for (const market of event.markets || []) {
+        const { yesPrice } = getLivePrice(market);
+        const vol = market.volume24hr || 0;
+        const liq = parseFloat(market.liquidity || '0');
+        if (vol < 1000 || liq < 1000) continue;
+        data.push({
+          name: market.question.slice(0, 40),
+          prob: Math.round(yesPrice * 100),
+          vol: Math.round(vol),
+          liq: Math.round(liq)
+        });
+      }
+    }
+
+    return data.slice(0, 200);
+  }, [events, getLivePrice]);
+
+  return (
+    <div className="space-y-4">
+      <div className="border border-border rounded-lg p-3 bg-card/30">
+        <div className="text-[10px] font-bold text-terminal-amber uppercase tracking-wider mb-3">VOLUME VS PROBABILITY SCATTER</div>
+        <ResponsiveContainer width="100%" height={350}>
+          <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.3} />
+            <XAxis type="number" dataKey="prob" name="Probability" unit="%" domain={[0, 100]}
+              tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} label={{ value: 'Probability %', position: 'bottom', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+            <YAxis type="number" dataKey="vol" name="Volume" scale="log" domain={['auto', 'auto']}
+              tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} label={{ value: '24h Volume', angle: -90, position: 'left', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+            <ZAxis type="number" dataKey="liq" range={[20, 200]} />
+            <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 10, borderRadius: 4 }}
+              formatter={(val: number, name: string) => [name === 'vol' ? PolymarketService.formatVolume(val) : `${val}%`, name === 'vol' ? 'Volume' : 'Probability']} />
+            <Scatter data={scatterData} fill="hsl(var(--terminal-cyan))" fillOpacity={0.6} />
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="grid grid-cols-3 gap-3 text-[10px]">
+        <div className="border border-border rounded-lg p-3 bg-card/30 text-center">
+          <div className="text-muted-foreground">Total Plotted</div>
+          <div className="text-lg font-black text-terminal-cyan">{scatterData.length}</div>
+        </div>
+        <div className="border border-border rounded-lg p-3 bg-card/30 text-center">
+          <div className="text-muted-foreground">Avg Probability</div>
+          <div className="text-lg font-black text-terminal-green">
+            {scatterData.length > 0 ? Math.round(scatterData.reduce((a, b) => a + b.prob, 0) / scatterData.length) : 0}%
+          </div>
+        </div>
+        <div className="border border-border rounded-lg p-3 bg-card/30 text-center">
+          <div className="text-muted-foreground">Median Volume</div>
+          <div className="text-lg font-black text-terminal-amber">
+            {PolymarketService.formatVolume(scatterData.length > 0 ? [...scatterData].sort((a, b) => a.vol - b.vol)[Math.floor(scatterData.length / 2)]?.vol || 0 : 0)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+HeatmapOverviewPanel.displayName = 'HeatmapOverviewPanel';
+
 // ============ MAIN ANALYTICS COMPONENT ============
 
 const ANALYSIS_TABS = [
   { id: 'opportunities', label: '🎯 Opportunities', icon: Target },
   { id: 'whales', label: '🐋 Smart Money', icon: Eye },
+  { id: 'momentum', label: '🚀 Momentum', icon: TrendingUp },
   { id: 'volume', label: '📊 Vol Anomalies', icon: Flame },
   { id: 'edge', label: '⚡ Edge Scanner', icon: Zap },
+  { id: 'timedecay', label: '⏰ Time Decay', icon: AlertTriangle },
   { id: 'arbitrage', label: '🔄 Arbitrage', icon: ArrowUpRight },
+  { id: 'liquidity', label: '🏊 Liquidity', icon: DollarSign },
+  { id: 'multioutcome', label: '🎲 Multi-Outcome', icon: Activity },
+  { id: 'rotation', label: '🔄 Rotation', icon: Shield },
+  { id: 'scatter', label: '🗺️ Scatter Map', icon: BarChart3 },
   { id: 'structure', label: '🏗️ Structure', icon: Brain },
 ];
 
@@ -723,12 +1190,13 @@ const PolymarketAnalytics = memo(({ events, allMarkets, liveTrades, onSelectEven
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/50">
         <div className="flex items-center gap-2">
           <Brain className="w-4 h-4 text-terminal-amber" />
-          <span className="text-[11px] font-bold text-terminal-amber tracking-wider">ABLE ANALYTICS ENGINE</span>
+          <span className="text-[11px] font-bold text-terminal-amber tracking-wider">ABLE ANALYTICS ENGINE v2</span>
         </div>
         <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
           <span className="text-terminal-green">{opportunities.length} signals</span>
           <span className="text-terminal-amber">🐋 {whaleActivity.length} tracked</span>
           <span className="text-terminal-cyan">{volumeAnomalies.length} anomalies</span>
+          <span className="text-foreground font-bold">{ANALYSIS_TABS.length} tools</span>
         </div>
       </div>
 
@@ -752,9 +1220,15 @@ const PolymarketAnalytics = memo(({ events, allMarkets, liveTrades, onSelectEven
         <div className="p-4">
           {activeAnalysis === 'opportunities' && <OpportunitiesPanel opportunities={opportunities} onSelect={onSelectEvent} />}
           {activeAnalysis === 'whales' && <WhalePanel activities={whaleActivity} />}
+          {activeAnalysis === 'momentum' && <MomentumPanel events={events} liveTrades={liveTrades} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
           {activeAnalysis === 'volume' && <VolumeAnomalyPanel anomalies={volumeAnomalies} onSelect={onSelectEvent} />}
           {activeAnalysis === 'edge' && <EdgeScannerPanel events={events} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
+          {activeAnalysis === 'timedecay' && <TimeDecayPanel events={events} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
           {activeAnalysis === 'arbitrage' && <ArbitragePanel arbs={arbitrageOpps} onSelect={onSelectEvent} />}
+          {activeAnalysis === 'liquidity' && <LiquidityPanel events={events} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
+          {activeAnalysis === 'multioutcome' && <MultiOutcomePanel events={events} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
+          {activeAnalysis === 'rotation' && <CategoryRotationPanel events={events} getLivePrice={getLivePrice} />}
+          {activeAnalysis === 'scatter' && <HeatmapOverviewPanel events={events} getLivePrice={getLivePrice} />}
           {activeAnalysis === 'structure' && <StructurePanel structure={marketStructure} />}
         </div>
       </ScrollArea>
