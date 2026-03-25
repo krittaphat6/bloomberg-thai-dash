@@ -705,6 +705,18 @@ const PolymarketHub = () => {
         <div className="flex-1 min-h-0 overflow-hidden">
           <OrderTickerFullView trades={tickerTrades} marketTitleCache={marketTitleCacheRef.current} />
         </div>
+      ) : viewMode === 'ANALYSIS' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <Suspense fallback={<PanelFallback label="Loading analytics..." />}>
+            <PolymarketAnalytics
+              events={displayEvents.map(({ event }) => event)}
+              allMarkets={allMarkets}
+              liveTrades={tickerTrades}
+              onSelectEvent={handleSelectEvent}
+              getLivePrice={getLivePrice}
+            />
+          </Suspense>
+        </div>
       ) : (
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Left: Event List */}
