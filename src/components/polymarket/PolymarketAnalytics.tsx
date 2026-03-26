@@ -1158,12 +1158,490 @@ const HeatmapOverviewPanel = memo(({ events, getLivePrice }: {
 });
 HeatmapOverviewPanel.displayName = 'HeatmapOverviewPanel';
 
+// ============ NEW V3 PANELS ============
+
+// 7. EV Ranker — Expected Value ranking for every market
+const EVRankerPanel = memo(({ events, getLivePrice, onSelect }: {
+  events: PolymarketEvent[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+  onSelect: (e: PolymarketEvent) => void;
+}) => {
+  const [bankroll, setBankroll] = useState(1000);
+  const evData = useMemo(() => {
+    const results: { event: PolymarketEvent; market: PolymarketMarket; yesPct: number; bestSide: 'YES' | 'NO'; bestEV: number; kelly: number; optimalBet: number; roi: number; liq: number }[] = [];
+    for (const event of events) {
+      for (const market of event.markets || []) {
+        const { yesPrice } = getLivePrice(market);
+        if (yesPrice <= 0.02 || yesPrice >= 0.98) continue;
+        const liq = parseFloat(market.liquidity || '0');
+        if (liq < 5000) continue;
+        const yesEV = PolymarketService.expectedValue(yesPrice + 0.05, 100, 100 / yesPrice);
+        const noEV = PolymarketService.expectedValue((1 - yesPrice) + 0.05, 100, 100 / (1 - yesPrice));
+        const bestSide: 'YES' | 'NO' = yesEV > noEV ? 'YES' : 'NO';
+        const bestEV = Math.max(yesEV, noEV);
+        const price = bestSide === 'YES' ? yesPrice : 1 - yesPrice;
+        const kelly = Math.min(PolymarketService.kellyFraction(price + 0.05, 1 / price), 0.15);
+        const optimalBet = bankroll * kelly;
+        const roi = PolymarketService.potentialROI(price);
+        results.push({ event, market, yesPct: Math.round(yesPrice * 100), bestSide, bestEV, kelly, optimalBet, roi, liq });
+      }
+    }
+    return results.sort((a, b) => b.bestEV - a.bestEV).slice(0, 50);
+  }, [events, getLivePrice, bankroll]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3 px-1 mb-2">
+        <span className="text-[10px] text-muted-foreground">Bankroll:</span>
+        <div className="flex gap-1">
+          {[500, 1000, 5000, 10000].map(b => (
+            <button key={b} onClick={() => setBankroll(b)}
+              className={`px-2 py-0.5 rounded text-[9px] font-bold ${bankroll === b ? 'bg-terminal-green/20 text-terminal-green border border-terminal-green/30' : 'text-muted-foreground hover:text-foreground'}`}>
+              ${b.toLocaleString()}
+            </button>
+          ))}
+        </div>
+        <span className="text-[10px] text-muted-foreground ml-auto">{evData.length} markets ranked</span>
+      </div>
+      <div className="grid grid-cols-[30px_1fr_45px_55px_55px_60px_55px_55px] gap-1 px-3 py-1.5 text-[8px] text-muted-foreground font-bold uppercase tracking-wider border-b border-border">
+        <span>#</span><span>MARKET</span><span className="text-right">PROB</span><span className="text-right">BEST EV</span>
+        <span className="text-right">SIDE</span><span className="text-right">KELLY</span><span className="text-right">BET $</span><span className="text-right">ROI</span>
+      </div>
+      {evData.map((d, i) => (
+        <div key={d.market.id} onClick={() => onSelect(d.event)}
+          className={`grid grid-cols-[30px_1fr_45px_55px_55px_60px_55px_55px] gap-1 px-3 py-1.5 text-[10px] border-b border-border/20 cursor-pointer hover:bg-muted/30 ${i < 5 ? 'bg-terminal-green/[0.03]' : ''}`}>
+          <span className="text-muted-foreground font-mono">{i + 1}</span>
+          <span className="text-foreground truncate font-medium">{d.market.question}</span>
+          <span className={`text-right font-bold ${d.yesPct >= 50 ? 'text-terminal-green' : 'text-destructive'}`}>{d.yesPct}%</span>
+          <span className={`text-right font-bold ${d.bestEV > 0 ? 'text-terminal-green' : 'text-destructive'}`}>${d.bestEV.toFixed(1)}</span>
+          <span className={`text-right font-bold ${d.bestSide === 'YES' ? 'text-terminal-green' : 'text-destructive'}`}>{d.bestSide}</span>
+          <span className="text-right text-terminal-cyan font-mono">{(d.kelly * 100).toFixed(1)}%</span>
+          <span className="text-right text-terminal-amber font-mono">${d.optimalBet.toFixed(0)}</span>
+          <span className="text-right text-terminal-green font-mono">{d.roi.toFixed(0)}%</span>
+        </div>
+      ))}
+    </div>
+  );
+});
+EVRankerPanel.displayName = 'EVRankerPanel';
+
+// 8. Volatility Scanner
+const VolatilityPanel = memo(({ events, liveTrades, getLivePrice, onSelect }: {
+  events: PolymarketEvent[];
+  liveTrades: (PolymarketLastTrade & { title?: string })[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+  onSelect: (e: PolymarketEvent) => void;
+}) => {
+  const volatility = useMemo(() => {
+    const tokenPrices = new Map<string, number[]>();
+    for (const t of liveTrades) {
+      const p = parseFloat(t.price || '0');
+      if (p > 0) { const arr = tokenPrices.get(t.asset_id) || []; arr.push(p); tokenPrices.set(t.asset_id, arr); }
+    }
+    const results: { event: PolymarketEvent; market: PolymarketMarket; yesPct: number; priceRange: number; stdDev: number; tradeCount: number; implied: string; volScore: number }[] = [];
+    for (const event of events) {
+      for (const market of event.markets || []) {
+        const { yesPrice } = getLivePrice(market);
+        if (yesPrice <= 0.02 || yesPrice >= 0.98) continue;
+        const vol = market.volume24hr || 0;
+        if (vol < 3000) continue;
+        const tokens = PolymarketService.extractTokenIds([market]);
+        let maxStd = 0, maxRange = 0, totalTrades = 0;
+        for (const tid of tokens) {
+          const prices = tokenPrices.get(tid);
+          if (!prices || prices.length < 3) continue;
+          totalTrades += prices.length;
+          const mean = prices.reduce((a, b) => a + b, 0) / prices.length;
+          const std = Math.sqrt(prices.reduce((s, p) => s + (p - mean) ** 2, 0) / prices.length);
+          const range = Math.max(...prices) - Math.min(...prices);
+          if (std > maxStd) maxStd = std;
+          if (range > maxRange) maxRange = range;
+        }
+        const distFrom50 = Math.abs(yesPrice - 0.5);
+        const impliedVol = (1 - distFrom50 * 2) * 100;
+        const volScore = maxStd * 1000 + impliedVol * 0.5;
+        if (volScore > 5 || totalTrades > 5) {
+          results.push({ event, market, yesPct: Math.round(yesPrice * 100), priceRange: maxRange * 100, stdDev: maxStd * 100, tradeCount: totalTrades, volScore, implied: impliedVol > 70 ? 'EXTREME' : impliedVol > 50 ? 'HIGH' : impliedVol > 30 ? 'MEDIUM' : 'LOW' });
+        }
+      }
+    }
+    return results.sort((a, b) => b.volScore - a.volScore).slice(0, 40);
+  }, [events, liveTrades, getLivePrice]);
+
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] text-muted-foreground px-1 mb-2">{volatility.length} markets ranked by volatility</div>
+      <div className="grid grid-cols-[1fr_45px_55px_55px_50px_65px] gap-1 px-3 py-1.5 text-[8px] text-muted-foreground font-bold uppercase tracking-wider border-b border-border">
+        <span>MARKET</span><span className="text-right">PROB</span><span className="text-right">RANGE</span>
+        <span className="text-right">STD</span><span className="text-right">TRADES</span><span className="text-right">IMPLIED</span>
+      </div>
+      {volatility.map((v, i) => (
+        <div key={v.market.id} onClick={() => onSelect(v.event)}
+          className={`grid grid-cols-[1fr_45px_55px_55px_50px_65px] gap-1 px-3 py-1.5 text-[10px] border-b border-border/20 cursor-pointer hover:bg-muted/30 ${v.implied === 'EXTREME' ? 'bg-destructive/[0.04]' : i < 5 ? 'bg-terminal-amber/[0.03]' : ''}`}>
+          <span className="text-foreground truncate font-medium">{v.market.question}</span>
+          <span className={`text-right font-bold ${v.yesPct >= 50 ? 'text-terminal-green' : 'text-destructive'}`}>{v.yesPct}%</span>
+          <span className="text-right text-terminal-amber font-mono">{v.priceRange.toFixed(1)}%</span>
+          <span className="text-right text-terminal-cyan font-mono">{v.stdDev.toFixed(2)}</span>
+          <span className="text-right text-muted-foreground">{v.tradeCount}</span>
+          <span className={`text-right font-bold text-[9px] ${v.implied === 'EXTREME' ? 'text-destructive' : v.implied === 'HIGH' ? 'text-terminal-amber' : 'text-muted-foreground'}`}>
+            {v.implied === 'EXTREME' ? '🌋' : v.implied === 'HIGH' ? '🔥' : v.implied === 'MEDIUM' ? '📊' : '❄️'} {v.implied}
+          </span>
+        </div>
+      ))}
+      {volatility.length === 0 && <div className="text-center py-8 text-muted-foreground text-xs">Waiting for live trade data...</div>}
+    </div>
+  );
+});
+VolatilityPanel.displayName = 'VolatilityPanel';
+
+// 9. Position Sizer — optimal portfolio allocation
+const PositionSizerPanel = memo(({ events, getLivePrice, onSelect }: {
+  events: PolymarketEvent[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+  onSelect: (e: PolymarketEvent) => void;
+}) => {
+  const [totalCapital, setTotalCapital] = useState(5000);
+  const [riskLevel, setRiskLevel] = useState<'conservative' | 'moderate' | 'aggressive'>('moderate');
+  const portfolio = useMemo(() => {
+    const kellyMult = riskLevel === 'conservative' ? 0.25 : riskLevel === 'moderate' ? 0.5 : 0.75;
+    const maxPos = riskLevel === 'conservative' ? 0.08 : riskLevel === 'moderate' ? 0.12 : 0.20;
+    const minLiq = riskLevel === 'conservative' ? 100000 : riskLevel === 'moderate' ? 50000 : 20000;
+    const candidates: { event: PolymarketEvent; market: PolymarketMarket; yesPct: number; side: 'YES' | 'NO'; kelly: number; ev: number; roi: number; allocation: number; potentialProfit: number }[] = [];
+    for (const event of events) {
+      for (const market of event.markets || []) {
+        const { yesPrice } = getLivePrice(market);
+        if (yesPrice <= 0.05 || yesPrice >= 0.95) continue;
+        const liq = parseFloat(market.liquidity || '0');
+        if (liq < minLiq) continue;
+        for (const side of ['YES', 'NO'] as const) {
+          const price = side === 'YES' ? yesPrice : 1 - yesPrice;
+          const trueProb = Math.min(price + 0.05, 0.95);
+          const kelly = PolymarketService.kellyFraction(trueProb, 1 / price) * kellyMult;
+          if (kelly <= 0.005) continue;
+          const ev = PolymarketService.expectedValue(trueProb, 100, 100 / price);
+          const roi = PolymarketService.potentialROI(price);
+          const allocation = Math.min(kelly, maxPos) * totalCapital;
+          const potentialProfit = (allocation / price) - allocation;
+          candidates.push({ event, market, yesPct: Math.round(yesPrice * 100), side, kelly, ev, roi, allocation, potentialProfit });
+        }
+      }
+    }
+    const byMarket = new Map<string, typeof candidates[0]>();
+    for (const c of candidates) { const ex = byMarket.get(c.market.id); if (!ex || c.ev > ex.ev) byMarket.set(c.market.id, c); }
+    const sorted = Array.from(byMarket.values()).sort((a, b) => b.ev - a.ev).slice(0, 20);
+    const totalAlloc = sorted.reduce((s, c) => s + c.allocation, 0);
+    if (totalAlloc > totalCapital) { const scale = totalCapital / totalAlloc; for (const c of sorted) { c.allocation *= scale; c.potentialProfit = (c.allocation / (c.side === 'YES' ? c.yesPct / 100 : (100 - c.yesPct) / 100)) - c.allocation; } }
+    return sorted;
+  }, [events, getLivePrice, totalCapital, riskLevel]);
+
+  const totalAllocated = portfolio.reduce((s, p) => s + p.allocation, 0);
+  const totalPotProfit = portfolio.reduce((s, p) => s + p.potentialProfit, 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">Capital:</span>
+          {[1000, 5000, 10000, 50000].map(c => (
+            <button key={c} onClick={() => setTotalCapital(c)} className={`px-2 py-0.5 rounded text-[9px] font-bold ${totalCapital === c ? 'bg-terminal-cyan/20 text-terminal-cyan border border-terminal-cyan/30' : 'text-muted-foreground hover:text-foreground'}`}>${c.toLocaleString()}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">Risk:</span>
+          {(['conservative', 'moderate', 'aggressive'] as const).map(r => (
+            <button key={r} onClick={() => setRiskLevel(r)} className={`px-2 py-0.5 rounded text-[9px] font-bold capitalize ${riskLevel === r ? 'bg-terminal-amber/20 text-terminal-amber border border-terminal-amber/30' : 'text-muted-foreground hover:text-foreground'}`}>{r}</button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'ALLOCATED', value: `$${totalAllocated.toFixed(0)}`, color: 'text-terminal-cyan' },
+          { label: 'POSITIONS', value: portfolio.length.toString(), color: 'text-terminal-green' },
+          { label: 'POT. PROFIT', value: `$${totalPotProfit.toFixed(0)}`, color: 'text-terminal-amber' },
+        ].map(s => (
+          <div key={s.label} className="border border-border rounded-lg p-2.5 bg-card/30 text-center">
+            <div className="text-[8px] text-muted-foreground uppercase tracking-wider">{s.label}</div>
+            <div className={`text-base font-black ${s.color}`}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-[25px_1fr_45px_40px_55px_55px_55px] gap-1 px-3 py-1.5 text-[8px] text-muted-foreground font-bold uppercase tracking-wider border-b border-border">
+        <span>#</span><span>MARKET</span><span className="text-right">PROB</span><span className="text-right">SIDE</span>
+        <span className="text-right">ALLOC</span><span className="text-right">PROFIT</span><span className="text-right">EV</span>
+      </div>
+      {portfolio.map((p, i) => (
+        <div key={p.market.id} onClick={() => onSelect(p.event)}
+          className="grid grid-cols-[25px_1fr_45px_40px_55px_55px_55px] gap-1 px-3 py-1.5 text-[10px] border-b border-border/20 cursor-pointer hover:bg-muted/30">
+          <span className="text-muted-foreground font-mono">{i + 1}</span>
+          <span className="text-foreground truncate font-medium">{p.market.question}</span>
+          <span className={`text-right font-bold ${p.yesPct >= 50 ? 'text-terminal-green' : 'text-destructive'}`}>{p.yesPct}%</span>
+          <span className={`text-right font-bold ${p.side === 'YES' ? 'text-terminal-green' : 'text-destructive'}`}>{p.side}</span>
+          <span className="text-right text-terminal-cyan font-mono">${p.allocation.toFixed(0)}</span>
+          <span className="text-right text-terminal-green font-mono">${p.potentialProfit.toFixed(0)}</span>
+          <span className={`text-right font-mono ${p.ev > 0 ? 'text-terminal-green' : 'text-destructive'}`}>${p.ev.toFixed(1)}</span>
+        </div>
+      ))}
+    </div>
+  );
+});
+PositionSizerPanel.displayName = 'PositionSizerPanel';
+
+// 10. Conviction Tracker — markets with biggest probability shifts
+const ConvictionPanel = memo(({ events, liveTrades, getLivePrice, onSelect }: {
+  events: PolymarketEvent[];
+  liveTrades: (PolymarketLastTrade & { title?: string })[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+  onSelect: (e: PolymarketEvent) => void;
+}) => {
+  const convictions = useMemo(() => {
+    const tokenFirstLast = new Map<string, { first: number; last: number; count: number }>();
+    for (const t of liveTrades) {
+      const p = parseFloat(t.price || '0');
+      if (p <= 0) continue;
+      const entry = tokenFirstLast.get(t.asset_id);
+      if (!entry) tokenFirstLast.set(t.asset_id, { first: p, last: p, count: 1 });
+      else { entry.last = p; entry.count++; }
+    }
+    const results: { event: PolymarketEvent; market: PolymarketMarket; yesPct: number; priceShift: number; direction: 'UP' | 'DOWN'; tradeCount: number; vol: number; conviction: string }[] = [];
+    for (const event of events) {
+      for (const market of event.markets || []) {
+        const { yesPrice } = getLivePrice(market);
+        if (yesPrice <= 0 || yesPrice >= 1) continue;
+        const vol = market.volume24hr || 0;
+        const tokens = PolymarketService.extractTokenIds([market]);
+        let maxShift = 0, dir: 'UP' | 'DOWN' = 'UP', tc = 0;
+        for (const tid of tokens) {
+          const entry = tokenFirstLast.get(tid);
+          if (!entry || entry.count < 3) continue;
+          const shift = (entry.last - entry.first) * 100;
+          tc += entry.count;
+          if (Math.abs(shift) > Math.abs(maxShift)) { maxShift = shift; dir = shift >= 0 ? 'UP' : 'DOWN'; }
+        }
+        const absShift = Math.abs(maxShift);
+        if (absShift < 1) continue;
+        const conviction = absShift > 5 ? 'VERY_HIGH' : absShift > 3 ? 'HIGH' : 'MODERATE';
+        results.push({ event, market, yesPct: Math.round(yesPrice * 100), priceShift: maxShift, direction: dir, tradeCount: tc, vol, conviction });
+      }
+    }
+    return results.sort((a, b) => Math.abs(b.priceShift) - Math.abs(a.priceShift)).slice(0, 40);
+  }, [events, liveTrades, getLivePrice]);
+
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] text-muted-foreground px-1 mb-2">{convictions.length} markets with significant price movement</div>
+      <div className="grid grid-cols-[1fr_45px_60px_50px_60px_75px] gap-1 px-3 py-1.5 text-[8px] text-muted-foreground font-bold uppercase tracking-wider border-b border-border">
+        <span>MARKET</span><span className="text-right">NOW</span><span className="text-right">SHIFT</span>
+        <span className="text-right">TRADES</span><span className="text-right">VOLUME</span><span className="text-right">CONVICTION</span>
+      </div>
+      {convictions.map((c) => (
+        <div key={c.market.id} onClick={() => onSelect(c.event)}
+          className={`grid grid-cols-[1fr_45px_60px_50px_60px_75px] gap-1 px-3 py-1.5 text-[10px] border-b border-border/20 cursor-pointer hover:bg-muted/30 ${c.conviction === 'VERY_HIGH' ? 'bg-terminal-amber/[0.04]' : ''}`}>
+          <span className="text-foreground truncate font-medium">{c.market.question}</span>
+          <span className={`text-right font-bold ${c.yesPct >= 50 ? 'text-terminal-green' : 'text-destructive'}`}>{c.yesPct}%</span>
+          <span className={`text-right font-bold font-mono ${c.direction === 'UP' ? 'text-terminal-green' : 'text-destructive'}`}>
+            {c.direction === 'UP' ? '↑' : '↓'}{Math.abs(c.priceShift).toFixed(1)}%
+          </span>
+          <span className="text-right text-muted-foreground">{c.tradeCount}</span>
+          <span className="text-right text-terminal-cyan font-mono">{PolymarketService.formatVolume(c.vol)}</span>
+          <span className={`text-right font-bold text-[8px] ${c.conviction === 'VERY_HIGH' ? 'text-terminal-amber' : c.conviction === 'HIGH' ? 'text-terminal-cyan' : 'text-muted-foreground'}`}>
+            {c.conviction === 'VERY_HIGH' ? '🔥 V.HIGH' : c.conviction === 'HIGH' ? '⚡ HIGH' : '📊 MOD'}
+          </span>
+        </div>
+      ))}
+      {convictions.length === 0 && <div className="text-center py-8 text-muted-foreground text-xs">Waiting for live trade data...</div>}
+    </div>
+  );
+});
+ConvictionPanel.displayName = 'ConvictionPanel';
+
+// 11. Profit Simulator — Monte Carlo
+const ProfitSimPanel = memo(({ events, getLivePrice }: {
+  events: PolymarketEvent[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+}) => {
+  const [capital, setCapital] = useState(5000);
+  const sim = useMemo(() => {
+    const bets: { price: number }[] = [];
+    for (const event of events) {
+      for (const market of event.markets || []) {
+        const { yesPrice } = getLivePrice(market);
+        if (yesPrice <= 0.05 || yesPrice >= 0.95) continue;
+        const liq = parseFloat(market.liquidity || '0');
+        if (liq < 20000) continue;
+        const ev = PolymarketService.expectedValue(yesPrice + 0.05, 100, 100 / yesPrice);
+        if (ev > 0) bets.push({ price: yesPrice });
+      }
+    }
+    bets.sort((a, b) => b.price - a.price);
+    const topBets = bets.slice(0, 20);
+    if (topBets.length === 0) return null;
+    const betPer = capital / topBets.length;
+    const finals: number[] = [];
+    const simRuns = 1000;
+    for (let r = 0; r < simRuns; r++) {
+      let eq = capital;
+      for (const bet of topBets) {
+        if (Math.random() < (bet.price + 0.03)) eq += betPer * ((1 / bet.price) - 1);
+        else eq -= betPer;
+      }
+      finals.push(eq);
+    }
+    finals.sort((a, b) => a - b);
+    const mean = finals.reduce((a, b) => a + b, 0) / simRuns;
+    const p10 = finals[Math.floor(simRuns * 0.1)];
+    const p50 = finals[Math.floor(simRuns * 0.5)];
+    const p90 = finals[Math.floor(simRuns * 0.9)];
+    const winRate = finals.filter(e => e > capital).length / simRuns * 100;
+    const bucketCount = 20;
+    const min = Math.min(...finals), max = Math.max(...finals);
+    const bs = (max - min) / bucketCount || 1;
+    const histogram: { range: string; count: number; isProfit: boolean }[] = [];
+    for (let b = 0; b < bucketCount; b++) {
+      const lo = min + b * bs;
+      histogram.push({ range: `$${lo.toFixed(0)}`, count: finals.filter(e => e >= lo && e < lo + bs).length, isProfit: lo >= capital });
+    }
+    return { mean, p10, p50, p90, winRate, bestCase: Math.max(...finals), maxLoss: Math.min(...finals) - capital, numBets: topBets.length, histogram };
+  }, [events, getLivePrice, capital]);
+
+  if (!sim) return <div className="text-center py-8 text-muted-foreground text-xs">Not enough +EV markets to simulate</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-muted-foreground">Capital:</span>
+        {[1000, 5000, 10000].map(c => (
+          <button key={c} onClick={() => setCapital(c)} className={`px-2 py-0.5 rounded text-[9px] font-bold ${capital === c ? 'bg-terminal-green/20 text-terminal-green border border-terminal-green/30' : 'text-muted-foreground hover:text-foreground'}`}>${c.toLocaleString()}</button>
+        ))}
+      </div>
+      <div className="grid grid-cols-5 gap-2">
+        {[
+          { label: 'WIN RATE', value: `${sim.winRate.toFixed(1)}%`, color: sim.winRate > 50 ? 'text-terminal-green' : 'text-destructive' },
+          { label: 'MEDIAN', value: `$${sim.p50.toFixed(0)}`, color: sim.p50 > capital ? 'text-terminal-green' : 'text-destructive' },
+          { label: 'MEAN', value: `$${sim.mean.toFixed(0)}`, color: sim.mean > capital ? 'text-terminal-green' : 'text-destructive' },
+          { label: 'BEST CASE', value: `$${sim.bestCase.toFixed(0)}`, color: 'text-terminal-amber' },
+          { label: 'MAX LOSS', value: `$${sim.maxLoss.toFixed(0)}`, color: 'text-destructive' },
+        ].map(s => (
+          <div key={s.label} className="border border-border rounded-lg p-2 bg-card/30 text-center">
+            <div className="text-[8px] text-muted-foreground uppercase">{s.label}</div>
+            <div className={`text-sm font-black ${s.color}`}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="border border-border rounded-lg p-3 bg-card/30">
+        <div className="text-[10px] font-bold text-terminal-amber uppercase tracking-wider mb-3">EQUITY DISTRIBUTION ({sim.numBets} bets × 1,000 runs)</div>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={sim.histogram}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.3} />
+            <XAxis dataKey="range" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} interval="preserveStartEnd" />
+            <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+            <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 10, borderRadius: 4 }} />
+            <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+              {sim.histogram.map((entry, idx) => (
+                <Cell key={idx} fill={entry.isProfit ? 'hsl(var(--terminal-green))' : 'hsl(var(--destructive))'} fillOpacity={0.7} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="grid grid-cols-3 gap-3 text-[10px]">
+        <div className="text-center"><span className="text-muted-foreground block text-[9px]">10th pctl</span><span className={`font-bold ${sim.p10 >= capital ? 'text-terminal-green' : 'text-destructive'}`}>${sim.p10.toFixed(0)}</span></div>
+        <div className="text-center"><span className="text-muted-foreground block text-[9px]">50th pctl</span><span className={`font-bold ${sim.p50 >= capital ? 'text-terminal-green' : 'text-destructive'}`}>${sim.p50.toFixed(0)}</span></div>
+        <div className="text-center"><span className="text-muted-foreground block text-[9px]">90th pctl</span><span className={`font-bold ${sim.p90 >= capital ? 'text-terminal-green' : 'text-destructive'}`}>${sim.p90.toFixed(0)}</span></div>
+      </div>
+    </div>
+  );
+});
+ProfitSimPanel.displayName = 'ProfitSimPanel';
+
+// 12. Value Composite Score
+const ValueCompositePanel = memo(({ events, liveTrades, getLivePrice, onSelect }: {
+  events: PolymarketEvent[];
+  liveTrades: (PolymarketLastTrade & { title?: string })[];
+  getLivePrice: (m: PolymarketMarket) => { yesPrice: number; noPrice: number };
+  onSelect: (e: PolymarketEvent) => void;
+}) => {
+  const composites = useMemo(() => {
+    const tokenFlow = new Map<string, { buys: number; sells: number; total: number }>();
+    for (const t of liveTrades) {
+      const entry = tokenFlow.get(t.asset_id) || { buys: 0, sells: 0, total: 0 };
+      const val = parseFloat(t.price || '0') * parseFloat(t.size || '0');
+      if (t.side === 'BUY') entry.buys += val; else entry.sells += val;
+      entry.total += val;
+      tokenFlow.set(t.asset_id, entry);
+    }
+    const allVols = events.flatMap(e => (e.markets || []).map(m => m.volume24hr || 0)).filter(v => v > 0);
+    const medianVol = allVols.sort((a, b) => a - b)[Math.floor(allVols.length / 2)] || 1;
+
+    const results: { event: PolymarketEvent; market: PolymarketMarket; yesPct: number; compositeScore: number; evScore: number; momentumScore: number; volumeScore: number; liquidityScore: number; timeScore: number; bestSide: 'YES' | 'NO'; grade: string }[] = [];
+    for (const event of events) {
+      for (const market of event.markets || []) {
+        const { yesPrice } = getLivePrice(market);
+        if (yesPrice <= 0.03 || yesPrice >= 0.97) continue;
+        const vol = market.volume24hr || 0;
+        const liq = parseFloat(market.liquidity || '0');
+        if (liq < 5000) continue;
+        const yesEV = PolymarketService.expectedValue(yesPrice + 0.05, 100, 100 / yesPrice);
+        const noEV = PolymarketService.expectedValue((1 - yesPrice) + 0.05, 100, 100 / (1 - yesPrice));
+        const bestSide: 'YES' | 'NO' = yesEV > noEV ? 'YES' : 'NO';
+        const evScore = Math.min(Math.max(yesEV, noEV) / 4, 25);
+        const tokens = PolymarketService.extractTokenIds([market]);
+        let buyPressure = 0.5;
+        for (const tid of tokens) { const flow = tokenFlow.get(tid); if (flow && flow.total > 0) buyPressure = flow.buys / flow.total; }
+        const momentumScore = bestSide === 'YES' ? Math.min(buyPressure * 25, 25) : Math.min((1 - buyPressure) * 25, 25);
+        const volumeScore = Math.min((vol / medianVol) * 5, 25);
+        const liquidityScore = Math.min(liq / 100000 * 15, 15);
+        let timeScore = 5;
+        if (market.endDate) { const d = Math.ceil((new Date(market.endDate).getTime() - Date.now()) / 86400000); if (d > 0 && d <= 7) timeScore = 10; else if (d <= 14) timeScore = 8; }
+        const compositeScore = evScore + momentumScore + volumeScore + liquidityScore + timeScore;
+        const grade = compositeScore >= 70 ? 'A+' : compositeScore >= 60 ? 'A' : compositeScore >= 50 ? 'B+' : compositeScore >= 40 ? 'B' : compositeScore >= 30 ? 'C' : 'D';
+        results.push({ event, market, yesPct: Math.round(yesPrice * 100), compositeScore, evScore, momentumScore, volumeScore, liquidityScore, timeScore, bestSide, grade });
+      }
+    }
+    return results.sort((a, b) => b.compositeScore - a.compositeScore).slice(0, 50);
+  }, [events, liveTrades, getLivePrice]);
+
+  const gradeColor = (g: string) => g === 'A+' || g === 'A' ? 'text-terminal-green' : g === 'B+' || g === 'B' ? 'text-terminal-amber' : 'text-destructive';
+
+  return (
+    <div className="space-y-2">
+      <div className="text-[10px] text-muted-foreground px-1 mb-1">Composite = EV(25) + Momentum(25) + Volume(25) + Liquidity(15) + Time(10)</div>
+      <div className="grid grid-cols-[25px_1fr_35px_40px_50px_30px_30px_30px_30px_30px] gap-1 px-2 py-1.5 text-[7px] text-muted-foreground font-bold uppercase tracking-wider border-b border-border">
+        <span>#</span><span>MARKET</span><span className="text-right">PROB</span><span className="text-right">SIDE</span>
+        <span className="text-right">SCORE</span><span className="text-right">EV</span><span className="text-right">MOM</span>
+        <span className="text-right">VOL</span><span className="text-right">LIQ</span><span className="text-right">GRD</span>
+      </div>
+      {composites.map((c, i) => (
+        <div key={c.market.id} onClick={() => onSelect(c.event)}
+          className={`grid grid-cols-[25px_1fr_35px_40px_50px_30px_30px_30px_30px_30px] gap-1 px-2 py-1.5 text-[10px] border-b border-border/20 cursor-pointer hover:bg-muted/30 ${i < 3 ? 'bg-terminal-green/[0.04]' : ''}`}>
+          <span className="text-muted-foreground font-mono">{i + 1}</span>
+          <span className="text-foreground truncate font-medium">{c.market.question}</span>
+          <span className={`text-right font-bold ${c.yesPct >= 50 ? 'text-terminal-green' : 'text-destructive'}`}>{c.yesPct}%</span>
+          <span className={`text-right font-bold ${c.bestSide === 'YES' ? 'text-terminal-green' : 'text-destructive'}`}>{c.bestSide}</span>
+          <span className="text-right font-black text-terminal-amber">{c.compositeScore.toFixed(0)}</span>
+          <span className="text-right text-terminal-green font-mono text-[8px]">{c.evScore.toFixed(0)}</span>
+          <span className="text-right text-terminal-cyan font-mono text-[8px]">{c.momentumScore.toFixed(0)}</span>
+          <span className="text-right text-terminal-amber font-mono text-[8px]">{c.volumeScore.toFixed(0)}</span>
+          <span className="text-right text-muted-foreground font-mono text-[8px]">{c.liquidityScore.toFixed(0)}</span>
+          <span className={`text-right font-black ${gradeColor(c.grade)}`}>{c.grade}</span>
+        </div>
+      ))}
+    </div>
+  );
+});
+ValueCompositePanel.displayName = 'ValueCompositePanel';
+
 // ============ MAIN ANALYTICS COMPONENT ============
 
 const ANALYSIS_TABS = [
+  { id: 'composite', label: '🏆 Value Score', icon: Brain },
   { id: 'opportunities', label: '🎯 Opportunities', icon: Target },
+  { id: 'evranker', label: '💰 EV Ranker', icon: DollarSign },
+  { id: 'positionsizer', label: '📐 Position Sizer', icon: Shield },
+  { id: 'profitsim', label: '🎰 Profit Sim', icon: BarChart3 },
   { id: 'whales', label: '🐋 Smart Money', icon: Eye },
+  { id: 'conviction', label: '🔮 Conviction', icon: TrendingUp },
   { id: 'momentum', label: '🚀 Momentum', icon: TrendingUp },
+  { id: 'volatility', label: '🌋 Volatility', icon: Activity },
   { id: 'volume', label: '📊 Vol Anomalies', icon: Flame },
   { id: 'edge', label: '⚡ Edge Scanner', icon: Zap },
   { id: 'timedecay', label: '⏰ Time Decay', icon: AlertTriangle },
@@ -1176,7 +1654,7 @@ const ANALYSIS_TABS = [
 ];
 
 const PolymarketAnalytics = memo(({ events, allMarkets, liveTrades, onSelectEvent, getLivePrice }: AnalyticsProps) => {
-  const [activeAnalysis, setActiveAnalysis] = useState('opportunities');
+  const [activeAnalysis, setActiveAnalysis] = useState('composite');
 
   const opportunities = useMemo(() => computeOpportunities(events, allMarkets, getLivePrice), [events, allMarkets, getLivePrice]);
   const whaleActivity = useMemo(() => computeWhaleActivity(liveTrades), [liveTrades]);
@@ -1186,21 +1664,19 @@ const PolymarketAnalytics = memo(({ events, allMarkets, liveTrades, onSelectEven
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/50">
         <div className="flex items-center gap-2">
           <Brain className="w-4 h-4 text-terminal-amber" />
-          <span className="text-[11px] font-bold text-terminal-amber tracking-wider">ABLE ANALYTICS ENGINE v2</span>
+          <span className="text-[11px] font-bold text-terminal-amber tracking-wider">ABLE ANALYTICS ENGINE v3</span>
         </div>
         <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
           <span className="text-terminal-green">{opportunities.length} signals</span>
-          <span className="text-terminal-amber">🐋 {whaleActivity.length} tracked</span>
+          <span className="text-terminal-amber">🐋 {whaleActivity.length}</span>
           <span className="text-terminal-cyan">{volumeAnomalies.length} anomalies</span>
           <span className="text-foreground font-bold">{ANALYSIS_TABS.length} tools</span>
         </div>
       </div>
 
-      {/* Analysis Tabs */}
       <div className="flex gap-0.5 px-2 py-1.5 border-b border-border bg-card/30 overflow-x-auto">
         {ANALYSIS_TABS.map(tab => (
           <button key={tab.id}
@@ -1215,12 +1691,17 @@ const PolymarketAnalytics = memo(({ events, allMarkets, liveTrades, onSelectEven
         ))}
       </div>
 
-      {/* Content */}
       <ScrollArea className="flex-1">
         <div className="p-4">
+          {activeAnalysis === 'composite' && <ValueCompositePanel events={events} liveTrades={liveTrades} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
           {activeAnalysis === 'opportunities' && <OpportunitiesPanel opportunities={opportunities} onSelect={onSelectEvent} />}
+          {activeAnalysis === 'evranker' && <EVRankerPanel events={events} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
+          {activeAnalysis === 'positionsizer' && <PositionSizerPanel events={events} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
+          {activeAnalysis === 'profitsim' && <ProfitSimPanel events={events} getLivePrice={getLivePrice} />}
           {activeAnalysis === 'whales' && <WhalePanel activities={whaleActivity} />}
+          {activeAnalysis === 'conviction' && <ConvictionPanel events={events} liveTrades={liveTrades} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
           {activeAnalysis === 'momentum' && <MomentumPanel events={events} liveTrades={liveTrades} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
+          {activeAnalysis === 'volatility' && <VolatilityPanel events={events} liveTrades={liveTrades} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
           {activeAnalysis === 'volume' && <VolumeAnomalyPanel anomalies={volumeAnomalies} onSelect={onSelectEvent} />}
           {activeAnalysis === 'edge' && <EdgeScannerPanel events={events} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
           {activeAnalysis === 'timedecay' && <TimeDecayPanel events={events} getLivePrice={getLivePrice} onSelect={onSelectEvent} />}
