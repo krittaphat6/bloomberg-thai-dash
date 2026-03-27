@@ -76,7 +76,7 @@ export default function WeatherBot() {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
-        {tab === 'dashboard' && <WeatherBotDashboard onNavigate={setTab} />}
+        {tab === 'dashboard' && <WeatherBotDashboard onNavigate={(t: string) => setTab(t as Tab)} />}
         {tab === 'live' && <WeatherBotLiveFeed />}
         {tab === 'signals' && <WeatherBotSignals />}
         {tab === 'markets' && <WeatherBotMarkets />}
