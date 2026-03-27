@@ -58,6 +58,7 @@ const AppContent = () => {
             <Route path="/pacman" element={<PacManGame />} />
             <Route path="/map" element={<GlobalMap />} />
             <Route path="/service-map" element={<ServiceMap />} />
+            <Route path="/weatherbot" element={<WeatherBot />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
