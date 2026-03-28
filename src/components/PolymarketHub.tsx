@@ -717,6 +717,12 @@ const PolymarketHub = () => {
             />
           </Suspense>
         </div>
+      ) : viewMode === 'WEATHERBOT' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <Suspense fallback={<PanelFallback label="Loading WeatherBot..." />}>
+            <WeatherBotEmbed />
+          </Suspense>
+        </div>
       ) : (
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Left: Event List */}
