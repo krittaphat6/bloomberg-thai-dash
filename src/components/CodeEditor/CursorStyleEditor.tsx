@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import Editor from '@monaco-editor/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,10 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Bot,
 } from 'lucide-react';
+
+const AIAssistantPanel = lazy(() => import('./AIAssistantPanel'));
 import { toast } from 'sonner';
 import { PineScriptRunner, OHLCData } from '@/utils/PineScriptRunner';
 import { 
