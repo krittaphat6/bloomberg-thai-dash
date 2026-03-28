@@ -907,6 +907,20 @@ await micropip.install('${packageName.trim()}')
             )}
           </div>
         </div>
+
+        {/* AI Assistant Panel */}
+        {showAIPanel && (
+          <Suspense fallback={<div className="w-[340px] flex items-center justify-center" style={{ background: '#1a1a2e' }}><Loader2 className="h-5 w-5 animate-spin text-purple-400" /></div>}>
+            <AIAssistantPanel 
+              editorContent={activeTab?.content || ''} 
+              onInsertCode={(code) => {
+                if (activeTab) {
+                  handleEditorChange(activeTab.content + '\n' + code);
+                }
+              }}
+            />
+          </Suspense>
+        )}
       </div>
 
       {/* Terminal */}
