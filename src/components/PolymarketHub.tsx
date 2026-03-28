@@ -14,6 +14,7 @@ const PolymarketPriceChart = lazy(async () => ({ default: (await import('@/compo
 const PolymarketCalculator = lazy(async () => ({ default: (await import('@/components/polymarket/PolymarketCalculator')).PolymarketCalculator }));
 const PolymarketHeatmap = lazy(() => import('@/components/polymarket/PolymarketHeatmap'));
 const PolymarketAnalytics = lazy(() => import('@/components/polymarket/PolymarketAnalytics'));
+const WeatherBotEmbed = lazy(() => import('@/pages/WeatherBot'));
 
 // ============ CONSTANTS ============
 
