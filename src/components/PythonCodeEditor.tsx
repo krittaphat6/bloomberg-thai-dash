@@ -118,11 +118,11 @@ export const PythonCodeEditor: React.FC = () => {
   const [key, setKey] = useState(0);
   const [loadTimeout, setLoadTimeout] = useState(false);
   
-  // Set timeout for loading
+  // Set timeout for loading - increased to 60s for slower connections
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoadTimeout(true);
-    }, 30000); // 30 seconds timeout
+    }, 60000); // 60 seconds timeout
     
     return () => clearTimeout(timer);
   }, [key]);

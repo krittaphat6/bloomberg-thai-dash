@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import Editor from '@monaco-editor/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,10 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Bot,
 } from 'lucide-react';
+
+const AIAssistantPanel = lazy(() => import('./AIAssistantPanel'));
 import { toast } from 'sonner';
 import { PineScriptRunner, OHLCData } from '@/utils/PineScriptRunner';
 import { 
@@ -164,7 +167,7 @@ plot(sma_value, color=color.blue, title="SMA")
 
 export default function CursorStyleEditor() {
   const [editorMode, setEditorMode] = useState<EditorMode>('python');
-  const [files, setFiles] = useState<FileNode[]>(DEFAULT_PYTHON_FILES);
+  const [showAIPanel, setShowAIPanel] = useState(false);
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [terminalOutput, setTerminalOutput] = useState<TerminalOutput[]>([]);
@@ -787,33 +790,18 @@ await micropip.install('${packageName.trim()}')
               Retry
             </Button>
           )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowAIPanel(!showAIPanel)}
+            className={`h-7 px-3 text-xs ${showAIPanel ? 'bg-purple-500/20 text-purple-400' : 'text-purple-400/60 hover:text-purple-400'}`}
+          >
+            <Bot className="h-3 w-3 mr-1" />
+            AI
+          </Button>
         </div>
       </div>
-
-      {/* Main content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <div className="w-48 border-r border-[#333] flex flex-col bg-[#252526]">
-          <div className="border-b border-[#333] p-2">
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`h-7 w-7 p-0 ${sidebarTab === 'files' ? 'bg-muted/50' : ''}`}
-                onClick={() => setSidebarTab('files')}
-              >
-                <FileText className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`h-7 w-7 p-0 ${sidebarTab === 'search' ? 'bg-muted/50' : ''}`}
-                onClick={() => setSidebarTab('search')}
-              >
-                <Search className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
           
           <ScrollArea className="flex-1">
             {sidebarTab === 'files' && (
@@ -904,6 +892,20 @@ await micropip.install('${packageName.trim()}')
             )}
           </div>
         </div>
+
+        {/* AI Assistant Panel */}
+        {showAIPanel && (
+          <Suspense fallback={<div className="w-[340px] flex items-center justify-center" style={{ background: '#1a1a2e' }}><Loader2 className="h-5 w-5 animate-spin text-purple-400" /></div>}>
+            <AIAssistantPanel 
+              editorContent={activeTab?.content || ''} 
+              onInsertCode={(code) => {
+                if (activeTab) {
+                  handleEditorChange(activeTab.content + '\n' + code);
+                }
+              }}
+            />
+          </Suspense>
+        )}
       </div>
 
       {/* Terminal */}
