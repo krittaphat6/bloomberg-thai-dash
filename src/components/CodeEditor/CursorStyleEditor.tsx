@@ -790,33 +790,18 @@ await micropip.install('${packageName.trim()}')
               Retry
             </Button>
           )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowAIPanel(!showAIPanel)}
+            className={`h-7 px-3 text-xs ${showAIPanel ? 'bg-purple-500/20 text-purple-400' : 'text-purple-400/60 hover:text-purple-400'}`}
+          >
+            <Bot className="h-3 w-3 mr-1" />
+            AI
+          </Button>
         </div>
       </div>
-
-      {/* Main content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <div className="w-48 border-r border-[#333] flex flex-col bg-[#252526]">
-          <div className="border-b border-[#333] p-2">
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`h-7 w-7 p-0 ${sidebarTab === 'files' ? 'bg-muted/50' : ''}`}
-                onClick={() => setSidebarTab('files')}
-              >
-                <FileText className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`h-7 w-7 p-0 ${sidebarTab === 'search' ? 'bg-muted/50' : ''}`}
-                onClick={() => setSidebarTab('search')}
-              >
-                <Search className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
           
           <ScrollArea className="flex-1">
             {sidebarTab === 'files' && (
