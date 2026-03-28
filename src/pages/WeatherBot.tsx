@@ -1,6 +1,4 @@
-import { useState, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useState } from 'react';
 import WeatherBotMarkets from '@/components/WeatherBot/MarketsPanel';
 import WeatherBotWeather from '@/components/WeatherBot/WeatherPanel';
 import WeatherBotBacktest from '@/components/WeatherBot/BacktestPanel';
@@ -40,17 +38,17 @@ export default function WeatherBot() {
   const [tab, setTab] = useState<Tab>('dashboard');
 
   return (
-    <div className="flex flex-col h-screen" style={{ background: '#08080d', color: '#e8e8f0', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
+    <div className="flex flex-col h-full" style={{ background: 'hsl(var(--background))', color: 'hsl(var(--foreground))', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
       {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b" style={{ background: '#0d0d18', borderColor: 'rgba(255,255,255,0.06)' }}>
+      <div className="flex items-center justify-between px-4 py-2 border-b" style={{ background: 'hsl(var(--card))', borderColor: 'rgba(255,255,255,0.06)' }}>
         <div className="flex items-center gap-3">
-          <span className="text-lg" style={{ color: '#f97316' }}>🌡</span>
-          <span className="font-bold tracking-widest text-sm" style={{ fontFamily: "'JetBrains Mono', monospace", color: '#f97316' }}>WEATHERBOT</span>
-          <span className="text-xs" style={{ color: '#50507a' }}>Polymarket Weather Trading</span>
+          <span className="text-lg" style={{ color: 'hsl(var(--terminal-amber))' }}>🌡</span>
+          <span className="font-bold tracking-widest text-sm font-mono" style={{ color: 'hsl(var(--terminal-amber))' }}>WEATHERBOT</span>
+          <span className="text-xs" style={{ color: 'hsl(var(--muted-foreground))' }}>Polymarket Weather Trading</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#00e87a' }} />
-          <span className="text-xs font-bold tracking-widest" style={{ fontFamily: "'JetBrains Mono', monospace", color: '#00e87a' }}>LIVE</span>
+          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'hsl(var(--terminal-green))' }} />
+          <span className="text-xs font-bold tracking-widest font-mono" style={{ color: 'hsl(var(--terminal-green))' }}>LIVE</span>
         </div>
       </div>
 
@@ -60,11 +58,10 @@ export default function WeatherBot() {
           <button
             key={n.id}
             onClick={() => setTab(n.id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold tracking-wider transition-all whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold tracking-wider transition-all whitespace-nowrap font-mono"
             style={{
-              fontFamily: "'JetBrains Mono', monospace",
               background: tab === n.id ? 'rgba(249,115,22,0.12)' : 'transparent',
-              color: tab === n.id ? '#f97316' : '#50507a',
+              color: tab === n.id ? 'hsl(var(--terminal-amber))' : 'hsl(var(--muted-foreground))',
               border: tab === n.id ? '1px solid rgba(249,115,22,0.25)' : '1px solid transparent',
             }}
           >
