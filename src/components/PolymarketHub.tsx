@@ -14,6 +14,7 @@ const PolymarketPriceChart = lazy(async () => ({ default: (await import('@/compo
 const PolymarketCalculator = lazy(async () => ({ default: (await import('@/components/polymarket/PolymarketCalculator')).PolymarketCalculator }));
 const PolymarketHeatmap = lazy(() => import('@/components/polymarket/PolymarketHeatmap'));
 const PolymarketAnalytics = lazy(() => import('@/components/polymarket/PolymarketAnalytics'));
+const WeatherBotEmbed = lazy(() => import('@/pages/WeatherBot'));
 
 // ============ CONSTANTS ============
 
@@ -160,7 +161,7 @@ const PolymarketHub = () => {
   const [selectedMarket, setSelectedMarket] = useState<PolymarketMarket | null>(null);
   const [activeTab, setActiveTab] = useState('TRENDING');
   const [activeSubTag, setActiveSubTag] = useState('All');
-  const [viewMode, setViewMode] = useState<'LIST' | 'HEATMAP' | 'GAINERS' | 'TICKER' | 'ANALYSIS'>('LIST');
+  const [viewMode, setViewMode] = useState<'LIST' | 'HEATMAP' | 'GAINERS' | 'TICKER' | 'ANALYSIS' | 'WEATHERBOT'>('LIST');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([]);
@@ -635,10 +636,10 @@ const PolymarketHub = () => {
         </div>
         <div className="flex items-center gap-2 px-3 shrink-0">
           <div className="flex border border-border rounded overflow-hidden">
-            {(['LIST', 'GAINERS', 'TICKER', 'HEATMAP', 'ANALYSIS'] as const).map(mode => (
+            {(['LIST', 'GAINERS', 'TICKER', 'HEATMAP', 'ANALYSIS', 'WEATHERBOT'] as const).map(mode => (
               <button key={mode} onClick={() => setViewMode(mode)}
                 className={`px-2 py-1 text-[9px] ${viewMode === mode ? 'bg-terminal-green/20 text-terminal-green' : 'text-muted-foreground hover:text-foreground'}`}>
-                {mode === 'LIST' ? '☰ List' : mode === 'GAINERS' ? '📊 Movers' : mode === 'TICKER' ? '⚡ Ticker' : mode === 'HEATMAP' ? <><Grid3X3 className="w-3 h-3 inline mr-0.5" />Map</> : '🧠 Analysis'}
+                {mode === 'LIST' ? '☰ List' : mode === 'GAINERS' ? '📊 Movers' : mode === 'TICKER' ? '⚡ Ticker' : mode === 'HEATMAP' ? <><Grid3X3 className="w-3 h-3 inline mr-0.5" />Map</> : mode === 'ANALYSIS' ? '🧠 Analysis' : '🌡 Weather'}
               </button>
             ))}
           </div>
@@ -715,6 +716,12 @@ const PolymarketHub = () => {
               onSelectEvent={handleSelectEvent}
               getLivePrice={getLivePrice}
             />
+          </Suspense>
+        </div>
+      ) : viewMode === 'WEATHERBOT' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <Suspense fallback={<PanelFallback label="Loading WeatherBot..." />}>
+            <WeatherBotEmbed />
           </Suspense>
         </div>
       ) : (
