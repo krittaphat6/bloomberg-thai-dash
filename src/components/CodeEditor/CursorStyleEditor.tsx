@@ -167,7 +167,7 @@ plot(sma_value, color=color.blue, title="SMA")
 
 export default function CursorStyleEditor() {
   const [editorMode, setEditorMode] = useState<EditorMode>('python');
-  const [files, setFiles] = useState<FileNode[]>(DEFAULT_PYTHON_FILES);
+  const [showAIPanel, setShowAIPanel] = useState(false);
   const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [terminalOutput, setTerminalOutput] = useState<TerminalOutput[]>([]);
