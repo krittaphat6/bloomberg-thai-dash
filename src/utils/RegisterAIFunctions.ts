@@ -1,6 +1,7 @@
 import { AIFunctionRegistry } from './AIFunctionRegistry';
 
 import { Trade, TradingMetrics, calculateMetrics, calculateRMultiples, runMonteCarloSimulation, detectPsychologyPatterns, calculateCostOfEmotions, calculatePnLByDimension } from './tradingMetrics';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface AppContext {
   navigate?: (path: string) => void;
@@ -302,6 +303,76 @@ export function registerAllFunctions(appContext: AppContext = {}): void {
           error: 'Invalid expression',
           message: 'Could not evaluate the expression'
         };
+      }
+    }
+  });
+
+  // ─── QuantAgent: Multi-Agent HFT Analysis ───────────────────────────────
+  AIFunctionRegistry.register({
+    name: 'run_quantagent',
+    description: 'รัน QuantAgent วิเคราะห์กราฟด้วย 4 AI agents: IndicatorAgent, PatternAgent, TrendAgent, RiskAgent — ใช้สำหรับวิเคราะห์ technical analysis แบบลึก',
+    parameters: {
+      symbol: {
+        type: 'string',
+        description: 'Trading symbol เช่น XAUUSD, BTCUSD, EURUSD, AAPL, TSLA'
+      },
+      timeframe: {
+        type: 'string',
+        enum: ['1m', '5m', '15m', '1h', '4h', '1D'],
+        description: 'Timeframe สำหรับการวิเคราะห์',
+        required: false
+      },
+      includeVision: {
+        type: 'boolean',
+        description: 'ถ้า true จะส่ง chart screenshot ให้ PatternAgent วิเคราะห์ด้วย vision AI',
+        required: false
+      }
+    },
+    handler: async (params) => {
+      try {
+        let chartImage: string | undefined;
+        if (params.includeVision !== false) {
+          try {
+            const { VisionService } = await import('@/services/vision/VisionService');
+            const screenshot = await VisionService.captureScreen();
+            chartImage = screenshot.base64;
+          } catch { /* Vision not available */ }
+        }
+
+        const { data, error } = await supabase.functions.invoke('quant-agent', {
+          body: {
+            symbol: params.symbol.toUpperCase(),
+            timeframe: params.timeframe ?? '1h',
+            chartImage,
+            includeVision: !!chartImage,
+          }
+        });
+
+        if (error) throw new Error(error.message);
+        if (!data?.success) throw new Error(data?.error ?? 'QuantAgent failed');
+
+        const { agents, finalDecision } = data;
+        const signalEmoji: Record<string, string> = {
+          STRONG_BUY: '🟢🟢', BUY: '🟢', HOLD: '🟡',
+          SELL: '🔴', STRONG_SELL: '🔴🔴', WATCH: '👁️'
+        };
+        const emoji = signalEmoji[finalDecision.signal] ?? '🟡';
+
+        return {
+          success: true,
+          formatted: `${emoji} **QuantAgent: ${data.symbol}** (${data.timeframe})
+🎯 **${finalDecision.signal}** — Confidence ${finalDecision.confidence}%
+💰 Target: $${finalDecision.priceTarget} | SL: $${finalDecision.stopLoss} | R:R ${finalDecision.riskReward}
+📊 Indicator: ${agents.indicator.signal} (${agents.indicator.confidence}%)
+🔍 Pattern: ${agents.pattern.signal} (${agents.pattern.confidence}%)
+📈 Trend: ${agents.trend.signal} (${agents.trend.confidence}%)
+🛡️ Risk: ${agents.risk.signal} (${agents.risk.confidence}%)
+
+${finalDecision.rationale}`,
+          raw: data,
+        };
+      } catch (err: any) {
+        return { success: false, error: err.message, message: `QuantAgent failed: ${err.message}` };
       }
     }
   });

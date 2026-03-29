@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { X, Copy, Table2, GitBranch, BarChart3, FileSpreadsheet, TrendingUp, Brain, Workflow, Network, Palette, PanelRightOpen } from 'lucide-react';
 
-export type ArtifactType = 'table' | 'relationship' | 'chart_analysis' | 'financial_statement' | 'screener_result';
+export type ArtifactType = 'table' | 'relationship' | 'chart_analysis' | 'financial_statement' | 'screener_result' | 'quantagent_report';
 export type ArtifactViewMode = 'table' | 'flowchart' | 'graph';
 
 export interface ArtifactData {
@@ -31,6 +31,7 @@ const TYPE_META: Record<ArtifactType, { icon: typeof Table2; label: string; colo
   chart_analysis: { icon: BarChart3, label: 'Chart Analysis', color: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' },
   financial_statement: { icon: FileSpreadsheet, label: 'Financial Statement', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
   screener_result: { icon: TrendingUp, label: 'Screener', color: 'text-orange-400 border-orange-500/30 bg-orange-500/10' },
+  quantagent_report: { icon: Brain, label: 'QuantAgent Report', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
 };
 
 const ArtifactPanel: React.FC<ArtifactPanelProps> = ({ artifact, onClose, isOpen }) => {

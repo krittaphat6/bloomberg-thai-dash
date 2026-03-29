@@ -50,3 +50,15 @@ verify_jwt = false
 
 [functions.comprehensive-news-analyzer]
 verify_jwt = false
+
+[functions.weatherbot-api]
+verify_jwt = false
+
+[functions.weather-ai-analysis]
+verify_jwt = false
+
+[functions.quant-agent]
+verify_jwt = false
+
+[functions.claude-code-assist]
+verify_jwt = false

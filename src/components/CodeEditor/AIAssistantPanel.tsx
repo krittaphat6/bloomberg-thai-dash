@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -36,7 +37,7 @@ export default function AIAssistantPanel({
     let assistantText = '';
 
     try {
-      const API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/weather-ai-analysis`;
+      const API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/claude-code-assist`;
       const resp = await fetch(API_URL, {
         method: 'POST',
         headers: {
@@ -44,8 +45,9 @@ export default function AIAssistantPanel({
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({
-          type: 'code_assist',
-          prompt: `Context - current code:\n\`\`\`\n${editorContent?.slice(0, 2000) || 'No code open'}\n\`\`\`\n\nUser: ${input}\n\nProvide helpful code assistance. If suggesting code, wrap it in code blocks.`,
+          code: editorContent?.slice(0, 3000) || '',
+          message: input,
+          history: messages.slice(-10).map(m => ({ role: m.role, content: m.content })),
         }),
       });
 
