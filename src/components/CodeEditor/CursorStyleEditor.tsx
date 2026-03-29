@@ -184,6 +184,7 @@ export default function CursorStyleEditor() {
   const [packageInput, setPackageInput] = useState('');
   const [isInstallingPackage, setIsInstallingPackage] = useState(false);
   const [copiedOutput, setCopiedOutput] = useState(false);
+  const [files, setFiles] = useState<FileNode[]>(DEFAULT_PYTHON_FILES);
   
   // Pine Script specific state
   const [pineScripts, setPineScripts] = useState<SavedScript[]>([]);
@@ -802,7 +803,11 @@ await micropip.install('${packageName.trim()}')
           </Button>
         </div>
       </div>
-          
+
+      {/* Main content area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar */}
+        <div className="w-48 border-r border-[#333] flex flex-col bg-[#252526]">
           <ScrollArea className="flex-1">
             {sidebarTab === 'files' && (
               <div className="py-1">
