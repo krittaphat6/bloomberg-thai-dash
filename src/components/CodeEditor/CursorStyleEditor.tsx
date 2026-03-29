@@ -184,6 +184,7 @@ export default function CursorStyleEditor() {
   const [packageInput, setPackageInput] = useState('');
   const [isInstallingPackage, setIsInstallingPackage] = useState(false);
   const [copiedOutput, setCopiedOutput] = useState(false);
+  const [files, setFiles] = useState<FileNode[]>(DEFAULT_PYTHON_FILES);
   
   // Pine Script specific state
   const [pineScripts, setPineScripts] = useState<SavedScript[]>([]);
