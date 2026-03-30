@@ -742,4 +742,93 @@ function getNodeStyle(type: string): string {
   return styles[type] || 'bg-zinc-800 border-zinc-700 text-zinc-300';
 }
 
+/* ─── QuantAgent Report Renderer ─── */
+const RenderQuantAgentReport: React.FC<{ content: any }> = ({ content }) => {
+  const { agents, finalDecision, symbol, timeframe } = content
+
+  const signalColor = (sig: string) => {
+    if (sig?.includes('BUY')) return 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+    if (sig?.includes('SELL')) return 'text-red-400 border-red-500/30 bg-red-500/10'
+    return 'text-amber-400 border-amber-500/30 bg-amber-500/10'
+  }
+
+  const confidenceBar = (conf: number) => (
+    <div className="w-full bg-zinc-800 rounded-full h-1.5 mt-1">
+      <div className={`h-1.5 rounded-full ${conf > 65 ? 'bg-emerald-500' : conf > 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+        style={{ width: `${conf}%` }} />
+    </div>
+  )
+
+  const agentRow = (label: string, result: any) => {
+    if (!result) return null
+    return (
+      <div className="p-2.5 rounded-lg border border-zinc-800 bg-zinc-900/50 space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-zinc-400">{label}</span>
+          <Badge variant="outline" className={`text-[10px] ${signalColor(result.signal)}`}>
+            {result.signal} · {result.confidence}%
+          </Badge>
+        </div>
+        {confidenceBar(result.confidence)}
+        <p className="text-[10px] text-zinc-500 mt-1">{result.summary}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Header */}
+      <div className={`p-3 rounded-lg border ${signalColor(finalDecision?.signal)}`}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-bold text-white">{symbol ?? 'Unknown'}</span>
+          <span className="text-[10px] text-zinc-500">{timeframe ?? '1H'} · QuantAgent Multi-Agent Analysis</span>
+        </div>
+        <Badge variant="outline" className={`text-sm px-3 py-1 ${signalColor(finalDecision?.signal)}`}>
+          {finalDecision?.signal ?? 'N/A'}
+        </Badge>
+      </div>
+
+      {/* Confidence + Targets */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="p-2 rounded bg-zinc-900 border border-zinc-800 text-center">
+          <p className="text-[10px] text-zinc-500">Confidence</p>
+          <p className="text-lg font-bold text-white">{finalDecision?.confidence ?? 0}%</p>
+          {confidenceBar(finalDecision?.confidence ?? 0)}
+        </div>
+        <div className="p-2 rounded bg-emerald-500/5 border border-emerald-500/20 text-center">
+          <p className="text-[10px] text-zinc-500">Target</p>
+          <p className="text-sm font-mono text-emerald-400">{finalDecision?.priceTarget?.toFixed(4) ?? '—'}</p>
+        </div>
+        <div className="p-2 rounded bg-red-500/5 border border-red-500/20 text-center">
+          <p className="text-[10px] text-zinc-500">Stop Loss</p>
+          <p className="text-sm font-mono text-red-400">{finalDecision?.stopLoss?.toFixed(4) ?? '—'}</p>
+        </div>
+      </div>
+
+      {finalDecision?.riskReward && (
+        <div className="text-center text-xs text-zinc-500">
+          Risk:Reward <span className="text-white font-mono">1 : {finalDecision.riskReward.toFixed(2)}</span>
+        </div>
+      )}
+
+      {/* Agent Breakdown */}
+      <div className="space-y-2">
+        <h4 className="text-[10px] text-zinc-500 uppercase tracking-widest">Agent Breakdown</h4>
+        {agentRow('📊 IndicatorAgent', agents?.indicator)}
+        {agentRow('🔍 PatternAgent', agents?.pattern)}
+        {agentRow('📈 TrendAgent', agents?.trend)}
+        {agentRow('🛡️ RiskAgent', agents?.risk)}
+      </div>
+
+      {/* Rationale */}
+      {finalDecision?.rationale && (
+        <div className="p-3 rounded-lg border border-zinc-800 bg-zinc-900/30">
+          <h4 className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Rationale</h4>
+          <p className="text-xs text-zinc-300">{finalDecision.rationale}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default ArtifactPanel;

@@ -420,3 +420,18 @@ function mapMarket(market: string): string {
   };
   return map[market] || market || 'america';
 }
+
+/**
+ * Parse QuantAgent result into Artifact
+ */
+export function parseQuantAgentArtifact(data: any): ArtifactData | null {
+  if (!data?.agents || !data?.finalDecision) return null
+  return {
+    id: Date.now().toString(),
+    type: 'quantagent_report',
+    title: `🤖 ${data.symbol} QuantAgent — ${data.finalDecision.signal}`,
+    timestamp: new Date(),
+    source: 'QuantAgent',
+    content: { ...data },
+  }
+}
