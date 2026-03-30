@@ -56,6 +56,7 @@ import { SuperClawPanel } from './SuperClawPanel';
 import ScreenerMain from './Screeners/ScreenerMain';
 import { Network } from 'lucide-react';
 import PolymarketHub from './PolymarketHub';
+import QuantAgentPanel from './QuantAgentPanel';
 
 interface PanelData {
   id: string;
