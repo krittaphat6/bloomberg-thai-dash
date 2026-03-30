@@ -182,6 +182,9 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({ artifact, onClose, isOpen
               {artifact.type === 'chart_analysis' && (
                 <RenderChartAnalysis content={artifact.content} />
               )}
+              {artifact.type === 'quantagent_report' && (
+                <RenderQuantAgentReport content={artifact.content} />
+              )}
             </>
           )}
           {viewMode === 'flowchart' && (
