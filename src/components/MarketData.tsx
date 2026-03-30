@@ -56,6 +56,7 @@ import { SuperClawPanel } from './SuperClawPanel';
 import ScreenerMain from './Screeners/ScreenerMain';
 import { Network } from 'lucide-react';
 import PolymarketHub from './PolymarketHub';
+import QuantAgentPanel from './QuantAgentPanel';
 
 interface PanelData {
   id: string;
@@ -402,6 +403,15 @@ const MarketData = () => {
       icon: <Brain className="w-5 h-5" />,
       description: 'OpenClaw-powered AI agent with vision, skills, and automation',
       tags: ['ai', 'agent', 'openclaw', 'automation', 'skills', 'superclaw']
+    },
+    {
+      id: 'quant-agent',
+      title: '🤖 QUANT AGENT',
+      component: <QuantAgentPanel />,
+      category: 'intelligence',
+      icon: <Brain className="w-5 h-5" />,
+      description: 'Multi-Agent HFT Analysis: IndicatorAgent + PatternAgent + TrendAgent + RiskAgent',
+      tags: ['quant', 'agent', 'hft', 'indicator', 'pattern', 'trend', 'risk', 'analysis', 'signal', 'quantagent']
     },
     
     // Utilities
