@@ -5,6 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// ─── Types ───
 interface OHLCVBar {
   timestamp: number
   open: number
@@ -20,6 +21,14 @@ interface AgentResult {
   confidence: number
   summary: string
   details: Record<string, any>
+}
+
+interface QuantAgentRequest {
+  symbol: string
+  timeframe?: string
+  bars?: OHLCVBar[]
+  chartImage?: string
+  includeVision?: boolean
 }
 
 // ── Technical Indicator Functions ──
@@ -72,6 +81,20 @@ function calcMACD(closes: number[]) {
   return { macd, signal: paddedSignal, hist }
 }
 
+function calcStochastic(bars: OHLCVBar[], kPeriod = 14, dPeriod = 3) {
+  const k = bars.map((_, i) => {
+    if (i < kPeriod - 1) return NaN
+    const slice = bars.slice(i - kPeriod + 1, i + 1)
+    const highest = Math.max(...slice.map(b => b.high))
+    const lowest = Math.min(...slice.map(b => b.low))
+    if (highest === lowest) return 50
+    return ((bars[i].close - lowest) / (highest - lowest)) * 100
+  })
+  const validK = k.filter(v => !isNaN(v))
+  const d = calcSMA(validK, dPeriod)
+  return { k, d: [...new Array(k.length - d.length).fill(NaN), ...d] }
+}
+
 function calcBollinger(closes: number[], period = 20, mult = 2) {
   const sma = calcSMA(closes, period)
   const upper: number[] = []
@@ -95,146 +118,286 @@ function calcATR(bars: OHLCVBar[], period = 14): number[] {
   return calcSMA(tr, period)
 }
 
-// ── 4 Agent Functions ──
+// ── AGENT 1: IndicatorAgent ──
 function runIndicatorAgent(bars: OHLCVBar[]): AgentResult {
   const closes = bars.map(b => b.close)
-  const rsi = calcRSI(closes)
-  const { macd, signal, hist } = calcMACD(closes)
-  const sma20 = calcSMA(closes, 20)
-  const sma50 = calcSMA(closes, 50)
-  const lastRSI = rsi.filter(v => !isNaN(v)).pop() ?? 50
-  const lastMACD = hist.filter(v => !isNaN(v)).pop() ?? 0
-  const lastClose = closes[closes.length - 1]
-  const lastSMA20 = sma20.filter(v => !isNaN(v)).pop() ?? lastClose
-  const lastSMA50 = sma50.filter(v => !isNaN(v)).pop() ?? lastClose
-  
-  let score = 0
-  if (lastRSI < 30) score += 2
-  else if (lastRSI < 40) score += 1
-  else if (lastRSI > 70) score -= 2
-  else if (lastRSI > 60) score -= 1
-  if (lastMACD > 0) score += 1; else score -= 1
-  if (lastClose > lastSMA20) score += 1; else score -= 1
-  if (lastClose > lastSMA50) score += 1; else score -= 1
+  const n = closes.length
+  const last = closes[n - 1]
 
-  const signal_out: AgentResult['signal'] = score >= 2 ? 'BUY' : score <= -2 ? 'SELL' : score > 0 ? 'WATCH' : 'HOLD'
+  const rsi = calcRSI(closes)
+  const { hist } = calcMACD(closes)
+  const stoch = calcStochastic(bars)
+  const ema20 = calcEMA(closes, 20)
+  const ema50 = calcEMA(closes, 50)
+  const bb = calcBollinger(closes)
+  const atr = calcATR(bars)
+
+  const lastRSI = rsi[n - 1] ?? 50
+  const lastMACD = hist[n - 1] ?? 0
+  const prevHist = hist[n - 2] ?? 0
+  const lastStochK = stoch.k[n - 1] ?? 50
+  const lastEMA20 = ema20[n - 1] ?? last
+  const lastEMA50 = ema50[n - 1] ?? last
+  const lastBBUpper = bb.upper[n - 1] ?? last
+  const lastBBLower = bb.lower[n - 1] ?? last
+  const lastATR = atr[n - 1] ?? 0
+
+  let score = 0
+  const signals: string[] = []
+
+  // RSI
+  if (lastRSI < 30) { score += 2; signals.push('RSI Oversold (Bullish)') }
+  else if (lastRSI > 70) { score -= 2; signals.push('RSI Overbought (Bearish)') }
+  else if (lastRSI > 50) { score += 1; signals.push('RSI Bullish Zone') }
+  else { score -= 1; signals.push('RSI Bearish Zone') }
+
+  // MACD Histogram
+  if (lastMACD > 0 && lastMACD > prevHist) { score += 2; signals.push('MACD Bullish Momentum') }
+  else if (lastMACD < 0 && lastMACD < prevHist) { score -= 2; signals.push('MACD Bearish Momentum') }
+  else if (lastMACD > 0) { score += 1; signals.push('MACD Positive') }
+  else { score -= 1; signals.push('MACD Negative') }
+
+  // Stochastic
+  if (lastStochK < 20) { score += 2; signals.push('Stochastic Oversold') }
+  else if (lastStochK > 80) { score -= 2; signals.push('Stochastic Overbought') }
+
+  // EMA Trend
+  if (lastEMA20 > lastEMA50) { score += 1; signals.push('EMA20 > EMA50 (Uptrend)') }
+  else { score -= 1; signals.push('EMA20 < EMA50 (Downtrend)') }
+
+  // Bollinger
+  if (last < lastBBLower) { score += 1; signals.push('Price below BB Lower (Oversold)') }
+  else if (last > lastBBUpper) { score -= 1; signals.push('Price above BB Upper (Overbought)') }
+
+  const maxScore = 9
+  const normalizedScore = Math.max(-maxScore, Math.min(maxScore, score))
+  const confidence = Math.round(50 + (normalizedScore / maxScore) * 45)
+  const signal: AgentResult['signal'] = score >= 4 ? 'BUY' : score <= -4 ? 'SELL' : score > 0 ? 'WATCH' : 'HOLD'
+
   return {
     agent: 'IndicatorAgent',
-    signal: signal_out,
-    confidence: Math.min(95, 50 + Math.abs(score) * 10),
-    summary: `RSI=${lastRSI.toFixed(1)}, MACD hist=${lastMACD.toFixed(4)}, Price ${lastClose > lastSMA20 ? 'above' : 'below'} SMA20`,
-    details: { rsi: lastRSI, macd_hist: lastMACD, sma20: lastSMA20, sma50: lastSMA50, score },
+    signal,
+    confidence,
+    summary: `RSI:${lastRSI.toFixed(1)} | MACD Hist:${lastMACD.toFixed(4)} | Stoch K:${lastStochK.toFixed(1)} | ATR:${lastATR.toFixed(4)}`,
+    details: { rsi: lastRSI, macd_hist: lastMACD, stoch_k: lastStochK, ema20: lastEMA20, ema50: lastEMA50, bb_upper: lastBBUpper, bb_lower: lastBBLower, atr: lastATR, active_signals: signals, score },
   }
 }
 
-function runPatternAgent(bars: OHLCVBar[], _chartImage?: string): AgentResult {
-  const closes = closes_from(bars)
+// ── AGENT 2: TrendAgent ──
+function runTrendAgent(bars: OHLCVBar[]): AgentResult {
+  const closes = bars.map(b => b.close)
+  const highs = bars.map(b => b.high)
+  const lows = bars.map(b => b.low)
+  const n = closes.length
+  const last = closes[n - 1]
+
+  const recent20 = closes.slice(-20)
+  const oldest = recent20[0]
+  const priceChange = ((last - oldest) / oldest) * 100
+  const volatility = calcATR(bars.slice(-20), 10)
+  const avgATR = volatility.filter(v => !isNaN(v)).slice(-5).reduce((a, b) => a + b, 0) / 5
+
+  const recentHighs = highs.slice(-10)
+  const recentLows = lows.slice(-10)
+  const hhCount = recentHighs.filter((h, i) => i > 0 && h > recentHighs[i - 1]).length
+  const llCount = recentLows.filter((l, i) => i > 0 && l < recentLows[i - 1]).length
+  const hlCount = recentLows.filter((l, i) => i > 0 && l > recentLows[i - 1]).length
+
+  const ema20 = calcEMA(closes, 20)
+  const emaSlope = ema20[n - 1] - ema20[Math.max(0, n - 6)]
+
+  let score = 0
+  const signals: string[] = []
+  let regime: string
+
+  if (hhCount >= 5 && hlCount >= 4) { score += 3; signals.push('Strong Uptrend (HH+HL)'); regime = 'UPTREND' }
+  else if (llCount >= 5) { score -= 3; signals.push('Strong Downtrend (LL+LH)'); regime = 'DOWNTREND' }
+  else { regime = 'RANGING' }
+
+  if (priceChange > 2) { score += 2; signals.push(`Bullish +${priceChange.toFixed(1)}% (20 bars)`) }
+  else if (priceChange < -2) { score -= 2; signals.push(`Bearish ${priceChange.toFixed(1)}% (20 bars)`) }
+
+  if (emaSlope > 0) { score += 1; signals.push('EMA20 Sloping Up') }
+  else { score -= 1; signals.push('EMA20 Sloping Down') }
+
+  const signal: AgentResult['signal'] = score >= 3 ? 'BUY' : score <= -3 ? 'SELL' : 'HOLD'
+
+  return {
+    agent: 'TrendAgent',
+    signal,
+    confidence: Math.max(20, Math.min(95, Math.round(50 + (score / 6) * 40))),
+    summary: `Regime: ${regime} | Price Change: ${priceChange.toFixed(2)}% | EMA Slope: ${emaSlope > 0 ? '↑' : '↓'}`,
+    details: { regime, priceChange, emaSlope, hhCount, llCount, hlCount, avgATR, signals },
+  }
+}
+
+// ── AGENT 3: PatternAgent (with optional Gemini Vision) ──
+async function runPatternAgent(bars: OHLCVBar[], chartImage: string | undefined, symbol: string, geminiApiKey: string): Promise<AgentResult> {
+  if (!chartImage || !geminiApiKey) {
+    return runPatternHeuristic(bars)
+  }
+
+  const prompt = `You are a professional technical analyst. Analyze this trading chart for ${symbol}.
+Identify: 1) Chart patterns 2) Key S/R levels 3) Candlestick patterns 4) Overall signal.
+Respond ONLY in JSON: {"patterns":[],"candlestick_pattern":null,"support_levels":[],"resistance_levels":[],"signal":"BUY|SELL|HOLD|WATCH","confidence":0-100,"summary":"brief"}`
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: 'image/png', data: chartImage } }
+            ]
+          }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 512 }
+        })
+      }
+    )
+    const data = await response.json()
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) throw new Error('No JSON')
+    const result = JSON.parse(jsonMatch[0])
+    return {
+      agent: 'PatternAgent',
+      signal: result.signal ?? 'HOLD',
+      confidence: result.confidence ?? 50,
+      summary: result.summary ?? `Patterns: ${(result.patterns || []).join(', ')}`,
+      details: { patterns: result.patterns ?? [], candlestick_pattern: result.candlestick_pattern, support_levels: result.support_levels ?? [], resistance_levels: result.resistance_levels ?? [], source: 'gemini-vision' },
+    }
+  } catch {
+    return runPatternHeuristic(bars)
+  }
+}
+
+function runPatternHeuristic(bars: OHLCVBar[]): AgentResult {
+  const closes = bars.map(b => b.close)
+  const n = closes.length
+  const last = closes[n - 1]
   const bb = calcBollinger(closes)
-  const lastClose = closes[closes.length - 1]
-  const lastUpper = bb.upper.filter(v => !isNaN(v)).pop() ?? lastClose
-  const lastLower = bb.lower.filter(v => !isNaN(v)).pop() ?? lastClose
-  const lastSMA = bb.sma.filter(v => !isNaN(v)).pop() ?? lastClose
-  
+  const lastUpper = bb.upper[n - 1] ?? last
+  const lastLower = bb.lower[n - 1] ?? last
+
   const patterns: string[] = []
-  // Simple pattern detection
-  if (lastClose >= lastUpper) patterns.push('Upper BB Touch')
-  if (lastClose <= lastLower) patterns.push('Lower BB Touch')
-  
-  // Doji detection
-  const lastBar = bars[bars.length - 1]
+  let score = 0
+
+  if (last >= lastUpper) { patterns.push('Upper BB Touch'); score -= 1 }
+  if (last <= lastLower) { patterns.push('Lower BB Touch'); score += 1 }
+
+  // Doji
+  const lastBar = bars[n - 1]
   const bodySize = Math.abs(lastBar.open - lastBar.close)
   const range = lastBar.high - lastBar.low
   if (range > 0 && bodySize / range < 0.1) patterns.push('Doji')
-  
+
   // Engulfing
-  if (bars.length >= 2) {
-    const prev = bars[bars.length - 2]
-    if (lastBar.close > lastBar.open && prev.close < prev.open &&
-        lastBar.close > prev.open && lastBar.open < prev.close) patterns.push('Bullish Engulfing')
-    if (lastBar.close < lastBar.open && prev.close > prev.open &&
-        lastBar.close < prev.open && lastBar.open > prev.close) patterns.push('Bearish Engulfing')
+  if (n >= 2) {
+    const prev = bars[n - 2]
+    if (lastBar.close > lastBar.open && prev.close < prev.open && lastBar.close > prev.open && lastBar.open < prev.close) { patterns.push('Bullish Engulfing'); score += 2 }
+    if (lastBar.close < lastBar.open && prev.close > prev.open && lastBar.close < prev.open && lastBar.open > prev.close) { patterns.push('Bearish Engulfing'); score -= 2 }
   }
-  
-  const isBullish = patterns.some(p => p.includes('Bullish') || p.includes('Lower BB'))
-  const isBearish = patterns.some(p => p.includes('Bearish') || p.includes('Upper BB'))
-  
+
+  // Near support/resistance
+  const recent = closes.slice(-20)
+  const max20 = Math.max(...recent)
+  const min20 = Math.min(...recent)
+  const rangeR = max20 - min20
+  const posInRange = rangeR > 0 ? (last - min20) / rangeR : 0.5
+  if (posInRange < 0.15) { score += 2; patterns.push('Near 20-bar Support') }
+  else if (posInRange > 0.85) { score -= 2; patterns.push('Near 20-bar Resistance') }
+
   return {
     agent: 'PatternAgent',
-    signal: isBullish ? 'BUY' : isBearish ? 'SELL' : 'HOLD',
-    confidence: patterns.length > 0 ? 60 + patterns.length * 10 : 40,
+    signal: score >= 2 ? 'BUY' : score <= -2 ? 'SELL' : 'HOLD',
+    confidence: patterns.length > 0 ? 50 + patterns.length * 10 : 40,
     summary: patterns.length > 0 ? `Patterns: ${patterns.join(', ')}` : 'No significant patterns detected',
-    details: { patterns, bb_upper: lastUpper, bb_lower: lastLower, bb_sma: lastSMA },
+    details: { patterns, bb_upper: lastUpper, bb_lower: lastLower, source: 'heuristic' },
   }
 }
 
-function closes_from(bars: OHLCVBar[]) { return bars.map(b => b.close) }
+// ── AGENT 4: RiskAgent (Gemini Synthesis) ──
+async function runRiskAgent(
+  indicatorResult: AgentResult, patternResult: AgentResult, trendResult: AgentResult,
+  bars: OHLCVBar[], symbol: string, geminiApiKey: string
+): Promise<AgentResult> {
+  const closes = bars.map(b => b.close)
+  const last = closes[closes.length - 1]
+  const atr = calcATR(bars, 14)
+  const lastATR = atr[atr.length - 1] ?? last * 0.01
 
-function runTrendAgent(bars: OHLCVBar[]): AgentResult {
-  const closes = closes_from(bars)
-  const ema20 = calcEMA(closes, 20)
-  const ema50 = calcEMA(closes, 50)
-  const ema200 = calcEMA(closes, Math.min(200, closes.length))
-  
-  const last20 = ema20[ema20.length - 1]
-  const last50 = ema50[ema50.length - 1]
-  const last200 = ema200[ema200.length - 1]
-  const lastClose = closes[closes.length - 1]
-  
-  // ADX approximation via directional movement
-  let upTrend = 0, downTrend = 0
-  for (let i = Math.max(1, closes.length - 14); i < closes.length; i++) {
-    if (closes[i] > closes[i-1]) upTrend++; else downTrend++
-  }
-  
-  const trendStrength = Math.abs(upTrend - downTrend) / 14 * 100
-  const isUpTrend = last20 > last50 && lastClose > last20
-  const isDownTrend = last20 < last50 && lastClose < last20
-  
-  return {
-    agent: 'TrendAgent',
-    signal: isUpTrend ? 'BUY' : isDownTrend ? 'SELL' : 'HOLD',
-    confidence: Math.min(90, 40 + trendStrength),
-    summary: `${isUpTrend ? 'Uptrend' : isDownTrend ? 'Downtrend' : 'Sideways'} — EMA20=${last20.toFixed(2)}, EMA50=${last50.toFixed(2)}`,
-    details: { ema20: last20, ema50: last50, ema200: last200, trend_strength: trendStrength },
-  }
-}
+  const agentSummary = `
+IndicatorAgent: Signal=${indicatorResult.signal} Confidence=${indicatorResult.confidence}% | ${indicatorResult.summary}
+PatternAgent: Signal=${patternResult.signal} Confidence=${patternResult.confidence}% | ${patternResult.summary}
+TrendAgent: Signal=${trendResult.signal} Confidence=${trendResult.confidence}% | ${trendResult.summary}
+Current Price: ${last}
+ATR(14): ${lastATR.toFixed(5)}
+Symbol: ${symbol}`
 
-function runRiskAgent(bars: OHLCVBar[]): AgentResult {
-  const closes = closes_from(bars)
-  const atr = calcATR(bars)
-  const lastATR = atr.filter(v => !isNaN(v)).pop() ?? 0
-  const lastClose = closes[closes.length - 1]
-  
-  // Volatility assessment
-  const returns = closes.slice(-20).map((c, i, a) => i > 0 ? Math.log(c / a[i-1]) : 0).slice(1)
-  const vol = Math.sqrt(returns.reduce((s, r) => s + r * r, 0) / returns.length) * Math.sqrt(252) * 100
-  
-  // Risk score
-  const riskLevel = vol > 40 ? 'HIGH' : vol > 20 ? 'MEDIUM' : 'LOW'
-  const suggestedSL = lastClose - 2 * lastATR
-  const suggestedTP = lastClose + 3 * lastATR
-  
+  // Try Gemini for AI synthesis
+  if (geminiApiKey) {
+    try {
+      const prompt = `You are a professional risk manager. Given these 3 agent analyses:\n${agentSummary}\n\nSynthesize all signals. Respond ONLY in JSON:\n{"signal":"STRONG_BUY|BUY|HOLD|SELL|STRONG_SELL","confidence":0-100,"stop_loss":number,"price_target":number,"risk_reward":number,"rationale":"2-3 sentences in Thai","risk_level":"LOW|MEDIUM|HIGH","key_risks":["risk1"]}`
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.15, maxOutputTokens: 512 }
+          })
+        }
+      )
+      const data = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const result = JSON.parse(jsonMatch[0])
+        return {
+          agent: 'RiskAgent',
+          signal: result.signal?.includes('BUY') ? 'BUY' : result.signal?.includes('SELL') ? 'SELL' : 'HOLD',
+          confidence: result.confidence ?? 50,
+          summary: result.rationale ?? 'Risk synthesis complete',
+          details: { final_signal: result.signal, stop_loss: result.stop_loss, price_target: result.price_target, risk_reward: result.risk_reward, risk_level: result.risk_level, key_risks: result.key_risks ?? [] },
+        }
+      }
+    } catch { /* fallback */ }
+  }
+
+  // Fallback: weighted vote
+  const scores: Record<string, number> = { BUY: 0, SELL: 0, HOLD: 0, WATCH: 0 }
+  const weights = [0.35, 0.3, 0.35];
+  [indicatorResult, patternResult, trendResult].forEach((r, i) => {
+    const sig = r.signal === 'WATCH' ? 'HOLD' : r.signal
+    scores[sig] = (scores[sig] ?? 0) + (r.confidence / 100) * weights[i]
+  })
+  const bestSignal = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0] as AgentResult['signal']
+  const stop_loss = last - lastATR * 2
+  const price_target = last + lastATR * 3
+
   return {
     agent: 'RiskAgent',
-    signal: riskLevel === 'HIGH' ? 'WATCH' : 'HOLD',
-    confidence: 70,
-    summary: `Risk: ${riskLevel} — ATR=${lastATR.toFixed(4)}, Vol=${vol.toFixed(1)}%`,
-    details: { atr: lastATR, volatility: vol, risk_level: riskLevel, suggested_sl: suggestedSL, suggested_tp: suggestedTP },
+    signal: bestSignal,
+    confidence: Math.round((scores[bestSignal] ?? 0) * 100),
+    summary: `Weighted consensus: ${bestSignal}. SL: ${stop_loss.toFixed(5)} TP: ${price_target.toFixed(5)}`,
+    details: { final_signal: bestSignal, stop_loss, price_target, risk_reward: 1.5, risk_level: 'MEDIUM', key_risks: ['Consensus not unanimous — use small position'], scores },
   }
 }
 
-// ── Generate synthetic bars from symbol ──
+// ── Fetch bars ──
 async function fetchBars(symbol: string, timeframe: string): Promise<OHLCVBar[]> {
-  // Try Binance for crypto
   const binanceSymbols: Record<string, string> = {
     'BTCUSD': 'BTCUSDT', 'ETHUSD': 'ETHUSDT', 'SOLUSD': 'SOLUSDT',
-    'BTCUSDT': 'BTCUSDT', 'ETHUSDT': 'ETHUSDT',
+    'BTCUSDT': 'BTCUSDT', 'ETHUSDT': 'ETHUSDT', 'BNBUSD': 'BNBUSDT',
   }
-  
-  const tfMap: Record<string, string> = {
-    '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1D': '1d',
-  }
-  
+  const tfMap: Record<string, string> = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1D': '1d' }
+
   const binSym = binanceSymbols[symbol.toUpperCase()]
   if (binSym) {
     try {
@@ -242,16 +405,36 @@ async function fetchBars(symbol: string, timeframe: string): Promise<OHLCVBar[]>
       const resp = await fetch(`https://api.binance.com/api/v3/klines?symbol=${binSym}&interval=${interval}&limit=200`)
       if (resp.ok) {
         const data = await resp.json()
-        return data.map((k: any) => ({
-          timestamp: k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5],
-        }))
+        return data.map((k: any) => ({ timestamp: k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }))
       }
     } catch { /* fallback */ }
   }
-  
-  // Synthetic data for non-crypto
+
+  // Try market-data-proxy
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    if (supabaseUrl && supabaseKey) {
+      const proxyRes = await fetch(`${supabaseUrl}/functions/v1/market-data-proxy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseKey}` },
+        body: JSON.stringify({ source: 'yahoo', symbols: [symbol], range: '1mo', interval: '1h' })
+      })
+      const proxyData = await proxyRes.json()
+      const result = proxyData?.yahoo?.[symbol] ?? proxyData?.[symbol]
+      if (result?.timestamps && result?.quotes) {
+        const bars = result.timestamps.map((t: number, i: number) => ({
+          timestamp: t * 1000, open: result.quotes.open?.[i] ?? 0, high: result.quotes.high?.[i] ?? 0,
+          low: result.quotes.low?.[i] ?? 0, close: result.quotes.close?.[i] ?? 0, volume: result.quotes.volume?.[i] ?? 0,
+        })).filter((b: OHLCVBar) => b.close > 0)
+        if (bars.length >= 30) return bars
+      }
+    }
+  } catch { /* fallback */ }
+
+  // Synthetic data
   const bars: OHLCVBar[] = []
-  let price = symbol.includes('XAU') ? 2350 : symbol.includes('EUR') ? 1.08 : 100
+  let price = symbol.includes('XAU') ? 2350 : symbol.includes('EUR') ? 1.08 : symbol.includes('US500') ? 5600 : symbol.includes('OIL') ? 68 : 100
   const now = Date.now()
   for (let i = 200; i >= 0; i--) {
     const change = (Math.random() - 0.48) * price * 0.005
@@ -269,7 +452,7 @@ async function fetchBars(symbol: string, timeframe: string): Promise<OHLCVBar[]>
 function makeFinalDecision(agents: { indicator: AgentResult; pattern: AgentResult; trend: AgentResult; risk: AgentResult }, bars: OHLCVBar[]) {
   const signalScore: Record<string, number> = { BUY: 2, WATCH: 0.5, HOLD: 0, SELL: -2 }
   const weights = { indicator: 0.3, pattern: 0.2, trend: 0.35, risk: 0.15 }
-  
+
   let weighted = 0
   let totalConf = 0
   for (const [key, agent] of Object.entries(agents)) {
@@ -277,69 +460,70 @@ function makeFinalDecision(agents: { indicator: AgentResult; pattern: AgentResul
     weighted += (signalScore[agent.signal] ?? 0) * w * (agent.confidence / 100)
     totalConf += agent.confidence * w
   }
-  
+
   const signal = weighted >= 1.2 ? 'STRONG_BUY' : weighted >= 0.5 ? 'BUY' : weighted <= -1.2 ? 'STRONG_SELL' : weighted <= -0.5 ? 'SELL' : 'HOLD'
   const lastClose = bars[bars.length - 1].close
-  const atr = agents.risk.details.atr || lastClose * 0.01
-  
+  const atr = agents.risk.details.atr || agents.indicator.details.atr || lastClose * 0.01
+
+  // Use RiskAgent's AI-computed values if available
+  const riskDetails = agents.risk.details
   return {
     signal,
     confidence: Math.round(totalConf),
-    priceTarget: +(lastClose + 3 * atr).toFixed(4),
-    stopLoss: +(lastClose - 2 * atr).toFixed(4),
-    riskReward: +(3 / 2).toFixed(1),
-    rationale: `${signal} based on ${Object.values(agents).filter(a => a.signal === 'BUY').length}/4 agents bullish. Trend: ${agents.trend.summary}`,
+    priceTarget: riskDetails.price_target ?? +(lastClose + 3 * atr).toFixed(4),
+    stopLoss: riskDetails.stop_loss ?? +(lastClose - 2 * atr).toFixed(4),
+    riskReward: riskDetails.risk_reward ?? +(3 / 2).toFixed(1),
+    rationale: agents.risk.summary || `${signal} based on ${Object.values(agents).filter(a => a.signal === 'BUY').length}/4 agents bullish.`,
+    riskLevel: riskDetails.risk_level ?? 'MEDIUM',
+    keyRisks: riskDetails.key_risks ?? [],
   }
 }
 
+// ── Main Handler ──
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
   try {
-    const { symbol, timeframe = '1h', bars: clientBars, chartImage, includeVision } = await req.json()
-    
-    if (!symbol) throw new Error('Symbol is required')
+    const body: QuantAgentRequest = await req.json()
+    const { symbol, timeframe = '1h', bars: clientBars, chartImage, includeVision = true } = body
 
-    const bars = clientBars?.length > 50 ? clientBars : await fetchBars(symbol, timeframe)
-    
-    if (bars.length < 20) throw new Error('Insufficient data for analysis')
-
-    const indicator = runIndicatorAgent(bars)
-    const pattern = runPatternAgent(bars, chartImage)
-    const trend = runTrendAgent(bars)
-    const risk = runRiskAgent(bars)
-
-    const agents = { indicator, pattern, trend, risk }
-    const finalDecision = makeFinalDecision(agents, bars)
-
-    // Optional: AI-enhanced rationale
-    const LOVABLE_KEY = Deno.env.get('LOVABLE_API_KEY')
-    if (LOVABLE_KEY) {
-      try {
-        const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${LOVABLE_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'google/gemini-2.5-flash-lite',
-            messages: [{
-              role: 'user',
-              content: `Summarize this QuantAgent analysis in 2 sentences (Thai):
-Symbol: ${symbol} (${timeframe})
-Indicator: ${indicator.signal} (${indicator.confidence}%) - ${indicator.summary}
-Pattern: ${pattern.signal} (${pattern.confidence}%) - ${pattern.summary}
-Trend: ${trend.signal} (${trend.confidence}%) - ${trend.summary}
-Risk: ${risk.signal} (${risk.confidence}%) - ${risk.summary}
-Final: ${finalDecision.signal} — Confidence ${finalDecision.confidence}%`
-            }],
-          }),
-        })
-        if (aiResp.ok) {
-          const aiData = await aiResp.json()
-          const aiText = aiData.choices?.[0]?.message?.content
-          if (aiText) finalDecision.rationale = aiText
-        }
-      } catch { /* AI enhancement optional */ }
+    if (!symbol) {
+      return new Response(JSON.stringify({ success: false, error: 'symbol is required' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
     }
+
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? ''
+
+    // Use provided bars or fetch
+    let ohlcvBars: OHLCVBar[] = clientBars?.length ? clientBars : []
+    if (ohlcvBars.length < 30) {
+      ohlcvBars = await fetchBars(symbol.toUpperCase(), timeframe)
+    }
+
+    if (ohlcvBars.length < 20) {
+      return new Response(JSON.stringify({ success: false, error: 'Insufficient price data (need 20+ bars)' }), {
+        status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // Run agents — Indicator + Trend in parallel, then Pattern (may use vision), then Risk (uses all 3)
+    const [indicatorResult, trendResult] = await Promise.all([
+      Promise.resolve(runIndicatorAgent(ohlcvBars)),
+      Promise.resolve(runTrendAgent(ohlcvBars)),
+    ])
+
+    const patternResult = await runPatternAgent(
+      ohlcvBars,
+      includeVision ? chartImage : undefined,
+      symbol.toUpperCase(),
+      GEMINI_API_KEY
+    )
+
+    const riskResult = await runRiskAgent(indicatorResult, patternResult, trendResult, ohlcvBars, symbol.toUpperCase(), GEMINI_API_KEY)
+
+    const agents = { indicator: indicatorResult, pattern: patternResult, trend: trendResult, risk: riskResult }
+    const finalDecision = makeFinalDecision(agents, ohlcvBars)
 
     return new Response(JSON.stringify({
       success: true,
