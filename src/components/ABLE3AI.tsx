@@ -143,6 +143,7 @@ const ABLE3AI = () => {
 
   // Artifact state
   const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
+  const [artifactHistory, setArtifactHistory] = useState<ArtifactData[]>([]);
   const [artifactMode, setArtifactMode] = useState(true);
 
   const addThinkingStep = useCallback((text: string, status: ThinkingStep['status'] = 'running') => {
