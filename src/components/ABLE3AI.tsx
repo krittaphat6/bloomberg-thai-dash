@@ -1106,10 +1106,16 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
       </CardContent>
     </Card>
 
-      {/* Artifact Side Panel */}
+      {/* Artifact Side Panel — always visible */}
       {artifactMode && (
         <div className="w-1/2 h-full">
-          <ArtifactPanel artifact={activeArtifact} onClose={() => { setActiveArtifact(null); setArtifactMode(false); }} isOpen={artifactMode} />
+          <ArtifactPanel
+            artifact={activeArtifact}
+            onClose={() => { setActiveArtifact(null); setArtifactMode(false); }}
+            isOpen={artifactMode}
+            artifacts={artifactHistory}
+            onSelectArtifact={(a) => setActiveArtifact(a)}
+          />
         </div>
       )}
     </div>
