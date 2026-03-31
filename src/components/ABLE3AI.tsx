@@ -22,7 +22,7 @@ import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { AgentOverlay, AGENT_QUICK_COMMANDS, AGENT_SYSTEM_PROMPT } from '@/components/agent/AgentOverlay';
 import ArtifactPanel, { ArtifactData } from '@/components/ABLE3AI/ArtifactPanel';
-import { detectArtifactFromResponse, fetchFinancialStatement } from '@/components/ABLE3AI/ArtifactGenerator';
+import { detectArtifactFromResponse, fetchFinancialStatement, parseQuantAgentArtifact } from '@/components/ABLE3AI/ArtifactGenerator';
 import { fetchTopNewsContext } from '@/components/ABLE3AI/TopNewsIntegration';
 
 interface ThinkingStep {
