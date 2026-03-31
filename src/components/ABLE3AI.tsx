@@ -143,6 +143,7 @@ const ABLE3AI = () => {
 
   // Artifact state
   const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
+  const [artifactHistory, setArtifactHistory] = useState<ArtifactData[]>([]);
   const [artifactMode, setArtifactMode] = useState(true);
 
   const addThinkingStep = useCallback((text: string, status: ThinkingStep['status'] = 'running') => {
@@ -661,41 +662,53 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
       // Save AI response to history
       conversationHistoryRef.current.push({ role: 'assistant', content: aiResponse });
 
-      // Artifact generation
-      if (artifactMode) {
+      // Artifact generation — ALWAYS generate artifact on every AI response
+      {
         const lowerInput = currentInput.toLowerCase();
+        let newArtifact: ArtifactData | null = null;
+
         // Financial statement detection
         if (/งบการเงิน|financial.*statement|balance.*sheet|ดูงบ|งบดุล|งบกำไร|pull.*financial/i.test(lowerInput)) {
-          addThinkingStep('📋 กำลังดึงงบการเงินจาก TradingView...');
           const symbolMatch = currentInput.match(/\b([A-Z]{1,6})\b/);
           if (symbolMatch) {
             const finArtifact = await fetchFinancialStatement(symbolMatch[1]);
             if (finArtifact) {
               finArtifact.aiResponse = aiResponse;
               finArtifact.userQuery = currentInput;
-              setActiveArtifact(finArtifact);
+              newArtifact = finArtifact;
             }
           }
-        } else {
+        }
+        
+        if (!newArtifact) {
           // Auto-detect artifact from response
-          const artifact = detectArtifactFromResponse(currentInput, aiResponse);
-          if (artifact) {
-            artifact.aiResponse = aiResponse;
-            artifact.userQuery = currentInput;
-            setActiveArtifact(artifact);
-          } else if (aiResponse.length > 50) {
-            // Always create a generic artifact from chat for flowchart/graph views
-            setActiveArtifact({
-              id: Date.now().toString(),
-              type: 'table',
-              title: currentInput.slice(0, 50),
-              timestamp: new Date(),
-              source: 'AI Chat',
-              aiResponse,
-              userQuery: currentInput,
-              content: { headers: [], rows: [] },
-            });
+          const detected = detectArtifactFromResponse(currentInput, aiResponse);
+          if (detected) {
+            detected.aiResponse = aiResponse;
+            detected.userQuery = currentInput;
+            newArtifact = detected;
           }
+        }
+
+        // Always create artifact from AI response for flowchart/graph views
+        if (!newArtifact && aiResponse.length > 30) {
+          newArtifact = {
+            id: Date.now().toString(),
+            type: 'markdown',
+            title: currentInput.slice(0, 60),
+            timestamp: new Date(),
+            source: model || 'AI',
+            aiResponse,
+            userQuery: currentInput,
+            content: { text: aiResponse },
+          };
+        }
+
+        if (newArtifact) {
+          newArtifact.version = artifactHistory.length + 1;
+          setActiveArtifact(newArtifact);
+          setArtifactHistory(prev => [...prev, newArtifact!]);
+          if (!artifactMode) setArtifactMode(true);
         }
       }
 
@@ -1093,10 +1106,16 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
       </CardContent>
     </Card>
 
-      {/* Artifact Side Panel */}
+      {/* Artifact Side Panel — always visible */}
       {artifactMode && (
         <div className="w-1/2 h-full">
-          <ArtifactPanel artifact={activeArtifact} onClose={() => { setActiveArtifact(null); setArtifactMode(false); }} isOpen={artifactMode} />
+          <ArtifactPanel
+            artifact={activeArtifact}
+            onClose={() => { setActiveArtifact(null); setArtifactMode(false); }}
+            isOpen={artifactMode}
+            artifacts={artifactHistory}
+            onSelectArtifact={(a) => setActiveArtifact(a)}
+          />
         </div>
       )}
     </div>
