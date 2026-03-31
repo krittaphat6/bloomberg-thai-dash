@@ -22,7 +22,7 @@ import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { AgentOverlay, AGENT_QUICK_COMMANDS, AGENT_SYSTEM_PROMPT } from '@/components/agent/AgentOverlay';
 import ArtifactPanel, { ArtifactData } from '@/components/ABLE3AI/ArtifactPanel';
-import { detectArtifactFromResponse, fetchFinancialStatement } from '@/components/ABLE3AI/ArtifactGenerator';
+import { detectArtifactFromResponse, fetchFinancialStatement, parseQuantAgentArtifact } from '@/components/ABLE3AI/ArtifactGenerator';
 import { fetchTopNewsContext } from '@/components/ABLE3AI/TopNewsIntegration';
 
 interface ThinkingStep {
@@ -539,8 +539,56 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
             }
           } catch (e) { console.error('Journal context error:', e); }
         }
-        
-        if (aiProvider === 'gemini' && geminiReady) {
+
+        // QuantAgent detection — direct edge function call
+        const isQuantAgentQuery = /quant\s*agent|multi.?agent|วิเคราะห์.*agent|indicator.*agent|pattern.*agent|risk.*agent|trend.*agent|4\s*agent|สัญญาณ.*multi|hft.*analysis|รัน.*quant/i.test(lowerInput);
+        if (isQuantAgentQuery) {
+          addThinkingStep('🤖 QuantAgent — เริ่มวิเคราะห์ Multi-Agent...');
+          // Extract symbols from user input
+          const symbolMatches = currentInput.match(/\b([A-Z]{2,10}(?:USD|BTC|ETH)?)\b/g) || ['XAUUSD'];
+          const uniqueSymbols = [...new Set(symbolMatches.filter(s => s.length >= 3 && s.length <= 10))];
+          const tfMatch = currentInput.match(/\b(1m|5m|15m|30m|1h|4h|1D|1W)\b/i);
+          const timeframe = tfMatch ? tfMatch[1] : '1h';
+          
+          const allResults: any[] = [];
+          for (const sym of uniqueSymbols.slice(0, 5)) {
+            addThinkingStep(`📊 วิเคราะห์ ${sym} (${timeframe})...`);
+            try {
+              const { data: qData, error: qErr } = await supabase.functions.invoke('quant-agent', {
+                body: { symbol: sym, timeframe }
+              });
+              if (!qErr && qData?.success) {
+                allResults.push(qData);
+                // Generate artifact for the first/main symbol
+                if (allResults.length === 1) {
+                  const artifact = parseQuantAgentArtifact(qData);
+                  if (artifact) {
+                    artifact.userQuery = currentInput;
+                    setActiveArtifact(artifact);
+                  }
+                }
+              }
+            } catch (e) { console.error(`QuantAgent ${sym}:`, e); }
+          }
+          
+          if (allResults.length > 0) {
+            const summaryLines = allResults.map(r => {
+              const d = r.finalDecision;
+              const targetStr = d.priceTarget ? ` | Target: ${d.priceTarget.toFixed(2)}` : '';
+              const slStr = d.stopLoss ? ` | SL: ${d.stopLoss.toFixed(2)}` : '';
+              const rrStr = d.riskReward ? ` | R:R ${d.riskReward.toFixed(1)}` : '';
+              return `**${r.symbol}** (${r.timeframe}): ${d.signal} — Confidence ${d.confidence}%${targetStr}${slStr}${rrStr}\n• Indicator: ${r.agents.indicator?.signal} (${r.agents.indicator?.confidence}%)\n• Pattern: ${r.agents.pattern?.signal} (${r.agents.pattern?.confidence}%)\n• Trend: ${r.agents.trend?.signal} (${r.agents.trend?.confidence}%)\n• Risk: ${r.agents.risk?.signal} (${r.agents.risk?.confidence}%)\n${d.rationale ? `• Rationale: ${d.rationale}` : ''}`;
+            });
+            aiResponse = `🤖 **QuantAgent Multi-Agent Analysis**\n\n${summaryLines.join('\n\n---\n\n')}`;
+            model = '🤖 QuantAgent';
+            addThinkingStep(`✅ วิเคราะห์เสร็จ ${allResults.length} symbols`, 'done');
+          } else {
+            aiResponse = '❌ ไม่สามารถวิเคราะห์ได้ — กรุณาลองใหม่';
+            model = 'Error';
+            addThinkingStep('❌ QuantAgent ล้มเหลว', 'error');
+          }
+        }
+        else if (aiProvider === 'gemini' && geminiReady) {
           const toolCall = GeminiService.detectToolCall(currentInput);
 
           if (toolCall && mcpReady) {
