@@ -185,6 +185,7 @@ const ABLE3AI = () => {
     { label: '📋 งบการเงิน', cmd: 'ดูงบการเงิน AAPL แบบละเอียด' },
     { label: '🌍 แผ่นดินไหว', cmd: 'แผ่นดินไหวล่าสุดมีที่ไหนบ้าง' },
     { label: '📸 วิเคราะห์กราฟ', cmd: 'วิเคราะห์กราฟที่เห็นบนหน้าจอตอนนี้' },
+    { label: '🤖 QuantAgent', cmd: 'รัน QuantAgent วิเคราะห์ XAUUSD, BTCUSD, EURUSD แบบ multi-agent' },
   ];
 
   // Fetch universal data context

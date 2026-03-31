@@ -43,7 +43,7 @@ export const AVAILABLE_PANELS: PanelConfig[] = [
   { id: 'intelligence', title: '🧠 INTELLIGENCE PLATFORM', keywords: ['intelligence', 'palantir', 'analytics', 'intelligence platform'], category: 'intelligence' },
   { id: 'able3ai', title: '🤖 ABLE AI', keywords: ['ai', 'able ai', 'chat ai', 'ollama', 'gemini'], category: 'intelligence' },
   { id: 'able-hf-40', title: '🧠 ABLE-HF 40 MODULES', keywords: ['40 modules', 'hf 40', 'hedge fund', 'able hf', 'modules'], category: 'intelligence' },
-  { id: 'quant-agent', title: '🤖 QUANT AGENT', keywords: ['quant', 'quantagent', 'quant agent', 'hft', 'multi agent', 'indicator agent', 'pattern agent', 'risk'], category: 'intelligence' },
+  
   
   // Utilities
   { id: 'code', title: '💻 PYTHON CODE EDITOR', keywords: ['code', 'python', 'editor', 'programming', 'pine script', 'โค้ด'], category: 'utilities' },
