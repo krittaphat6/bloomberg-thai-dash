@@ -1,17 +1,20 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   X, Copy, Check, Table2, GitBranch, BarChart3, FileSpreadsheet, TrendingUp,
-  Brain, Workflow, Network, ChevronLeft, ChevronRight, Maximize2, Minimize2,
-  Download, Share2, Layers, FileText, Code, Eye, RotateCcw, Sparkles,
-  ArrowUpRight, ArrowDownRight, Minus, Clock, Hash, Link2, BookOpen
+  Brain, Network, ChevronLeft, ChevronRight, Maximize2, Minimize2,
+  FileText, Code, Layers, Link2, BookOpen, Search, Star, StarOff,
+  ArrowUpRight, ArrowDownRight, Minus, Hash, Clock, FolderOpen,
+  ChevronDown, ChevronRight as ChevronR, Eye, MoreHorizontal,
+  PanelRightClose, Vault, StickyNote, Tag, Bookmark
 } from 'lucide-react';
 
+/* ═══════════════════════════════════════════════════════════════
+   TYPES
+   ═══════════════════════════════════════════════════════════════ */
 export type ArtifactType = 'table' | 'relationship' | 'chart_analysis' | 'financial_statement' | 'screener_result' | 'quantagent_report' | 'text' | 'code' | 'markdown';
-export type ArtifactViewMode = 'preview' | 'code' | 'table' | 'flowchart' | 'graph';
+export type ArtifactViewMode = 'reading' | 'graph' | 'source';
 
 export interface ArtifactData {
   id: string;
@@ -34,28 +37,63 @@ interface ArtifactPanelProps {
   onSelectArtifact?: (artifact: ArtifactData) => void;
 }
 
-const TYPE_META: Record<ArtifactType, { icon: typeof Table2; label: string; accent: string }> = {
-  table: { icon: Table2, label: 'Table', accent: 'hsl(210 100% 65%)' },
-  relationship: { icon: GitBranch, label: 'Relationship Map', accent: 'hsl(270 70% 65%)' },
-  chart_analysis: { icon: BarChart3, label: 'Chart Analysis', accent: 'hsl(190 80% 55%)' },
-  financial_statement: { icon: FileSpreadsheet, label: 'Financial Statement', accent: 'hsl(150 70% 50%)' },
-  screener_result: { icon: TrendingUp, label: 'Screener', accent: 'hsl(30 90% 55%)' },
-  quantagent_report: { icon: Brain, label: 'QuantAgent Report', accent: 'hsl(160 70% 45%)' },
-  text: { icon: FileText, label: 'Text', accent: 'hsl(220 15% 65%)' },
-  code: { icon: Code, label: 'Code', accent: 'hsl(40 90% 55%)' },
-  markdown: { icon: BookOpen, label: 'Document', accent: 'hsl(200 60% 55%)' },
+/* ═══════════════════════════════════════════════════════════════
+   OBSIDIAN COLOR PALETTE (HSL tokens)
+   ═══════════════════════════════════════════════════════════════ */
+const OBS = {
+  bg:         'hsl(240, 6%, 10%)',
+  bgDeep:     'hsl(240, 7%, 8%)',
+  bgSurface:  'hsl(240, 5%, 13%)',
+  bgHover:    'hsl(240, 5%, 16%)',
+  bgActive:   'hsl(240, 5%, 18%)',
+  border:     'hsl(240, 4%, 18%)',
+  borderSoft: 'hsl(240, 3%, 14%)',
+  text:       'hsl(220, 15%, 85%)',
+  textMuted:  'hsl(220, 8%, 55%)',
+  textFaint:  'hsl(220, 5%, 38%)',
+  accent:     'hsl(254, 80%, 68%)',    // Obsidian purple
+  accentDim:  'hsl(254, 40%, 22%)',
+  accentGlow: 'hsl(254, 70%, 55%)',
+  link:       'hsl(254, 70%, 72%)',
+  tag:        'hsl(190, 55%, 55%)',
+  green:      'hsl(150, 55%, 48%)',
+  red:        'hsl(0, 55%, 55%)',
+  orange:     'hsl(30, 75%, 55%)',
+  yellow:     'hsl(45, 80%, 55%)',
+  cyan:       'hsl(190, 65%, 50%)',
+  pink:       'hsl(330, 55%, 60%)',
 };
 
-/* ════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT — Claude-style Artifact Panel
-   ════════════════════════════════════════════════════════════════════ */
+const TYPE_ICON: Record<ArtifactType, { icon: typeof Table2; color: string }> = {
+  table:               { icon: Table2, color: OBS.cyan },
+  relationship:        { icon: GitBranch, color: OBS.pink },
+  chart_analysis:      { icon: BarChart3, color: OBS.orange },
+  financial_statement: { icon: FileSpreadsheet, color: OBS.green },
+  screener_result:     { icon: TrendingUp, color: OBS.yellow },
+  quantagent_report:   { icon: Brain, color: OBS.accent },
+  text:                { icon: FileText, color: OBS.textMuted },
+  code:                { icon: Code, color: OBS.yellow },
+  markdown:            { icon: BookOpen, color: OBS.link },
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN COMPONENT — Obsidian Vault Artifact Panel
+   ═══════════════════════════════════════════════════════════════ */
 const ArtifactPanel: React.FC<ArtifactPanelProps> = ({ artifact, onClose, isOpen, artifacts = [], onSelectArtifact }) => {
-  const [viewMode, setViewMode] = useState<ArtifactViewMode>('preview');
+  const [viewMode, setViewMode] = useState<ArtifactViewMode>('reading');
   const [copied, setCopied] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showGraph, setShowGraph] = useState(false);
+  const [showVault, setShowVault] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [starred, setStarred] = useState<Set<string>>(new Set());
 
   const currentIndex = artifacts.findIndex(a => a.id === artifact?.id);
+
+  const filteredArtifacts = useMemo(() => {
+    if (!searchTerm) return artifacts;
+    const q = searchTerm.toLowerCase();
+    return artifacts.filter(a => a.title.toLowerCase().includes(q) || a.type.includes(q));
+  }, [artifacts, searchTerm]);
 
   const navigateArtifact = (dir: -1 | 1) => {
     const newIdx = currentIndex + dir;
@@ -64,75 +102,21 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({ artifact, onClose, isOpen
     }
   };
 
-  /* ─── Empty State ─── */
-  if (!artifact) {
-    return (
-      <div className="h-full flex flex-col bg-[hsl(0,0%,4%)] border-l border-[hsl(0,0%,12%)]">
-        {/* Clean header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(0,0%,12%)]">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[hsl(200,80%,50%)] to-[hsl(260,70%,55%)] flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-[hsl(0,0%,93%)]">Artifacts</h3>
-              <span className="text-[11px] text-[hsl(0,0%,45%)]">AI-generated content</span>
-            </div>
-          </div>
-          <Button size="icon" variant="ghost" onClick={onClose} className="h-8 w-8 rounded-lg text-[hsl(0,0%,45%)] hover:text-[hsl(0,0%,93%)] hover:bg-[hsl(0,0%,10%)]">
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-
-        {/* Empty state — Claude-style centered message */}
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-center space-y-6 max-w-xs">
-            <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-[hsl(200,60%,15%)] to-[hsl(260,50%,12%)] border border-[hsl(200,40%,20%)] flex items-center justify-center">
-              <Layers className="w-10 h-10 text-[hsl(200,60%,45%)]" />
-            </div>
-            <div>
-              <p className="text-[15px] font-medium text-[hsl(0,0%,80%)]">No artifact yet</p>
-              <p className="text-[13px] text-[hsl(0,0%,40%)] mt-2 leading-relaxed">
-                เมื่อคุณสนทนากับ ABLE AI ผลลัพธ์จะแสดงที่นี่อัตโนมัติ — ตาราง, กราฟ, รายงาน, Flowchart และอื่นๆ
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {['วิเคราะห์ XAUUSD', 'ดูงบ AAPL', 'หา top gainers'].map((hint, i) => (
-                <span key={i} className="text-[11px] px-3 py-1.5 rounded-full border border-[hsl(0,0%,15%)] text-[hsl(0,0%,50%)] bg-[hsl(0,0%,6%)]">{hint}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Obsidian-style graph toggle */}
-        <div className="px-5 py-3 border-t border-[hsl(0,0%,12%)]">
-          <Button variant="ghost" onClick={() => setShowGraph(!showGraph)} className="w-full h-9 text-xs text-[hsl(0,0%,45%)] hover:text-[hsl(200,60%,55%)] hover:bg-[hsl(0,0%,8%)] gap-2">
-            <Network className="w-3.5 h-3.5" />
-            {showGraph ? 'Hide' : 'Show'} Knowledge Graph
-          </Button>
-          {showGraph && (
-            <div className="mt-3 p-4 rounded-xl border border-[hsl(0,0%,12%)] bg-[hsl(0,0%,5%)] text-center">
-              <Network className="w-8 h-8 text-[hsl(200,40%,30%)] mx-auto mb-2" />
-              <p className="text-[11px] text-[hsl(0,0%,35%)]">Graph view จะแสดงเมื่อมี artifacts หลายรายการเชื่อมโยงกัน</p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const meta = TYPE_META[artifact.type] || TYPE_META.text;
-  const Icon = meta.icon;
+  const toggleStar = (id: string) => {
+    setStarred(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
   const copyToClipboard = () => {
+    if (!artifact) return;
     let text = '';
     if (['table', 'screener_result', 'financial_statement'].includes(artifact.type)) {
       const { headers, rows, groups } = artifact.content;
-      if (groups) {
-        text = groups.map((g: any) => `${g.title}\n${g.headers.join('\t')}\n${g.rows.map((r: any[]) => r.join('\t')).join('\n')}`).join('\n\n');
-      } else if (headers && rows) {
-        text = [headers.join('\t'), ...rows.map((r: any[]) => r.join('\t'))].join('\n');
-      }
+      if (groups) text = groups.map((g: any) => `${g.title}\n${g.headers.join('\t')}\n${g.rows.map((r: any[]) => r.join('\t')).join('\n')}`).join('\n\n');
+      else if (headers && rows) text = [headers.join('\t'), ...rows.map((r: any[]) => r.join('\t'))].join('\n');
     }
     if (!text && artifact.aiResponse) text = artifact.aiResponse;
     if (!text) text = JSON.stringify(artifact.content, null, 2);
@@ -141,249 +125,404 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({ artifact, onClose, isOpen
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const viewModes: { value: ArtifactViewMode; icon: typeof Eye; label: string }[] = [
-    { value: 'preview', icon: Eye, label: 'Preview' },
-    { value: 'table', icon: Table2, label: 'Table' },
-    { value: 'flowchart', icon: Workflow, label: 'Flow' },
-    { value: 'graph', icon: Network, label: 'Graph' },
-    { value: 'code', icon: Code, label: 'JSON' },
-  ];
-
-  return (
-    <div className={`h-full flex flex-col bg-[hsl(0,0%,4%)] border-l border-[hsl(0,0%,12%)] ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-      {/* ─── Header — Claude style ─── */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(0,0%,12%)] bg-[hsl(0,0%,5%)]">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          {/* Navigation arrows */}
-          {artifacts.length > 1 && (
-            <div className="flex items-center gap-0.5">
-              <Button size="icon" variant="ghost" onClick={() => navigateArtifact(-1)} disabled={currentIndex <= 0}
-                className="h-7 w-7 rounded text-[hsl(0,0%,45%)] hover:text-white hover:bg-[hsl(0,0%,12%)] disabled:opacity-20">
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </Button>
-              <Button size="icon" variant="ghost" onClick={() => navigateArtifact(1)} disabled={currentIndex >= artifacts.length - 1}
-                className="h-7 w-7 rounded text-[hsl(0,0%,45%)] hover:text-white hover:bg-[hsl(0,0%,12%)] disabled:opacity-20">
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Button>
+  /* ─── EMPTY STATE ─── */
+  if (!artifact) {
+    return (
+      <div className="h-full flex flex-col" style={{ background: OBS.bgDeep }}>
+        <PanelHeader onClose={onClose} title="Vault" subtitle="No note selected" />
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="text-center space-y-5 max-w-[260px]">
+            <div className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center"
+              style={{ background: OBS.accentDim, border: `1px solid ${OBS.accent}30` }}>
+              <StickyNote className="w-8 h-8" style={{ color: OBS.accent }} />
             </div>
-          )}
-          {/* Type icon + title */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ backgroundColor: `${meta.accent}15`, border: `1px solid ${meta.accent}30` }}>
-              <Icon className="w-3.5 h-3.5" style={{ color: meta.accent }} />
+            <div>
+              <p className="text-sm font-medium" style={{ color: OBS.text }}>Vault is empty</p>
+              <p className="text-xs mt-2 leading-relaxed" style={{ color: OBS.textFaint }}>
+                เมื่อคุณสนทนากับ ABLE AI ผลลัพธ์จะถูกบันทึกเป็น Note ใน Vault อัตโนมัติ
+              </p>
             </div>
-            <div className="min-w-0">
-              <h3 className="text-[13px] font-semibold text-[hsl(0,0%,93%)] truncate">{artifact.title}</h3>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ color: meta.accent, backgroundColor: `${meta.accent}12` }}>
-                  {meta.label}
+            <div className="flex flex-wrap gap-1.5 justify-center">
+              {['วิเคราะห์ XAUUSD', 'ดูงบ AAPL', 'QuantAgent'].map((h, i) => (
+                <span key={i} className="text-[11px] px-3 py-1.5 rounded-full"
+                  style={{ background: OBS.bgSurface, border: `1px solid ${OBS.border}`, color: OBS.textFaint }}>
+                  {h}
                 </span>
-                {artifact.version && (
-                  <span className="text-[10px] text-[hsl(0,0%,35%)] flex items-center gap-0.5">
-                    <Hash className="w-2.5 h-2.5" />v{artifact.version}
-                  </span>
-                )}
-                <span className="text-[10px] text-[hsl(0,0%,30%)] flex items-center gap-0.5">
-                  <Clock className="w-2.5 h-2.5" />
-                  {new Date(artifact.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
+              ))}
             </div>
           </div>
         </div>
-        {/* Actions */}
-        <div className="flex items-center gap-1">
-          <Button size="icon" variant="ghost" onClick={copyToClipboard}
-            className="h-7 w-7 rounded text-[hsl(0,0%,45%)] hover:text-white hover:bg-[hsl(0,0%,12%)]">
-            {copied ? <Check className="w-3.5 h-3.5 text-[hsl(150,70%,45%)]" /> : <Copy className="w-3.5 h-3.5" />}
-          </Button>
-          <Button size="icon" variant="ghost" onClick={() => setIsFullscreen(!isFullscreen)}
-            className="h-7 w-7 rounded text-[hsl(0,0%,45%)] hover:text-white hover:bg-[hsl(0,0%,12%)]">
-            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-          </Button>
-          <Button size="icon" variant="ghost" onClick={onClose}
-            className="h-7 w-7 rounded text-[hsl(0,0%,45%)] hover:text-white hover:bg-[hsl(0,0%,12%)]">
-            <X className="w-3.5 h-3.5" />
-          </Button>
-        </div>
       </div>
+    );
+  }
 
-      {/* ─── View Mode Tabs — Claude style pill switcher ─── */}
-      <div className="px-4 py-2 border-b border-[hsl(0,0%,10%)] bg-[hsl(0,0%,4.5%)]">
-        <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[hsl(0,0%,7%)] border border-[hsl(0,0%,12%)]">
-          {viewModes.map(m => {
-            const isActive = viewMode === m.value;
-            return (
-              <button key={m.value} onClick={() => setViewMode(m.value)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-all duration-150 ${
-                  isActive
-                    ? 'bg-[hsl(0,0%,14%)] text-[hsl(0,0%,93%)] shadow-sm'
-                    : 'text-[hsl(0,0%,40%)] hover:text-[hsl(0,0%,60%)] hover:bg-[hsl(0,0%,9%)]'
-                }`}>
-                <m.icon className="w-3 h-3" />
-                {m.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ─── Content ─── */}
-      <ScrollArea className="flex-1">
-        <div className="p-5">
-          {viewMode === 'preview' && <PreviewRenderer artifact={artifact} />}
-          {viewMode === 'table' && <TableRenderer artifact={artifact} />}
-          {viewMode === 'flowchart' && <FlowchartRenderer artifact={artifact} />}
-          {viewMode === 'graph' && <GraphRenderer artifact={artifact} />}
-          {viewMode === 'code' && <CodeRenderer artifact={artifact} />}
-        </div>
-      </ScrollArea>
-
-      {/* ─── Obsidian-style footer with linked notes ─── */}
-      {(artifact.linkedNotes?.length || artifacts.length > 1) && (
-        <div className="px-4 py-3 border-t border-[hsl(0,0%,10%)] bg-[hsl(0,0%,4.5%)]">
-          {artifact.linkedNotes && artifact.linkedNotes.length > 0 && (
-            <div className="flex items-center gap-2 mb-2">
-              <Link2 className="w-3 h-3 text-[hsl(0,0%,35%)]" />
-              <span className="text-[10px] text-[hsl(0,0%,35%)] uppercase tracking-wider">Linked</span>
-              <div className="flex gap-1.5 flex-wrap">
-                {artifact.linkedNotes.map((note, i) => (
-                  <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-[hsl(200,40%,12%)] text-[hsl(200,50%,55%)] border border-[hsl(200,30%,18%)]">
-                    {note}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          {artifacts.length > 1 && (
-            <div className="flex items-center gap-1.5 text-[10px] text-[hsl(0,0%,35%)]">
-              <Layers className="w-3 h-3" />
-              <span>{currentIndex + 1} / {artifacts.length} artifacts</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-/* ════════════════════════════════════════════════════════════════════
-   PREVIEW RENDERER — Smart auto-detect display
-   ════════════════════════════════════════════════════════════════════ */
-const PreviewRenderer: React.FC<{ artifact: ArtifactData }> = ({ artifact }) => {
-  // Auto-select best renderer
-  if (artifact.type === 'quantagent_report') return <QuantAgentRenderer content={artifact.content} />;
-  if (artifact.type === 'chart_analysis') return <ChartAnalysisRenderer content={artifact.content} />;
-  if (artifact.type === 'relationship') return <RelationshipRenderer content={artifact.content} />;
-  if (['table', 'screener_result', 'financial_statement'].includes(artifact.type)) return <TableRenderer artifact={artifact} />;
-
-  // Default: render AI response as document
-  if (artifact.aiResponse) return <DocumentRenderer text={artifact.aiResponse} title={artifact.title} />;
+  const typeInfo = TYPE_ICON[artifact.type] || TYPE_ICON.text;
 
   return (
-    <div className="text-[13px] text-[hsl(0,0%,60%)] leading-relaxed">
-      <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(artifact.content, null, 2)}</pre>
+    <div className={`h-full flex ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}
+      style={{ background: OBS.bgDeep }}>
+
+      {/* ─── VAULT SIDEBAR (collapsible) ─── */}
+      {showVault && artifacts.length > 0 && (
+        <div className="w-[220px] flex-shrink-0 flex flex-col border-r" style={{ background: OBS.bg, borderColor: OBS.borderSoft }}>
+          {/* Vault search */}
+          <div className="p-2.5">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs"
+              style={{ background: OBS.bgSurface, border: `1px solid ${OBS.borderSoft}` }}>
+              <Search className="w-3 h-3 flex-shrink-0" style={{ color: OBS.textFaint }} />
+              <input
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Search vault..."
+                className="bg-transparent outline-none flex-1 text-[11px] placeholder:text-[hsl(220,5%,30%)]"
+                style={{ color: OBS.text }}
+              />
+            </div>
+          </div>
+
+          {/* Vault file tree */}
+          <ScrollArea className="flex-1">
+            <div className="px-1.5 pb-3">
+              {/* Starred section */}
+              {starred.size > 0 && (
+                <VaultSection title="Starred" icon={<Star className="w-3 h-3" style={{ color: OBS.yellow }} />}>
+                  {filteredArtifacts.filter(a => starred.has(a.id)).map(a => (
+                    <VaultItem
+                      key={a.id}
+                      artifact={a}
+                      isActive={a.id === artifact.id}
+                      typeInfo={TYPE_ICON[a.type] || TYPE_ICON.text}
+                      onClick={() => onSelectArtifact?.(a)}
+                    />
+                  ))}
+                </VaultSection>
+              )}
+
+              {/* All notes */}
+              <VaultSection title="All Notes" icon={<FolderOpen className="w-3 h-3" style={{ color: OBS.textFaint }} />} defaultOpen>
+                {filteredArtifacts.map(a => (
+                  <VaultItem
+                    key={a.id}
+                    artifact={a}
+                    isActive={a.id === artifact.id}
+                    typeInfo={TYPE_ICON[a.type] || TYPE_ICON.text}
+                    onClick={() => onSelectArtifact?.(a)}
+                  />
+                ))}
+              </VaultSection>
+            </div>
+          </ScrollArea>
+
+          <div className="px-3 py-2 text-center border-t" style={{ borderColor: OBS.borderSoft }}>
+            <span className="text-[10px]" style={{ color: OBS.textFaint }}>
+              {artifacts.length} note{artifacts.length !== 1 ? 's' : ''} in vault
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MAIN CONTENT ─── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-3 py-2 border-b"
+          style={{ background: OBS.bg, borderColor: OBS.borderSoft }}>
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            {/* Vault toggle */}
+            <button onClick={() => setShowVault(!showVault)}
+              className="p-1.5 rounded-md transition-colors hover:opacity-80"
+              style={{ color: showVault ? OBS.accent : OBS.textFaint }}
+              title="Toggle vault sidebar">
+              <PanelRightClose className="w-4 h-4" style={{ transform: showVault ? 'scaleX(-1)' : 'none' }} />
+            </button>
+
+            {/* Nav arrows */}
+            {artifacts.length > 1 && (
+              <div className="flex items-center">
+                <button onClick={() => navigateArtifact(-1)} disabled={currentIndex <= 0}
+                  className="p-1 rounded disabled:opacity-20 transition-colors"
+                  style={{ color: OBS.textMuted }}>
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => navigateArtifact(1)} disabled={currentIndex >= artifacts.length - 1}
+                  className="p-1 rounded disabled:opacity-20 transition-colors"
+                  style={{ color: OBS.textMuted }}>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-1.5 min-w-0 ml-1">
+              <typeInfo.icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: typeInfo.color }} />
+              <span className="text-[13px] font-medium truncate" style={{ color: OBS.text }}>
+                {artifact.title}
+              </span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-0.5">
+            {/* View mode tabs - Obsidian style */}
+            <div className="flex items-center mr-2 rounded-md overflow-hidden"
+              style={{ background: OBS.bgSurface, border: `1px solid ${OBS.borderSoft}` }}>
+              {([
+                { mode: 'reading' as const, icon: Eye, tip: 'Reading' },
+                { mode: 'graph' as const, icon: Network, tip: 'Graph' },
+                { mode: 'source' as const, icon: Code, tip: 'Source' },
+              ]).map(m => (
+                <button key={m.mode} onClick={() => setViewMode(m.mode)}
+                  title={m.tip}
+                  className="p-1.5 transition-all"
+                  style={{
+                    color: viewMode === m.mode ? OBS.accent : OBS.textFaint,
+                    background: viewMode === m.mode ? OBS.accentDim : 'transparent',
+                  }}>
+                  <m.icon className="w-3.5 h-3.5" />
+                </button>
+              ))}
+            </div>
+
+            <button onClick={() => toggleStar(artifact.id)}
+              className="p-1.5 rounded-md transition-colors" style={{ color: starred.has(artifact.id) ? OBS.yellow : OBS.textFaint }}>
+              {starred.has(artifact.id) ? <Star className="w-3.5 h-3.5 fill-current" /> : <StarOff className="w-3.5 h-3.5" />}
+            </button>
+            <button onClick={copyToClipboard}
+              className="p-1.5 rounded-md transition-colors" style={{ color: copied ? OBS.green : OBS.textFaint }}>
+              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+            <button onClick={() => setIsFullscreen(!isFullscreen)}
+              className="p-1.5 rounded-md transition-colors" style={{ color: OBS.textFaint }}>
+              {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded-md transition-colors" style={{ color: OBS.textFaint }}>
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content area */}
+        <ScrollArea className="flex-1">
+          <div className="p-5 max-w-[720px] mx-auto">
+            {viewMode === 'reading' && <ReadingView artifact={artifact} />}
+            {viewMode === 'graph' && <ObsidianGraphView artifact={artifact} allArtifacts={artifacts} onSelect={onSelectArtifact} />}
+            {viewMode === 'source' && <SourceView artifact={artifact} />}
+          </div>
+        </ScrollArea>
+
+        {/* Backlinks footer — Obsidian signature feature */}
+        <BacklinksFooter artifact={artifact} allArtifacts={artifacts} onSelect={onSelectArtifact} />
+      </div>
     </div>
   );
 };
 
-/* ─── Document Renderer (Markdown-like) ─── */
-const DocumentRenderer: React.FC<{ text: string; title: string }> = ({ text, title }) => {
+/* ═══════════════════════════════════════════════════════════════
+   PANEL HEADER (empty state)
+   ═══════════════════════════════════════════════════════════════ */
+const PanelHeader: React.FC<{ onClose: () => void; title: string; subtitle?: string }> = ({ onClose, title, subtitle }) => (
+  <div className="flex items-center justify-between px-4 py-3 border-b" style={{ background: OBS.bg, borderColor: OBS.borderSoft }}>
+    <div className="flex items-center gap-2.5">
+      <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: OBS.accentDim }}>
+        <Vault className="w-4 h-4" style={{ color: OBS.accent }} />
+      </div>
+      <div>
+        <span className="text-sm font-semibold" style={{ color: OBS.text }}>{title}</span>
+        {subtitle && <p className="text-[10px]" style={{ color: OBS.textFaint }}>{subtitle}</p>}
+      </div>
+    </div>
+    <button onClick={onClose} className="p-1.5 rounded-md transition-colors" style={{ color: OBS.textFaint }}>
+      <X className="w-4 h-4" />
+    </button>
+  </div>
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   VAULT SIDEBAR COMPONENTS
+   ═══════════════════════════════════════════════════════════════ */
+const VaultSection: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }> = ({ title, icon, children, defaultOpen = false }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="mb-1">
+      <button onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 w-full px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider rounded-md transition-colors"
+        style={{ color: OBS.textFaint }}>
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronR className="w-3 h-3" />}
+        {icon}
+        <span>{title}</span>
+      </button>
+      {open && <div className="ml-1">{children}</div>}
+    </div>
+  );
+};
+
+const VaultItem: React.FC<{ artifact: ArtifactData; isActive: boolean; typeInfo: { icon: typeof Table2; color: string }; onClick: () => void }> = ({ artifact, isActive, typeInfo, onClick }) => (
+  <button onClick={onClick}
+    className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-md text-left transition-all group"
+    style={{
+      background: isActive ? OBS.bgActive : 'transparent',
+      color: isActive ? OBS.text : OBS.textMuted,
+    }}>
+    <typeInfo.icon className="w-3 h-3 flex-shrink-0" style={{ color: typeInfo.color }} />
+    <span className="text-[11px] truncate flex-1">{artifact.title}</span>
+    <span className="text-[9px] opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: OBS.textFaint }}>
+      {new Date(artifact.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+    </span>
+  </button>
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   READING VIEW — Obsidian's primary note view
+   ═══════════════════════════════════════════════════════════════ */
+const ReadingView: React.FC<{ artifact: ArtifactData }> = ({ artifact }) => {
+  return (
+    <div className="space-y-6">
+      {/* Note metadata (Obsidian YAML frontmatter style) */}
+      <div className="rounded-lg p-4" style={{ background: OBS.bgSurface, border: `1px solid ${OBS.borderSoft}` }}>
+        <div className="grid grid-cols-2 gap-y-2 gap-x-6 text-[11px]">
+          <MetaRow label="type" value={artifact.type} color={TYPE_ICON[artifact.type]?.color} />
+          <MetaRow label="created" value={new Date(artifact.timestamp).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })} />
+          {artifact.version && <MetaRow label="version" value={`v${artifact.version}`} />}
+          {artifact.source && <MetaRow label="source" value={artifact.source} />}
+        </div>
+        {artifact.linkedNotes && artifact.linkedNotes.length > 0 && (
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t" style={{ borderColor: OBS.borderSoft }}>
+            <Tag className="w-3 h-3" style={{ color: OBS.tag }} />
+            <div className="flex gap-1.5 flex-wrap">
+              {artifact.linkedNotes.map((tag, i) => (
+                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full"
+                  style={{ background: `${OBS.tag}15`, color: OBS.tag, border: `1px solid ${OBS.tag}25` }}>
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Content renderer based on type */}
+      <NoteContent artifact={artifact} />
+    </div>
+  );
+};
+
+const MetaRow: React.FC<{ label: string; value: string; color?: string }> = ({ label, value, color }) => (
+  <div className="flex items-center gap-2">
+    <span style={{ color: OBS.textFaint }}>{label}:</span>
+    <span className="font-mono" style={{ color: color || OBS.text }}>{value}</span>
+  </div>
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   NOTE CONTENT — Smart renderer per type
+   ═══════════════════════════════════════════════════════════════ */
+const NoteContent: React.FC<{ artifact: ArtifactData }> = ({ artifact }) => {
+  if (artifact.type === 'quantagent_report') return <QuantAgentNote content={artifact.content} />;
+  if (artifact.type === 'chart_analysis') return <ChartNote content={artifact.content} />;
+  if (artifact.type === 'relationship') return <RelationshipNote content={artifact.content} />;
+  if (['table', 'screener_result', 'financial_statement'].includes(artifact.type)) return <TableNote artifact={artifact} />;
+  if (artifact.aiResponse) return <MarkdownNote text={artifact.aiResponse} />;
+  return <pre className="text-xs font-mono whitespace-pre-wrap" style={{ color: OBS.textMuted }}>{JSON.stringify(artifact.content, null, 2)}</pre>;
+};
+
+/* ─── Markdown Note ─── */
+const MarkdownNote: React.FC<{ text: string }> = ({ text }) => {
   const sections = useMemo(() => {
     const lines = text.split('\n');
-    const result: Array<{ type: 'heading' | 'bullet' | 'divider' | 'bold-line' | 'text'; content: string }> = [];
+    const result: Array<{ type: 'h1' | 'h2' | 'h3' | 'bullet' | 'divider' | 'callout' | 'text'; content: string }> = [];
     for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      if (trimmed === '---') {
-        result.push({ type: 'divider', content: '' });
-      } else if (/^#{1,3}\s/.test(trimmed)) {
-        result.push({ type: 'heading', content: trimmed.replace(/^#+\s/, '') });
-      } else if (/^\*\*[^*]+\*\*$/.test(trimmed)) {
-        result.push({ type: 'heading', content: trimmed.replace(/\*\*/g, '') });
-      } else if (/^[-•*]\s/.test(trimmed) || /^\d+[.)]\s/.test(trimmed)) {
-        result.push({ type: 'bullet', content: trimmed.replace(/^[-•*\d.)]+\s/, '') });
-      } else {
-        result.push({ type: 'text', content: trimmed });
-      }
+      const t = line.trim();
+      if (!t) continue;
+      if (t === '---') { result.push({ type: 'divider', content: '' }); continue; }
+      if (/^#{1}\s/.test(t)) { result.push({ type: 'h1', content: t.replace(/^#+\s/, '') }); continue; }
+      if (/^#{2}\s/.test(t)) { result.push({ type: 'h2', content: t.replace(/^#+\s/, '') }); continue; }
+      if (/^#{3}\s/.test(t) || /^\*\*[^*]+\*\*$/.test(t)) { result.push({ type: 'h3', content: t.replace(/^#+\s/, '').replace(/\*\*/g, '') }); continue; }
+      if (/^>\s/.test(t)) { result.push({ type: 'callout', content: t.replace(/^>\s?/, '') }); continue; }
+      if (/^[-•*]\s/.test(t) || /^\d+[.)]\s/.test(t)) { result.push({ type: 'bullet', content: t.replace(/^[-•*\d.)]+\s/, '') }); continue; }
+      result.push({ type: 'text', content: t });
     }
     return result;
   }, [text]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 mb-4">
-        <BookOpen className="w-4 h-4 text-[hsl(200,50%,55%)]" />
-        <span className="text-[13px] font-semibold text-[hsl(0,0%,85%)]">{title}</span>
-      </div>
-      {sections.map((sec, i) => {
-        if (sec.type === 'divider') return <div key={i} className="border-t border-[hsl(0,0%,12%)] my-4" />;
-        if (sec.type === 'heading') return <h3 key={i} className="text-[13px] font-bold text-[hsl(0,0%,88%)] mt-4 mb-1">{renderInlineMarkdown(sec.content)}</h3>;
-        if (sec.type === 'bullet') return (
-          <div key={i} className="flex gap-2 text-[13px] text-[hsl(0,0%,70%)] leading-relaxed ml-2">
-            <span className="text-[hsl(200,50%,50%)] mt-0.5 flex-shrink-0">•</span>
-            <span>{renderInlineMarkdown(sec.content)}</span>
+    <div className="obsidian-note space-y-2.5">
+      {sections.map((s, i) => {
+        if (s.type === 'divider') return <div key={i} className="my-4" style={{ borderTop: `1px solid ${OBS.border}` }} />;
+        if (s.type === 'h1') return <h1 key={i} className="text-xl font-bold mt-6 mb-2" style={{ color: OBS.text }}>{renderInline(s.content)}</h1>;
+        if (s.type === 'h2') return <h2 key={i} className="text-base font-bold mt-5 mb-1.5" style={{ color: OBS.text }}>{renderInline(s.content)}</h2>;
+        if (s.type === 'h3') return <h3 key={i} className="text-sm font-semibold mt-4 mb-1" style={{ color: OBS.text }}>{renderInline(s.content)}</h3>;
+        if (s.type === 'callout') return (
+          <div key={i} className="flex gap-2.5 px-4 py-3 rounded-lg my-2"
+            style={{ background: `${OBS.accent}08`, borderLeft: `3px solid ${OBS.accent}` }}>
+            <p className="text-[13px] leading-relaxed" style={{ color: OBS.textMuted }}>{renderInline(s.content)}</p>
           </div>
         );
-        return <p key={i} className="text-[13px] text-[hsl(0,0%,70%)] leading-relaxed">{renderInlineMarkdown(sec.content)}</p>;
+        if (s.type === 'bullet') return (
+          <div key={i} className="flex gap-2.5 text-[13px] leading-relaxed ml-3">
+            <span className="mt-0.5 flex-shrink-0" style={{ color: OBS.accent }}>•</span>
+            <span style={{ color: OBS.textMuted }}>{renderInline(s.content)}</span>
+          </div>
+        );
+        return <p key={i} className="text-[13px] leading-[1.8]" style={{ color: OBS.textMuted }}>{renderInline(s.content)}</p>;
       })}
     </div>
   );
 };
 
-function renderInlineMarkdown(text: string) {
-  const parts = text.split(/(\*\*.*?\*\*)/g);
-  return parts.map((part, j) =>
-    part.startsWith('**') && part.endsWith('**')
-      ? <strong key={j} className="text-[hsl(0,0%,90%)] font-semibold">{part.slice(2, -2)}</strong>
-      : <span key={j}>{part}</span>
-  );
+function renderInline(text: string): React.ReactNode {
+  // Handle **bold**, `code`, [[links]]
+  const parts = text.split(/(\*\*.*?\*\*|`[^`]+`|\[\[[^\]]+\]\])/g);
+  return parts.map((part, j) => {
+    if (part.startsWith('**') && part.endsWith('**'))
+      return <strong key={j} style={{ color: OBS.text }}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith('`') && part.endsWith('`'))
+      return <code key={j} className="text-[12px] font-mono px-1.5 py-0.5 rounded" style={{ background: OBS.bgSurface, color: OBS.orange }}>{part.slice(1, -1)}</code>;
+    if (part.startsWith('[[') && part.endsWith(']]'))
+      return <span key={j} className="cursor-pointer underline decoration-dotted underline-offset-2" style={{ color: OBS.link }}>{part.slice(2, -2)}</span>;
+    return <span key={j}>{part}</span>;
+  });
 }
 
-/* ════════════════════════════════════════════════════════════════════
-   TABLE RENDERER
-   ════════════════════════════════════════════════════════════════════ */
-const TableRenderer: React.FC<{ artifact: ArtifactData }> = ({ artifact }) => {
+/* ─── Table Note ─── */
+const TableNote: React.FC<{ artifact: ArtifactData }> = ({ artifact }) => {
   const { headers, rows, groups } = artifact.content;
-
-  if (groups && groups.length > 0) {
+  if (groups?.length) {
     return (
       <div className="space-y-6">
-        {groups.map((group: any, gi: number) => (
+        {groups.map((g: any, gi: number) => (
           <div key={gi}>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-1.5 h-1.5 rounded-full bg-[hsl(150,60%,45%)]" />
-              <h4 className="text-[12px] font-bold text-[hsl(0,0%,80%)] uppercase tracking-wider">{group.title}</h4>
-              <span className="text-[10px] text-[hsl(0,0%,30%)]">{group.rows?.length || 0} rows</span>
-            </div>
-            <DataTable headers={group.headers} rows={group.rows} />
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: OBS.text }}>
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: OBS.accent }} />
+              {g.title}
+              <span className="text-[10px] font-normal" style={{ color: OBS.textFaint }}>({g.rows?.length || 0})</span>
+            </h3>
+            <ObsidianTable headers={g.headers} rows={g.rows} />
           </div>
         ))}
       </div>
     );
   }
-
-  if (headers && rows) return <DataTable headers={headers} rows={rows} />;
-
-  return <p className="text-[13px] text-[hsl(0,0%,45%)]">No table data available for this artifact.</p>;
+  if (headers && rows) return <ObsidianTable headers={headers} rows={rows} />;
+  return <p className="text-sm" style={{ color: OBS.textFaint }}>No table data.</p>;
 };
 
-const DataTable: React.FC<{ headers: string[]; rows: any[][] }> = ({ headers, rows }) => (
-  <div className="overflow-x-auto rounded-xl border border-[hsl(0,0%,12%)] bg-[hsl(0,0%,5%)]">
+const ObsidianTable: React.FC<{ headers: string[]; rows: any[][] }> = ({ headers, rows }) => (
+  <div className="overflow-x-auto rounded-lg" style={{ border: `1px solid ${OBS.borderSoft}` }}>
     <table className="w-full text-[12px]">
       <thead>
-        <tr className="border-b border-[hsl(0,0%,12%)]">
-          {headers?.map((h: string, i: number) => (
-            <th key={i} className="px-4 py-2.5 text-left text-[hsl(0,0%,50%)] font-semibold whitespace-nowrap">{h}</th>
+        <tr style={{ borderBottom: `2px solid ${OBS.accent}30`, background: OBS.bgSurface }}>
+          {headers?.map((h, i) => (
+            <th key={i} className="px-3 py-2 text-left font-semibold whitespace-nowrap" style={{ color: OBS.textMuted }}>{h}</th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {rows?.map((row: any[], ri: number) => (
-          <tr key={ri} className="border-b border-[hsl(0,0%,8%)] hover:bg-[hsl(0,0%,7%)] transition-colors">
-            {row.map((cell: any, ci: number) => (
-              <td key={ci} className={`px-4 py-2.5 whitespace-nowrap ${getCellColor(cell)}`}>{formatCell(cell)}</td>
+        {rows?.map((row, ri) => (
+          <tr key={ri} className="transition-colors"
+            style={{ borderBottom: `1px solid ${OBS.borderSoft}` }}
+            onMouseEnter={e => (e.currentTarget.style.background = OBS.bgHover)}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+            {row.map((cell, ci) => (
+              <td key={ci} className={`px-3 py-2 whitespace-nowrap font-mono ${getCellColor(cell)}`}>{formatCell(cell)}</td>
             ))}
           </tr>
         ))}
@@ -392,495 +531,531 @@ const DataTable: React.FC<{ headers: string[]; rows: any[][] }> = ({ headers, ro
   </div>
 );
 
-/* ════════════════════════════════════════════════════════════════════
-   CHART ANALYSIS RENDERER
-   ════════════════════════════════════════════════════════════════════ */
-const ChartAnalysisRenderer: React.FC<{ content: any }> = ({ content }) => {
-  const { symbol, timeframe, indicators, signals, levels, analysis } = content;
+/* ─── QuantAgent Note ─── */
+const QuantAgentNote: React.FC<{ content: any }> = ({ content }) => {
+  const { agents, finalDecision, symbol, timeframe } = content;
+  const signalColor = (sig: string) => {
+    if (sig?.includes('BUY')) return OBS.green;
+    if (sig?.includes('SELL')) return OBS.red;
+    return OBS.orange;
+  };
+  const color = signalColor(finalDecision?.signal);
 
   return (
     <div className="space-y-5">
-      {/* Symbol header card */}
-      <div className="flex items-center gap-4 p-4 rounded-xl bg-[hsl(195,30%,7%)] border border-[hsl(195,30%,15%)]">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[hsl(195,70%,25%)] to-[hsl(195,50%,15%)] flex items-center justify-center">
-          <BarChart3 className="w-6 h-6 text-[hsl(195,80%,60%)]" />
+      {/* Signal callout */}
+      <div className="rounded-lg p-5" style={{ background: `${color}08`, border: `1px solid ${color}20` }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold" style={{ color: OBS.text }}>{symbol ?? 'Unknown'}</h2>
+            <span className="text-[11px]" style={{ color: OBS.textFaint }}>{timeframe ?? '1H'} · Multi-Agent</span>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold font-mono" style={{ color }}>{finalDecision?.signal ?? 'N/A'}</div>
+            <ConfBar value={finalDecision?.confidence ?? 0} />
+          </div>
         </div>
-        <div>
-          <div className="text-lg font-bold text-[hsl(0,0%,93%)]">{symbol || 'Unknown'}</div>
-          <div className="text-[11px] text-[hsl(0,0%,45%)]">{timeframe || 'Daily'} · Technical Analysis</div>
+        <div className="grid grid-cols-3 gap-3 mt-4">
+          <SmallStat label="Confidence" value={`${finalDecision?.confidence ?? 0}%`} />
+          <SmallStat label="Target" value={finalDecision?.priceTarget?.toFixed(4) ?? '—'} color={OBS.green} />
+          <SmallStat label="Stop Loss" value={finalDecision?.stopLoss?.toFixed(4) ?? '—'} color={OBS.red} />
         </div>
       </div>
 
-      {/* Indicators grid */}
+      {/* Agent cards */}
+      {[
+        { label: 'Indicator Agent', icon: '📊', data: agents?.indicator },
+        { label: 'Pattern Agent', icon: '🔍', data: agents?.pattern },
+        { label: 'Trend Agent', icon: '📈', data: agents?.trend },
+        { label: 'Risk Agent', icon: '🛡️', data: agents?.risk },
+      ].map(a => a.data && (
+        <div key={a.label} className="rounded-lg p-4" style={{ background: OBS.bgSurface, border: `1px solid ${OBS.borderSoft}` }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium" style={{ color: OBS.text }}>{a.icon} {a.label}</span>
+            <span className="text-[11px] font-mono font-bold" style={{ color: signalColor(a.data.signal) }}>
+              {a.data.signal} · {a.data.confidence}%
+            </span>
+          </div>
+          <ConfBar value={a.data.confidence} />
+          {a.data.summary && <p className="text-[11px] mt-2 leading-relaxed" style={{ color: OBS.textFaint }}>{a.data.summary}</p>}
+        </div>
+      ))}
+
+      {finalDecision?.rationale && (
+        <div className="px-4 py-3 rounded-lg" style={{ background: `${OBS.accent}06`, borderLeft: `3px solid ${OBS.accent}` }}>
+          <p className="text-[12px] leading-relaxed" style={{ color: OBS.textMuted }}>{finalDecision.rationale}</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ─── Chart Analysis Note ─── */
+const ChartNote: React.FC<{ content: any }> = ({ content }) => {
+  const { symbol, timeframe, indicators, signals, levels, analysis } = content;
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: OBS.accentDim }}>
+          <BarChart3 className="w-5 h-5" style={{ color: OBS.accent }} />
+        </div>
+        <div>
+          <h2 className="text-base font-bold" style={{ color: OBS.text }}>{symbol || 'Unknown'}</h2>
+          <span className="text-[11px]" style={{ color: OBS.textFaint }}>{timeframe || 'Daily'} · Technical Analysis</span>
+        </div>
+      </div>
+
       {indicators && (
-        <Section title="Technical Indicators">
+        <NoteSection title="Indicators">
           <div className="grid grid-cols-2 gap-2">
-            {Object.entries(indicators).map(([key, val]: [string, any]) => (
-              <div key={key} className="p-3 rounded-lg bg-[hsl(0,0%,6%)] border border-[hsl(0,0%,12%)]">
-                <div className="text-[10px] text-[hsl(0,0%,40%)] uppercase tracking-wider">{key}</div>
-                <div className={`text-[15px] font-mono font-bold mt-0.5 ${getValueColor(val)}`}>
-                  {typeof val === 'number' ? val.toFixed(2) : String(val)}
+            {Object.entries(indicators).map(([k, v]: [string, any]) => (
+              <div key={k} className="p-3 rounded-lg" style={{ background: OBS.bgSurface, border: `1px solid ${OBS.borderSoft}` }}>
+                <div className="text-[10px] uppercase tracking-wider" style={{ color: OBS.textFaint }}>{k}</div>
+                <div className={`text-sm font-mono font-bold mt-0.5 ${getValueColor(v)}`}>
+                  {typeof v === 'number' ? v.toFixed(2) : String(v)}
                 </div>
               </div>
             ))}
           </div>
-        </Section>
+        </NoteSection>
       )}
 
-      {/* Signals */}
-      {signals && signals.length > 0 && (
-        <Section title="Signals">
-          <div className="space-y-2">
-            {signals.map((sig: any, i: number) => (
-              <div key={i} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-[12px] border ${
-                sig.direction === 'bullish' ? 'border-[hsl(150,40%,18%)] bg-[hsl(150,30%,6%)]' :
-                sig.direction === 'bearish' ? 'border-[hsl(0,40%,18%)] bg-[hsl(0,30%,6%)]' :
-                'border-[hsl(0,0%,12%)] bg-[hsl(0,0%,6%)]'
-              }`}>
-                {sig.direction === 'bullish'
-                  ? <ArrowUpRight className="w-4 h-4 text-[hsl(150,60%,50%)]" />
-                  : sig.direction === 'bearish'
-                  ? <ArrowDownRight className="w-4 h-4 text-[hsl(0,60%,55%)]" />
-                  : <Minus className="w-4 h-4 text-[hsl(0,0%,45%)]" />}
-                <span className="font-medium text-[hsl(0,0%,85%)]">{sig.name}</span>
-                {sig.detail && <span className="text-[11px] text-[hsl(0,0%,40%)] ml-auto">{sig.detail}</span>}
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Key levels */}
-      {levels && (
-        <Section title="Key Levels">
+      {signals?.length > 0 && (
+        <NoteSection title="Signals">
           <div className="space-y-1.5">
-            {Object.entries(levels).map(([label, price]: [string, any]) => (
-              <div key={label} className="flex justify-between items-center px-4 py-2 rounded-lg bg-[hsl(0,0%,6%)]">
-                <span className="text-[12px] text-[hsl(0,0%,50%)]">{label}</span>
-                <span className="text-[13px] font-mono text-[hsl(0,0%,90%)] font-medium">{typeof price === 'number' ? price.toFixed(2) : price}</span>
+            {signals.map((sig: any, i: number) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ background: OBS.bgSurface }}>
+                {sig.direction === 'bullish' ? <ArrowUpRight className="w-4 h-4" style={{ color: OBS.green }} />
+                  : sig.direction === 'bearish' ? <ArrowDownRight className="w-4 h-4" style={{ color: OBS.red }} />
+                  : <Minus className="w-4 h-4" style={{ color: OBS.textFaint }} />}
+                <span className="text-xs font-medium" style={{ color: OBS.text }}>{sig.name}</span>
+                {sig.detail && <span className="text-[11px] ml-auto" style={{ color: OBS.textFaint }}>{sig.detail}</span>}
               </div>
             ))}
           </div>
-        </Section>
+        </NoteSection>
       )}
 
-      {/* Analysis text */}
-      {analysis && (
-        <div className="p-4 rounded-xl bg-[hsl(195,20%,6%)] border border-[hsl(195,20%,14%)]">
-          <p className="text-[13px] text-[hsl(0,0%,70%)] leading-relaxed whitespace-pre-wrap">{analysis}</p>
-        </div>
-      )}
-    </div>
-  );
-};
-
-/* ════════════════════════════════════════════════════════════════════
-   QUANTAGENT REPORT RENDERER
-   ════════════════════════════════════════════════════════════════════ */
-const QuantAgentRenderer: React.FC<{ content: any }> = ({ content }) => {
-  const { agents, finalDecision, symbol, timeframe } = content;
-
-  const signalStyle = (sig: string) => {
-    if (sig?.includes('BUY')) return { color: 'hsl(150,60%,50%)', bg: 'hsl(150,30%,7%)', border: 'hsl(150,30%,15%)' };
-    if (sig?.includes('SELL')) return { color: 'hsl(0,60%,55%)', bg: 'hsl(0,30%,7%)', border: 'hsl(0,30%,15%)' };
-    return { color: 'hsl(40,70%,55%)', bg: 'hsl(40,20%,7%)', border: 'hsl(40,20%,15%)' };
-  };
-
-  const style = signalStyle(finalDecision?.signal);
-
-  return (
-    <div className="space-y-5">
-      {/* Hero card */}
-      <div className="p-5 rounded-xl border" style={{ backgroundColor: style.bg, borderColor: style.border }}>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <div className="text-lg font-bold text-[hsl(0,0%,93%)]">{symbol ?? 'Unknown'}</div>
-            <div className="text-[11px] text-[hsl(0,0%,45%)]">{timeframe ?? '1H'} · Multi-Agent Analysis</div>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold" style={{ color: style.color }}>{finalDecision?.signal ?? 'N/A'}</div>
-            <div className="text-[11px] text-[hsl(0,0%,45%)]">Confidence {finalDecision?.confidence ?? 0}%</div>
-          </div>
-        </div>
-        <ConfidenceBar value={finalDecision?.confidence ?? 0} />
-      </div>
-
-      {/* Targets row */}
-      <div className="grid grid-cols-3 gap-3">
-        <MetricCard label="Confidence" value={`${finalDecision?.confidence ?? 0}%`} />
-        <MetricCard label="Target" value={finalDecision?.priceTarget?.toFixed(4) ?? '—'} accent="hsl(150,60%,45%)" />
-        <MetricCard label="Stop Loss" value={finalDecision?.stopLoss?.toFixed(4) ?? '—'} accent="hsl(0,55%,50%)" />
-      </div>
-
-      {finalDecision?.riskReward && (
-        <div className="text-center text-[12px] text-[hsl(0,0%,45%)]">
-          Risk:Reward <span className="text-[hsl(0,0%,90%)] font-mono font-bold">1 : {finalDecision.riskReward.toFixed(2)}</span>
-        </div>
-      )}
-
-      {/* Agent Breakdown */}
-      <Section title="Agent Breakdown">
-        <div className="space-y-2.5">
-          {[
-            { label: 'Indicator Agent', icon: '📊', data: agents?.indicator },
-            { label: 'Pattern Agent', icon: '🔍', data: agents?.pattern },
-            { label: 'Trend Agent', icon: '📈', data: agents?.trend },
-            { label: 'Risk Agent', icon: '🛡️', data: agents?.risk },
-          ].map(a => a.data && (
-            <AgentCard key={a.label} label={a.label} icon={a.icon} result={a.data} />
+      {levels && (
+        <NoteSection title="Key Levels">
+          {Object.entries(levels).map(([label, price]: [string, any]) => (
+            <div key={label} className="flex justify-between items-center px-3 py-2 rounded-md" style={{ background: OBS.bgSurface }}>
+              <span className="text-xs" style={{ color: OBS.textMuted }}>{label}</span>
+              <span className="text-xs font-mono font-medium" style={{ color: OBS.text }}>{typeof price === 'number' ? price.toFixed(2) : price}</span>
+            </div>
           ))}
-        </div>
-      </Section>
+        </NoteSection>
+      )}
 
-      {finalDecision?.rationale && (
-        <div className="p-4 rounded-xl bg-[hsl(0,0%,5%)] border border-[hsl(0,0%,12%)]">
-          <h4 className="text-[10px] text-[hsl(0,0%,40%)] uppercase tracking-wider mb-2">Rationale</h4>
-          <p className="text-[13px] text-[hsl(0,0%,70%)] leading-relaxed">{finalDecision.rationale}</p>
+      {analysis && (
+        <div className="px-4 py-3 rounded-lg" style={{ background: `${OBS.cyan}06`, borderLeft: `3px solid ${OBS.cyan}` }}>
+          <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: OBS.textMuted }}>{analysis}</p>
         </div>
       )}
     </div>
   );
 };
 
-const AgentCard: React.FC<{ label: string; icon: string; result: any }> = ({ label, icon, result }) => {
-  const style = result.signal?.includes('BUY') ? 'hsl(150,60%,50%)' : result.signal?.includes('SELL') ? 'hsl(0,60%,55%)' : 'hsl(40,70%,55%)';
-  return (
-    <div className="p-3.5 rounded-xl border border-[hsl(0,0%,12%)] bg-[hsl(0,0%,5.5%)]">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[12px] text-[hsl(0,0%,65%)] font-medium">{icon} {label}</span>
-        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ color: style, backgroundColor: `${style}15` }}>
-          {result.signal} · {result.confidence}%
-        </span>
-      </div>
-      <ConfidenceBar value={result.confidence} />
-      {result.summary && <p className="text-[11px] text-[hsl(0,0%,40%)] mt-2 leading-relaxed">{result.summary}</p>}
-    </div>
-  );
-};
-
-/* ════════════════════════════════════════════════════════════════════
-   RELATIONSHIP RENDERER
-   ════════════════════════════════════════════════════════════════════ */
-const RelationshipRenderer: React.FC<{ content: any }> = ({ content }) => {
+/* ─── Relationship Note ─── */
+const RelationshipNote: React.FC<{ content: any }> = ({ content }) => {
   const { nodes, connections, summary } = content;
   return (
     <div className="space-y-5">
       {summary && (
-        <div className="p-4 rounded-xl bg-[hsl(270,20%,7%)] border border-[hsl(270,20%,14%)]">
-          <div className="flex items-center gap-2 mb-2">
-            <Brain className="w-4 h-4 text-[hsl(270,60%,60%)]" />
-            <span className="text-[12px] font-semibold text-[hsl(270,40%,75%)]">AI Summary</span>
-          </div>
-          <p className="text-[13px] text-[hsl(0,0%,70%)] leading-relaxed">{summary}</p>
+        <div className="px-4 py-3 rounded-lg" style={{ background: `${OBS.accent}06`, borderLeft: `3px solid ${OBS.accent}` }}>
+          <p className="text-[13px] leading-relaxed" style={{ color: OBS.textMuted }}>{summary}</p>
         </div>
       )}
       {nodes && (
         <div className="flex flex-wrap gap-2">
           {nodes.map((node: any, i: number) => {
-            const s = getNodeAccent(node.type);
+            const c = getNodeAccent(node.type);
             return (
-              <div key={i} className="px-3.5 py-2.5 rounded-xl border text-[12px]"
-                style={{ backgroundColor: `${s}08`, borderColor: `${s}25`, color: s }}>
+              <div key={i} className="px-3 py-2 rounded-lg text-xs" style={{ background: `${c}10`, border: `1px solid ${c}25`, color: c }}>
                 <div className="font-medium">{node.label}</div>
-                {node.detail && <div className="text-[10px] opacity-50 mt-0.5">{node.detail}</div>}
+                {node.detail && <div className="text-[10px] opacity-60 mt-0.5">{node.detail}</div>}
               </div>
             );
           })}
         </div>
       )}
-      {connections && connections.length > 0 && (
-        <Section title="Connections">
-          <div className="space-y-1.5">
+      {connections?.length > 0 && (
+        <NoteSection title="Connections">
+          <div className="space-y-1">
             {connections.map((conn: any, i: number) => (
-              <div key={i} className="flex items-center gap-2 text-[12px] px-3 py-2 rounded-lg bg-[hsl(0,0%,6%)]">
-                <span className="text-[hsl(0,0%,80%)]">{conn.from}</span>
-                <span className={`text-[11px] ${conn.type === 'positive' ? 'text-[hsl(150,60%,50%)]' : conn.type === 'negative' ? 'text-[hsl(0,60%,55%)]' : 'text-[hsl(0,0%,35%)]'}`}>→</span>
-                <span className="text-[hsl(0,0%,80%)]">{conn.to}</span>
-                {conn.label && <span className="text-[hsl(0,0%,30%)] text-[10px] ml-auto">({conn.label})</span>}
+              <div key={i} className="flex items-center gap-2 text-xs px-3 py-2 rounded-md" style={{ background: OBS.bgSurface }}>
+                <span style={{ color: OBS.text }}>{conn.from}</span>
+                <span style={{ color: conn.type === 'positive' ? OBS.green : conn.type === 'negative' ? OBS.red : OBS.textFaint }}>→</span>
+                <span style={{ color: OBS.text }}>{conn.to}</span>
+                {conn.label && <span className="ml-auto text-[10px]" style={{ color: OBS.textFaint }}>({conn.label})</span>}
               </div>
             ))}
           </div>
-        </Section>
+        </NoteSection>
       )}
     </div>
   );
 };
 
-/* ════════════════════════════════════════════════════════════════════
-   FLOWCHART RENDERER
-   ════════════════════════════════════════════════════════════════════ */
-const FlowchartRenderer: React.FC<{ artifact: ArtifactData }> = ({ artifact }) => {
-  const nodes = extractFlowchartNodes(artifact);
+/* ═══════════════════════════════════════════════════════════════
+   OBSIDIAN GRAPH VIEW — Force-directed knowledge graph
+   ═══════════════════════════════════════════════════════════════ */
+const ObsidianGraphView: React.FC<{
+  artifact: ArtifactData;
+  allArtifacts: ArtifactData[];
+  onSelect?: (a: ArtifactData) => void;
+}> = ({ artifact, allArtifacts, onSelect }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
+  const nodesRef = useRef<GraphNode[]>([]);
+  const linksRef = useRef<GraphLink[]>([]);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+
+  interface GraphNode {
+    id: string;
+    label: string;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    type: string;
+    color: string;
+    radius: number;
+    isCurrent: boolean;
+    artifactId?: string;
+  }
+  interface GraphLink { source: string; target: string; }
+
+  // Build graph data
+  useEffect(() => {
+    const nodes: GraphNode[] = [];
+    const links: GraphLink[] = [];
+    const seen = new Set<string>();
+
+    allArtifacts.forEach((a, i) => {
+      const id = `note-${a.id}`;
+      if (!seen.has(id)) {
+        seen.add(id);
+        const angle = (i / Math.max(allArtifacts.length, 1)) * Math.PI * 2;
+        const r = 120 + Math.random() * 60;
+        nodes.push({
+          id, label: a.title.slice(0, 20), x: 300 + Math.cos(angle) * r, y: 200 + Math.sin(angle) * r,
+          vx: 0, vy: 0, type: a.type, color: TYPE_ICON[a.type]?.color || OBS.textMuted,
+          radius: a.id === artifact.id ? 8 : 5, isCurrent: a.id === artifact.id, artifactId: a.id,
+        });
+      }
+
+      // Extract tags/linked notes
+      a.linkedNotes?.forEach(tag => {
+        const tagId = `tag-${tag}`;
+        if (!seen.has(tagId)) {
+          seen.add(tagId);
+          nodes.push({
+            id: tagId, label: `#${tag}`, x: 300 + (Math.random() - 0.5) * 250, y: 200 + (Math.random() - 0.5) * 180,
+            vx: 0, vy: 0, type: 'tag', color: OBS.tag, radius: 4, isCurrent: false,
+          });
+        }
+        links.push({ source: id, target: tagId });
+      });
+    });
+
+    // Connect sequential notes
+    for (let i = 1; i < allArtifacts.length; i++) {
+      links.push({ source: `note-${allArtifacts[i - 1].id}`, target: `note-${allArtifacts[i].id}` });
+    }
+
+    nodesRef.current = nodes;
+    linksRef.current = links;
+  }, [allArtifacts, artifact.id]);
+
+  // Animation loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const tick = () => {
+      const nodes = nodesRef.current;
+      const links = linksRef.current;
+
+      // Simple force simulation
+      const centerX = W / 2, centerY = H / 2;
+      for (const n of nodes) {
+        // Center gravity
+        n.vx += (centerX - n.x) * 0.001;
+        n.vy += (centerY - n.y) * 0.001;
+        // Repulsion
+        for (const m of nodes) {
+          if (m.id === n.id) continue;
+          const dx = n.x - m.x, dy = n.y - m.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          if (dist < 150) {
+            const force = 2 / (dist * dist);
+            n.vx += dx * force;
+            n.vy += dy * force;
+          }
+        }
+      }
+      // Attraction along links
+      for (const l of links) {
+        const s = nodes.find(n => n.id === l.source);
+        const t = nodes.find(n => n.id === l.target);
+        if (!s || !t) continue;
+        const dx = t.x - s.x, dy = t.y - s.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const force = (dist - 80) * 0.003;
+        s.vx += dx / dist * force;
+        s.vy += dy / dist * force;
+        t.vx -= dx / dist * force;
+        t.vy -= dy / dist * force;
+      }
+      // Apply velocity
+      for (const n of nodes) {
+        n.vx *= 0.92;
+        n.vy *= 0.92;
+        n.x += n.vx;
+        n.y += n.vy;
+        n.x = Math.max(20, Math.min(W - 20, n.x));
+        n.y = Math.max(20, Math.min(H - 20, n.y));
+      }
+
+      // Draw
+      ctx.clearRect(0, 0, W, H);
+
+      // Dot grid
+      ctx.fillStyle = 'hsla(254, 30%, 40%, 0.08)';
+      for (let x = 0; x < W; x += 20) {
+        for (let y = 0; y < H; y += 20) {
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      // Links
+      for (const l of links) {
+        const s = nodes.find(n => n.id === l.source);
+        const t = nodes.find(n => n.id === l.target);
+        if (!s || !t) continue;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(t.x, t.y);
+        ctx.strokeStyle = 'hsla(254, 30%, 50%, 0.15)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Nodes
+      for (const n of nodes) {
+        const isHov = hoveredNode === n.id;
+
+        // Glow for current
+        if (n.isCurrent) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.radius + 8, 0, Math.PI * 2);
+          ctx.fillStyle = `${OBS.accent}18`;
+          ctx.fill();
+        }
+
+        // Node circle
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, isHov ? n.radius + 2 : n.radius, 0, Math.PI * 2);
+        ctx.fillStyle = n.isCurrent ? OBS.accent : n.color;
+        ctx.fill();
+
+        // Label
+        if (n.isCurrent || isHov || n.radius > 5) {
+          ctx.font = `${n.isCurrent ? '600 11px' : '400 10px'} system-ui, sans-serif`;
+          ctx.fillStyle = n.isCurrent ? OBS.text : OBS.textMuted;
+          ctx.textAlign = 'center';
+          ctx.fillText(n.label, n.x, n.y + n.radius + 14);
+        }
+      }
+
+      animRef.current = requestAnimationFrame(tick);
+    };
+
+    animRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animRef.current);
+  }, [hoveredNode]);
+
+  // Mouse hover detection
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const nodes = nodesRef.current;
+    let found: string | null = null;
+    for (const n of nodes) {
+      const dx = mx - n.x, dy = my - n.y;
+      if (dx * dx + dy * dy < (n.radius + 5) * (n.radius + 5)) {
+        found = n.id;
+        break;
+      }
+    }
+    setHoveredNode(found);
+  }, []);
+
+  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    for (const n of nodesRef.current) {
+      const dx = mx - n.x, dy = my - n.y;
+      if (dx * dx + dy * dy < (n.radius + 5) * (n.radius + 5) && n.artifactId) {
+        const a = allArtifacts.find(a => a.id === n.artifactId);
+        if (a && onSelect) onSelect(a);
+        break;
+      }
+    }
+  }, [allArtifacts, onSelect]);
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 mb-4">
-        <Workflow className="w-4 h-4 text-[hsl(270,60%,60%)]" />
-        <span className="text-[12px] font-semibold text-[hsl(270,40%,75%)]">Decision Flowchart</span>
-        <span className="text-[10px] text-[hsl(0,0%,35%)] ml-auto">{nodes.length} nodes</span>
+      <div className="flex items-center gap-2">
+        <Network className="w-4 h-4" style={{ color: OBS.accent }} />
+        <span className="text-sm font-semibold" style={{ color: OBS.text }}>Graph View</span>
+        <span className="text-[10px] ml-auto" style={{ color: OBS.textFaint }}>
+          {nodesRef.current.length} nodes · {linksRef.current.length} links
+        </span>
+      </div>
+      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${OBS.borderSoft}`, background: OBS.bgDeep }}>
+        <canvas
+          ref={canvasRef}
+          width={600}
+          height={400}
+          className="w-full cursor-crosshair"
+          style={{ height: 400 }}
+          onMouseMove={handleMouseMove}
+          onClick={handleClick}
+        />
       </div>
       {/* Legend */}
-      <div className="flex flex-wrap gap-4 mb-4 text-[10px] text-[hsl(0,0%,50%)]">
-        {[
-          { label: 'Start', color: 'hsl(210,70%,55%)' },
-          { label: 'Decision', color: 'hsl(30,80%,55%)' },
-          { label: 'Process', color: 'hsl(270,60%,55%)' },
-          { label: 'Action', color: 'hsl(150,60%,45%)' },
-          { label: 'Result', color: 'hsl(190,70%,50%)' },
-        ].map(l => (
-          <span key={l.label} className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: l.color }} />{l.label}
-          </span>
-        ))}
-      </div>
-      {/* Nodes */}
-      <div className="flex flex-col items-center gap-0">
-        {nodes.map((node, i) => {
-          const c = flowNodeColor(node.type);
-          return (
-            <React.Fragment key={i}>
-              <div className={`w-full max-w-sm px-4 py-3 rounded-xl border text-[12px] text-center transition-all hover:scale-[1.02] ${
-                node.type === 'start' || node.type === 'result' ? 'rounded-full' : ''
-              }`} style={{ backgroundColor: `${c}08`, borderColor: `${c}30`, color: c }}>
-                <div className="flex items-center justify-center gap-2 font-medium">
-                  <span>{flowNodeIcon(node.type)}</span>
-                  <span>{node.label}</span>
-                </div>
-                {node.detail && <div className="text-[10px] opacity-50 mt-0.5">{node.detail}</div>}
-              </div>
-              {i < nodes.length - 1 && (
-                <div className="flex flex-col items-center my-0.5">
-                  <div className="w-px h-5 bg-[hsl(0,0%,15%)]" />
-                  <div className="text-[hsl(0,0%,25%)] text-[10px]">↓</div>
-                </div>
-              )}
-            </React.Fragment>
-          );
-        })}
+      <div className="flex flex-wrap gap-4 text-[10px]" style={{ color: OBS.textFaint }}>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: OBS.accent }} /> Current</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: OBS.tag }} /> Tag</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: OBS.cyan }} /> Note</span>
       </div>
     </div>
   );
 };
 
-/* ════════════════════════════════════════════════════════════════════
-   GRAPH RENDERER — Obsidian style
-   ════════════════════════════════════════════════════════════════════ */
-const GraphRenderer: React.FC<{ artifact: ArtifactData }> = ({ artifact }) => {
-  const { nodes, connections } = extractGraphData(artifact);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Network className="w-4 h-4 text-[hsl(200,50%,55%)]" />
-        <span className="text-[12px] font-semibold text-[hsl(200,40%,70%)]">Knowledge Graph</span>
-        <span className="text-[10px] text-[hsl(0,0%,35%)] ml-auto">{nodes.length} nodes · {connections.length} links</span>
-      </div>
-
-      {/* Obsidian-style graph canvas */}
-      <div className="relative p-8 rounded-2xl border border-[hsl(0,0%,12%)] bg-[hsl(0,0%,3%)] min-h-[350px] overflow-hidden">
-        {/* Dot grid background */}
-        <div className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: 'radial-gradient(circle, hsl(200,40%,40%) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-
-        <div className="relative flex flex-wrap gap-4 justify-center items-center">
-          {nodes.map((node, i) => {
-            const accent = getNodeAccent(node.type);
-            const radius = Math.min(200, 60 + i * 25);
-            const angle = (i / Math.max(nodes.length, 1)) * Math.PI * 2;
-            const offsetX = Math.cos(angle) * radius * 0.3;
-            const offsetY = Math.sin(angle) * radius * 0.2;
-            return (
-              <div key={i} className="relative px-4 py-3 rounded-2xl border-2 text-[12px] transition-all hover:scale-110 hover:shadow-lg cursor-pointer"
-                style={{
-                  backgroundColor: `${accent}10`,
-                  borderColor: `${accent}40`,
-                  color: accent,
-                  transform: `translate(${offsetX}px, ${offsetY}px)`,
-                  boxShadow: `0 0 20px ${accent}08`,
-                }}>
-                <div className="font-bold">{node.label}</div>
-                {node.detail && <div className="text-[10px] opacity-50 mt-0.5">{node.detail}</div>}
-                {node.value && (
-                  <div className="text-[10px] font-mono mt-1 opacity-80">{node.value}</div>
-                )}
-                {/* Connection dot */}
-                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full" style={{ backgroundColor: accent }} />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Connections list */}
-        {connections.length > 0 && (
-          <div className="mt-6 pt-4 border-t border-[hsl(0,0%,10%)] space-y-1.5">
-            {connections.map((conn, i) => (
-              <div key={i} className="flex items-center gap-2 text-[11px] px-3 py-1.5 rounded-lg bg-[hsl(0,0%,5%)]">
-                <span className="text-[hsl(0,0%,70%)]">{conn.from}</span>
-                <span className={conn.type === 'positive' ? 'text-[hsl(150,60%,50%)]' : conn.type === 'negative' ? 'text-[hsl(0,60%,55%)]' : 'text-[hsl(0,0%,30%)]'}>
-                  {conn.type === 'positive' ? '━▸ ↑' : conn.type === 'negative' ? '━▸ ↓' : '━▸'}
-                </span>
-                <span className="text-[hsl(0,0%,70%)]">{conn.to}</span>
-                {conn.label && <span className="text-[hsl(0,0%,25%)] ml-auto">({conn.label})</span>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+/* ═══════════════════════════════════════════════════════════════
+   SOURCE VIEW — Raw JSON
+   ═══════════════════════════════════════════════════════════════ */
+const SourceView: React.FC<{ artifact: ArtifactData }> = ({ artifact }) => (
+  <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${OBS.borderSoft}` }}>
+    <div className="flex items-center gap-2 px-4 py-2" style={{ background: OBS.bgSurface, borderBottom: `1px solid ${OBS.borderSoft}` }}>
+      <Code className="w-3.5 h-3.5" style={{ color: OBS.orange }} />
+      <span className="text-[11px]" style={{ color: OBS.textFaint }}>artifact.json</span>
     </div>
-  );
-};
-
-/* ════════════════════════════════════════════════════════════════════
-   CODE / JSON RENDERER
-   ════════════════════════════════════════════════════════════════════ */
-const CodeRenderer: React.FC<{ artifact: ArtifactData }> = ({ artifact }) => (
-  <div className="rounded-xl border border-[hsl(0,0%,12%)] bg-[hsl(0,0%,3%)] overflow-hidden">
-    <div className="flex items-center gap-2 px-4 py-2 border-b border-[hsl(0,0%,10%)] bg-[hsl(0,0%,5%)]">
-      <Code className="w-3.5 h-3.5 text-[hsl(40,80%,55%)]" />
-      <span className="text-[11px] text-[hsl(0,0%,45%)]">artifact.json</span>
-    </div>
-    <pre className="p-4 text-[11px] font-mono text-[hsl(0,0%,60%)] leading-relaxed overflow-x-auto whitespace-pre-wrap">
+    <pre className="p-4 text-[11px] font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap" style={{ color: OBS.textMuted, background: OBS.bgDeep }}>
       {JSON.stringify(artifact.content, null, 2)}
     </pre>
   </div>
 );
 
-/* ════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
+   BACKLINKS FOOTER — Obsidian's signature feature
+   ═══════════════════════════════════════════════════════════════ */
+const BacklinksFooter: React.FC<{
+  artifact: ArtifactData;
+  allArtifacts: ArtifactData[];
+  onSelect?: (a: ArtifactData) => void;
+}> = ({ artifact, allArtifacts, onSelect }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  // Find backlinks: other artifacts that share tags/linked notes
+  const backlinks = useMemo(() => {
+    if (!artifact.linkedNotes?.length) return allArtifacts.filter(a => a.id !== artifact.id).slice(-3);
+    return allArtifacts.filter(a => a.id !== artifact.id && a.linkedNotes?.some(t => artifact.linkedNotes?.includes(t)));
+  }, [artifact, allArtifacts]);
+
+  if (backlinks.length === 0 && allArtifacts.length <= 1) return null;
+
+  return (
+    <div className="border-t" style={{ background: OBS.bg, borderColor: OBS.borderSoft }}>
+      <button onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 w-full px-4 py-2.5 text-left transition-colors"
+        style={{ color: OBS.textFaint }}>
+        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronR className="w-3 h-3" />}
+        <Link2 className="w-3 h-3" style={{ color: OBS.accent }} />
+        <span className="text-[11px] font-medium">Backlinks</span>
+        <span className="text-[10px] ml-1">({backlinks.length})</span>
+      </button>
+      {expanded && backlinks.length > 0 && (
+        <div className="px-4 pb-3 space-y-1">
+          {backlinks.map(bl => {
+            const info = TYPE_ICON[bl.type] || TYPE_ICON.text;
+            return (
+              <button key={bl.id} onClick={() => onSelect?.(bl)}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-left transition-colors text-xs"
+                style={{ color: OBS.textMuted }}
+                onMouseEnter={e => (e.currentTarget.style.background = OBS.bgHover)}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <info.icon className="w-3 h-3 flex-shrink-0" style={{ color: info.color }} />
+                <span className="truncate flex-1">{bl.title}</span>
+                <span className="text-[9px]" style={{ color: OBS.textFaint }}>
+                  {new Date(bl.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
    SHARED COMPONENTS
-   ════════════════════════════════════════════════════════════════════ */
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+   ═══════════════════════════════════════════════════════════════ */
+const NoteSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div>
-    <h4 className="text-[10px] text-[hsl(0,0%,40%)] uppercase tracking-wider mb-3 font-semibold">{title}</h4>
+    <h4 className="text-[10px] uppercase tracking-widest font-semibold mb-2.5" style={{ color: OBS.textFaint }}>{title}</h4>
     {children}
   </div>
 );
 
-const ConfidenceBar: React.FC<{ value: number }> = ({ value }) => (
-  <div className="w-full bg-[hsl(0,0%,10%)] rounded-full h-1.5 mt-1.5 overflow-hidden">
-    <div className={`h-1.5 rounded-full transition-all duration-500 ${value > 65 ? 'bg-[hsl(150,60%,45%)]' : value > 40 ? 'bg-[hsl(40,70%,50%)]' : 'bg-[hsl(0,55%,50%)]'}`}
-      style={{ width: `${Math.min(100, value)}%` }} />
+const ConfBar: React.FC<{ value: number }> = ({ value }) => (
+  <div className="w-full rounded-full h-1 mt-1 overflow-hidden" style={{ background: `${OBS.textFaint}20` }}>
+    <div className="h-1 rounded-full transition-all duration-500"
+      style={{ width: `${Math.min(100, value)}%`, background: value > 65 ? OBS.green : value > 40 ? OBS.orange : OBS.red }} />
   </div>
 );
 
-const MetricCard: React.FC<{ label: string; value: string; accent?: string }> = ({ label, value, accent }) => (
-  <div className="p-3 rounded-xl bg-[hsl(0,0%,5.5%)] border border-[hsl(0,0%,12%)] text-center">
-    <p className="text-[10px] text-[hsl(0,0%,40%)] uppercase tracking-wider">{label}</p>
-    <p className="text-[14px] font-mono font-bold mt-1" style={{ color: accent || 'hsl(0,0%,90%)' }}>{value}</p>
+const SmallStat: React.FC<{ label: string; value: string; color?: string }> = ({ label, value, color }) => (
+  <div className="p-2.5 rounded-lg text-center" style={{ background: OBS.bgSurface, border: `1px solid ${OBS.borderSoft}` }}>
+    <div className="text-[9px] uppercase tracking-wider" style={{ color: OBS.textFaint }}>{label}</div>
+    <div className="text-xs font-mono font-bold mt-0.5" style={{ color: color || OBS.text }}>{value}</div>
   </div>
 );
 
-/* ════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    UTILITY FUNCTIONS
-   ════════════════════════════════════════════════════════════════════ */
-function extractFlowchartNodes(artifact: ArtifactData): Array<{ label: string; type: string; detail?: string }> {
-  const nodes: Array<{ label: string; type: string; detail?: string }> = [];
-  const response = artifact.aiResponse || '';
-  const query = artifact.userQuery || artifact.title;
-
-  nodes.push({ label: query.slice(0, 60), type: 'start', detail: 'User Query' });
-
-  if (response) {
-    const headers = response.match(/\*\*([^*]+)\*\*/g)?.map(h => h.replace(/\*\*/g, '')) || [];
-    const conditions = response.match(/(?:ถ้า|หาก|เมื่อ|if|when|because)[^.\n]{5,60}/gi) || [];
-    const actions = response.match(/(?:ควร|แนะนำ|suggest|recommend|should|buy|sell|ซื้อ|ขาย|hold)[^.\n]{5,60}/gi) || [];
-    const results = response.match(/(?:ผลลัพธ์|สรุป|conclusion|result|ดังนั้น|therefore|target)[^.\n]{5,60}/gi) || [];
-
-    headers.slice(0, 3).forEach(h => nodes.push({ label: h.slice(0, 50), type: 'process' }));
-    conditions.slice(0, 2).forEach(c => nodes.push({ label: c.trim().slice(0, 50), type: 'decision' }));
-    actions.slice(0, 2).forEach(a => nodes.push({ label: a.trim().slice(0, 50), type: 'action' }));
-    if (results.length > 0) nodes.push({ label: results[0].trim().slice(0, 60), type: 'result' });
-  }
-
-  if (nodes.length <= 1) {
-    if (artifact.type === 'chart_analysis') {
-      const { symbol, indicators, signals, analysis } = artifact.content;
-      nodes.push({ label: `Analyze ${symbol || 'Asset'}`, type: 'process' });
-      if (indicators) Object.entries(indicators).slice(0, 3).forEach(([k, v]) => nodes.push({ label: `${k}: ${typeof v === 'number' ? (v as number).toFixed(2) : v}`, type: 'process' }));
-      if (signals) (signals as any[]).slice(0, 2).forEach(s => nodes.push({ label: s.name, type: s.direction === 'bullish' ? 'action' : 'decision' }));
-      if (analysis) nodes.push({ label: analysis.slice(0, 60) + '...', type: 'result' });
-    } else if (artifact.type === 'financial_statement' || artifact.type === 'screener_result') {
-      const groups = artifact.content.groups || [{ title: 'Data', rows: artifact.content.rows || [] }];
-      groups.slice(0, 4).forEach((g: any) => nodes.push({ label: g.title, type: 'process', detail: `${g.rows?.length || 0} items` }));
-      nodes.push({ label: 'Analysis Complete', type: 'result' });
-    }
-  }
-
-  if (nodes.length > 1 && nodes[nodes.length - 1].type !== 'result') {
-    nodes.push({ label: 'Summary', type: 'result' });
-  }
-
-  return nodes.length > 1 ? nodes : [{ label: query.slice(0, 50), type: 'start' }, { label: 'Awaiting data...', type: 'result' }];
-}
-
-function extractGraphData(artifact: ArtifactData): { nodes: any[]; connections: any[] } {
-  if (artifact.type === 'relationship' && artifact.content.nodes?.length) {
-    return { nodes: artifact.content.nodes, connections: artifact.content.connections || [] };
-  }
-
-  const nodes: any[] = [];
-  const connections: any[] = [];
-  const response = artifact.aiResponse || '';
-
-  if (response) {
-    const assets = [...new Set((response.match(/\b(?:XAU|BTC|ETH|USD|EUR|GBP|JPY|SPX|DXY|VIX|AAPL|TSLA|NVDA|GOOGL|MSFT|Gold|Bitcoin|Oil)[A-Z]*/gi) || []))];
-    assets.slice(0, 6).forEach(a => nodes.push({ label: a, type: 'asset' }));
-
-    const indicators = [...new Set((response.match(/\b(?:RSI|MACD|SMA|EMA|P\/E|ROE|ROA|GDP|CPI|NFP|PMI|ATR|Bollinger|Volume|Market Cap|Revenue|EPS)[^,\n]{0,20}/gi) || []))];
-    indicators.slice(0, 6).forEach(ind => nodes.push({ label: ind.trim().slice(0, 30), type: 'indicator' }));
-
-    const events = [...new Set((response.match(/\b(?:Fed|ECB|BOJ|FOMC|inflation|recession|breakout|support|resistance)[^,.\n]{0,30}/gi) || []))];
-    events.slice(0, 4).forEach(ev => nodes.push({ label: ev.trim().slice(0, 30), type: 'event' }));
-
-    const decisions = [...new Set((response.match(/(?:buy|sell|hold|Long|Short|strong buy|strong sell)[^,.\n]{0,30}/gi) || []))];
-    decisions.slice(0, 3).forEach(d => nodes.push({ label: d.trim().slice(0, 30), type: 'condition' }));
-  }
-
-  if (nodes.length === 0 && artifact.type === 'chart_analysis') {
-    const { symbol, indicators, signals } = artifact.content;
-    nodes.push({ label: symbol || 'Asset', type: 'asset' });
-    if (indicators) Object.entries(indicators).forEach(([k, v]) => nodes.push({ label: k, type: 'indicator', value: typeof v === 'number' ? (v as number).toFixed(2) : v }));
-    if (signals) (signals as any[]).forEach(s => nodes.push({ label: s.name, type: s.direction === 'bullish' ? 'event' : 'condition' }));
-  }
-
-  const assetNodes = nodes.filter(n => n.type === 'asset');
-  const others = nodes.filter(n => n.type !== 'asset');
-  assetNodes.forEach(asset => {
-    others.slice(0, 5).forEach(other => {
-      const isNeg = response.includes('bearish') || response.includes('sell') || response.includes('ขาย');
-      connections.push({ from: asset.label, to: other.label, type: other.type === 'condition' ? (isNeg ? 'negative' : 'positive') : 'neutral' });
-    });
-  });
-
-  return { nodes, connections };
-}
-
-function flowNodeColor(type: string): string {
-  const map: Record<string, string> = { start: 'hsl(210,70%,55%)', decision: 'hsl(30,80%,55%)', process: 'hsl(270,60%,55%)', action: 'hsl(150,60%,45%)', result: 'hsl(190,70%,50%)', condition: 'hsl(50,70%,50%)' };
-  return map[type] || 'hsl(0,0%,45%)';
-}
-
-function flowNodeIcon(type: string): string {
-  const map: Record<string, string> = { start: '▶', decision: '◆', process: '⊕', action: '⚡', result: '◎', condition: '◇' };
-  return map[type] || '●';
-}
-
+   ═══════════════════════════════════════════════════════════════ */
 function getNodeAccent(type: string): string {
-  const map: Record<string, string> = { asset: 'hsl(210,70%,55%)', indicator: 'hsl(270,60%,55%)', event: 'hsl(30,80%,55%)', condition: 'hsl(50,70%,50%)', source: 'hsl(340,60%,55%)', outcome: 'hsl(190,70%,50%)', decision: 'hsl(150,60%,45%)' };
-  return map[type] || 'hsl(0,0%,50%)';
+  const map: Record<string, string> = {
+    asset: OBS.cyan, indicator: OBS.accent, event: OBS.orange,
+    condition: OBS.yellow, source: OBS.pink, outcome: OBS.cyan, decision: OBS.green,
+  };
+  return map[type] || OBS.textMuted;
 }
 
 function getCellColor(val: any): string {
   if (typeof val === 'number') {
-    if (val > 0) return 'text-[hsl(150,60%,50%)]';
-    if (val < 0) return 'text-[hsl(0,55%,55%)]';
+    if (val > 0) return `text-[hsl(150,55%,48%)]`;
+    if (val < 0) return `text-[hsl(0,55%,55%)]`;
   }
   if (typeof val === 'string') {
-    if (val.includes('Strong Buy') || val.includes('🟢')) return 'text-[hsl(150,60%,50%)] font-medium';
+    if (val.includes('Strong Buy') || val.includes('🟢')) return 'text-[hsl(150,55%,48%)] font-medium';
     if (val.includes('Strong Sell') || val.includes('🔴')) return 'text-[hsl(0,55%,55%)] font-medium';
-    if (val.includes('Buy') || val.includes('Bullish')) return 'text-[hsl(150,50%,50%)]';
-    if (val.includes('Sell') || val.includes('Bearish')) return 'text-[hsl(0,50%,55%)]';
+    if (val.includes('Buy') || val.includes('Bullish')) return 'text-[hsl(150,45%,48%)]';
+    if (val.includes('Sell') || val.includes('Bearish')) return 'text-[hsl(0,45%,55%)]';
   }
-  return 'text-[hsl(0,0%,70%)]';
+  return `text-[hsl(220,8%,55%)]`;
 }
 
 function formatCell(val: any): string {
@@ -895,10 +1070,10 @@ function formatCell(val: any): string {
 }
 
 function getValueColor(val: any): string {
-  if (typeof val !== 'number') return 'text-[hsl(0,0%,90%)]';
+  if (typeof val !== 'number') return '';
   if (val > 70) return 'text-[hsl(0,55%,55%)]';
-  if (val < 30) return 'text-[hsl(150,60%,50%)]';
-  return 'text-[hsl(0,0%,90%)]';
+  if (val < 30) return 'text-[hsl(150,55%,48%)]';
+  return '';
 }
 
 export default ArtifactPanel;
