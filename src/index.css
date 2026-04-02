@@ -1207,3 +1207,17 @@
 .proposal-rejected {
   border-left: 3px solid #ef4444;
 }
+
+/* Ticker Tape Marquee Animation */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
