@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { OllamaService, OllamaModel } from '@/services/FreeAIService';
 import { GeminiService } from '@/services/GeminiService';
+import { ClaudeService } from '@/services/ClaudeService';
 import { UniversalDataService } from '@/services/UniversalDataService';
 import { useMCP } from '@/contexts/MCPContext';
 import { usePanelCommander, AVAILABLE_PANELS } from '@/contexts/PanelCommanderContext';
