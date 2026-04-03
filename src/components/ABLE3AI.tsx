@@ -212,13 +212,17 @@ const ABLE3AI = () => {
   const updateGreeting = useCallback(() => {
     const providerStatus = geminiReady && aiProvider === 'gemini' 
       ? '🟢 Gemini (Cloud)' 
-      : ollamaConnected && aiProvider === 'ollama' 
-        ? '🟢 Ollama (Local)' 
-        : '🔴 Disconnected';
+      : aiProvider === 'claude'
+        ? '🟢 Claude (Cloud)'
+        : ollamaConnected && aiProvider === 'ollama' 
+          ? '🟢 Ollama (Local)' 
+          : '🔴 Disconnected';
+    
+    const modelName = aiProvider === 'gemini' ? 'Gemini 2.5 Flash' : aiProvider === 'claude' ? 'Claude Sonnet' : selectedModel;
     
     setMessages([{
       id: '1',
-      text: `🤖 **ABLE AI - Powered by ${aiProvider === 'gemini' ? 'Gemini 2.5 Flash' : selectedModel}**\n\n` +
+      text: `🤖 **ABLE AI - Powered by ${modelName}**\n\n` +
         `สวัสดีครับ! พร้อมช่วยวิเคราะห์ตลาดการเงิน\n\n` +
         `**AI Provider:** ${providerStatus}\n` +
         `**MCP Tools:** ${mcpReady ? `${tools.length} พร้อมใช้` : 'กำลังโหลด...'}\n` +
