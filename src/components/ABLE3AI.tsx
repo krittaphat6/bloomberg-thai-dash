@@ -117,7 +117,7 @@ const ABLE3AI = () => {
   const [geminiReady, setGeminiReady] = useState(false);
   
   // AI Provider selection
-  const [aiProvider, setAiProvider] = useState<'ollama' | 'gemini'>('gemini');
+  const [aiProvider, setAiProvider] = useState<'ollama' | 'gemini' | 'claude'>('gemini');
   
   const [isConnecting, setIsConnecting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
