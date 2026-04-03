@@ -792,6 +792,11 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
                     <Sparkles className="w-3 h-3" />
                     Gemini 2.5 Flash
                   </span>
+                ) : aiProvider === 'claude' ? (
+                  <span className="text-orange-400 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Claude Sonnet
+                  </span>
                 ) : ollamaConnected && aiProvider === 'ollama' ? (
                   <span className="text-green-400 flex items-center gap-1">
                     <Wifi className="w-3 h-3" />
