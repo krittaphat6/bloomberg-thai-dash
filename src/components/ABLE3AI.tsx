@@ -878,21 +878,38 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
         {/* Settings Panel */}
         {showSettings && (
           <div className="mt-3 p-3 bg-black/70 rounded-lg border border-green-500/30 space-y-3">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <Button
                 variant={geminiReady && aiProvider === 'gemini' ? 'default' : 'outline'}
                 size="sm"
                 onClick={handleGeminiConnect}
                 disabled={isConnecting}
-                className={`flex-1 gap-2 h-10 ${
+                className={`flex-1 gap-1 h-10 text-xs ${
                   geminiReady && aiProvider === 'gemini'
                     ? 'bg-purple-600 hover:bg-purple-700 text-white border-purple-500'
                     : 'border-purple-500/50 text-purple-400 hover:bg-purple-500/20'
                 }`}
               >
-                <Sparkles className="w-4 h-4" />
-                Gemini (Cloud)
-                {geminiReady && aiProvider === 'gemini' && <Check className="w-4 h-4" />}
+                <Sparkles className="w-3.5 h-3.5" />
+                Gemini
+                {geminiReady && aiProvider === 'gemini' && <Check className="w-3.5 h-3.5" />}
+              </Button>
+              <Button
+                variant={aiProvider === 'claude' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setAiProvider('claude');
+                  toast({ title: "✅ Claude Mode", description: "พร้อมใช้งาน Claude Sonnet (Cloud)" });
+                }}
+                className={`flex-1 gap-1 h-10 text-xs ${
+                  aiProvider === 'claude'
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white border-orange-500'
+                    : 'border-orange-500/50 text-orange-400 hover:bg-orange-500/20'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Claude
+                {aiProvider === 'claude' && <Check className="w-3.5 h-3.5" />}
               </Button>
               <Button
                 variant={aiProvider === 'ollama' ? 'default' : 'outline'}
@@ -901,15 +918,15 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
                   setAiProvider('ollama');
                   if (!ollamaConnected) toast({ title: "🔌 Ollama Mode Selected", description: "Enter your Bridge URL below" });
                 }}
-                className={`flex-1 gap-2 h-10 ${
+                className={`flex-1 gap-1 h-10 text-xs ${
                   aiProvider === 'ollama'
                     ? 'bg-green-600 hover:bg-green-700 text-white border-green-500'
                     : 'border-green-500/50 text-green-400 hover:bg-green-500/20'
                 }`}
               >
-                <Wifi className="w-4 h-4" />
-                Ollama (Local)
-                {ollamaConnected && aiProvider === 'ollama' && <Check className="w-4 h-4" />}
+                <Wifi className="w-3.5 h-3.5" />
+                Ollama
+                {ollamaConnected && aiProvider === 'ollama' && <Check className="w-3.5 h-3.5" />}
               </Button>
             </div>
 
