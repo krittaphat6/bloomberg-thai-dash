@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { OllamaService, OllamaModel } from '@/services/FreeAIService';
 import { GeminiService } from '@/services/GeminiService';
+import { ClaudeService } from '@/services/ClaudeService';
 import { UniversalDataService } from '@/services/UniversalDataService';
 import { useMCP } from '@/contexts/MCPContext';
 import { usePanelCommander, AVAILABLE_PANELS } from '@/contexts/PanelCommanderContext';
@@ -116,7 +117,7 @@ const ABLE3AI = () => {
   const [geminiReady, setGeminiReady] = useState(false);
   
   // AI Provider selection
-  const [aiProvider, setAiProvider] = useState<'ollama' | 'gemini'>('gemini');
+  const [aiProvider, setAiProvider] = useState<'ollama' | 'gemini' | 'claude'>('gemini');
   
   const [isConnecting, setIsConnecting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -211,13 +212,17 @@ const ABLE3AI = () => {
   const updateGreeting = useCallback(() => {
     const providerStatus = geminiReady && aiProvider === 'gemini' 
       ? '🟢 Gemini (Cloud)' 
-      : ollamaConnected && aiProvider === 'ollama' 
-        ? '🟢 Ollama (Local)' 
-        : '🔴 Disconnected';
+      : aiProvider === 'claude'
+        ? '🟢 Claude (Cloud)'
+        : ollamaConnected && aiProvider === 'ollama' 
+          ? '🟢 Ollama (Local)' 
+          : '🔴 Disconnected';
+    
+    const modelName = aiProvider === 'gemini' ? 'Gemini 2.5 Flash' : aiProvider === 'claude' ? 'Claude Sonnet' : selectedModel;
     
     setMessages([{
       id: '1',
-      text: `🤖 **ABLE AI - Powered by ${aiProvider === 'gemini' ? 'Gemini 2.5 Flash' : selectedModel}**\n\n` +
+      text: `🤖 **ABLE AI - Powered by ${modelName}**\n\n` +
         `สวัสดีครับ! พร้อมช่วยวิเคราะห์ตลาดการเงิน\n\n` +
         `**AI Provider:** ${providerStatus}\n` +
         `**MCP Tools:** ${mcpReady ? `${tools.length} พร้อมใช้` : 'กำลังโหลด...'}\n` +
@@ -621,6 +626,40 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
             aiResponse = response.text;
             model = response.model;
           }
+        } else if (aiProvider === 'claude') {
+          addThinkingStep('🧠 Claude Sonnet กำลังประมวลผล...');
+          const toolCall = ClaudeService.detectToolCall(currentInput);
+          if (toolCall && mcpReady) {
+            addThinkingStep(`🔧 ตรวจพบ tool call: ${toolCall.tool}`);
+            try {
+              const result = await executeTool(toolCall.tool, toolCall.params);
+              const toolResult = ClaudeService.formatToolResult(toolCall.tool, result);
+              addThinkingStep('🧠 Claude กำลังวิเคราะห์ผลลัพธ์...');
+              const claudeResponse = await ClaudeService.chat(
+                `User asked: "${currentInput}"\n\nData from ${toolCall.tool}:\n${toolResult}\n\n${contextSummary}\n${topNewsContext}\n\nวิเคราะห์และตอบเป็นภาษาไทย`,
+                conversationHistoryRef.current.slice(0, -1).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+              );
+              aiResponse = `${toolResult}\n\n---\n\n**🤖 การวิเคราะห์:**\n${claudeResponse.text}`;
+              model = `MCP + Claude`;
+            } catch (error) {
+              addThinkingStep(`❌ Tool error: ${error instanceof Error ? error.message : 'Unknown'}`, 'error');
+              aiResponse = `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+              model = 'Error';
+            }
+          } else {
+            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}\n${journalContext}\n${filingsContext}`;
+            try {
+              const response = await ClaudeService.chat(
+                enhancedPrompt,
+                conversationHistoryRef.current.slice(0, -1).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+              );
+              aiResponse = response.text;
+              model = response.model;
+            } catch (err: any) {
+              aiResponse = `❌ Claude Error: ${err.message}`;
+              model = 'Error';
+            }
+          }
         } else if (aiProvider === 'ollama' && ollamaConnected) {
           addThinkingStep(`🧠 Ollama (${selectedModel}) กำลังประมวลผล...`);
           const toolCall = OllamaService.detectToolCall(currentInput);
@@ -777,7 +816,7 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
               <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-cyan-500 rounded-lg flex items-center justify-center">
                 <Bot className="w-5 h-5 text-black" />
               </div>
-              <div className={`absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-black ${(geminiReady && aiProvider === 'gemini') || (ollamaConnected && aiProvider === 'ollama') ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+              <div className={`absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-black ${(geminiReady && aiProvider === 'gemini') || aiProvider === 'claude' || (ollamaConnected && aiProvider === 'ollama') ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-white">ABLE AI</span>
@@ -786,6 +825,11 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
                   <span className="text-purple-400 flex items-center gap-1">
                     <Sparkles className="w-3 h-3" />
                     Gemini 2.5 Flash
+                  </span>
+                ) : aiProvider === 'claude' ? (
+                  <span className="text-orange-400 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Claude Sonnet
                   </span>
                 ) : ollamaConnected && aiProvider === 'ollama' ? (
                   <span className="text-green-400 flex items-center gap-1">
@@ -868,21 +912,38 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
         {/* Settings Panel */}
         {showSettings && (
           <div className="mt-3 p-3 bg-black/70 rounded-lg border border-green-500/30 space-y-3">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <Button
                 variant={geminiReady && aiProvider === 'gemini' ? 'default' : 'outline'}
                 size="sm"
                 onClick={handleGeminiConnect}
                 disabled={isConnecting}
-                className={`flex-1 gap-2 h-10 ${
+                className={`flex-1 gap-1 h-10 text-xs ${
                   geminiReady && aiProvider === 'gemini'
                     ? 'bg-purple-600 hover:bg-purple-700 text-white border-purple-500'
                     : 'border-purple-500/50 text-purple-400 hover:bg-purple-500/20'
                 }`}
               >
-                <Sparkles className="w-4 h-4" />
-                Gemini (Cloud)
-                {geminiReady && aiProvider === 'gemini' && <Check className="w-4 h-4" />}
+                <Sparkles className="w-3.5 h-3.5" />
+                Gemini
+                {geminiReady && aiProvider === 'gemini' && <Check className="w-3.5 h-3.5" />}
+              </Button>
+              <Button
+                variant={aiProvider === 'claude' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setAiProvider('claude');
+                  toast({ title: "✅ Claude Mode", description: "พร้อมใช้งาน Claude Sonnet (Cloud)" });
+                }}
+                className={`flex-1 gap-1 h-10 text-xs ${
+                  aiProvider === 'claude'
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white border-orange-500'
+                    : 'border-orange-500/50 text-orange-400 hover:bg-orange-500/20'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Claude
+                {aiProvider === 'claude' && <Check className="w-3.5 h-3.5" />}
               </Button>
               <Button
                 variant={aiProvider === 'ollama' ? 'default' : 'outline'}
@@ -891,15 +952,15 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
                   setAiProvider('ollama');
                   if (!ollamaConnected) toast({ title: "🔌 Ollama Mode Selected", description: "Enter your Bridge URL below" });
                 }}
-                className={`flex-1 gap-2 h-10 ${
+                className={`flex-1 gap-1 h-10 text-xs ${
                   aiProvider === 'ollama'
                     ? 'bg-green-600 hover:bg-green-700 text-white border-green-500'
                     : 'border-green-500/50 text-green-400 hover:bg-green-500/20'
                 }`}
               >
-                <Wifi className="w-4 h-4" />
-                Ollama (Local)
-                {ollamaConnected && aiProvider === 'ollama' && <Check className="w-4 h-4" />}
+                <Wifi className="w-3.5 h-3.5" />
+                Ollama
+                {ollamaConnected && aiProvider === 'ollama' && <Check className="w-3.5 h-3.5" />}
               </Button>
             </div>
 
