@@ -626,6 +626,40 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
             aiResponse = response.text;
             model = response.model;
           }
+        } else if (aiProvider === 'claude') {
+          addThinkingStep('🧠 Claude Sonnet กำลังประมวลผล...');
+          const toolCall = ClaudeService.detectToolCall(currentInput);
+          if (toolCall && mcpReady) {
+            addThinkingStep(`🔧 ตรวจพบ tool call: ${toolCall.tool}`);
+            try {
+              const result = await executeTool(toolCall.tool, toolCall.params);
+              const toolResult = ClaudeService.formatToolResult(toolCall.tool, result);
+              addThinkingStep('🧠 Claude กำลังวิเคราะห์ผลลัพธ์...');
+              const claudeResponse = await ClaudeService.chat(
+                `User asked: "${currentInput}"\n\nData from ${toolCall.tool}:\n${toolResult}\n\n${contextSummary}\n${topNewsContext}\n\nวิเคราะห์และตอบเป็นภาษาไทย`,
+                conversationHistoryRef.current.slice(0, -1).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+              );
+              aiResponse = `${toolResult}\n\n---\n\n**🤖 การวิเคราะห์:**\n${claudeResponse.text}`;
+              model = `MCP + Claude`;
+            } catch (error) {
+              addThinkingStep(`❌ Tool error: ${error instanceof Error ? error.message : 'Unknown'}`, 'error');
+              aiResponse = `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+              model = 'Error';
+            }
+          } else {
+            const enhancedPrompt = `${currentInput}\n\n--- App Data Context ---\n${contextSummary}\n${topNewsContext}\n${journalContext}\n${filingsContext}`;
+            try {
+              const response = await ClaudeService.chat(
+                enhancedPrompt,
+                conversationHistoryRef.current.slice(0, -1).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+              );
+              aiResponse = response.text;
+              model = response.model;
+            } catch (err: any) {
+              aiResponse = `❌ Claude Error: ${err.message}`;
+              model = 'Error';
+            }
+          }
         } else if (aiProvider === 'ollama' && ollamaConnected) {
           addThinkingStep(`🧠 Ollama (${selectedModel}) กำลังประมวลผล...`);
           const toolCall = OllamaService.detectToolCall(currentInput);
