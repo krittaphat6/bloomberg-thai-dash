@@ -1172,6 +1172,7 @@ Revenue Growth YoY: ${fmtP(f.total_revenue_yoy_growth_fy)} | EPS Growth YoY: ${f
             className="h-10 text-sm bg-black/50 border-green-500/50 text-white placeholder:text-gray-500 flex-1"
           />
           <Button
+            data-able-send
             onClick={sendMessage}
             disabled={isLoading || (!inputMessage.trim() && !uploadedFile)}
             size="sm"
