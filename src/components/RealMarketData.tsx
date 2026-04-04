@@ -301,16 +301,19 @@ const RealMarketData: React.FC = () => {
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [snapshotData, gainData, loseData, newsData, mktStatus] = await Promise.all([
-        PolygonService.getAllSnapshots().catch(() => []),
-        PolygonService.getGainers().catch(() => []),
-        PolygonService.getLosers().catch(() => []),
+      const [allStocks, newsData, mktStatus] = await Promise.all([
+        PolygonService.getAllStocks().catch(() => []),
         PolygonService.getNews(undefined, 30).catch(() => []),
         PolygonService.getMarketStatus().catch(() => null),
       ]);
-      if (snapshotData.length > 0) { setStocks(snapshotData); setStatus('LIVE'); }
-      if (gainData.length > 0) setGainers(gainData);
-      if (loseData.length > 0) setLosers(loseData);
+      if (allStocks.length > 0) {
+        setStocks(allStocks);
+        setStatus('LIVE');
+        // Derive gainers/losers from the data
+        const sorted = [...allStocks].sort((a, b) => b.changePercent - a.changePercent);
+        setGainers(sorted.filter(s => s.changePercent > 0).slice(0, 20));
+        setLosers(sorted.filter(s => s.changePercent < 0).sort((a, b) => a.changePercent - b.changePercent).slice(0, 20));
+      }
       if (newsData.length > 0) setNews(newsData);
       if (mktStatus) setMarketStatus(mktStatus);
     } catch (err) {
