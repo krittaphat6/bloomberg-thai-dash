@@ -259,6 +259,22 @@ const ABLE3AI = () => {
     return () => { if (loadingTimerRef.current) clearInterval(loadingTimerRef.current); };
   }, [isLoading]);
 
+  // Listen for queries from other panels (e.g., RealMarketData)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.query) {
+        setInputMessage(detail.query);
+        setTimeout(() => {
+          const btn = document.querySelector('[data-able-send]') as HTMLButtonElement;
+          if (btn) btn.click();
+        }, 100);
+      }
+    };
+    window.addEventListener('able-ai-query', handler);
+    return () => window.removeEventListener('able-ai-query', handler);
+  }, []);
+
   const handleGeminiConnect = async () => {
     setIsConnecting(true);
     try {
